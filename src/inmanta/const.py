@@ -155,7 +155,7 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(int, Enum):
+class LogLevel(IntEnum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
@@ -174,9 +174,6 @@ class LogLevel(int, Enum):
         Convert an integer formated log level into a string formated log level
         """
         return StrLogLevel[self.name]
-
-    def __str__(self) -> str:
-        return self.name
 
 
 @stable_api
