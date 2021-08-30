@@ -51,8 +51,8 @@ dummy-yummy # A comment
 
     project = Project(project_dir)
     Project.set(project)
-    project.load_module("mod1")
-    project.load_module("mod2")
+    project.load_module("mod1", allow_v1=True)
+    project.load_module("mod2", allow_v1=True)
     reqs = project.collect_python_requirements()
     expected_reqs = ["iplib@git+https://github.com/bartv/python3-iplib", "pytest>=1.5", "iplib>=0.0.1", "dummy-yummy"]
     assert sorted(reqs) == sorted(expected_reqs)
@@ -77,7 +77,7 @@ iplib>=0.0.1
     common.add_file(mod1, "requirements.txt", mod1_req_txt, msg="initial commit")
     project = Project(project_dir)
     Project.set(project)
-    project.load_module("mod1")
+    project.load_module("mod1", allow_v1=True)
     requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires
     assert sorted(requirements) == sorted(["pytest>=1.5", "iplib>=0.0.1"])
     # This would fail if the comments weren't filtered out

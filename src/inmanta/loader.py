@@ -98,7 +98,7 @@ class SourceInfo(object):
         from inmanta.module import Project
 
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+            self._requires = Project.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
         return self._requires
 
 

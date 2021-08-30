@@ -16,17 +16,19 @@
     Contact: code@inmanta.com
 """
 import argparse
+import json
 import os
+import shutil
 import subprocess
-import venv
-from typing import Dict, List
-from unittest.mock import patch
+from importlib.abc import Loader
+from itertools import chain
+from typing import List, Optional, Tuple
 
 import py
-import pydantic
 import pytest
+import yaml
 
-from inmanta import module
+from inmanta import env, loader, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
@@ -44,8 +46,13 @@ def run_module_install(python_path: str, module_path: str, editable: bool, set_p
     """
     if not set_path_argument:
         os.chdir(module_path)
-    with patch("inmanta.env.ProcessEnv.env_path", new=python_path):
+    # patch env.process_env
+    old_process_env: str = env.process_env.python_path
+    env.process_env.__init__(python_path=python_path)
+    try:
         ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+    finally:
+        env.process_env.__init__(python_path=old_process_env)
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -167,7 +174,7 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
     os.chdir(coroot)
     Config.load_config()
 
-    with pytest.raises(CompilerException):
+    with pytest.raises(CompilerException, match="Not all module dependencies have been met"):
         ProjectTool().execute("install", [])
 
 
@@ -198,29 +205,104 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
-def test_module_install(tmpdir: py.path.local, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(
+    tmpvenv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
+) -> None:
+    """
+    Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
+    for its options.
+    """
+    venv_dir, python_path = tmpvenv_active
+    # build command requires virtualenv package
+    subprocess.check_call([python_path, "-m", "pip", "install", "virtualenv"])
+
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
-    venv.create(tmpdir, with_pip=True)
-    pip: str = os.path.join(tmpdir, "bin", "pip")
-    # default pip version is not compatible with module install flow
-    subprocess.check_output([pip, "install", "-U", "pip"])
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
-        out: str = subprocess.check_output(
-            [
-                pip,
-                "list",
-                "--format",
-                "json",
-                *(["--editable"] if only_editable else []),
-            ]
-        ).decode()
-        packages: List[Dict[str, str]] = pydantic.parse_raw_as(List[Dict[str, str]], out)
-        return any(package["name"] == name for package in packages)
+        return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
-    run_module_install(os.path.join(tmpdir, "bin", "python"), module_path, editable, set_path_argument)
+    run_module_install(python_path, module_path, editable, set_path_argument)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
+
+
+def setup_simple_project(
+    projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
+) -> module.ProjectMetadata:
+    """
+    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
+
+    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
+    :param path: The path to the directory to create the project in.
+    :param imports: The modules to import in the project.
+    :param index_urls: The urls to any Python indexes to declare as module source.
+    :param github_source: Whether to add the inmanta github as a module source.
+    """
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
+    metadata: module.ProjectMetadata
+    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
+        metadata = module.ProjectMetadata.parse(fh.read())
+        metadata.repo = [
+            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
+            *(
+                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
+                if github_source
+                else []
+            ),
+        ]
+        fh.seek(0)
+        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
+        fh.write(yaml.dump(json.loads(metadata.json())))
+        fh.truncate()
+    with open(os.path.join(path, "main.cf"), "w") as fh:
+        fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    return metadata
+
+
+@pytest.mark.parametrize(
+    "install_module_names, module_dependencies",
+    [
+        (["minimalv2module"], []),
+        # include module with _ to make sure that works as well
+        (["minimalv2module", "elaboratev2module_extension"], ["elaboratev2module"]),
+    ],
+)
+def test_project_install(
+    local_module_package_index: str,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpdir: py.path.local,
+    projects_dir: str,
+    install_module_names: List[str],
+    module_dependencies: List[str],
+) -> None:
+    """
+    Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
+    as expected.
+    """
+    venv_dir, python_path = tmpvenv_active
+    fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
+
+    # set up project and modules
+    project_path: str = os.path.join(tmpdir, "project")
+    metadata: module.ProjectMetadata = setup_simple_project(
+        projects_dir, project_path, ["std", *install_module_names], index_urls=[local_module_package_index]
+    )
+
+    os.chdir(project_path)
+    for fq_mod_name in fq_mod_names:
+        assert env.process_env.get_module_file(fq_mod_name) is None
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+    for fq_mod_name in fq_mod_names:
+        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        env_module_file, module_loader = module_info
+        assert not isinstance(module_loader, loader.PluginModuleLoader)
+        assert env_module_file is not None
+        assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
+    v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
+    assert os.path.exists(v1_mod_dir)
+    assert os.listdir(v1_mod_dir) == ["std"]

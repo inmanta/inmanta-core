@@ -27,10 +27,16 @@ from typing import Iterator, Type
 import py
 import pytest
 import yaml
-from pkg_resources import Requirement, parse_version
+from pkg_resources import parse_version
 
 from inmanta import module
-from inmanta.module import InvalidMetadata, InvalidModuleException, MetadataDeprecationWarning, Project
+from inmanta.module import (
+    InmantaModuleRequirement,
+    InvalidMetadata,
+    InvalidModuleException,
+    MetadataDeprecationWarning,
+    Project,
+)
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -324,8 +330,7 @@ def inmanta_module_v2(tmpdir):
     yield InmantaModule(tmpdir, "setup.cfg")
 
 
-@pytest.mark.asyncio
-async def test_module_version_non_pep440_complient(inmanta_module_v1):
+def test_module_version_non_pep440_complient(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
@@ -342,8 +347,7 @@ compiler_version: 2017.2
     assert "Version non_pep440_value is not PEP440 compliant" in cause.msg
 
 
-@pytest.mark.asyncio
-async def test_invalid_yaml_syntax_in_module_yml(inmanta_module_v1):
+def test_invalid_yaml_syntax_in_module_yml(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 test:
@@ -359,8 +363,7 @@ test:
     assert f"Invalid yaml syntax in {inmanta_module_v1.get_metadata_file_path()}" in cause.msg
 
 
-@pytest.mark.asyncio
-async def test_module_requires(inmanta_module_v1):
+def test_module_requires(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
@@ -372,11 +375,10 @@ requires:
         """
     )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
-@pytest.mark.asyncio
-async def test_module_requires_single(inmanta_module_v1):
+def test_module_requires_single(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
@@ -386,11 +388,10 @@ requires: std > 1.0.0
         """
     )
     mod: module.Module = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-    assert mod.requires() == [Requirement.parse("std > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
 
 
-@pytest.mark.asyncio
-async def test_module_requires_legacy(inmanta_module_v1):
+def test_module_requires_legacy(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
@@ -408,11 +409,10 @@ requires:
         warning = w[0]
         assert issubclass(warning.category, MetadataDeprecationWarning)
         assert "yaml dictionary syntax for specifying module requirements has been deprecated" in str(warning.message)
-    assert mod.requires() == [Requirement.parse("std"), Requirement.parse("ip > 1.0.0")]
+    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
-@pytest.mark.asyncio
-async def test_module_requires_legacy_invalid(inmanta_module_v1):
+def test_module_requires_legacy_invalid(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
@@ -430,8 +430,7 @@ requires:
     assert "Invalid legacy requires" in cause.msg
 
 
-@pytest.mark.asyncio
-async def test_module_v2_metadata(inmanta_module_v2):
+def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:
     inmanta_module_v2.write_metadata_file(
         """
 [metadata]
@@ -452,3 +451,33 @@ install_requires =
     assert mod.metadata.name == "inmanta-module-mod1"
     assert mod.metadata.version == "1.2.3"
     assert mod.metadata.license == "Apache 2.0"
+
+
+@pytest.mark.parametrize("underscore", [True, False])
+def test_module_v2_name_underscore(inmanta_module_v2: InmantaModule, underscore: bool):
+    """
+    Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
+    """
+    separator: str = "_" if underscore else "-"
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-my{separator}mod
+version = 1.2.3
+license = Apache 2.0
+
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+packages = find_namespace:
+        """
+    )
+    if underscore:
+        with pytest.raises(InvalidModuleException):
+            module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+    else:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())

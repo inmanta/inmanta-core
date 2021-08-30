@@ -16,15 +16,25 @@
     Contact: bart@inmanta.com
 """
 import glob
+import importlib
 import logging
 import os
+import re
 import subprocess
 import sys
+import tempfile
+from importlib.abc import Loader
 from subprocess import CalledProcessError
+from typing import Dict, List, Optional, Pattern, Tuple
+from unittest.mock import patch
 
+import py
+import pydantic
 import pytest
+from pkg_resources import Requirement
 
-from inmanta import env
+from inmanta import env, loader, module
+from packaging import version
 from utils import LogSequence
 
 
@@ -84,13 +94,13 @@ def test_install_fails(tmpdir, caplog):
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
-    parent_installed = list(env.VirtualEnv._get_installed_packages(sys.executable).keys())
+    parent_installed = list(env.process_env.get_installed_packages().keys())
 
     # create a venv and list all packages available in the venv
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
 
-    installed_packages = list(env.VirtualEnv._get_installed_packages(venv._parent_python).keys())
+    installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
 
     # verify that the venv sees all parent packages
     assert not set(parent_installed) - set(installed_packages)
@@ -152,3 +162,293 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
+
+
+def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
+    """
+    Make sure the constructor for env.Environment can handle multi-digit minor versions of Python to ensure compatibility with
+    Python 3.10+.
+    """
+    with patch("sys.version_info", new=(3, 123, 0)):
+        # python version is not included in path on windows
+        with patch("sys.platform", new="linux"):
+            assert env.PythonEnvironment(env_path=str(tmpdir)).site_packages_dir == os.path.join(
+                str(tmpdir), "lib", "python3.123", "site-packages"
+            )
+
+
+@pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_process_env_install_from_index(
+    tmpdir: str,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    version: Optional[version.Version],
+    active_compiler_venv: bool,
+) -> None:
+    """
+    Install a package from a pip index into the process_env. Assert any version specs are respected.
+    """
+    if active_compiler_venv:
+        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+    venv_dir, python_path = tmpvenv_active
+    package_name: str = "more-itertools"
+    assert package_name not in env.process_env.get_installed_packages()
+    env.process_env.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+    installed: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    assert package_name in installed
+    if version is not None:
+        assert installed[package_name] == version
+
+
+def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
+    """
+    Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
+    """
+    venv_dir, python_path = tmpvenv_active
+    with pytest.raises(env.PackageNotFound):
+        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")])
+
+
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_process_env_install_from_index_conflicting_reqs(
+    tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local], active_compiler_venv: bool
+) -> None:
+    """
+    Attempt to install a package with conflicting version requirements from a pip index. Make sure this fails and the
+    package remains uninstalled.
+    """
+    if active_compiler_venv:
+        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+    venv_dir, python_path = tmpvenv_active
+    package_name: str = "more-itertools"
+    with pytest.raises(subprocess.CalledProcessError) as e:
+        env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+    assert "conflicting dependencies" in e.value.stderr.decode()
+    assert package_name not in env.process_env.get_installed_packages()
+
+
+@pytest.mark.parametrize("editable", [True, False])
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_process_env_install_from_source(
+    tmpdir: py.path.local,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    modules_v2_dir: str,
+    editable: bool,
+    active_compiler_venv: bool,
+) -> None:
+    """
+    Install a package from source into the process_env. Make sure the editable option actually results in an editable install.
+    """
+    if active_compiler_venv:
+        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+    venv_dir, python_path = tmpvenv_active
+    package_name: str = "inmanta-module-minimalv2module"
+    project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
+    assert package_name not in env.process_env.get_installed_packages()
+    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
+    assert package_name in env.process_env.get_installed_packages()
+    if editable:
+        assert any(
+            package["name"] == package_name
+            for package in pydantic.parse_raw_as(
+                List[Dict[str, str]],
+                subprocess.check_output([python_path, "-m", "pip", "list", "--editable", "--format", "json"]).decode(),
+            )
+        )
+
+
+# v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
+@pytest.mark.parametrize("v1_plugin_loader", [True, False])
+@pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_active_env_get_module_file(
+    local_module_package_index: str,
+    tmpdir: py.path.local,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    v1_plugin_loader: bool,
+    package_name: str,
+    active_compiler_venv: bool,
+) -> None:
+    """
+    Test the env.ActiveEnv.get_module_file() command on a newly installed package. Make sure it works regardless of whether we
+    install a dependency of inmanta-core (wich is already installed in the encapsulating development venv), a new package or an
+    inmanta module (namespace package).
+    """
+    compiler_env: Optional[env.VirtualEnv] = env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv"))
+    if active_compiler_venv:
+        compiler_env.use_virtual_env()
+
+    venv_dir, python_path = tmpvenv_active
+
+    if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
+        module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
+        index = str(local_module_package_index)
+    else:
+        module_name = package_name.replace("-", "_")
+        index = None
+
+    # unload module if already loaded from encapsulating development venv
+    if module_name in sys.modules:
+        loaded = [sub for sub in sys.modules.keys() if sub.startswith(module_name)]
+        for sub in loaded:
+            del sys.modules[sub]
+    importlib.invalidate_caches()
+
+    if v1_plugin_loader:
+        loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
+
+    assert env.ActiveEnv.get_module_file(module_name) is None
+    env.process_env.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+    assert package_name in env.process_env.get_installed_packages()
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    assert module_info is not None
+    module_file, mod_loader = module_info
+    assert module_file is not None
+    assert not isinstance(mod_loader, loader.PluginModuleLoader)
+    assert module_file == os.path.join(env.process_env.site_packages_dir, *module_name.split("."), "__init__.py")
+    # verify that the package was installed in the development venv, not the compiler one
+    assert compiler_env.site_packages_dir not in module_file
+    importlib.import_module(module_name)
+    assert module_name in sys.modules
+    assert sys.modules[module_name].__file__ == module_file
+
+
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_active_env_get_module_file_editable_namespace_package(
+    tmpdir: str,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    modules_v2_dir: str,
+    active_compiler_venv: bool,
+) -> None:
+    """
+    Verify that get_module_file works after installing an editable namespace package in an active environment.
+    """
+    if active_compiler_venv:
+        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+
+    venv_dir, python_path = tmpvenv_active
+
+    package_name: str = "inmanta-module-minimalv2module"
+    module_name: str = "inmanta_plugins.minimalv2module"
+
+    assert env.ActiveEnv.get_module_file(module_name) is None
+    project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
+    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
+    assert package_name in env.process_env.get_installed_packages()
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    assert module_info is not None
+    module_file, mod_loader = module_info
+    assert module_file is not None
+    assert not isinstance(mod_loader, loader.PluginModuleLoader)
+    assert module_file == os.path.join(modules_v2_dir, "minimalv2module", *module_name.split("."), "__init__.py")
+    importlib.import_module(module_name)
+    assert module_name in sys.modules
+    assert sys.modules[module_name].__file__ == module_file
+
+
+def create_install_package(name: str, version: version.Version, requirements: List[Requirement]) -> None:
+    """
+    Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
+    cleans it up after install.
+
+    :param name: Package name.
+    :param version: Version for this package.
+    :param requirements: Requirements on other packages. Required packages must already be installed when calling this function.
+    """
+    req_string: str = (
+        "" if len(requirements) == 0 else ("[options]\ninstall_requires=" + "\n    ".join(str(req) for req in requirements))
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "setup.cfg"), "w") as fd:
+            fd.write(
+                f"""
+[metadata]
+name = {name}
+version = {version}
+
+{req_string}
+                """.strip()
+            )
+        with open(os.path.join(tmpdir, "pyproject.toml"), "w") as fd:
+            fd.write(
+                """
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+                """.strip()
+            )
+        env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
+
+
+# make sure activating the compiler venv does not conflict
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+def test_active_env_check_basic(
+    caplog,
+    tmpdir: str,
+    tmpvenv_active: str,
+    active_compiler_venv: bool,
+) -> None:
+    """
+    Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
+    """
+    if active_compiler_venv:
+        env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
+
+    caplog.set_level(logging.WARNING)
+    venv_dir, python_path = tmpvenv_active
+
+    in_scope_test: Pattern[str] = re.compile("test-package-.*")
+    in_scope_nonext: Pattern[str] = re.compile("nonexistant-package")
+
+    def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+        for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
+            caplog.clear()
+            assert env.ActiveEnv.check(in_scope) == expect[0]
+            if not expect[0]:
+                assert expect[1] in {rec.message for rec in caplog.records}
+
+    assert_all_checks()
+    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    assert_all_checks()
+    create_install_package("test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")])
+    assert_all_checks()
+    create_install_package("test-package-one", version.Version("2.0.0"), [])
+    assert_all_checks(
+        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0")
+    )
+
+
+def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
+    """
+    Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
+    """
+    caplog.set_level(logging.WARNING)
+    venv_dir, python_path = tmpvenv_active
+    in_scope: Pattern[str] = re.compile("test-package-.*")
+    constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
+
+    def check_log(version: Optional[version.Version]) -> None:
+        assert f"Incompatibility between constraint test-package-one~=1.0 and installed version {version}" in {
+            rec.message for rec in caplog.records
+        }
+
+    assert env.ActiveEnv.check(in_scope)
+
+    caplog.clear()
+    assert not env.ActiveEnv.check(in_scope, constraints)
+    check_log(None)
+
+    caplog.clear()
+    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    assert env.ActiveEnv.check(in_scope, constraints)
+
+    caplog.clear()
+    v: version.Version = version.Version("2.0.0")
+    create_install_package("test-package-one", v, [])
+    assert not env.ActiveEnv.check(in_scope, constraints)
+    check_log(v)

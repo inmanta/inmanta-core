@@ -16,12 +16,15 @@
     Contact: code@inmanta.com
 """
 import configparser
+import importlib.util
 import logging
 import os
 import shutil
 import subprocess
 import sys
 import zipfile
+from importlib.machinery import ModuleSpec
+from types import ModuleType
 from typing import Optional
 
 import pytest
@@ -68,16 +71,17 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 )
 def test_build_v2_module(
     tmpdir,
+    modules_dir: str,
+    modules_v2_dir: str,
     module_name: str,
     is_v2_module: bool,
     set_path_argument: bool,
     monkeypatch: MonkeyPatch,
-    modules_dir: str,
-    modules_v2_dir: str,
 ) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.
     """
+    module_dir: str
     if is_v2_module:
         module_dir = os.path.join(modules_v2_dir, module_name)
     else:
@@ -111,12 +115,6 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
-    # A second invocation of the build command should raise an exception
-    # because the dist directory already exists
-    with pytest.raises(subprocess.CalledProcessError) as excinfo:
-        run_module_build(module_copy_dir, set_path_argument)
-    assert f"Non-empty output directory {dist_dir}" in excinfo.value.stdout.decode()
-
 
 def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
     """
@@ -135,7 +133,7 @@ def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> No
     assert not os.path.exists(os.path.join(module_copy_dir, "dist"))
 
 
-def test_build_v2_module_incomplete_package_data(tmpdir, caplog, modules_v2_dir: str) -> None:
+def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, caplog) -> None:
     """
     Verify that a warning is shown when a data file present in module namespace package is not packaged, because
     it's not mentioned in the `options.package_data` section of the setup.cfg
@@ -152,6 +150,19 @@ def test_build_v2_module_incomplete_package_data(tmpdir, caplog, modules_v2_dir:
     config_parser.set("options.package_data", "inmanta_plugins.minimalv2module", "setup.cfg")
     with open(setup_cfg_file, "w") as fd:
         config_parser.write(fd)
+
+    # load the module to make sure pycache files are ignored in the warning
+    source_dir: str = os.path.join(str(tmpdir), "module", "inmanta_plugins", "minimalv2module")
+    spec: ModuleSpec = importlib.util.spec_from_file_location(
+        "inmanta_plugins.minimalv2module", os.path.join(source_dir, "__init__.py")
+    )
+    mod: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert os.path.isfile(
+        os.path.join(
+            source_dir, "__pycache__", "__init__.cpython-%s.pyc" % "".join(str(digit) for digit in sys.version_info[:2])
+        )
+    )
 
     with caplog.at_level(logging.WARNING):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))

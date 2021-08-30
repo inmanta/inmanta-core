@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional, Set
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 import texttable
 import yaml
@@ -45,6 +45,7 @@ from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
+    InmantaModuleRequirement,
     InstallMode,
     InvalidMetadata,
     InvalidModuleException,
@@ -53,6 +54,7 @@ from inmanta.module import (
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
+    ModuleV2Source,
     Project,
     gitprovider,
 )
@@ -264,8 +266,8 @@ class ProjectTool(ModuleLikeTool):
         """
         Install all modules the project requires.
         """
-        # This currently only installs v1 modules. #3083 will add the v2 install
-        self.get_project(load=True)
+        project: Project = self.get_project(load=False)
+        project.install_modules()
 
 
 class ModuleTool(ModuleLikeTool):
@@ -494,10 +496,10 @@ version: 0.0.1dev0"""
                 specs[name] = []
 
             try:
-                if project._install_mode == InstallMode.master:
+                if project.install_mode == InstallMode.master:
                     reqv = "master"
                 else:
-                    release_only = project._install_mode == InstallMode.release
+                    release_only = project.install_mode == InstallMode.release
                     versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
                     if versions is None:
                         reqv = "None"
@@ -523,7 +525,7 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
-    def update(self, module: str = None, project: Project = None):
+    def update(self, module: Optional[str] = None, project: Optional[Project] = None):
         """
         Update all modules from their source
         """
@@ -534,13 +536,24 @@ version: 0.0.1dev0"""
         else:
             my_project = project
 
-        def do_update(specs: "Mapping[str, Iterable[Requirement]]", modules: List[str]) -> None:
-            for module in modules:
-                spec = specs.get(module, [])
+        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
+            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
+
+            v2_python_specs: List[Requirement] = [
+                ModuleV2Source.get_python_package_requirement(module_spec)
+                for module, module_specs in specs.items()
+                for module_spec in module_specs
+                if module in v2_modules
+            ]
+            if v2_python_specs:
+                env.process_env.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
+
+            for v1_module in set(modules).difference(v2_modules):
+                spec = specs.get(v1_module, [])
                 try:
-                    ModuleV1.update(my_project, module, spec, install_mode=my_project._install_mode)
+                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
                 except Exception:
-                    LOGGER.exception("Failed to update module %s", module)
+                    LOGGER.exception("Failed to update module %s", v1_module)
 
         attempt = 0
         done = False
@@ -552,7 +565,7 @@ version: 0.0.1dev0"""
                 # get AST
                 my_project.get_complete_ast()
                 # get current full set of requirements
-                specs = my_project.collect_imported_requirements()
+                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:
                     modules = list(specs.keys())
                 else:
@@ -587,7 +600,7 @@ version: 0.0.1dev0"""
         """
 
         def install(install_path: str) -> None:
-            env.ProcessEnv.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
@@ -725,8 +738,6 @@ class V2ModuleBuilder:
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
-            if os.listdir(output_directory):
-                raise ModuleBuildFailedError(msg=f"Non-empty output directory {output_directory}")
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
@@ -744,7 +755,7 @@ class V2ModuleBuilder:
         """
         rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
-        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package)
+        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore={"__pycache__"})
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
@@ -767,14 +778,20 @@ class V2ModuleBuilder:
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Set[str]] = None) -> Set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
+
+        :param directory: The directory to list the files of.
+        :param ignore: Names of subdirectories to ignore, regardless of their relative depth.
         """
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result = set()
+        ignore = ignore if ignore is not None else set()
         for (dirpath, dirnames, filenames) in os.walk(directory):
+            if os.path.basename(dirpath) in ignore:
+                continue
             relative_paths_to_filenames = set(os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames)
             result = result | relative_paths_to_filenames
         return result
@@ -884,10 +901,11 @@ build-backend = "setuptools.build_meta"
         config.add_section("options")
 
         # add requirements
-        if self._module.get_all_requires() or self._module.get_python_requirements_as_list():
-            ordered_requirements = sorted([str(r) for r in self._module.get_all_requires()])
-            requires = [f"{ModuleV2.PKG_NAME_PREFIX}{req}" for req in ordered_requirements]
-            requires += self._module.get_python_requirements_as_list()
+        module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
+        python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
+        if module_requirements or python_requirements:
+            requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
+            requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 
         # Make setuptools work

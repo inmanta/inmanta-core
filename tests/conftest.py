@@ -19,6 +19,7 @@ import asyncio
 import concurrent
 import csv
 import datetime
+import importlib.util
 import json
 import logging
 import os
@@ -26,6 +27,7 @@ import queue
 import random
 import re
 import shutil
+import site
 import socket
 import string
 import subprocess
@@ -34,11 +36,14 @@ import tempfile
 import time
 import traceback
 import uuid
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+import venv
+from types import ModuleType
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
 import psutil
+import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
@@ -52,7 +57,7 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, loader, protocol, resources
+from inmanta import config, const, data, env, loader, moduletool, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -68,6 +73,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from libpip2pi.commands import dir2pi
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages
 if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
@@ -262,6 +268,8 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
+    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
+    old_process_env: str = env.process_env.python_path
 
     yield
 
@@ -275,6 +283,9 @@ def deactive_venv():
             os.environ["PYTHONPATH"] = old_pythonpath
         else:
             del os.environ["PYTHONPATH"]
+    if old_os_venv is not None:
+        os.environ["VIRTUAL_ENV"] = old_os_venv
+    env.process_env.__init__(python_path=old_process_env)
     loader.PluginModuleFinder.reset()
 
 
@@ -778,10 +789,23 @@ class SnippetCompilationTest(KeepOnFail):
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         """
         self.setup_for_snippet_external(snippet)
+        loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
+        self._patch_process_env(project)
         self._install_v2_modules(project, install_v2_modules)
+
+    def _patch_process_env(self, project: Project) -> None:
+        """
+        Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
+        running process.
+        """
+        assert project.virtualenv.virtual_python is not None
+        env.process_env.__init__(python_path=project.virtualenv.virtual_python)
+        path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
+        env.process_env.notify_change()
+        os.makedirs(path, exist_ok=True)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
         module_tool = ModuleTool()
@@ -796,6 +820,7 @@ class SnippetCompilationTest(KeepOnFail):
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd))
         loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(self, snippet):
         if self.modules_dir:
@@ -909,13 +934,18 @@ def snippetcompiler_clean(modules_dir):
 
 
 @pytest.fixture(scope="session")
-def modules_dir():
+def modules_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
 
 
 @pytest.fixture(scope="session")
 def modules_v2_dir():
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
+
+
+@pytest.fixture(scope="session")
+def projects_dir() -> str:
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
 class CLI(object):
@@ -1015,3 +1045,106 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
+
+
+@pytest.fixture
+def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
+    `tmpdir` fixture. The venv is activated within the currently running process. This venv is completely decoupled from the
+    active development venv. As a result, any attempts to load new modules from the development venv will fail until cleanup.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    python_path: py.path.local = venv_dir.join("bin", "python")
+    venv.create(venv_dir, with_pip=True)
+    subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
+    yield (venv_dir, python_path)
+
+
+@pytest.fixture
+def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
+    from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
+    cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
+    environment context because its setup and teardown will then wrap the dependent setup and teardown. This works because
+    pytest fixture setup and teardown use LIFO semantics
+    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixturein particular should
+    always come after this one.
+
+    This fixture has a huge side effect that affects the running Python process. For a venv fixture that does not affect the
+    running process, check out tmpvenv.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir, python_path = tmpvenv
+
+    # adapted from
+    # https://github.com/pypa/virtualenv/blob/9569493453a39d63064ed7c20653987ba15c99e5/src/virtualenv/activation/python/activate_this.py
+    # MIT license
+    # Copyright (c) 2007 Ian Bicking and Contributors
+    # Copyright (c) 2009 Ian Bicking, The Open Planning Project
+    # Copyright (c) 2011-2016 The virtualenv developers
+    # Copyright (c) 2020-202x The virtualenv developers
+    binpath: str
+    base: str
+    site_packages: str
+    if sys.platform == "win32":
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "Scripts"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(base, "Lib", "site-packages")
+    else:
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "bin"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(
+            base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+        )
+
+    # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
+    os.environ["PATH"] = os.pathsep.join(
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+    )
+    os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
+
+    # add the virtual environments libraries to the host python import mechanism
+    prev_length = len(sys.path)
+    site.addsitedir(site_packages)
+    # exclude old venv path
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+
+    sys.real_prefix = sys.prefix
+    sys.prefix = base
+
+    # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
+    env.process_env.__init__(python_path=python_path)
+    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
+    env.process_env.init_namespace(const.PLUGINS_PACKAGE)
+    env.process_env.notify_change()
+
+    yield tmpvenv
+
+    def module_in_prefix(module: ModuleType, prefix: str) -> bool:
+        file: Optional[str] = getattr(module, "__file__", None)
+        return file.startswith(prefix) if file is not None else False
+
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)]
+    for mod_name in loaded_modules:
+        del sys.modules[mod_name]
+    importlib.invalidate_caches()
+
+
+@pytest.fixture(scope="session")
+def local_module_package_index(modules_v2_dir: str) -> Iterator[Tuple[str]]:
+    """
+    Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+
+    :return: The path to the index
+    """
+    with tempfile.TemporaryDirectory() as artifact_dir:
+        for module_dir in os.listdir(modules_v2_dir):
+            path: str = os.path.join(modules_v2_dir, module_dir)
+            moduletool.ModuleTool().build(path=path, output_dir=artifact_dir)
+        dir2pi(argv=["dir2pi", artifact_dir])
+        yield os.path.join(artifact_dir, "simple")
