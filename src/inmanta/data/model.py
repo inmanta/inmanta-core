@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
@@ -29,6 +29,9 @@ import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+
+if TYPE_CHECKING:
+    from pydantic.typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
 
 # This reference to the actual pydantic field_type_schema method is only loaded once
 old_field_type_schema = pydantic.schema.field_type_schema
@@ -315,6 +318,31 @@ class LogLine(BaseModel):
     args: List[Optional[ArgumentTypes]] = []
     kwargs: Dict[str, Optional[ArgumentTypes]] = {}
     timestamp: datetime.datetime
+
+    def dict(
+        self,
+        *,
+        include: Optional[Union["AbstractSetIntStr", "MappingIntStrAny"]] = None,
+        exclude: Optional[Union["AbstractSetIntStr", "MappingIntStrAny"]] = None,
+        by_alias: bool = False,
+        skip_defaults: Optional[bool] = None,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+    ) -> "DictStrAny":
+        generated_dict = super().dict(
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            skip_defaults=skip_defaults,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+        )
+
+        # Overwrite the value of the level with its name as the db expects this
+        generated_dict["level"] = self.level.name
+        return generated_dict
 
 
 class ResourceIdDetails(BaseModel):
