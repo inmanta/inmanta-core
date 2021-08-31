@@ -15,17 +15,17 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
 import shutil
-from typing import List, Callable
-import logging
+from typing import Callable, List
 
 import py
 import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import ModuleV1, ModuleV2, Project, CompilerException
+from inmanta.module import CompilerException, ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
 
 
@@ -168,10 +168,7 @@ def test_load_module_v1_module_using_install(project_builder: Callable[[str, Lis
 @pytest.mark.parametrize("allow_v1", [True, False])
 @pytest.mark.parametrize("editable_install", [True, False])
 def test_load_module_v2_already_installed(
-    project_builder: Callable[[str, List[str], List[str]], Project],
-    modules_v2_dir: str,
-    allow_v1: bool,
-    editable_install: bool
+    project_builder: Callable[[str, List[str], List[str]], Project], modules_v2_dir: str, allow_v1: bool, editable_install: bool
 ) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed

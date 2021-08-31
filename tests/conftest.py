@@ -38,7 +38,7 @@ import traceback
 import uuid
 import venv
 from types import ModuleType
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Callable
+from typing import AsyncIterator, Callable, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -958,7 +958,7 @@ def project_builder(tmpdir: py.path.local) -> Callable[[str, List[str], List[str
         main_cf_content: str,
         copy_to_libs_dir: List[str] = [],
         install_v2_modules: List[Tuple[str, bool]] = [],
-        python_package_source: Optional[str] = None
+        python_package_source: Optional[str] = None,
     ) -> Project:
         """
         :param main_cf_content: The content of main.cf file in the project.
@@ -973,14 +973,16 @@ def project_builder(tmpdir: py.path.local) -> Callable[[str, List[str], List[str
         os.mkdir(project_dir)
         project_yml_file = os.path.join(project_dir, "project.yml")
         with open(project_yml_file, "w") as fd:
-            fd.write("""
+            fd.write(
+                """
 name: test
 modulepath: libs
 downloadpath: libs
 install_mode: "release"
 repo:
     - {type: git, url: https://github.com/inmanta/}
-""")
+"""
+            )
             if python_package_source:
                 fd.write(f"    - {{type: package, url: {python_package_source} }}\n")
 
