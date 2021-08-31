@@ -25,6 +25,7 @@ requires = [
     "asyncpg",
     "click",
     f"inmanta-core~={version}.dev",
+    "pip2pi",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
