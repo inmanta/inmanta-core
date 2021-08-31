@@ -164,7 +164,7 @@ class ResourceAction(object):
     async def execute(
         self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
     ) -> None:
-        self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
+        self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
         with cache.manager(self.resource.id.get_version()):
             self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
@@ -186,7 +186,7 @@ class ResourceAction(object):
                 self.running = True
                 if self.is_done():
                     # Action is cancelled
-                    self.logger.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
+                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
                     self.running = False
                     return
 

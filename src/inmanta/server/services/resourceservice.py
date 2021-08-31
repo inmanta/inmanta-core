@@ -450,7 +450,7 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         [resource_id_str],
-                        log.level.value,
+                        log.level.to_int,
                         log.timestamp,
                         log.msg,
                     )
@@ -460,7 +460,6 @@ class ResourceService(protocol.ServerSlice):
                         {
                             **log.dict(),
                             "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
-                            "level": log.level.name,
                         }
                         for log in messages
                     ],
@@ -622,7 +621,7 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         resource_ids,
-                        const.LogLevel[msg["level"]].value,
+                        const.LogLevel(msg["level"]).to_int,
                         parse_timestamp(msg["timestamp"]),
                         msg["msg"],
                     )

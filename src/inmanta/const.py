@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from enum import Enum, IntEnum
+from enum import Enum
 
 from inmanta.stable_api import stable_api
 
@@ -155,31 +155,9 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(IntEnum):
+class LogLevel(str, Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.
-    """
-
-    CRITICAL = 50
-    ERROR = 40
-    WARNING = 30
-    INFO = 20
-    DEBUG = 10
-    TRACE = 3
-    NOTSET = 0
-
-    @property
-    def to_str(self) -> "StrLogLevel":
-        """
-        Convert an integer formated log level into a string formated log level
-        """
-        return StrLogLevel[self.name]
-
-
-@stable_api
-class StrLogLevel(str, Enum):
-    """
-    Log levels as strings.
     """
 
     CRITICAL = "CRITICAL"
@@ -191,11 +169,39 @@ class StrLogLevel(str, Enum):
     NOTSET = "NOTSET"
 
     @property
-    def to_int(self) -> LogLevel:
+    def to_int(self) -> int:
+        return LOG_LEVEL_AS_INTEGER[self]
+
+    def from_int(level: int) -> "LogLevel":
         """
-        Convert a string formated log level into an integer formated log level
+        This methods is an example of construction of a LogLevel value from an integer
         """
-        return LogLevel[self.name]
+        return LogLevel(level)
+
+    def from_str(level: str) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from a string
+        """
+        return LogLevel(level)
+
+
+# Mapping each log level to its integer value
+LOG_LEVEL_AS_INTEGER = {
+    LogLevel.CRITICAL: 50,
+    LogLevel.ERROR: 40,
+    LogLevel.WARNING: 30,
+    LogLevel.INFO: 20,
+    LogLevel.DEBUG: 10,
+    LogLevel.TRACE: 3,
+    LogLevel.NOTSET: 1,
+}
+
+
+# The following code registers the integer log levels as values
+# in the LogLevel enum.  It allows to pass them in the constructor
+# as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
+for level, value in LOG_LEVEL_AS_INTEGER.items():
+    LogLevel._value2member_map_[value] = level
 
 
 INMANTA_URN = "urn:inmanta:"
