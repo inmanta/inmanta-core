@@ -319,31 +319,6 @@ class LogLine(BaseModel):
     kwargs: Dict[str, Optional[ArgumentTypes]] = {}
     timestamp: datetime.datetime
 
-    def dict(
-        self,
-        *,
-        include: Optional[Union["AbstractSetIntStr", "MappingIntStrAny"]] = None,
-        exclude: Optional[Union["AbstractSetIntStr", "MappingIntStrAny"]] = None,
-        by_alias: bool = False,
-        skip_defaults: Optional[bool] = None,
-        exclude_unset: bool = False,
-        exclude_defaults: bool = False,
-        exclude_none: bool = False,
-    ) -> "DictStrAny":
-        generated_dict = super().dict(
-            include=include,
-            exclude=exclude,
-            by_alias=by_alias,
-            skip_defaults=skip_defaults,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-        )
-
-        # Overwrite the value of the level with its name as the db expects this
-        generated_dict["level"] = self.level.name
-        return generated_dict
-
 
 class ResourceIdDetails(BaseModel):
     resource_type: ResourceType

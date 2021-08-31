@@ -457,7 +457,11 @@ class ResourceService(protocol.ServerSlice):
 
                 await resource_action.set_and_save(
                     messages=[
-                        {**log.dict(), "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds")}
+                        {
+                            **log.dict(),
+                            "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
+                            "level": log.level.name,
+                        }
                         for log in messages
                     ],
                     changes=changes_with_rvid,
