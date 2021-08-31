@@ -17,14 +17,15 @@
 """
 import os
 import shutil
-from typing import List
+from typing import List, Callable
+import logging
 
 import py
 import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import ModuleV1, ModuleV2, Project
+from inmanta.module import ModuleV1, ModuleV2, Project, CompilerException
 from inmanta.moduletool import DummyProject, ModuleConverter
 
 
@@ -127,3 +128,131 @@ def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcom
     output = capsys.readouterr().out
     assert "Print from v2 module" in output
     assert "Hello world" in output
+
+
+@pytest.mark.parametrize("allow_v1", [True, False])
+def test_load_module_v1_already_installed(
+    project_builder: Callable[[str, List[str], List[str]], Project], modules_dir: str, allow_v1: bool
+) -> None:
+    """
+    Test whether the Project.load_module() method works correctly when loading a V1 module that was already installed
+    in the module path.
+    """
+    module_name = "elaboratev1module"
+    module_dir = os.path.join(modules_dir, module_name)
+    project: Project = project_builder(main_cf_content=f"import {module_name}", copy_to_libs_dir=[module_dir])
+
+    assert module_name not in project.modules
+    if allow_v1:
+        project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+        assert module_name in project.modules
+    else:
+        with pytest.raises(CompilerException, match=f"Could not find module {module_name}"):
+            project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+
+
+def test_load_module_v1_module_using_install(project_builder: Callable[[str, List[str], List[str]], Project]):
+    """
+    Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
+    and that module is not yet present in the module path.
+    """
+    module_name = "std"
+    project: Project = project_builder(main_cf_content=f"import {module_name}")
+    assert module_name not in project.modules
+    assert module_name not in os.listdir(project.downloadpath)
+    project.load_module(module_name=module_name, install=True, allow_v1=True)
+    assert module_name in project.modules
+    assert module_name in os.listdir(project.downloadpath)
+
+
+@pytest.mark.parametrize("allow_v1", [True, False])
+@pytest.mark.parametrize("editable_install", [True, False])
+def test_load_module_v2_already_installed(
+    project_builder: Callable[[str, List[str], List[str]], Project],
+    modules_v2_dir: str,
+    allow_v1: bool,
+    editable_install: bool
+) -> None:
+    """
+    Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed
+    in the compiler venv.
+    """
+    module_name = "elaboratev2module"
+    module_dir = os.path.join(modules_v2_dir, module_name)
+    project: Project = project_builder(
+        main_cf_content=f"import {module_name}", install_v2_modules=[(module_dir, editable_install)]
+    )
+
+    assert module_name not in project.modules
+    project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+    assert module_name in project.modules
+
+
+@pytest.mark.parametrize("install", [True, False])
+def test_load_module_v2_module_using_install(
+    tmpvenv_active: py.path.local,
+    project_builder: Callable[[str, List[str], List[str]], Project],
+    local_module_package_index: str,
+    install: bool,
+):
+    """
+    Test whether the Project.load_module() method works correctly when a module is only available as a V2 module
+    and that module is not yet installed in the compiler venv.
+    """
+    module_name = "minimalv2module"
+    project: Project = project_builder(
+        main_cf_content=f"import {module_name}", python_package_source=local_module_package_index
+    )
+    assert module_name not in project.modules
+    assert module_name not in os.listdir(project.downloadpath)
+    if install:
+        project.load_module(module_name=module_name, install=install, allow_v1=True)
+    else:
+        with pytest.raises(CompilerException, match="Could not find module minimalv2module"):
+            project.load_module(module_name=module_name, install=install, allow_v1=True)
+    assert (module_name in project.modules) == install
+    assert module_name not in os.listdir(project.downloadpath)
+
+
+@pytest.mark.parametrize("allow_v1", [True, False])
+def test_load_module_module_not_found(project_builder: Callable[[str, List[str], List[str]], Project], allow_v1: bool):
+    """
+    Assert behavior when a module is not found as a V1 or a V2 module.
+    """
+    module_name = "non_existing_module"
+    project: Project = project_builder(main_cf_content=f"import {module_name}")
+    with pytest.raises(CompilerException, match=f"Could not find module {module_name}"):
+        project.load_module(module_name=module_name, install=True, allow_v1=allow_v1)
+
+
+def test_load_module_v1_and_v2_installed(
+    tmpdir: py.path.local,
+    project_builder: Callable[[str, List[str], List[str]], Project],
+    modules_dir: str,
+    caplog,
+) -> None:
+    """
+    Test whether the Project.load_module() method works correctly when the v1 and v2 version of a module are both installed.
+    The V2 module should be loaded and a warning should be logged.
+    """
+    module_name = "minimalv1module"
+    module_dir = os.path.join(modules_dir, module_name)
+
+    # Convert v1 to v2 module
+    module = ModuleV1(project=DummyProject(autostd=False), path=module_dir)
+    module_dir_v2 = os.path.join(tmpdir, f"{module_name}-v2")
+    ModuleConverter(module).convert(output_directory=module_dir_v2)
+
+    project: Project = project_builder(
+        main_cf_content=f"import {module_name}",
+        copy_to_libs_dir=[module_dir],
+        install_v2_modules=[(module_dir_v2, False)],
+    )
+
+    assert module_name not in project.modules
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        project.load_module(module_name=module_name, install=False, allow_v1=True)
+    assert f"Module {module_name} is installed as a V1 module and a V2 module: V1 will be ignored." in caplog.text
+    assert module_name in project.modules
+    assert isinstance(project.modules[module_name], ModuleV2)

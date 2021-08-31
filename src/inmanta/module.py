@@ -484,7 +484,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             download_path: str = os.path.join(project.downloadpath, module_name)
             result = self.remote_repo.clone(module_name, project.downloadpath)
             if not result:
-                raise InvalidModuleException("could not locate module with name: %s" % module_name)
+                return None
 
             return ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
@@ -503,7 +503,7 @@ class ModuleRepo:
         raise NotImplementedError("Abstract method")
 
     def path_for(self, name: str) -> Optional[str]:
-        # same class is used for search parh and remote repos, perhaps not optimal
+        # same class is used for search path and remote repos, perhaps not optimal
         raise NotImplementedError("Abstract method")
 
 

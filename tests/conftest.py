@@ -38,7 +38,7 @@ import traceback
 import uuid
 import venv
 from types import ModuleType
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Callable
 
 import asyncpg
 import pkg_resources
@@ -948,6 +948,65 @@ def projects_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
+@pytest.fixture(scope="function")
+def project_builder(tmpdir: py.path.local) -> Callable[[str, List[str], List[str]], Project]:
+    """
+    Fixture that creates an Inmanta Project and returns the corresponding instance of the Project class.
+    """
+
+    def create_project(
+        main_cf_content: str,
+        copy_to_libs_dir: List[str] = [],
+        install_v2_modules: List[Tuple[str, bool]] = [],
+        python_package_source: Optional[str] = None
+    ) -> Project:
+        """
+        :param main_cf_content: The content of main.cf file in the project.
+        :param copy_to_libs_dir: The V1 module directories that should be copied in to the libs directory of the project.
+        :param install_v2_modules: The V2 module directories that should be installed in the compiler venv of the project.
+                                   The first element of the tuple indicates the path to the module directory. The second
+                                   element indicates whether the module should be installed in an editable way.
+        :param python_package_source: The python package repository that should be configured on the Inmanta project to
+                                      discover V2 modules.
+        """
+        project_dir = os.path.join(tmpdir, "project")
+        os.mkdir(project_dir)
+        project_yml_file = os.path.join(project_dir, "project.yml")
+        with open(project_yml_file, "w") as fd:
+            fd.write("""
+name: test
+modulepath: libs
+downloadpath: libs
+install_mode: "release"
+repo:
+    - {type: git, url: https://github.com/inmanta/}
+""")
+            if python_package_source:
+                fd.write(f"    - {{type: package, url: {python_package_source} }}\n")
+
+        main_cf_file = os.path.join(project_dir, "main.cf")
+        with open(main_cf_file, "w") as fd:
+            fd.write(main_cf_content)
+
+        libs_dir = os.path.join(project_dir, "libs")
+        for mod_dir in copy_to_libs_dir:
+            shutil.copytree(mod_dir, os.path.join(libs_dir, os.path.basename(mod_dir)))
+
+        project = Project(path=project_dir)
+        project.use_virtual_env()
+        wheels_dir = os.path.join(tmpdir, "wheels")
+        for mod_dir, do_editable_install in install_v2_modules:
+            if do_editable_install:
+                project.install_in_compiler_venv(mod_dir, editable=do_editable_install)
+            else:
+                v2_package = ModuleTool().build(mod_dir, output_dir=wheels_dir)
+                project.install_in_compiler_venv(v2_package, editable=do_editable_install)
+
+        return project
+
+    return create_project
+
+
 class CLI(object):
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
@@ -1064,7 +1123,7 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
 
 
 @pytest.fixture
-def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[py.path.local]:
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
@@ -1136,7 +1195,7 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[Tuple[str]]:
+def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
 
