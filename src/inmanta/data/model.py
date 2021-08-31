@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
@@ -29,9 +29,6 @@ import inmanta.ast.export as ast_export
 from inmanta import const
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
-
-if TYPE_CHECKING:
-    from pydantic.typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
 
 # This reference to the actual pydantic field_type_schema method is only loaded once
 old_field_type_schema = pydantic.schema.field_type_schema
