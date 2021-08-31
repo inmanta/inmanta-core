@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import argparse
+import configparser
 import json
 import os
 import shutil
@@ -33,6 +34,7 @@ from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
+from packaging import version
 
 
 def run_module_install(python_path: str, module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -306,3 +308,59 @@ def test_project_install(
     v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_project_install_preinstalled(
+    local_module_package_index: str,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    projects_dir: str,
+    editable: bool,
+) -> None:
+    """
+    Verify that `inmanta project install` does not override preinstalled modules.
+    """
+    venv_dir, python_path = tmpvenv_active
+    module_name: str = "minimalv2module"
+    fq_mod_name: str = "inmanta_plugins.minimalv2module"
+
+    assert env.process_env.get_module_file(fq_mod_name) is None
+
+    # preinstall older version of module
+    module_path: str = os.path.join(tmpdir, module_name)
+    shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
+    config_file: str = os.path.join(module_path, module.ModuleV2.MODULE_FILE)
+    config: configparser.ConfigParser = configparser.ConfigParser()
+    config.read(config_file)
+    config["egg_info"] = {"tag_build": ".dev0"}
+    with open(config_file, "w") as fh:
+        config.write(fh)
+    ModuleTool().install(editable=editable, path=module_path)
+
+    def assert_module_install() -> None:
+        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        env_module_file, module_loader = module_info
+        assert not isinstance(module_loader, loader.PluginModuleLoader)
+        assert env_module_file is not None
+        install_path: str = module_path if editable else env.process_env.site_packages_dir
+        assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
+        assert (
+            env.process_env.get_installed_packages(only_editable=editable).get(f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None)
+            == version.Version(config["metadata"]["version"] + ".dev0")
+        )
+
+    assert_module_install()
+
+    # set up project and modules
+    project_path: str = os.path.join(tmpdir, "project")
+    metadata: module.ProjectMetadata = setup_simple_project(
+        projects_dir, project_path, ["std", "minimalv2module"], index_urls=[local_module_package_index]
+    )
+
+    os.chdir(project_path)
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+    assert_module_install()
