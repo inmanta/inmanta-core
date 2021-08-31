@@ -2195,6 +2195,18 @@ class Compile(BaseDocument):
 
 
 class LogLine(DataDocument):
+    """
+    LogLine data document.
+
+    An instance of this class only has one attribute: _data.
+    This unique attribute is a dict, with the following keys:
+        - msg: the message to write to logs (value type: str)
+        - args: the args that can be passed to the logger (value type: list)
+        - level: the log level of the message (value type: str, example: "CRITICAL")
+        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
+    """
+
     @property
     def msg(self) -> str:
         return self._data["msg"]
@@ -2208,11 +2220,17 @@ class LogLine(DataDocument):
         level: str = self._data["level"]
         return LogLevel[level]
 
-    def write_to_logger(self, logger: logging.Logger):
-        logger.log(self.log_level.value, self.msg, *self.args)
+    def write_to_logger(self, logger: logging.Logger) -> None:
+        logger.log(self.log_level.to_int, self.msg, *self.args)
 
     @classmethod
-    def log(cls, level: Union[int, const.LogLevel], msg: str, timestamp=None, **kwargs):
+    def log(
+        cls,
+        level: Union[int, const.LogLevel],
+        msg: str,
+        timestamp: Optional[datetime.datetime] = None,
+        **kwargs,
+    ) -> "LogLine":
         if timestamp is None:
             timestamp = datetime.datetime.now().astimezone()
 
