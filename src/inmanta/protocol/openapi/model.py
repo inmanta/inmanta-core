@@ -114,10 +114,10 @@ class SchemaBase(BaseModel):
         schema: SchemaBase = self.resolve(ref_prefix, known_schemas)
 
         # We only do a deepcopy if the parameter says so AND this object has not been newly built
-        deep = deep and not schema == self
+        deep = deep and schema is not self
 
         # Duplicate the schema, and update some of its values
-        duplicate: SchemaBase = schema.copy(update, deep=deep)
+        duplicate: SchemaBase = schema.copy(update=update, deep=deep)
 
         # We copy and resolve the list of schema
         if duplicate.anyOf is not None:
