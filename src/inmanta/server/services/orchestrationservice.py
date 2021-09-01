@@ -276,7 +276,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         metadata = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
-        failed = compile_state == const.Compilestate.failed.name
+        failed = compile_state == const.Compilestate.failed
 
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
