@@ -694,3 +694,65 @@ async def test_tags(server, feature_manager):
         for operation in path.values():
             assert len(operation["tags"]) > 0
     assert "core.project" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]
+
+
+def test_openapi_schema() -> None:
+    ref_prefix = "#/"
+    schemas = {
+        "person": {
+            "title": "Person",
+            "properties": {
+                "address": {
+                    "$ref": ref_prefix + "address",
+                },
+                "age": {
+                    "title": "Age",
+                    "type": "integer",
+                },
+            },
+        },
+        "address": {
+            "title": "Address",
+            "properties": {
+                "street": {
+                    "title": "Street",
+                    "type": "string",
+                },
+                "number": {
+                    "title": "Number",
+                    "type": "integer",
+                },
+                "city": {
+                    "title": "City",
+                    "type": "string",
+                },
+            },
+        },
+    }
+
+    person_schema = Schema(**schemas["person"])
+    address_schema = Schema(**schemas["address"])
+
+    assert person_schema == Schema(
+        title="Person",
+        properties={
+            "address": Schema(**{"$ref": ref_prefix + "address"}),
+            "age": SchemaBase(title="Age", type="integer"),
+        },
+    )
+
+    assert address_schema == Schema(
+        title="Address",
+        properties={
+            "street": SchemaBase(title="Street", type="string"),
+            "number": SchemaBase(title="Number", type="integer"),
+            "city": SchemaBase(title="City", type="string"),
+        },
+    )
+
+    assert Schema(**{"$ref": ref_prefix + "person"}).resolve(ref_prefix, schemas) == person_schema
+    assert Schema(**{"$ref": ref_prefix + "address"}).resolve(ref_prefix, schemas) == address_schema
+
+    assert not Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
+    person_schema.properties["address"] = address_schema
+    assert Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
