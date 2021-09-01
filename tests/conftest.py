@@ -844,7 +844,7 @@ class SnippetCompilationTest(KeepOnFail):
             downloadpath: {self.libs}
             version: 1.0
             repo:
-                - {{type: git, url: https://github.com/inmanta/ }}
+                - {{type: git, url: {self.repo} }}
             """
             )
             if python_package_source:

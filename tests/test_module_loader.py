@@ -156,6 +156,8 @@ def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     """
     module_name = "std"
     project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}")
+    # Remove std module in downloadpath created by other test case
+    shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
     project.load_module(module_name=module_name, allow_v1=True)
