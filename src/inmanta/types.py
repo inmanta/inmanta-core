@@ -19,7 +19,6 @@
 
 import uuid
 from datetime import datetime
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from pydantic import errors, types
@@ -60,7 +59,7 @@ class StrictNonIntBool(object):
 
 
 PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
-SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
+SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]
