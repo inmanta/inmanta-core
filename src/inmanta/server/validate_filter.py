@@ -162,7 +162,7 @@ class ResourceLogFilterModel(FilterModel):
 
 
 def get_log_levels_for_filter(minimal_log_level: const.LogLevel) -> List[str]:
-    return [level.name for level in const.LogLevel if level.value >= minimal_log_level.value]
+    return [level.value for level in const.LogLevel if level.to_int >= minimal_log_level.to_int]
 
 
 class ResourceLogFilterValidator(FilterValidator):

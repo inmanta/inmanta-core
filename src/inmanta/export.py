@@ -332,10 +332,10 @@ class Exporter(object):
 
             # call dependency managers
             self._call_dep_manager(types)
-            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
             self.failed = False
         else:
-            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed
             self.failed = True
             LOGGER.warning("Compilation of model failed.")
 

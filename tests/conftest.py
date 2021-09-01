@@ -38,7 +38,7 @@ import traceback
 import uuid
 import venv
 from types import ModuleType
-from typing import AsyncIterator, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
