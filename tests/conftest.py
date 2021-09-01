@@ -1084,7 +1084,7 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
 
 
 @pytest.fixture
-def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[py.path.local]:
+def tmpvenv_active(deactive_venv, tmpvenv: Tuple[py.path.local, py.path.local]) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
