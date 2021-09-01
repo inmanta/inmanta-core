@@ -104,7 +104,7 @@ class SchemaBase(BaseModel):
 
         :param ref_prefix: The prefix this object ref should have if it is only a reference
         :param known_schemas: A dict of known schemas, the keys are the reference diminished from their prefix
-        :param update: values to change/add in the new model. 
+        :param update: values to change/add in the new model.
             Note: the data is not validated before creating the new model: you should trust this data
             Note: this update is applied to every schema we resolve
             Note: this is passed directly to BaseModel.copy method
