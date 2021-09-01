@@ -963,7 +963,7 @@ def project_builder(tmpdir: py.path.local) -> Callable[[str, List[str], List[str
         """
         :param main_cf_content: The content of main.cf file in the project.
         :param copy_to_libs_dir: The V1 module directories that should be copied into the libs directory of the project.
-        :param install_v2_modules: The V2 module directories that should be installed in the developer venv.
+        :param install_v2_modules: The V2 module directories that should be installed in the compiler venv.
                                    The first element of the tuple indicates the path to the module directory. The second
                                    element indicates whether the module should be installed in an editable way.
         :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
