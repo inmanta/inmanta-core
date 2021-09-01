@@ -141,7 +141,7 @@ class InmantaModuleRequirement:
 class CompilerExceptionWithExtendedTrace(CompilerException):
     """
     A compiler exception that adds additional information about the cause of this exception
-    to the formatted trace when available.
+    to the formatted trace.
     """
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:

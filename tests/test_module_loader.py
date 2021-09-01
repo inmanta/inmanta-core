@@ -25,7 +25,7 @@ import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import CompilerException, ModuleV1, ModuleV2, Project
+from inmanta.module import ModuleNotFoundException, ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
 
 
@@ -147,7 +147,7 @@ def test_load_module_v1_already_installed(
         project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
         assert module_name in project.modules
     else:
-        with pytest.raises(CompilerException, match=f"Could not find module {module_name}"):
+        with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
             project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
 
 
@@ -205,7 +205,7 @@ def test_load_module_v2_module_using_install(
     if install:
         project.load_module(module_name=module_name, install=install, allow_v1=True)
     else:
-        with pytest.raises(CompilerException, match="Could not find module minimalv2module"):
+        with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
             project.load_module(module_name=module_name, install=install, allow_v1=True)
     assert (module_name in project.modules) == install
     assert module_name not in os.listdir(project.downloadpath)
@@ -218,7 +218,7 @@ def test_load_module_module_not_found(project_builder: Callable[[str, List[str],
     """
     module_name = "non_existing_module"
     project: Project = project_builder(main_cf_content=f"import {module_name}")
-    with pytest.raises(CompilerException, match=f"Could not find module {module_name}"):
+    with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
         project.load_module(module_name=module_name, install=True, allow_v1=allow_v1)
 
 
