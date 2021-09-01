@@ -155,33 +155,65 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(Enum):
+class LogLevel(str, Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
 
-    CRITICAL = 50
-    ERROR = 40
-    WARNING = 30
-    INFO = 20
-    DEBUG = 10
-    TRACE = 3
-    NOTSET = 0
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    TRACE = "TRACE"
+    NOTSET = "NOTSET"
+
+    @property
+    def to_int(self) -> int:
+        return LOG_LEVEL_AS_INTEGER[self]
+
+    def from_int(level: int) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from an integer
+        """
+        return LogLevel(level)
+
+    def from_str(level: str) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from a string
+        """
+        return LogLevel(level)
+
+
+# Mapping each log level to its integer value
+LOG_LEVEL_AS_INTEGER = {
+    LogLevel.CRITICAL: 50,
+    LogLevel.ERROR: 40,
+    LogLevel.WARNING: 30,
+    LogLevel.INFO: 20,
+    LogLevel.DEBUG: 10,
+    LogLevel.TRACE: 3,
+    LogLevel.NOTSET: 1,
+}
+
+
+# The following code registers the integer log levels as values
+# in the LogLevel enum.  It allows to pass them in the constructor
+# as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
+for level, value in LOG_LEVEL_AS_INTEGER.items():
+    LogLevel._value2member_map_[value] = level
 
 
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(Enum):
+class Compilestate(str, Enum):
     """
     Compile state, whether the compile did succeed or not
-
-    SUCCESS=1
-    FAILED=2
     """
 
-    success = 1
-    failed = 2
+    success = "success"
+    failed = "failed"
 
 
 EXPORT_META_DATA = "export_metadata"

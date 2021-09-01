@@ -54,7 +54,7 @@ from asyncpg.protocol import Record
 
 import inmanta.db.versions
 from inmanta import const, resources, util
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, ResourceState
+from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.server import config
@@ -2195,27 +2195,47 @@ class Compile(BaseDocument):
 
 
 class LogLine(DataDocument):
+    """
+    LogLine data document.
+
+    An instance of this class only has one attribute: _data.
+    This unique attribute is a dict, with the following keys:
+        - msg: the message to write to logs (value type: str)
+        - args: the args that can be passed to the logger (value type: list)
+        - level: the log level of the message (value type: str, example: "CRITICAL")
+        - kwargs: the key-word args that where used to generated the log (value type: list)
+        - timestamp: the time at which the LogLine was created (value type: datetime.datetime)
+    """
+
     @property
-    def msg(self):
+    def msg(self) -> str:
         return self._data["msg"]
 
     @property
-    def args(self):
+    def args(self) -> List:
         return self._data["args"]
 
-    def get_log_level_as_int(self):
-        return self._data["level"].value
+    @property
+    def log_level(self) -> LogLevel:
+        level: str = self._data["level"]
+        return LogLevel[level]
 
-    def write_to_logger(self, logger):
-        logger.log(self.get_log_level_as_int(), self.msg, *self.args)
+    def write_to_logger(self, logger: logging.Logger) -> None:
+        logger.log(self.log_level.to_int, self.msg, *self.args)
 
     @classmethod
-    def log(cls, level, msg, timestamp=None, **kwargs):
+    def log(
+        cls,
+        level: Union[int, const.LogLevel],
+        msg: str,
+        timestamp: Optional[datetime.datetime] = None,
+        **kwargs,
+    ) -> "LogLine":
         if timestamp is None:
             timestamp = datetime.datetime.now().astimezone()
 
         log_line = msg % kwargs
-        return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
+        return cls(level=LogLevel(level).name, msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
 @stable_api
