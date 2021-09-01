@@ -111,13 +111,13 @@ class SchemaBase(BaseModel):
         """
 
         # Get this schema if it is not a ref, or a new schema pointed to by the ref
-        schema: SchemaBase = self.resolve(ref_prefix, known_schemas)
+        schema: S = self.resolve(ref_prefix, known_schemas)
 
         # We only do a deepcopy if the parameter says so AND this object has not been newly built
         deep = deep and schema is not self
 
         # Duplicate the schema, and update some of its values
-        duplicate: SchemaBase = schema.copy(update=update, deep=deep)
+        duplicate: S = schema.copy(update=update, deep=deep)
 
         # We copy and resolve the list of schema
         if duplicate.anyOf is not None:
@@ -134,12 +134,12 @@ class Schema(SchemaBase):
     properties: Optional[Dict[str, Union["Schema", SchemaBase]]] = None
     additionalProperties: Optional[Union["Schema", SchemaBase, bool]] = None
 
-    def from_dict(self: S, schema: Dict[str, Any]) -> S:
+    def from_dict(self: "Schema", schema: Dict[str, Any]) -> "Schema":
         return Schema(**schema)
 
     def recursive_resolve(
-        self: S, ref_prefix: str, known_schemas: Dict[str, Any], update: Dict[str, Any], deep: bool = True
-    ) -> S:
+        self: "Schema", ref_prefix: str, known_schemas: Dict[str, Any], update: Dict[str, Any], deep: bool = True
+    ) -> "Schema":
         duplicate: Schema = super().recursive_resolve(ref_prefix, known_schemas, update, deep=deep)
 
         if duplicate.items is not None:
