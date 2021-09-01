@@ -522,7 +522,7 @@ class ResourceService(protocol.ServerSlice):
                         self.log_resource_action(
                             env.id,
                             resource_ids,
-                            const.LogLevel[msg["level"]].value,
+                            const.LogLevel(msg["level"]).to_int,
                             parse_timestamp(msg["timestamp"]),
                             msg["msg"],
                         )
