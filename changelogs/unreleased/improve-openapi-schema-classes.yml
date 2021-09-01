@@ -1,0 +1,5 @@
+description: Improve openapi schema classes
+change-type: minor
+destination-branches:
+  - iso4
+  - master
