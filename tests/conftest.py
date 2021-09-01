@@ -784,17 +784,28 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[LocalPackagePath] = []) -> None:
+    def setup_for_snippet(
+        self,
+        snippet: str,
+        autostd: bool = True,
+        install_v2_modules: List[LocalPackagePath] = [],
+        add_to_module_path: List[str] = [],
+        python_package_source: Optional[str] = None,
+    ) -> Project:
         """
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
+        :param add_to_module_path: Additional directories that should be added to the module path.
+        :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
+                                      discover V2 modules.
         """
-        self.setup_for_snippet_external(snippet)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_source)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env(project)
         self._install_v2_modules(project, install_v2_modules)
+        return project
 
     def _patch_process_env(self, project: Project) -> None:
         """
@@ -822,24 +833,33 @@ class SnippetCompilationTest(KeepOnFail):
         loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    def setup_for_snippet_external(self, snippet):
-        if self.modules_dir:
-            module_path = f"[{self.libs}, {self.modules_dir}]"
-        else:
-            module_path = f"{self.libs}"
+    def setup_for_snippet_external(
+        self, snippet: str, add_to_module_path: List[str] = [], python_package_source: Optional[str] = None
+    ) -> None:
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
-                """
+                f"""
             name: snippet test
-            modulepath: %s
-            downloadpath: %s
+            modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
+            downloadpath: {self.libs}
             version: 1.0
-            repo: ['%s']"""
-                % (module_path, self.libs, self.repo)
+            repo:
+                - {{type: git, url: https://github.com/inmanta/ }}
+            """
             )
+            if python_package_source:
+                cfg.write(f"    - {{type: package, url: {python_package_source} }}")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
+
+    def _get_modulepath_for_project_yml_file(self, add_to_module_path: List[str] = []) -> str:
+        dirs = [self.libs]
+        if self.modules_dir:
+            dirs.append(self.modules_dir)
+        if add_to_module_path:
+            dirs.extend(add_to_module_path)
+        return f"[{', '.join(dirs)}]"
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
@@ -946,67 +966,6 @@ def modules_v2_dir():
 @pytest.fixture(scope="session")
 def projects_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-
-
-@pytest.fixture(scope="function")
-def project_builder(tmpdir: py.path.local) -> Callable[[str, List[str], List[str]], Project]:
-    """
-    Fixture that creates an Inmanta Project and returns the corresponding instance of the Project class.
-    """
-
-    def create_project(
-        main_cf_content: str,
-        copy_to_libs_dir: List[str] = [],
-        install_v2_modules: List[Tuple[str, bool]] = [],
-        python_package_source: Optional[str] = None,
-    ) -> Project:
-        """
-        :param main_cf_content: The content of main.cf file in the project.
-        :param copy_to_libs_dir: The V1 module directories that should be copied into the libs directory of the project.
-        :param install_v2_modules: The V2 module directories that should be installed in the developer venv.
-                                   The first element of the tuple indicates the path to the module directory. The second
-                                   element indicates whether the module should be installed in an editable way.
-        :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
-                                      discover V2 modules.
-        """
-        project_dir = os.path.join(tmpdir, "project")
-        os.mkdir(project_dir)
-        project_yml_file = os.path.join(project_dir, "project.yml")
-        with open(project_yml_file, "w") as fd:
-            fd.write(
-                """
-name: test
-modulepath: libs
-downloadpath: libs
-install_mode: "release"
-repo:
-    - {type: git, url: https://github.com/inmanta/}
-"""
-            )
-            if python_package_source:
-                fd.write(f"    - {{type: package, url: {python_package_source} }}\n")
-
-        main_cf_file = os.path.join(project_dir, "main.cf")
-        with open(main_cf_file, "w") as fd:
-            fd.write(main_cf_content)
-
-        libs_dir = os.path.join(project_dir, "libs")
-        for mod_dir in copy_to_libs_dir:
-            shutil.copytree(mod_dir, os.path.join(libs_dir, os.path.basename(mod_dir)))
-
-        project = Project(path=project_dir)
-        project.use_virtual_env()
-        wheels_dir = os.path.join(tmpdir, "wheels")
-        for mod_dir, do_editable_install in install_v2_modules:
-            if do_editable_install:
-                project.install_in_compiler_venv(mod_dir, editable=do_editable_install)
-            else:
-                v2_package = ModuleTool().build(mod_dir, output_dir=wheels_dir)
-                project.install_in_compiler_venv(v2_package, editable=do_editable_install)
-
-        return project
-
-    return create_project
 
 
 class CLI(object):

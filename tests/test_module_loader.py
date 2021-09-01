@@ -18,7 +18,7 @@
 import logging
 import os
 import shutil
-from typing import Callable, List
+from typing import List
 
 import py
 import pytest
@@ -131,16 +131,14 @@ def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcom
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
-def test_load_module_v1_already_installed(
-    project_builder: Callable[[str, List[str], List[str]], Project], modules_dir: str, allow_v1: bool
-) -> None:
+def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, allow_v1: bool) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V1 module that was already installed
     in the module path.
     """
     module_name = "elaboratev1module"
     module_dir = os.path.join(modules_dir, module_name)
-    project: Project = project_builder(main_cf_content=f"import {module_name}", copy_to_libs_dir=[module_dir])
+    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}", add_to_module_path=[module_dir])
 
     assert module_name not in project.modules
     if allow_v1:
@@ -151,16 +149,16 @@ def test_load_module_v1_already_installed(
             project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
 
 
-def test_load_module_v1_module_using_install(project_builder: Callable[[str, List[str], List[str]], Project]):
+def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     """
     Test whether the Project.load_module() method works correctly when a module is only available as a V1 module
     and that module is not yet present in the module path.
     """
     module_name = "std"
-    project: Project = project_builder(main_cf_content=f"import {module_name}")
+    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}")
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
-    project.load_module(module_name=module_name, install=True, allow_v1=True)
+    project.load_module(module_name=module_name, allow_v1=True)
     assert module_name in project.modules
     assert module_name in os.listdir(project.downloadpath)
 
@@ -168,7 +166,10 @@ def test_load_module_v1_module_using_install(project_builder: Callable[[str, Lis
 @pytest.mark.parametrize("allow_v1", [True, False])
 @pytest.mark.parametrize("editable_install", [True, False])
 def test_load_module_v2_already_installed(
-    project_builder: Callable[[str, List[str], List[str]], Project], modules_v2_dir: str, allow_v1: bool, editable_install: bool
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    allow_v1: bool,
+    editable_install: bool,
 ) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed
@@ -176,8 +177,8 @@ def test_load_module_v2_already_installed(
     """
     module_name = "elaboratev2module"
     module_dir = os.path.join(modules_v2_dir, module_name)
-    project: Project = project_builder(
-        main_cf_content=f"import {module_name}", install_v2_modules=[(module_dir, editable_install)]
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}", install_v2_modules=[LocalPackagePath(module_dir, editable_install)]
     )
 
     assert module_name not in project.modules
@@ -187,8 +188,7 @@ def test_load_module_v2_already_installed(
 
 @pytest.mark.parametrize("install", [True, False])
 def test_load_module_v2_module_using_install(
-    tmpvenv_active: py.path.local,
-    project_builder: Callable[[str, List[str], List[str]], Project],
+    snippetcompiler_clean,
     local_module_package_index: str,
     install: bool,
 ):
@@ -197,8 +197,8 @@ def test_load_module_v2_module_using_install(
     and that module is not yet installed in the compiler venv.
     """
     module_name = "minimalv2module"
-    project: Project = project_builder(
-        main_cf_content=f"import {module_name}", python_package_source=local_module_package_index
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}", python_package_source=local_module_package_index
     )
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
@@ -212,19 +212,20 @@ def test_load_module_v2_module_using_install(
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
-def test_load_module_module_not_found(project_builder: Callable[[str, List[str], List[str]], Project], allow_v1: bool):
+def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool):
     """
     Assert behavior when a module is not found as a V1 or a V2 module.
     """
     module_name = "non_existing_module"
-    project: Project = project_builder(main_cf_content=f"import {module_name}")
+    snippetcompiler_clean.modules_dir = None
+    project: Project = snippetcompiler_clean.setup_for_snippet(snippet=f"import {module_name}")
     with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
         project.load_module(module_name=module_name, install=True, allow_v1=allow_v1)
 
 
 def test_load_module_v1_and_v2_installed(
     tmpdir: py.path.local,
-    project_builder: Callable[[str, List[str], List[str]], Project],
+    snippetcompiler_clean,
     modules_dir: str,
     caplog,
 ) -> None:
@@ -240,10 +241,9 @@ def test_load_module_v1_and_v2_installed(
     module_dir_v2 = os.path.join(tmpdir, f"{module_name}-v2")
     ModuleConverter(module).convert(output_directory=module_dir_v2)
 
-    project: Project = project_builder(
-        main_cf_content=f"import {module_name}",
-        copy_to_libs_dir=[module_dir],
-        install_v2_modules=[(module_dir_v2, False)],
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}",
+        install_v2_modules=[LocalPackagePath(module_dir_v2, editable=False)],
     )
 
     assert module_name not in project.modules
