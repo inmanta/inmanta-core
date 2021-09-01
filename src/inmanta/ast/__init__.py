@@ -748,11 +748,11 @@ class KeyException(RuntimeException):
         return 70
 
 
-class CycleExcpetion(TypingException):
+class CycleException(TypingException):
     """Exception raised when a type is its own parent (type cycle)"""
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
-        super(CycleExcpetion, self).__init__(first_type, "")
+        super(CycleException, self).__init__(first_type, "")
         self.types = []  # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
@@ -768,17 +768,6 @@ class CycleExcpetion(TypingException):
     def get_message(self) -> str:
         trace = ",".join([x.get_full_name() for x in self.types])
         return "Entity can not be its own parent %s" % (trace)
-
-
-class ModuleNotFoundException(WrappingRuntimeException):
-    def __init__(self, name: str, stmt: "Statement", cause: CompilerException, msg: str = None) -> None:
-        if msg is None:
-            msg = "could not find module %s" % name
-        WrappingRuntimeException.__init__(self, stmt, msg, cause)
-        self.name = name
-
-    def importantance(self):
-        return 5
 
 
 class NotFoundException(RuntimeException):
