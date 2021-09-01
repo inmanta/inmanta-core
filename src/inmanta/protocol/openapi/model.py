@@ -73,9 +73,12 @@ SchemaBase.update_forward_refs()
 
 
 class Schema(SchemaBase):
-    items: Optional[SchemaBase] = None
-    properties: Optional[Dict[str, SchemaBase]] = None
-    additionalProperties: Optional[Union[SchemaBase, bool]] = None
+    items: Optional[Union["Schema", SchemaBase]] = None
+    properties: Optional[Dict[str, Union["Schema", SchemaBase]]] = None
+    additionalProperties: Optional[Union["Schema", SchemaBase, bool]] = None
+
+
+Schema.update_forward_refs()
 
 
 class Example(BaseModel):
