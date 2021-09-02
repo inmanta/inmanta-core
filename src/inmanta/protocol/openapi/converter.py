@@ -18,11 +18,12 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, GenericMeta, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType
+from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
 from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
@@ -417,7 +418,7 @@ class OperationHandler:
 
         return_properties: Optional[Dict[str, Schema]] = None
 
-        if isinstance(return_type, GenericMeta) and return_type.__origin__ == ReturnValue:
+        if is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
             # Dealing with the special case of ReturnValue[...]
             links_type = self.type_converter.get_openapi_type(Dict[str, str])
             links_type.title = "Links"
@@ -438,18 +439,18 @@ class OperationHandler:
                 ),
             }
 
-            if not return_type.__args__ or not len(return_type.__args__) == 1:
+            type_args = get_args(return_type, evaluate=True)
+            if not type_args or len(type_args) != 1:
                 raise RuntimeError(
                     "ReturnValue definition should take one type Argument, e.g. ReturnValue[None].  "
-                    f"Got this instead: {return_type.__args__}"
+                    f"Got this instead: {type_args}"
                 )
 
             if not url_method_properties.envelope:
                 raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
 
-            return_value_type = return_type.__args__[0]
-            if return_value_type != NoneType:
-                return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(return_value_type)
+            if type_args[0] != NoneType:
+                return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
 
         else:
             openapi_return_type = self.type_converter.get_openapi_type(return_type)
