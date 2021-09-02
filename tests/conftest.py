@@ -1118,7 +1118,7 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
     sys.prefix = base
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
-    env.process_env.__init__(python_path=python_path)
+    env.process_env.__init__(python_path=str(python_path))
     # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
     env.process_env.init_namespace(const.PLUGINS_PACKAGE)
     env.process_env.notify_change()

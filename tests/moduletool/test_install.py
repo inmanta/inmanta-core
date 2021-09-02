@@ -21,40 +21,148 @@ import json
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 from importlib.abc import Loader
 from itertools import chain
-from typing import List, Optional, Tuple
+from pkg_resources import Requirement
+from typing import Iterator, List, Optional, Tuple
+from unittest.mock import patch
 
 import py
 import pytest
 import yaml
 
-from inmanta import env, loader, module
+from inmanta import const, env, loader, module
 from inmanta.ast import CompilerException, ModuleNotFoundException
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool, ProjectTool
+from libpip2pi.commands import dir2pi
 from moduletool.common import BadModProvider, install_project
 from packaging import version
 
 
-def run_module_install(python_path: str, module_path: str, editable: bool, set_path_argument: bool) -> None:
+@pytest.fixture
+def build_venv_active(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Install the Inmanta module (v2) using the `inmanta module install` command.
+    Yields an active virtual environment that is suitable to build modules with.
+    """
+    env.process_env.install_from_index([Requirement.parse("virtualenv")])
+    yield tmpvenv_active
 
-    :param python_path: Path to the Python executable for the environment to install the module in.
+
+def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
+    """
+    Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
+
     :param module_path: Path to the inmanta module
     :param editable: Install the module in editable mode (pip install -e).
     :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
     """
     if not set_path_argument:
         os.chdir(module_path)
-    # patch env.process_env
-    old_process_env: str = env.process_env.python_path
-    env.process_env.__init__(python_path=python_path)
-    try:
-        ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
-    finally:
-        env.process_env.__init__(python_path=old_process_env)
+    ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+
+
+@dataclass
+class PipIndex:
+    artifact_dir: str
+
+    @property
+    def url(self) -> str:
+        return f"{self.artifact_dir}/simple"
+
+    def publish(self) -> None:
+        dir2pi(argv=["dir2pi", self.artifact_dir])
+
+
+def module_from_template(
+    source_dir: str,
+    dest_dir: str,
+    *,
+    new_version: Optional[version.Version] = None,
+    dev_version: bool = False,
+    new_name: Optional[str] = None,
+    new_requirements: Optional[List[module.InmantaModuleRequirement]] = None,
+    install: bool = False,
+    editable: bool = False,
+    publish_index: Optional[PipIndex] = None,
+) -> module.ModuleV2Metadata:
+    """
+    Creates a v2 module from a template.
+
+    :param source_dir: The directory where the original module lives.
+    :param dest_dir: The directory to use to copy the original to and to stage any changes in.
+    :param new_version: The new version for the module, if any.
+    :param dev_version: Whether to tag the version with a dev tag.
+    :param new_name: The new name of the inmanta module, if any.
+    :param new_requirements: The new requirements for the module, if any.
+    :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
+        python environment unless editable is True.
+    :param editable: Whether to install the module in editable mode, ignored if install is False.
+    :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
+    """
+    # preinstall older version of module
+    shutil.copytree(source_dir, dest_dir)
+    config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
+    config: configparser.ConfigParser = configparser.ConfigParser()
+    config.read(config_file)
+    if new_version is not None:
+        config["metadata"]["version"] = str(new_version)
+    if dev_version:
+        config["egg_info"] = {"tag_build": ".dev0"}
+    if new_name is not None:
+        os.rename(
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])),
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
+        )
+        config["metadata"]["name"] = module.ModuleV2Source.get_python_package_name(new_name)
+    if new_requirements:
+        config["options"]["install_requires"] = "\n    ".join(
+            str(module.ModuleV2Source.get_python_package_requirement(req)) for req in new_requirements
+        )
+    with open(config_file, "w") as fh:
+        config.write(fh)
+    if install:
+        ModuleTool().install(editable=editable, path=dest_dir)
+    if publish_index is not None:
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        publish_index.publish()
+    with open(config_file, "r") as fh:
+        return module.ModuleV2Metadata.parse(fh)
+
+
+def setup_simple_project(
+    projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
+) -> module.ProjectMetadata:
+    """
+    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
+
+    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
+    :param path: The path to the directory to create the project in.
+    :param imports: The modules to import in the project.
+    :param index_urls: The urls to any Python indexes to declare as module source.
+    :param github_source: Whether to add the inmanta github as a module source.
+    """
+    index_urls = index_urls if index_urls is not None else []
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
+    metadata: module.ProjectMetadata
+    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
+        metadata = module.ProjectMetadata.parse(fh.read())
+        metadata.repo = [
+            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
+            *(
+                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
+                if github_source
+                else []
+            ),
+        ]
+        fh.seek(0)
+        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
+        fh.write(yaml.dump(json.loads(metadata.json())))
+        fh.truncate()
+    with open(os.path.join(path, "main.cf"), "w") as fh:
+        fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    return metadata
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -208,16 +316,12 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 @pytest.mark.parametrize("editable", [True, False])
 @pytest.mark.parametrize("set_path_argument", [True, False])
 def test_module_install(
-    tmpvenv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
+    build_venv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
 ) -> None:
     """
     Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
     for its options.
     """
-    venv_dir, python_path = tmpvenv_active
-    # build command requires virtualenv package
-    subprocess.check_call([python_path, "-m", "pip", "install", "virtualenv"])
-
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
 
@@ -225,43 +329,40 @@ def test_module_install(
         return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
-    run_module_install(python_path, module_path, editable, set_path_argument)
+    run_module_install(module_path, editable, set_path_argument)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
 
 
-def setup_simple_project(
-    projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
-) -> module.ProjectMetadata:
+@pytest.mark.parametrize("dev", [True, False])
+def test_module_install_version(
+    tmpdir: py.path.local, tmpvenv_active: Tuple[py.path.local, py.path.local], projects_dir: str, modules_v2_dir: str, dev: bool
+) -> None:
     """
-    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
+    Make sure that the module install results in a module instance with the appropriate version information.
 
-    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
-    :param path: The path to the directory to create the project in.
-    :param imports: The modules to import in the project.
-    :param index_urls: The urls to any Python indexes to declare as module source.
-    :param github_source: Whether to add the inmanta github as a module source.
+    :param dev: whether to add a dev tag to the version
     """
-    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
-    metadata: module.ProjectMetadata
-    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
-        metadata = module.ProjectMetadata.parse(fh.read())
-        metadata.repo = [
-            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
-            *(
-                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
-                if github_source
-                else []
-            ),
-        ]
-        fh.seek(0)
-        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
-        fh.write(yaml.dump(json.loads(metadata.json())))
-        fh.truncate()
-    with open(os.path.join(path, "main.cf"), "w") as fh:
-        fh.write("\n".join(f"import {module_name}" for module_name in imports))
-    return metadata
+    module_name: str = "minimalv2module"
+    module_path: str = os.path.join(str(tmpdir), module_name)
+    plain_version: version.Version = version.Version("1.2.3")
+    full_version: version.Version = plain_version if not dev else version.Version(f"{plain_version}.dev0")
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+        new_version=plain_version,
+        dev_version=dev,
+    )
+    project_dir: str = os.path.join(str(tmpdir), "project")
+    setup_simple_project(projects_dir, project_dir, [])
+    os.chdir(project_dir)
+
+    ModuleTool().install(editable=True, path=module_path)
+    module: module.Module = ModuleTool().get_module(module_name)
+    assert module.version == full_version
 
 
 @pytest.mark.parametrize(
@@ -284,7 +385,6 @@ def test_project_install(
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
-    venv_dir, python_path = tmpvenv_active
     fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
@@ -313,7 +413,7 @@ def test_project_install(
 @pytest.mark.parametrize("editable", [True, False])
 def test_project_install_preinstalled(
     local_module_package_index: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    build_venv_active: Tuple[py.path.local, py.path.local],
     tmpdir: py.path.local,
     modules_v2_dir: str,
     projects_dir: str,
@@ -322,22 +422,16 @@ def test_project_install_preinstalled(
     """
     Verify that `inmanta project install` does not override preinstalled modules.
     """
-    venv_dir, python_path = tmpvenv_active
     module_name: str = "minimalv2module"
     fq_mod_name: str = "inmanta_plugins.minimalv2module"
 
     assert env.process_env.get_module_file(fq_mod_name) is None
 
     # preinstall older version of module
-    module_path: str = os.path.join(tmpdir, module_name)
-    shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
-    config_file: str = os.path.join(module_path, module.ModuleV2.MODULE_FILE)
-    config: configparser.ConfigParser = configparser.ConfigParser()
-    config.read(config_file)
-    config["egg_info"] = {"tag_build": ".dev0"}
-    with open(config_file, "w") as fh:
-        config.write(fh)
-    ModuleTool().install(editable=editable, path=module_path)
+    module_path: str = os.path.join(str(tmpdir), module_name)
+    metadata: module.ModuleV2Metadata = module_from_template(os.path.join(
+        modules_v2_dir, module_name), module_path, dev_version=True, install=True, editable=editable
+    )
 
     def assert_module_install() -> None:
         module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
@@ -348,15 +442,15 @@ def test_project_install_preinstalled(
         assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
         assert (
             env.process_env.get_installed_packages(only_editable=editable).get(f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None)
-            == version.Version(config["metadata"]["version"] + ".dev0")
+            == version.Version(metadata.version + ".dev0")
         )
 
     assert_module_install()
 
     # set up project and modules
-    project_path: str = os.path.join(tmpdir, "project")
-    metadata: module.ProjectMetadata = setup_simple_project(
-        projects_dir, project_path, ["std", "minimalv2module"], index_urls=[local_module_package_index]
+    project_path: str = os.path.join(str(tmpdir), "project")
+    setup_simple_project(
+        projects_dir, project_path, ["std", module_name], index_urls=[local_module_package_index]
     )
 
     os.chdir(project_path)
@@ -364,3 +458,67 @@ def test_project_install_preinstalled(
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
     assert_module_install()
+
+
+@pytest.mark.parametrize("preinstall_v2", [True, False])
+def test_project_install_modules_cache_invalid(
+    caplog,
+    local_module_package_index: str,
+    build_venv_active: Tuple[py.path.local, py.path.local],
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    projects_dir: str,
+    preinstall_v2: bool,
+) -> None:
+    """
+    Verify that introducing invalidities in the modules cache results in the appropriate exception.
+
+    :param preinstall_v2: Whether the preinstalled module should be a v2.
+    """
+    module_name: str = "minimalv2module"
+    fq_mod_name: str = "inmanta_plugins.minimalv2module"
+
+    assert env.process_env.get_module_file(fq_mod_name) is None
+
+    # preinstall older version of module
+    module_meta: module.ModuleMetadata
+    if preinstall_v2:
+        module_meta = module_from_template(
+            os.path.join(modules_v2_dir, module_name), os.path.join(str(tmpdir), module_name), dev_version=True, install=True
+        )
+    else:
+        # TODO: use snippetcompiler_clean instead
+        pass
+    # prepare second module that depends on new version of first module
+    new_module_name: str = f"{module_name}2"
+    custom_index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        os.path.join(str(tmpdir), new_module_name),
+        new_name=new_module_name,
+        # requires stable version, not currently installed dev version
+        new_requirements=[module.InmantaModuleRequirement.parse(f"{module_name}>={module_meta.version}")],
+        install=False,
+        publish_index=custom_index,
+    )
+
+    # set up project and modules
+    project_path: str = os.path.join(tmpdir, "project")
+    project_meta: module.ProjectMetadata = setup_simple_project(
+        projects_dir,
+        project_path,
+        ["std", new_module_name, module_name],
+        index_urls=[local_module_package_index, custom_index.url],
+    )
+
+    os.chdir(project_path)
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    with pytest.raises(CompilerException):
+        ProjectTool().execute("install", [])
+
+    assert (
+        f"Compiler has loaded module {module_name}=={module_meta.version}.dev0 but {module_name}=={module_meta.version} has"
+        " later been installed as a side effect."
+        in (rec.message for rec in caplog.records)
+    )

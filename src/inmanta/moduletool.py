@@ -593,7 +593,7 @@ version: 0.0.1dev0"""
         if last_failure is not None and not done:
             raise last_failure
 
-    def install(self, editable: bool = False, path: Optional[str] = None):
+    def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
         context of a project.
