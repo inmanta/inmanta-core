@@ -17,7 +17,7 @@
 """
 
 import inmanta.compiler as compiler
-from inmanta.ast import ModuleNotFoundException
+from inmanta.module import ModuleLoadingException
 
 
 def test_issue_120_bad_import(snippetcompiler):
@@ -25,7 +25,7 @@ def test_issue_120_bad_import(snippetcompiler):
     try:
         compiler.do_compile()
         raise AssertionError("Should get exception")
-    except ModuleNotFoundException as e:
+    except ModuleLoadingException as e:
         assert e.location.lnr == 1
 
 
@@ -34,7 +34,7 @@ def test_issue_120_bad_import_extra(snippetcompiler):
     try:
         compiler.do_compile()
         raise AssertionError("Should get exception")
-    except ModuleNotFoundException as e:
+    except ModuleLoadingException as e:
         assert e.location.lnr == 1
 
 
@@ -46,8 +46,5 @@ def test_1480_1767_invalid_repo(snippetcompiler_clean):
         """,
         "could not find module std (reported in import std (__internal__:1:1))"
         "\ncaused by:"
-        "\n  Could not load module std"
-        "\n  caused by:"
-        "\n    inmanta.module.InvalidModuleException: could not locate module with name: std"
-        "\n",
+        "\n  Could not find module std. Please make sure to install it by running `inmanta project install`.",
     )

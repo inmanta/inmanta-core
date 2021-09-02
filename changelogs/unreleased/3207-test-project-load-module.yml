@@ -1,0 +1,5 @@
+---
+description: Added tests for the project.load_module() method
+issue-nr: 3207
+change-type: minor
+destination-branches: [master]

@@ -41,7 +41,6 @@ from inmanta.protocol.openapi.model import (
     RequestBody,
     Response,
     Schema,
-    SchemaBase,
     Server,
 )
 from inmanta.server import config
@@ -170,9 +169,10 @@ class OpenApiTypeConverter:
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
         schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
         if "definitions" in schema.keys():
-            definitions = schema.pop("definitions")
+            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
             if self.components.schemas is not None:
-                self.components.schemas.update(definitions)
+                for key, definition in definitions.items():
+                    self.components.schemas[key] = Schema(**definition)
         return Schema(**schema)
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
@@ -198,8 +198,7 @@ class OpenApiTypeConverter:
             return None
 
         ref_key = ref_match.group(1)
-        schema = self.components.schemas[ref_key]
-        return Schema(**schema)
+        return self.components.schemas[ref_key]
 
 
 class ArgOptionHandler:
@@ -416,7 +415,7 @@ class OperationHandler:
         if return_type is None or return_type == inspect.Signature.empty:
             return None
 
-        return_properties: Optional[Dict[str, SchemaBase]] = None
+        return_properties: Optional[Dict[str, Schema]] = None
 
         if isinstance(return_type, GenericMeta) and return_type.__origin__ == ReturnValue:
             # Dealing with the special case of ReturnValue[...]
