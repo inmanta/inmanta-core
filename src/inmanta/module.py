@@ -62,7 +62,7 @@ from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
 from inmanta import const, env, loader, plugins
-from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
+from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
@@ -138,10 +138,10 @@ class InmantaModuleRequirement:
         return cls(Requirement.parse(spec))
 
 
-@stable_api
-class InvalidModuleException(CompilerException):
+class CompilerExceptionWithExtendedTrace(CompilerException):
     """
-    This exception is raised if a module is invalid
+    A compiler exception that adds additional information about the cause of this exception
+    to the formatted trace.
     """
 
     def format_trace(self, indent: str = "", indent_level: int = 0) -> str:
@@ -156,6 +156,47 @@ class InvalidModuleException(CompilerException):
                 out += indent * (indent_level + 1) + line
 
         return out
+
+
+@stable_api
+class InvalidModuleException(CompilerExceptionWithExtendedTrace):
+    """
+    This exception is raised if a module is invalid.
+    """
+
+
+class ModuleNotFoundException(CompilerExceptionWithExtendedTrace):
+    """
+    This exception is raised if a module is not found in any of the repositories.
+    """
+
+
+class ModuleLoadingException(WrappingRuntimeException):
+    """
+    Wrapper around an InvalidModuleException or a ModuleNotFoundException that contains extra information
+    about the specific DefinedImport statement that cannot not be processed correctly.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        stmt: "DefineImport",
+        cause: Union[InvalidModuleException, ModuleNotFoundException],
+        msg: Optional[str] = None,
+    ) -> None:
+        """
+        :param name: The name of the module that could not be loaded.
+        :param stmt: The DefinedImport statement that triggered the failure
+        :param cause: The InvalidModuleException or ModuleNotFoundException that was raised
+        :param msg: A description of the error.
+        """
+        if msg is None:
+            msg = "could not find module %s" % name
+        WrappingRuntimeException.__init__(self, stmt, msg, cause)
+        self.name = name
+
+    def importantance(self) -> int:
+        return 5
 
 
 class ModuleMetadataFileNotFound(InvalidModuleException):
@@ -360,9 +401,11 @@ class ModuleSource(Generic[TModule]):
 
         :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version.
+        :return: The module object when the module was installed. When the module could not be found, None is returned.
         """
         raise NotImplementedError("Abstract method")
 
+    @abstractmethod
     def path_for(self, name: str) -> Optional[str]:
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
@@ -443,7 +486,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             # be associated with the v1 loader.
             return None
         if init is None:
-            raise Exception(f"Package {package} was installed but no __init__.py file could be found.")
+            raise InvalidModuleException(f"Package {package} was installed but no __init__.py file could be found.")
         pkg_installation_dir = os.path.abspath(os.path.dirname(init))
         if os.path.exists(os.path.join(pkg_installation_dir, ModuleV2.MODULE_FILE)):
             # normal install: __init__.py is in module root
@@ -453,7 +496,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             module_root_dir = os.path.normpath(os.path.join(pkg_installation_dir, os.pardir, os.pardir))
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
-        raise Exception(f"Invalid module: found plugins package but the module has no {ModuleV2.MODULE_FILE}.")
+        raise InvalidModuleException(f"Invalid module: found plugins package but the module has no {ModuleV2.MODULE_FILE}.")
 
     @classmethod
     def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV2":
@@ -484,7 +527,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             download_path: str = os.path.join(project.downloadpath, module_name)
             result = self.remote_repo.clone(module_name, project.downloadpath)
             if not result:
-                raise InvalidModuleException("could not locate module with name: %s" % module_name)
+                return None
 
             return ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
@@ -503,7 +546,7 @@ class ModuleRepo:
         raise NotImplementedError("Abstract method")
 
     def path_for(self, name: str) -> Optional[str]:
-        # same class is used for search parh and remote repos, perhaps not optimal
+        # same class is used for search path and remote repos, perhaps not optimal
         raise NotImplementedError("Abstract method")
 
 
@@ -1347,8 +1390,8 @@ class Project(ModuleLike[ProjectMetadata]):
                     if not v1_mode:
                         for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
                             require_v2(dep_module_name)
-            except InvalidModuleException as e:
-                raise ModuleNotFoundException(ns, imp, e)
+            except (InvalidModuleException, ModuleNotFoundException) as e:
+                raise ModuleLoadingException(ns, imp, e)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
@@ -1380,7 +1423,7 @@ class Project(ModuleLike[ProjectMetadata]):
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
         if module is None:
-            raise CompilerException(
+            raise ModuleNotFoundException(
                 f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install`."
             )
 
@@ -1817,7 +1860,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             return iter(())
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
-            raise CompilerException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
+            raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
         return (
             (
                 Path(file_name),
