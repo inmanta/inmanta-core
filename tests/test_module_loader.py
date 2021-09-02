@@ -243,6 +243,8 @@ def test_load_module_v1_and_v2_installed(
     module_dir_v2 = os.path.join(tmpdir, f"{module_name}-v2")
     ModuleConverter(module).convert(output_directory=module_dir_v2)
 
+    # The V1 module is installed implicitly. The snippetcompiler_clean fixture adds
+    # the `modules_dir` to the modulepath of the newly created project.
     project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet=f"import {module_name}",
         install_v2_modules=[LocalPackagePath(module_dir_v2, editable=False)],
