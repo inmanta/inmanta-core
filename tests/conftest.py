@@ -784,17 +784,28 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True, install_v2_modules: List[LocalPackagePath] = []) -> None:
+    def setup_for_snippet(
+        self,
+        snippet: str,
+        autostd: bool = True,
+        install_v2_modules: List[LocalPackagePath] = [],
+        add_to_module_path: List[str] = [],
+        python_package_source: Optional[str] = None,
+    ) -> Project:
         """
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
+        :param add_to_module_path: Additional directories that should be added to the module path.
+        :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
+                                      discover V2 modules.
         """
-        self.setup_for_snippet_external(snippet)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_source)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env(project)
         self._install_v2_modules(project, install_v2_modules)
+        return project
 
     def _patch_process_env(self, project: Project) -> None:
         """
@@ -822,24 +833,33 @@ class SnippetCompilationTest(KeepOnFail):
         loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    def setup_for_snippet_external(self, snippet):
-        if self.modules_dir:
-            module_path = f"[{self.libs}, {self.modules_dir}]"
-        else:
-            module_path = f"{self.libs}"
+    def setup_for_snippet_external(
+        self, snippet: str, add_to_module_path: List[str] = [], python_package_source: Optional[str] = None
+    ) -> None:
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
-                """
+                f"""
             name: snippet test
-            modulepath: %s
-            downloadpath: %s
+            modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
+            downloadpath: {self.libs}
             version: 1.0
-            repo: ['%s']"""
-                % (module_path, self.libs, self.repo)
+            repo:
+                - {{type: git, url: {self.repo} }}
+            """
             )
+            if python_package_source:
+                cfg.write(f"    - {{type: package, url: {python_package_source} }}")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
+
+    def _get_modulepath_for_project_yml_file(self, add_to_module_path: List[str] = []) -> str:
+        dirs = [self.libs]
+        if self.modules_dir:
+            dirs.append(self.modules_dir)
+        if add_to_module_path:
+            dirs.extend(add_to_module_path)
+        return f"[{', '.join(dirs)}]"
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
@@ -1064,7 +1084,9 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
 
 
 @pytest.fixture
-def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv_active(
+    deactive_venv, tmpvenv: Tuple[py.path.local, py.path.local]
+) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
@@ -1136,7 +1158,7 @@ def tmpvenv_active(deactive_venv, tmpvenv: py.path.local) -> Iterator[Tuple[py.p
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[Tuple[str]]:
+def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
 

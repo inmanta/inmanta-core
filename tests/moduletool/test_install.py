@@ -33,8 +33,9 @@ import pytest
 import yaml
 
 from inmanta import const, env, loader, module
-from inmanta.ast import CompilerException, ModuleNotFoundException
+from inmanta.ast import CompilerException
 from inmanta.config import Config
+from inmanta.module import ModuleLoadingException
 from inmanta.moduletool import ModuleTool, ProjectTool
 from libpip2pi.commands import dir2pi
 from moduletool.common import BadModProvider, install_project
@@ -173,7 +174,7 @@ def test_bad_checkout(git_modules_dir, modules_repo):
     os.chdir(coroot)
     Config.load_config()
 
-    with pytest.raises(ModuleNotFoundException):
+    with pytest.raises(ModuleLoadingException):
         ProjectTool().execute("install", [])
 
 
@@ -193,7 +194,7 @@ def test_bad_setup(git_modules_dir, modules_repo):
         ["git", "clone", os.path.join(git_modules_dir, "repos", "mod2"), mod1], cwd=git_modules_dir, stderr=subprocess.STDOUT
     )
 
-    with pytest.raises(ModuleNotFoundException):
+    with pytest.raises(ModuleLoadingException):
         ModuleTool().execute("verify", [])
 
 
@@ -259,7 +260,7 @@ def test_install_for_git_failures(git_modules_dir, modules_repo):
     gp = module.gitprovider
     module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
     try:
-        with pytest.raises(ModuleNotFoundException):
+        with pytest.raises(ModuleLoadingException):
             ProjectTool().execute("install", [])
     finally:
         module.gitprovider = gp
