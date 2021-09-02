@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
@@ -168,7 +168,7 @@ class OpenApiTypeConverter:
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
         schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
         if "definitions" in schema.keys():
-            definitions: Dict[str, Dict[str, Any]] = schema.pop("definitions")
+            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
                     self.components.schemas[key] = Schema(**definition)
