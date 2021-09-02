@@ -788,9 +788,9 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         autostd: bool = True,
-        install_v2_modules: List[LocalPackagePath] = [],
-        add_to_module_path: List[str] = [],
-        python_package_source: Optional[str] = None,
+        install_v2_modules: List[LocalPackagePath] = None,
+        add_to_module_path: List[str] = None,
+        python_package_source: Optional[List[str]] = None,
     ) -> Project:
         """
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
@@ -803,22 +803,22 @@ class SnippetCompilationTest(KeepOnFail):
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
-        self._patch_process_env(project)
+        self._patch_process_env()
         self._install_v2_modules(project, install_v2_modules)
         return project
 
-    def _patch_process_env(self, project: Project) -> None:
+    def _patch_process_env(self) -> None:
         """
         Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
-        assert project.virtualenv.virtual_python is not None
-        env.process_env.__init__(python_path=project.virtualenv.virtual_python)
+        env.process_env.__init__(env_path=self.env)
         path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
         env.process_env.notify_change()
         os.makedirs(path, exist_ok=True)
 
-    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
+    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = None) -> None:
+        install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
             with tempfile.TemporaryDirectory() as build_dir:
@@ -834,8 +834,10 @@ class SnippetCompilationTest(KeepOnFail):
         loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(
-        self, snippet: str, add_to_module_path: List[str] = [], python_package_source: Optional[str] = None
+        self, snippet: str, add_to_module_path: Optional[List[str]] = None, python_package_source: Optional[List[str]] = None
     ) -> None:
+        add_to_module_path = add_to_module_path if add_to_module_path is not None else []
+        python_package_source = python_package_source if python_package_source is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -845,10 +847,17 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo:
                 - {{type: git, url: {self.repo} }}
-            """
+            """.rstrip()
             )
             if python_package_source:
-                cfg.write(f"    - {{type: package, url: {python_package_source} }}")
+                cfg.write(
+                    "".join(
+                        f"""
+                - {{type: package, url: {source} }}
+                        """.rstrip()
+                        for source in python_package_source
+                    )
+                )
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)

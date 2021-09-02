@@ -25,7 +25,7 @@ import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import ModuleNotFoundException, ModuleV1, ModuleV2, Project
+from inmanta.module import DummyProject, ModuleNotFoundException, ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
 
 
@@ -200,7 +200,7 @@ def test_load_module_v2_module_using_install(
     """
     module_name = "minimalv2module"
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", python_package_source=local_module_package_index
+        snippet=f"import {module_name}", python_package_source=[local_module_package_index]
     )
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)

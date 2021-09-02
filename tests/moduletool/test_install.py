@@ -36,7 +36,7 @@ from inmanta import const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.module import ModuleLoadingException
-from inmanta.moduletool import ModuleTool, ProjectTool
+from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from libpip2pi.commands import dir2pi
 from moduletool.common import BadModProvider, install_project
 from packaging import version
@@ -132,6 +132,7 @@ def module_from_template(
         return module.ModuleV2Metadata.parse(fh)
 
 
+# TODO: replace all usages with snippetcompiler_clean
 def setup_simple_project(
     projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
 ) -> module.ProjectMetadata:
@@ -465,8 +466,9 @@ def test_project_install_preinstalled(
 def test_project_install_modules_cache_invalid(
     caplog,
     local_module_package_index: str,
-    build_venv_active: Tuple[py.path.local, py.path.local],
+    snippetcompiler_clean,
     tmpdir: py.path.local,
+    modules_dir: str,
     modules_v2_dir: str,
     projects_dir: str,
     preinstall_v2: bool,
@@ -476,50 +478,71 @@ def test_project_install_modules_cache_invalid(
 
     :param preinstall_v2: Whether the preinstalled module should be a v2.
     """
-    module_name: str = "minimalv2module"
-    fq_mod_name: str = "inmanta_plugins.minimalv2module"
+    module_name: str = "minimalv1module"
+    fq_mod_name: str = "inmanta_plugins.minimalv1module"
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
     assert env.process_env.get_module_file(fq_mod_name) is None
 
-    # preinstall older version of module
-    module_meta: module.ModuleMetadata
-    if preinstall_v2:
-        module_meta = module_from_template(
-            os.path.join(modules_v2_dir, module_name), os.path.join(str(tmpdir), module_name), dev_version=True, install=True
-        )
-    else:
-        # TODO: use snippetcompiler_clean instead
-        pass
-    # prepare second module that depends on new version of first module
-    new_module_name: str = f"{module_name}2"
-    custom_index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # prepare v2 module
+    v2_template_path: str = os.path.join(str(tmpdir), module_name)
+    v1: module.ModuleV1 = module.ModuleV1(project=DummyProject(autostd=False), path=os.path.join(modules_dir, module_name))
+    v2_version: version.Version = version.Version(str(v1.version.major + 1) + ".0.0")
+    ModuleConverter(v1).convert(output_directory=v2_template_path)
     module_from_template(
-        os.path.join(modules_v2_dir, module_name),
+        v2_template_path, os.path.join(str(tmpdir), module_name, "stable"), new_version=v2_version, publish_index=index
+    )
+
+    # prepare second module that depends on stable v2 version of first module
+    new_module_name: str = f"{module_name}2"
+    module_from_template(
+        v2_template_path,
         os.path.join(str(tmpdir), new_module_name),
         new_name=new_module_name,
         # requires stable version, not currently installed dev version
-        new_requirements=[module.InmantaModuleRequirement.parse(f"{module_name}>={module_meta.version}")],
+        new_requirements=[module.InmantaModuleRequirement.parse(f"{module_name}>={v2_version}")],
         install=False,
-        publish_index=custom_index,
+        publish_index=index,
     )
 
-    # set up project and modules
-    project_path: str = os.path.join(tmpdir, "project")
-    project_meta: module.ProjectMetadata = setup_simple_project(
-        projects_dir,
-        project_path,
-        ["std", new_module_name, module_name],
-        index_urls=[local_module_package_index, custom_index.url],
+    # preinstall module
+    if preinstall_v2:
+        # set up project, including activation of venv
+        snippetcompiler_clean.setup_for_snippet("")
+        # install older v2 module
+        module_from_template(
+            v2_template_path, os.path.join(str(tmpdir), module_name, "dev"), new_version=v2_version, dev_version=True, install=True
+        )
+    else:
+        # install module as v1
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}",
+            autostd=False,
+        )
+        ProjectTool().execute("install", [])
+
+    # set up project for installation
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {new_module_name}
+        import {module_name}
+        """,
+        autostd=False,
+        python_package_source=[index.url, local_module_package_index],
     )
 
-    os.chdir(project_path)
-    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-    module.Project.get().autostd = False
+    os.chdir(module.Project.get().path)
     with pytest.raises(CompilerException):
         ProjectTool().execute("install", [])
 
-    assert (
-        f"Compiler has loaded module {module_name}=={module_meta.version}.dev0 but {module_name}=={module_meta.version} has"
+    message: str = (
+        f"Compiler has loaded module {module_name}=={v2_version}.dev0 but {module_name}=={v2_version} has"
         " later been installed as a side effect."
+        if preinstall_v2
+        else f""
+    )
+
+    assert (
+        message
         in (rec.message for rec in caplog.records)
     )
