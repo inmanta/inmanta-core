@@ -38,7 +38,7 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Schema, SchemaBase
+from inmanta.protocol.openapi.model import MediaType, Schema
 from inmanta.server import SLICE_SERVER
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
@@ -263,7 +263,7 @@ def test_openapi_types_base_model():
 def test_openapi_types_union():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Union[str, bytes])
-    assert openapi_type == Schema(anyOf=[SchemaBase(type="string"), SchemaBase(type="string", format="binary")])
+    assert openapi_type == Schema(anyOf=[Schema(type="string"), Schema(type="string", format="binary")])
 
 
 def test_openapi_types_optional():
@@ -276,7 +276,7 @@ def test_openapi_types_list():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[Union[int, UUID]])
     assert openapi_type == Schema(
-        type="array", items=Schema(anyOf=[SchemaBase(type="integer"), SchemaBase(type="string", format="uuid")])
+        type="array", items=Schema(anyOf=[Schema(type="integer"), Schema(type="string", format="uuid")])
     )
 
 
@@ -286,7 +286,7 @@ def test_openapi_types_enum():
     assert openapi_type.type == "array"
     assert openapi_type.items.ref == type_converter.ref_prefix + "ResourceAction"
 
-    resource_action_type = Schema(**type_converter.components.schemas["ResourceAction"])
+    resource_action_type = type_converter.components.schemas["ResourceAction"]
     assert resource_action_type.type == "string"
     assert resource_action_type.enum == ["store", "push", "pull", "deploy", "dryrun", "getfact", "other"]
 
@@ -699,60 +699,63 @@ async def test_tags(server, feature_manager):
 def test_openapi_schema() -> None:
     ref_prefix = "#/"
     schemas = {
-        "person": {
-            "title": "Person",
-            "properties": {
-                "address": {
-                    "$ref": ref_prefix + "address",
+        "person": Schema(
+            **{
+                "title": "Person",
+                "properties": {
+                    "address": {
+                        "$ref": ref_prefix + "address",
+                    },
+                    "age": {
+                        "title": "Age",
+                        "type": "integer",
+                    },
                 },
-                "age": {
-                    "title": "Age",
-                    "type": "integer",
+            }
+        ),
+        "address": Schema(
+            **{
+                "title": "Address",
+                "properties": {
+                    "street": {
+                        "title": "Street",
+                        "type": "string",
+                    },
+                    "number": {
+                        "title": "Number",
+                        "type": "integer",
+                    },
+                    "city": {
+                        "title": "City",
+                        "type": "string",
+                    },
                 },
-            },
-        },
-        "address": {
-            "title": "Address",
-            "properties": {
-                "street": {
-                    "title": "Street",
-                    "type": "string",
-                },
-                "number": {
-                    "title": "Number",
-                    "type": "integer",
-                },
-                "city": {
-                    "title": "City",
-                    "type": "string",
-                },
-            },
-        },
+            }
+        ),
     }
 
-    person_schema = Schema(**schemas["person"])
-    address_schema = Schema(**schemas["address"])
-
-    assert person_schema == Schema(
+    assert schemas["person"] == Schema(
         title="Person",
         properties={
             "address": Schema(**{"$ref": ref_prefix + "address"}),
-            "age": SchemaBase(title="Age", type="integer"),
+            "age": Schema(title="Age", type="integer"),
         },
     )
 
-    assert address_schema == Schema(
+    assert schemas["address"] == Schema(
         title="Address",
         properties={
-            "street": SchemaBase(title="Street", type="string"),
-            "number": SchemaBase(title="Number", type="integer"),
-            "city": SchemaBase(title="City", type="string"),
+            "street": Schema(title="Street", type="string"),
+            "number": Schema(title="Number", type="integer"),
+            "city": Schema(title="City", type="string"),
         },
     )
 
-    assert Schema(**{"$ref": ref_prefix + "person"}).resolve(ref_prefix, schemas) == person_schema
-    assert Schema(**{"$ref": ref_prefix + "address"}).resolve(ref_prefix, schemas) == address_schema
+    assert Schema(**{"$ref": ref_prefix + "person"}).resolve(ref_prefix, schemas) == schemas["person"]
+    assert Schema(**{"$ref": ref_prefix + "address"}).resolve(ref_prefix, schemas) == schemas["address"]
+
+    person_schema = schemas["person"].copy(deep=True)
 
     assert not Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
-    person_schema.properties["address"] = address_schema
+    person_schema.properties["address"] = schemas["address"]
     assert Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema

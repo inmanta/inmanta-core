@@ -50,16 +50,14 @@ class Reference(BaseModel):
     ref: str = Field(..., alias="$ref")
 
 
-S = TypeVar("S", bound="SchemaBase")
-
-
-class SchemaBase(BaseModel):
+class Schema(BaseModel):
     ref: Optional[str] = Field(None, alias="$ref")
     title: Optional[str] = None
     required: Optional[List[str]] = None
     type: Optional[str] = None
-    items: Optional[Any] = None
-    properties: Optional[Dict[str, Any]] = None
+    items: Optional["Schema"] = None
+    properties: Optional[Dict[str, "Schema"]] = None
+    additionalProperties: Optional[Union["Schema", bool]] = None
     description: Optional[str] = None
     format: Optional[str] = None
     default: Optional[Any] = None
@@ -67,18 +65,10 @@ class SchemaBase(BaseModel):
     readOnly: Optional[bool] = None
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
-    anyOf: Optional[Sequence["SchemaBase"]] = None
+    anyOf: Optional[Sequence["Schema"]] = None
     enum: Optional[List[str]] = None
 
-    def from_dict(self: S, schema: Dict[str, Any]) -> S:
-        """
-        Build an object with the same type as this object
-
-        :param schema: The schema of the object to build
-        """
-        return SchemaBase(**schema)
-
-    def resolve(self: S, ref_prefix: str, known_schemas: Dict[str, Any]) -> S:
+    def resolve(self, ref_prefix: str, known_schemas: Dict[str, "Schema"]) -> "Schema":
         """
         Returns this object or the one this object is refering to.
 
@@ -94,11 +84,11 @@ class SchemaBase(BaseModel):
             raise ValueError(f"Schema reference (={self.ref}) doesn't start with the expected prefix: '{ref_prefix}'")
 
         reference = self.ref[len(ref_prefix) :]
-        return self.from_dict(known_schemas[reference])
+        return known_schemas[reference]
 
     def recursive_resolve(
-        self: S, ref_prefix: str, known_schemas: Dict[str, Any], update: Dict[str, Any], deep: bool = True
-    ) -> S:
+        self, ref_prefix: str, known_schemas: Dict[str, "Schema"], update: Dict[str, Any], deep: bool = True
+    ) -> "Schema":
         """
         Returns this object of the one this object is refering to, and resolve all the nested schema it contains.
 
@@ -114,45 +104,29 @@ class SchemaBase(BaseModel):
         """
 
         # Get this schema if it is not a ref, or a new schema pointed to by the ref
-        schema: S = self.resolve(ref_prefix, known_schemas)
+        schema = self.resolve(ref_prefix, known_schemas)
 
         # We only do a deepcopy if the parameter says so AND this object has not been newly built
         deep = deep and schema is not self
 
         # Duplicate the schema, and update some of its values
-        duplicate: S = schema.copy(update=update, deep=deep)
+        duplicate = schema.copy(update=update, deep=deep)
 
         # We copy and resolve the list of schema
         if duplicate.anyOf is not None:
             duplicate.anyOf = [s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.anyOf]
 
-        return duplicate
-
-
-SchemaBase.update_forward_refs()
-
-
-class Schema(SchemaBase):
-    items: Optional[Union["Schema", SchemaBase]] = None
-    properties: Optional[Dict[str, Union["Schema", SchemaBase]]] = None
-    additionalProperties: Optional[Union["Schema", SchemaBase, bool]] = None
-
-    def from_dict(self: "Schema", schema: Dict[str, Any]) -> "Schema":
-        return Schema(**schema)
-
-    def recursive_resolve(
-        self: "Schema", ref_prefix: str, known_schemas: Dict[str, Any], update: Dict[str, Any], deep: bool = True
-    ) -> "Schema":
-        duplicate: Schema = super().recursive_resolve(ref_prefix, known_schemas, update, deep=deep)
-
+        # We copy and resolve the items if we have any
         if duplicate.items is not None:
             duplicate.items = duplicate.items.recursive_resolve(ref_prefix, known_schemas, update, deep=False)
 
+        # We copy and resolve the properties if we have any
         if duplicate.properties is not None:
             duplicate.properties = {
                 k: s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for k, s in duplicate.properties.items()
             }
 
+        # We copy and resolve the additionalProperties if we have any
         if duplicate.additionalProperties is not None and not isinstance(duplicate.additionalProperties, bool):
             duplicate.additionalProperties = duplicate.additionalProperties.recursive_resolve(
                 ref_prefix, known_schemas, update, deep=False
@@ -253,7 +227,7 @@ class PathItem(BaseModel):
 
 
 class Components(BaseModel):
-    schemas: Optional[Dict[str, Union[Schema, Reference]]] = None
+    schemas: Optional[Dict[str, Schema]] = None
     responses: Optional[Dict[str, Union[Response, Reference]]] = None
     parameters: Optional[Dict[str, Union[Parameter, Reference]]] = None
     examples: Optional[Dict[str, Union[Example, Reference]]] = None
