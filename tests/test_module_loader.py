@@ -262,7 +262,8 @@ def test_load_module_v1_and_v2_installed(
 
 @pytest.mark.parametrize("preload_v1_module", [True, False])
 def test_load_module_recursive_v2_module_depends_on_v1(
-    local_module_package_index: str, snippetcompiler, preload_v1_module: bool) -> None:
+    local_module_package_index: str, snippetcompiler, preload_v1_module: bool
+) -> None:
     """
     A V2 module cannot depend on a V1 module. This test case ensure that the load_module_recursive() method
     raises an error when a dependency of a V2 module is only available as a V1 module.
