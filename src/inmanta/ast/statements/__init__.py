@@ -89,7 +89,7 @@ class DynamicStatement(Statement):
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
@@ -127,7 +127,7 @@ class ExpressionStatement(DynamicStatement):
         raise NotImplementedError()
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> Dict[object, ResultVariable]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach

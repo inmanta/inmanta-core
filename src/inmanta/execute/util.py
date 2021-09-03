@@ -34,7 +34,7 @@ class Unknown(AnyType):
     :param source: The source object that can determine the value
     """
 
-    def __init__(self, source):
+    def __init__(self, source: object) -> None:
         self.source = source
 
     def __iter__(self):
@@ -42,7 +42,7 @@ class Unknown(AnyType):
 
 
 class NoneValue(object):
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, NoneValue)
 
     def __hash__(self):
