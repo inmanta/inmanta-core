@@ -107,7 +107,7 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = {}
+        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 

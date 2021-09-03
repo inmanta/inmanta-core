@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, cast
+from typing import Any, Dict, List, Optional, Set, cast
 
 import asyncpg
 
@@ -267,7 +267,7 @@ class OrchestrationService(protocol.ServerSlice):
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input, key, default):
+        def safe_get(input: JsonType, key: str, default: Any) -> Any:
             if not isinstance(input, dict):
                 return default
             if key not in input:

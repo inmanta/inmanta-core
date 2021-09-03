@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, TextIO
 
 import texttable
 import yaml
@@ -40,6 +40,7 @@ import build
 import build.env
 from inmanta import env
 from inmanta.ast import CompilerException
+from inmanta.ast.type import Union
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
@@ -667,7 +668,7 @@ version: 0.0.1dev0"""
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
 
-    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str]=None) -> None:
+    def freeze(self, outfile: Optional[Union[str, TextIO]], recursive: Optional[bool], operator: str, module: Optional[str]=None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
@@ -708,9 +709,10 @@ version: 0.0.1dev0"""
             close = True
 
         try:
+            assert outfile
             outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
-            if close:
+            if close and outfile:
                 outfile.close()
 
 
