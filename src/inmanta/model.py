@@ -120,7 +120,7 @@ class Value(object):
     """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
-    def from_list(lst) -> List["Value"]:
+    def from_list(lst: List[JsonType]) -> List["Value"]:
         return [Value.from_dict(x) for x in lst]
 
     @staticmethod
