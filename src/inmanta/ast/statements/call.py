@@ -125,7 +125,7 @@ class FunctionCall(ReferenceStatement):
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(
@@ -137,7 +137,7 @@ class FunctionCall(ReferenceStatement):
             ),
         )
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(

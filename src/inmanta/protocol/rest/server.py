@@ -97,6 +97,7 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(status)
 
     def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[ReturnTypes, bytes]:
+        assert body
         if content_type == common.JSON_CONTENT:
             return common.json_encode(body)
         if content_type == common.HTML_CONTENT:
@@ -257,11 +258,11 @@ class RESTServer(RESTBase):
         self.running = False
         self._http_server = None
 
-    def start_request(self):
+    def start_request(self) -> None:
         self.idle_event.clear()
         self.inflight_counter += 1
 
-    def end_request(self):
+    def end_request(self) -> None:
         self.inflight_counter -= 1
         if self.inflight_counter == 0:
             self.idle_event.set()

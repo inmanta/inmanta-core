@@ -17,7 +17,7 @@
 """
 import datetime
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools
@@ -29,7 +29,7 @@ from inmanta.data.model import ReleasedResourceState
 
 
 class InvalidFilter(Exception):
-    def __init__(self, message: str, *args) -> None:
+    def __init__(self, message: str, *args: Any) -> None:
         super().__init__(message, *args)
         self.message = message
 

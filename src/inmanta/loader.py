@@ -363,7 +363,7 @@ class PluginModuleLoader(FileLoader):
 
         return os.path.join(*module_parts)
 
-    def _loading_top_level_package(self):
+    def _loading_top_level_package(self) -> bool:
         return self.path == ""
 
 

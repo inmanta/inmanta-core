@@ -117,7 +117,7 @@ class InmantaModuleRequirement:
         return self._requirement.key.replace("-", "_")
 
     @property
-    def specifier(self):
+    def specifier(self) -> str:
         return self._requirement.specifier
 
     def __eq__(self, other: object) -> bool:

@@ -167,7 +167,7 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
-def warn(warning: InmantaWarning):
+def warn(warning: InmantaWarning) -> None:
     """
     Warn using the supplied InmantaWarning instance.
     """
