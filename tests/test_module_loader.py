@@ -259,7 +259,7 @@ def test_load_module_v1_and_v2_installed(
     assert isinstance(project.modules[module_name], ModuleV2)
 
 
-def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_index, snippetcompiler) -> None:
+def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_index: str, snippetcompiler) -> None:
     """
     A V2 module cannot depend on a V1 module. This test case ensure that the load_module_recursive() method
     raises an error when a dependency of a V2 module is only available as a V1 module.
@@ -273,7 +273,7 @@ def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_inde
         project.load_module_recursive(install=True)
 
 
-def test_load_module_recursive_complex_module_dependencies(local_module_package_index, snippetcompiler) -> None:
+def test_load_module_recursive_complex_module_dependencies(local_module_package_index: str, snippetcompiler) -> None:
     """
     Test whether the load_module_recursive() method works correctly when complex, circular dependencies exist between modules.
 
