@@ -18,17 +18,15 @@
 import logging
 import os
 import shutil
-from typing import List, Tuple
+from typing import List
 
 import py
 import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import ModuleNotFoundException, ModuleV1, ModuleV2, Project, ModuleLoadingException
+from inmanta.module import ModuleLoadingException, ModuleNotFoundException, ModuleV1, ModuleV2, Project
 from inmanta.moduletool import DummyProject, ModuleConverter
-from inmanta.ast.statements import Statement
-from inmanta.ast.blocks import BasicBlock
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
