@@ -18,7 +18,7 @@
 import logging
 import os
 import shutil
-from typing import List
+from typing import List, Set
 
 import py
 import pytest
@@ -121,6 +121,7 @@ def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcom
     module_name = "v1_module_depends_on_v1_and_v2_module"
     snippetcompiler.setup_for_snippet(
         f"import {module_name}",
+        autostd=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=False)],
     )
 
@@ -259,7 +260,9 @@ def test_load_module_v1_and_v2_installed(
     assert isinstance(project.modules[module_name], ModuleV2)
 
 
-def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_index: str, snippetcompiler) -> None:
+@pytest.mark.parametrize("preload_v1_module", [True, False])
+def test_load_module_recursive_v2_module_depends_on_v1(
+    local_module_package_index: str, snippetcompiler, preload_v1_module: bool) -> None:
     """
     A V2 module cannot depend on a V1 module. This test case ensure that the load_module_recursive() method
     raises an error when a dependency of a V2 module is only available as a V1 module.
@@ -269,6 +272,10 @@ def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_inde
     project = snippetcompiler.setup_for_snippet(
         snippet="import v2_depends_on_v1", python_package_source=local_module_package_index
     )
+    if preload_v1_module:
+        project.get_module("mod1", allow_v1=True)
+    assert ("mod1" in project.modules) == preload_v1_module
+
     with pytest.raises(ModuleLoadingException, match="could not find module mod1"):
         project.load_module_recursive(install=True)
 
@@ -290,7 +297,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     )
     assert "complex_module_dependencies_mod1" not in project.modules
     assert "complex_module_dependencies_mod2" not in project.modules
-    loaded_namespaces: List[str] = set(ns for ns, _, _ in project.load_module_recursive(install=True))
+    loaded_namespaces: Set[str] = set(ns for ns, _, _ in project.load_module_recursive(install=True))
     assert "complex_module_dependencies_mod1" in project.modules
     assert "complex_module_dependencies_mod2" in project.modules
     expected_namespaces = {

@@ -1324,7 +1324,7 @@ class Project(ModuleLike[ProjectMetadata]):
         parts = full_module_name.split("::")
         module_name = parts[0]
 
-        if module_name in self.modules:
+        if module_name in self.modules and (allow_v1 or isinstance(self.modules[module_name], ModuleV2)):
             return self.modules[module_name]
         return self.load_module(module_name, install=install, allow_v1=allow_v1)
 
