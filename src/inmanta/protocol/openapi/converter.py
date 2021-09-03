@@ -418,7 +418,7 @@ class OperationHandler:
 
         return_properties: Optional[Dict[str, Schema]] = None
 
-        if is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
+        if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
             # Dealing with the special case of ReturnValue[...]
             links_type = self.type_converter.get_openapi_type(Dict[str, str])
             links_type.title = "Links"
