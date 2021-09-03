@@ -250,7 +250,7 @@ class ProjectTool(ModuleLikeTool):
             if close:
                 outfile.close()
 
-    def init(self, output_dir, name, default):
+    def init(self, output_dir: str, name: st, default: bool) -> str:
         os.makedirs(output_dir, exist_ok=True)
         project_path = os.path.join(output_dir, name)
         if os.path.exists(project_path):
@@ -262,7 +262,7 @@ class ProjectTool(ModuleLikeTool):
             no_input=default,
         )
 
-    def install(self):
+    def install(self) -> None:
         """
         Install all modules the project requires.
         """
@@ -279,7 +279,7 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser):
+    def modules_parser_config(cls, parser: ArgumentParser) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
@@ -467,7 +467,7 @@ version: 0.0.1dev0"""
 
         LOGGER.info("Module successfully created.")
 
-    def do(self, command, module):
+    def do(self, command: str, module: str) -> None:
         for mod in self.get_modules(module):
             try:
                 mod.execute_command(command)
@@ -637,16 +637,16 @@ version: 0.0.1dev0"""
 
     def commit(
         self,
-        message,
-        module=None,
-        version=None,
-        dev=False,
-        major=False,
-        minor=False,
-        patch=False,
-        commit_all=False,
-        tag=False,
-    ):
+        message: str,
+        module: Optional[str]=None,
+        version: Optional[str]=None,
+        dev: bool=False,
+        major: bool=False,
+        minor: bool=False,
+        patch: bool=False,
+        commit_all: bool=False,
+        tag: bool=False,
+    ) -> None:
         """
         Commit all current changes.
         """
@@ -667,7 +667,7 @@ version: 0.0.1dev0"""
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
 
-    def freeze(self, outfile, recursive, operator, module=None):
+    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str]=None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """

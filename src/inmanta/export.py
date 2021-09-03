@@ -39,6 +39,7 @@ from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
+from inmanta.types import JsonType
 from inmanta.util import get_compiler_version, groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -681,7 +682,7 @@ class ModelExporter(object):
                 rawvalue = [rawvalue]
             return {"values": [convert(v) for v in rawvalue]}
 
-        def convert_attribute(value: ResultVariable):
+        def convert_attribute(value: ResultVariable) -> JsonType:
             try:
                 rawvalue = value.get_value()
             except OptionalValueException:
