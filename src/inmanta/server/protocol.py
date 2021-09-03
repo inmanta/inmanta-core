@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -137,7 +137,7 @@ class Server(endpoints.Endpoint):
 
         return [s for s in (resolve(name) for name in order) if s is not None]
 
-    def _get_slice_sequence(self):
+    def _get_slice_sequence(self) -> Sequence["ServerSlice"]:
         if self._slice_sequence is not None:
             return self._slice_sequence
         self._slice_sequence = self._order_slices()

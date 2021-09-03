@@ -79,7 +79,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self):
+    def normalize(self) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):
@@ -251,7 +251,7 @@ class FunctionUnit(Waiter):
 
     __slots__ = ("result", "base_requires", "function", "resolver")
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         result.set_provider(self)
@@ -266,7 +266,7 @@ class FunctionUnit(Waiter):
             self.waitfor(r)
         self.ready(self)
 
-    def execute(self):
+    def execute(self) -> None:
         requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue, self.result)

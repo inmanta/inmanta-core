@@ -166,7 +166,7 @@ class OrchestrationService(protocol.ServerSlice):
         return 200, d
 
     @protocol.handle(methods.delete_version, version_id="id", env="tid")
-    async def delete_version(self, env, version_id):
+    async def delete_version(self, env: data.Environment, version_id: int) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}

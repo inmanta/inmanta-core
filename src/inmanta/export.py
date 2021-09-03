@@ -295,7 +295,7 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self, no_commit=False):
+    def get_version(self, no_commit: bool = False) -> int:
         if no_commit:
             return 0
         tid = cfg_env.get()
@@ -318,7 +318,7 @@ class Exporter(object):
         include_status: bool = False,
         model_export: bool = False,
         export_plugin: Optional[str] = None,
-    ) -> None:
+    ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
         """

@@ -147,7 +147,7 @@ class AgentTriggerMethod(str, Enum):
     push_full_deploy = "push_full_deploy"
 
     @classmethod
-    def get_agent_trigger_method(cls, is_full_deploy):
+    def get_agent_trigger_method(cls, is_full_deploy: bool):
         if is_full_deploy:
             return cls.push_full_deploy
         else:

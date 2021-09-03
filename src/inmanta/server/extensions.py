@@ -192,7 +192,7 @@ class ApplicationContext:
     def get_slices(self) -> List[ServerSlice]:
         return self._slices
 
-    def set_feature_manager(self, feature_manager: FeatureManager):
+    def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         assert self._feature_manager is None
         self._feature_manager = feature_manager
 

@@ -32,7 +32,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Set, Tuple, TypeVar, Union
+from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -128,7 +128,7 @@ class Scheduler(object):
         self._scheduled: Dict[Callable, object] = {}
         self._stopped = False
 
-    def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
+    def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: Optional[float] = None) -> None:
         """
         Add a new action
 
