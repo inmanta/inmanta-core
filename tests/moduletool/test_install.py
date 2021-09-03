@@ -19,13 +19,15 @@ import argparse
 import configparser
 import json
 import os
+import re
 import shutil
 import subprocess
+import yaml
 from dataclasses import dataclass
 from importlib.abc import Loader
 from itertools import chain
 from pkg_resources import Requirement
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple, Union
 from unittest.mock import patch
 
 import py
@@ -83,7 +85,7 @@ def module_from_template(
     new_version: Optional[version.Version] = None,
     dev_version: bool = False,
     new_name: Optional[str] = None,
-    new_requirements: Optional[List[module.InmantaModuleRequirement]] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
@@ -119,7 +121,8 @@ def module_from_template(
         config["metadata"]["name"] = module.ModuleV2Source.get_python_package_name(new_name)
     if new_requirements:
         config["options"]["install_requires"] = "\n    ".join(
-            str(module.ModuleV2Source.get_python_package_requirement(req)) for req in new_requirements
+            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+            for req in new_requirements
         )
     with open(config_file, "w") as fh:
         config.write(fh)
@@ -469,11 +472,10 @@ def test_project_install_modules_cache_invalid(
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
-    projects_dir: str,
     preinstall_v2: bool,
 ) -> None:
     """
-    Verify that introducing invalidities in the modules cache results in the appropriate exception.
+    Verify that introducing invalidities in the modules cache results in the appropriate exception and warnings.
 
     :param preinstall_v2: Whether the preinstalled module should be a v2.
     """
@@ -535,7 +537,13 @@ def test_project_install_modules_cache_invalid(
         module.Project.get().get_module(module_name, install=False, allow_v1=True)
 
     os.chdir(module.Project.get().path)
-    with pytest.raises(CompilerException):
+    with pytest.raises(
+        CompilerException,
+        match=(
+            "Not all modules were loaded correctly as a result of transient dependencies."
+            " A recompile should load them correctly."
+        )
+    ):
         ProjectTool().execute("install", [])
 
     message: str = (
@@ -548,4 +556,120 @@ def test_project_install_modules_cache_invalid(
     assert (
         message
         in (rec.message for rec in caplog.records)
+    )
+
+
+def test_project_install_incompatible_versions(
+    caplog,
+    snippetcompiler_clean,
+    tmpdir: py.path.local,
+    modules_dir: str,
+    modules_v2_dir: str,
+) -> None:
+    """
+    Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
+    """
+    # declare conflicting module parameters
+    module_name: str = "v2mod"
+    module_version: version.Version = version.Version("1.0.0")
+    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"{module_name}>42")
+
+    # prepare v1 module
+    v1_modules_path: str = os.path.join(str(tmpdir), "libs")
+    v1mod_path: str = os.path.join(v1_modules_path, "v1mod")
+    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod_path)
+    with open(os.path.join(v1mod_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
+        config: Dict[str, object] = yaml.safe_load(fh)
+        config["requires"] = [str(req_v1_on_v2)]
+        fh.seek(0)
+        yaml.dump(config, fh)
+
+    # prepare v2 module
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), module_name),
+        new_version=module_version,
+        new_name=module_name,
+        publish_index=index,
+    )
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import v1mod
+        import {module_name}
+        """,
+        autostd=False,
+        add_to_module_path=[v1_modules_path],
+        python_package_source=[index.url],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    with pytest.raises(
+        CompilerException, match="Not all module dependencies have been met. Run `inmanta modules update` to resolve this."
+    ):
+        ProjectTool().execute("install", [])
+
+    assert (
+        f"requirement {req_v1_on_v2} on module {module_name} not fulfilled, now at version {module_version}"
+        in (rec.message for rec in caplog.records)
+    )
+
+
+def test_project_install_incompatible_dependencies(
+    caplog,
+    snippetcompiler_clean,
+    tmpdir: py.path.local,
+    modules_dir: str,
+    modules_v2_dir: str,
+) -> None:
+    """
+    Verify that introducing version incompatibilities in the Python environment results in the appropriate exception and
+    warnings.
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        new_requirements=[Requirement.parse("more-itertools~=7.0")],
+        publish_index=index,
+    )
+    v2mod2: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod2"),
+        new_name="v2mod2",
+        new_requirements=[Requirement.parse("more-itertools~=8.0")],
+        publish_index=index,
+    )
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
+        import {module.ModuleV2.get_name_from_metadata(v2mod2)}
+        """,
+        autostd=False,
+        python_package_source=[index.url, "https://pypi.org/simple"],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    with pytest.raises(
+        CompilerException,
+        match=(
+            "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts before"
+            " attempting another compile. Run `pip check` to check for any incompatibilities."
+        )
+    ):
+        ProjectTool().execute("install", [])
+
+    assert any(
+        re.match("Incompatibility between constraint more-itertools~=[78].0 and installed version [78]\\..*", rec.message) is not None
+        for rec in caplog.records
     )
