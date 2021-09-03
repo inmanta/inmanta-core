@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -54,7 +54,7 @@ class SliceStartupException(ServerStartFailure):
         self.__cause__ = cause
         self.in_slice = slice_name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Slice {self.in_slice} failed to start because: {str(self.__cause__)}"
 
 
@@ -68,7 +68,7 @@ class ReturnClient(Client):
         super().__init__(name, with_rest_client=False)
         self.session = session
 
-    async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: Any, kwargs: Any) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
             return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
@@ -497,7 +497,7 @@ class Session(object):
     def get_client(self) -> ReturnClient:
         return self.client
 
-    def abort(self):
+    def abort(self) -> None:
         "Send poison pill to signal termination."
         self._queue.put(None)
 

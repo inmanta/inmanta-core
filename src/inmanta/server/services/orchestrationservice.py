@@ -27,7 +27,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.protocol import methods, methods_v2
+from inmanta.protocol import methods, methods_v2, handle
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
@@ -94,7 +94,7 @@ class OrchestrationService(protocol.ServerSlice):
                 for v in delete_list:
                     await version_dict[v].delete_cascade()
 
-    @protocol.handle(methods.list_versions, env="tid")
+    @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
@@ -118,7 +118,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.get_version, version_id="id", env="tid")
+    @handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
         self,
         env: data.Environment,
@@ -165,7 +165,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.delete_version, version_id="id", env="tid")
+    @handle(methods.delete_version, version_id="id", env="tid")
     async def delete_version(self, env: data.Environment, version_id: int) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
@@ -174,11 +174,11 @@ class OrchestrationService(protocol.ServerSlice):
         await version.delete_cascade()
         return 200
 
-    @protocol.handle(methods_v2.reserve_version, env="tid")
+    @handle(methods_v2.reserve_version, env="tid")
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
-    @protocol.handle(methods.put_version, env="tid")
+    @handle(methods.put_version, env="tid")
     async def put_version(
         self,
         env: data.Environment,
@@ -187,7 +187,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        compiler_version: str = None,
+        compiler_version: Optional[str] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -396,7 +396,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200
 
-    @protocol.handle(methods.release_version, version_id="id", env="tid")
+    @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
         self,
         env: data.Environment,
@@ -416,7 +416,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep = [rid + ",v=%s" % version_id for rid in undep]
+        undep = cast(ResourceIdStr, [rid + ",v=%s" % version_id for rid in undep])
 
         now = datetime.datetime.now().astimezone()
 
@@ -436,7 +436,7 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         skippable = await model.get_skipped_for_undeployable()
-        skippable = [rid + ",v=%s" % version_id for rid in skippable]
+        skippable = cast(ResourceIdStr, [rid + ",v=%s" % version_id for rid in skippable])
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
@@ -471,12 +471,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, {"model": model}
 
-    @protocol.handle(methods.deploy, env="tid")
+    @handle(methods.deploy, env="tid")
     async def deploy(
         self,
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-        agents: List[str] = None,
+        agents: Optional[List[str]] = None,
     ) -> Apireturn:
         warnings = []
 

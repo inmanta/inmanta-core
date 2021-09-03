@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 import texttable
 import yaml
@@ -423,13 +423,13 @@ class ModuleTool(ModuleLikeTool):
             project = self.get_project(load=True)
             return project.get_module(module)
 
-    def get_modules(self, module: str = None):
+    def get_modules(self, module: str = None) -> List[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name):
+    def create(self, name: str) -> None:
         project = self.get_project()
         mod_root = project.modulepath[-1]
         LOGGER.info("Creating new module %s in %s", name, mod_root)
@@ -474,7 +474,7 @@ version: 0.0.1dev0"""
             except Exception as e:
                 print(e)
 
-    def list(self, requires=False):
+    def list(self, requires: bool=False) -> None:
         """
         List all modules in a table
         """
@@ -615,21 +615,21 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
-    def status(self, module=None):
+    def status(self, module: str=None) -> None:
         """
         Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
             mod.status()
 
-    def push(self, module=None):
+    def push(self, module: str=None) -> None:
         """
         Push all modules
         """
         for mod in self.get_modules(module):
             mod.push()
 
-    def verify(self):
+    def verify(self) -> None:
         """
         Verify dependencies and frozen module versions
         """
@@ -715,9 +715,9 @@ version: 0.0.1dev0"""
 
 
 class ModuleBuildFailedError(Exception):
-    def __init__(self, msg: str, *args, **kwargs) -> None:
+    def __init__(self, msg: str, *args: Any) -> None:
         self.msg = msg
-        super(ModuleBuildFailedError, self).__init__(msg, *args, **kwargs)
+        super(ModuleBuildFailedError, self).__init__(msg, *args)
 
     def __str__(self) -> str:
         return self.msg

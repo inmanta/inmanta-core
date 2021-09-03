@@ -295,7 +295,7 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     )
 
 
-def save_config(client: Client, env: Dict[str, str]):
+def save_config(client: Client, env: Dict[str, str]) -> None:
     cfg = """
 [config]
 fact-expire = 1800

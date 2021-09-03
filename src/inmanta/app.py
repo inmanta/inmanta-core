@@ -219,7 +219,7 @@ class ExperimentalFeatureFlags:
     def _get_name(self, option: Option[bool]) -> str:
         return f"flag_{option.name}"
 
-    def add(self, option: Option) -> None:
+    def add(self, option: Option[bool]) -> None:
         """ Add an option to the set of feature flags """
         self.metavar_to_option[self._get_name(option)] = option
 

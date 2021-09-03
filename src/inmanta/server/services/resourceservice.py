@@ -50,7 +50,7 @@ from inmanta.data.paging import (
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
 )
-from inmanta.protocol import methods, methods_v2
+from inmanta.protocol import methods, methods_v2, handle
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
@@ -175,7 +175,7 @@ class ResourceService(protocol.ServerSlice):
         except KeyError:
             pass
 
-    def close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
         """Close the given logger for the given env.
         :param env: The environment to close the logger for
         :param logger: The logger to close, if the logger is none it is retrieved
@@ -205,7 +205,7 @@ class ResourceService(protocol.ServerSlice):
         log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    @protocol.handle(methods.get_resource, resource_id="id", env="tid")
+    @handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(
         self,
         env: data.Environment,
@@ -245,7 +245,7 @@ class ResourceService(protocol.ServerSlice):
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
 
-    @protocol.handle(methods.get_resources_for_agent, env="tid")
+    @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
@@ -389,7 +389,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    @protocol.handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
+    @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
     async def resource_deploy_done(
         self,
         env: data.Environment,
@@ -497,7 +497,7 @@ class ResourceService(protocol.ServerSlice):
                     changes=changes_with_rvid,
                 )
 
-    @protocol.handle(methods.resource_action_update, env="tid")
+    @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
         self,
         env: data.Environment,
@@ -684,7 +684,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200
 
-    @protocol.handle(methods_v2.resource_deploy_start, env="tid", resource_id="rvid")
+    @handle(methods_v2.resource_deploy_start, env="tid", resource_id="rvid")
     async def resource_deploy_start(
         self,
         env: data.Environment,
@@ -720,7 +720,7 @@ class ResourceService(protocol.ServerSlice):
 
         return await data.Resource.get_resource_state_for_dependencies(environment=env.id, resource_version_id=resource_id)
 
-    @protocol.handle(methods_v2.get_resource_actions, env="tid")
+    @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
         self,
         env: data.Environment,
@@ -804,7 +804,7 @@ class ResourceService(protocol.ServerSlice):
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
 
-    @protocol.handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
+    @handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
     async def get_resource_events(
         self,
         env: data.Environment,
@@ -871,7 +871,7 @@ class ResourceService(protocol.ServerSlice):
             for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
         }
 
-    @protocol.handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
+    @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
     async def resource_did_dependency_change(
         self,
         env: data.Environment,
@@ -884,7 +884,7 @@ class ResourceService(protocol.ServerSlice):
             for action in actions
         )
 
-    @protocol.handle(methods_v2.resource_list, env="tid")
+    @handle(methods_v2.resource_list, env="tid")
     async def resource_list(
         self,
         env: data.Environment,
@@ -943,7 +943,7 @@ class ResourceService(protocol.ServerSlice):
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
-    @protocol.handle(methods_v2.resource_details, env="tid")
+    @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
 
         details = await data.Resource.get_resource_details(env.id, rid)
@@ -951,7 +951,7 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details
 
-    @protocol.handle(methods_v2.resource_history, env="tid")
+    @handle(methods_v2.resource_history, env="tid")
     async def resource_history(
         self,
         env: data.Environment,
@@ -1004,7 +1004,7 @@ class ResourceService(protocol.ServerSlice):
         )
         return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))
 
-    @protocol.handle(methods_v2.resource_logs, env="tid")
+    @handle(methods_v2.resource_logs, env="tid")
     async def resource_logs(
         self,
         env: data.Environment,

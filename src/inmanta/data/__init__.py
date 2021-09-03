@@ -3979,7 +3979,7 @@ class DryRun(BaseDocument):
     resources: Dict[str, Any] = Field(field_type=dict, default={})
 
     @classmethod
-    async def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+    async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: m.ResourceVersionIdStr, dryrun_data: JsonType) -> None:
         """
         Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
         if the resource has not been saved yet.
@@ -4000,7 +4000,7 @@ class DryRun(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def create(cls, environment, model, total, todo):
+    async def create(cls, environment: uuid.UUID, model:int , total:int, todo:int) -> "DryRun":
         obj = cls(
             environment=environment,
             model=model,
@@ -4012,7 +4012,7 @@ class DryRun(BaseDocument):
         await obj.insert()
         return obj
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         dict_result = BaseDocument.to_dict(self)
         resources = {r["id"]: r for r in dict_result["resources"].values()}
         dict_result["resources"] = resources

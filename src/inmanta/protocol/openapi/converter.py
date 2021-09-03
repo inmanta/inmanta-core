@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
@@ -49,7 +49,7 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o) -> Union[ReturnTypes, util.JSONSerializable]:
+def openapi_json_encoder(o: Any) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.api_boundary_json_encoder(o)
@@ -152,7 +152,7 @@ class OpenApiTypeConverter:
     Lookup for OpenAPI types corresponding to python types
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.components = Components(schemas={})
         self.ref_prefix = "#/components/schemas/"
         self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
@@ -207,7 +207,7 @@ class ArgOptionHandler:
     Extracts header, response header and path parameter information from ArgOptions
     """
 
-    def __init__(self, type_converter: OpenApiTypeConverter):
+    def __init__(self, type_converter: OpenApiTypeConverter) -> None:
         self.type_converter = type_converter
 
     def extract_parameters_from_arg_options(

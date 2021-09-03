@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.protocol import methods
+from inmanta.protocol import methods, handle
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -99,7 +99,7 @@ class ParameterService(protocol.ServerSlice):
 
         LOGGER.info("Done renewing expired parameters")
 
-    @protocol.handle(methods.get_param, param_id="id", env="tid")
+    @handle(methods.get_param, param_id="id", env="tid")
     async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
@@ -181,7 +181,7 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @protocol.handle(methods.set_param, param_id="id", env="tid")
+    @handle(methods.set_param, param_id="id", env="tid")
     async def set_param(
         self,
         env: data.Environment,
@@ -209,7 +209,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 
-    @protocol.handle(methods.set_parameters, env="tid")
+    @handle(methods.set_parameters, env="tid")
     async def set_parameters(self, env: data.Environment, parameters: List[Dict[str, Any]]) -> Apireturn:
         recompile = False
         compile_metadata = {
@@ -235,7 +235,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
+    @handle(methods.delete_param, env="tid", parameter_name="id")
     async def delete_param(self, env: data.Environment, parameter_name: str, resource_id: str) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=parameter_name)
@@ -256,7 +256,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.list_params, env="tid")
+    @handle(methods.list_params, env="tid")
     async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
         params = await data.Parameter.list_parameters(env.id, **query)
         return (
