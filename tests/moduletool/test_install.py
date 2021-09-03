@@ -132,7 +132,6 @@ def module_from_template(
         return module.ModuleV2Metadata.parse(fh)
 
 
-# TODO: replace all usages with snippetcompiler_clean
 def setup_simple_project(
     projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
 ) -> module.ProjectMetadata:
@@ -531,6 +530,10 @@ def test_project_install_modules_cache_invalid(
         python_package_source=[index.url, local_module_package_index],
     )
 
+    if not preinstall_v2:
+        # populate project.modules[module_name]
+        module.Project.get().get_module(module_name, install=False, allow_v1=True)
+
     os.chdir(module.Project.get().path)
     with pytest.raises(CompilerException):
         ProjectTool().execute("install", [])
@@ -539,7 +542,7 @@ def test_project_install_modules_cache_invalid(
         f"Compiler has loaded module {module_name}=={v2_version}.dev0 but {module_name}=={v2_version} has"
         " later been installed as a side effect."
         if preinstall_v2
-        else f""
+        else f"Compiler has loaded module {module_name} as v1 but it has later been installed as v2 as a side effect."
     )
 
     assert (
