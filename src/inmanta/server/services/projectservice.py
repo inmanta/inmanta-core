@@ -24,7 +24,7 @@ import asyncpg
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.protocol import methods, methods_v2, handle
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,

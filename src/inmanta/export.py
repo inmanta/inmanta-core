@@ -30,7 +30,7 @@ from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
 from inmanta.ast.attribute import Attribute, RelationAttribute
-from inmanta.ast.entity import Entity, EntityLike
+from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr

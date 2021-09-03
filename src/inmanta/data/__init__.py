@@ -223,7 +223,15 @@ T = TypeVar("T")
 
 
 class Field(Generic[T]):
-    def __init__(self, field_type: Type[T], required: bool=False, unique:bool=False, reference:bool=False, part_of_primary_key: bool=False, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        field_type: Type[T],
+        required: bool = False,
+        unique: bool = False,
+        reference: bool = False,
+        part_of_primary_key: bool = False,
+        **kwargs: Any,
+    ) -> None:
 
         self._field_type = field_type
         self._required = required
@@ -4004,7 +4012,7 @@ class DryRun(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def create(cls, environment: uuid.UUID, model:int , total:int, todo:int) -> "DryRun":
+    async def create(cls, environment: uuid.UUID, model: int, total: int, todo: int) -> "DryRun":
         obj = cls(
             environment=environment,
             model=model,

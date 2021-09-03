@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, TextIO
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 import texttable
 import yaml
@@ -40,7 +40,6 @@ import build
 import build.env
 from inmanta import env
 from inmanta.ast import CompilerException
-from inmanta.ast.type import Union
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import (
@@ -251,7 +250,7 @@ class ProjectTool(ModuleLikeTool):
             if close:
                 outfile.close()
 
-    def init(self, output_dir: str, name: st, default: bool) -> str:
+    def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
         project_path = os.path.join(output_dir, name)
         if os.path.exists(project_path):
@@ -414,7 +413,7 @@ class ModuleTool(ModuleLikeTool):
             except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
 
-    def get_module(self, module: str = None, project: Optional[Project] = None) -> Module:
+    def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
@@ -475,7 +474,7 @@ version: 0.0.1dev0"""
             except Exception as e:
                 print(e)
 
-    def list(self, requires: bool=False) -> None:
+    def list(self, requires: bool = False) -> None:
         """
         List all modules in a table
         """
@@ -616,14 +615,14 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
-    def status(self, module: str=None) -> None:
+    def status(self, module: str = None) -> None:
         """
         Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
             mod.status()
 
-    def push(self, module: str=None) -> None:
+    def push(self, module: str = None) -> None:
         """
         Push all modules
         """
@@ -639,14 +638,14 @@ version: 0.0.1dev0"""
     def commit(
         self,
         message: str,
-        module: Optional[str]=None,
-        version: Optional[str]=None,
-        dev: bool=False,
-        major: bool=False,
-        minor: bool=False,
-        patch: bool=False,
-        commit_all: bool=False,
-        tag: bool=False,
+        module: Optional[str] = None,
+        version: Optional[str] = None,
+        dev: bool = False,
+        major: bool = False,
+        minor: bool = False,
+        patch: bool = False,
+        commit_all: bool = False,
+        tag: bool = False,
     ) -> None:
         """
         Commit all current changes.
@@ -668,52 +667,52 @@ version: 0.0.1dev0"""
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
 
-    def freeze(self, outfile: Optional[Union[str, TextIO]], recursive: Optional[bool], operator: str, module: Optional[str]=None) -> None:
+    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
 
         # find module
-        module = self.get_module(module)
+        module_obj = self.get_module(module)
 
         if recursive is None:
-            recursive = module.freeze_recursive
+            recursive = module_obj.freeze_recursive
 
         if operator is None:
-            operator = module.freeze_operator
+            operator = module_obj.freeze_operator
 
         if operator not in ["==", "~=", ">="]:
             LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
 
         freeze = {}
 
-        for submodule in module.get_all_submodules():
-            freeze.update(module.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
+        for submodule in module_obj.get_all_submodules():
+            freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
         set_yaml_order_preserving()
 
-        with open(module.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
 
         close = False
+        out_fd = None
         if outfile is None:
-            outfile = open(module.get_metadata_file_path(), "w", encoding="UTF-8")
+            out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            out_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            out_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            assert outfile
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            out_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
-            if close and outfile:
-                outfile.close()
+            if close:
+                out_fd.close()
 
 
 class ModuleBuildFailedError(Exception):
@@ -789,7 +788,7 @@ class V2ModuleBuilder:
         """
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
-        result = set()
+        result: Set[str] = set()
         ignore = ignore if ignore is not None else set()
         for (dirpath, dirnames, filenames) in os.walk(directory):
             if os.path.basename(dirpath) in ignore:

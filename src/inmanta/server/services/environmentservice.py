@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Set, cast
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.protocol import encode_token, methods, methods_v2, handle
+from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (

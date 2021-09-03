@@ -21,7 +21,7 @@ import logging
 import os
 from typing import Iterable, List, cast
 
-from inmanta.protocol import methods, handle
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_FILE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt

@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.protocol import methods, handle
+from inmanta.protocol import handle, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt

@@ -19,7 +19,7 @@ import logging
 from typing import Dict, List, cast
 
 from inmanta import data
-from inmanta.protocol import methods, handle
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService

@@ -50,7 +50,7 @@ from inmanta.data.paging import (
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
 )
-from inmanta.protocol import methods, methods_v2, handle
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta

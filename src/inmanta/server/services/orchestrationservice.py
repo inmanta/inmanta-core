@@ -27,7 +27,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.protocol import methods, methods_v2, handle
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id

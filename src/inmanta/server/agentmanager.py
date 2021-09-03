@@ -33,7 +33,7 @@ from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
-from inmanta.protocol import encode_token, methods, methods_v2, handle
+from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (

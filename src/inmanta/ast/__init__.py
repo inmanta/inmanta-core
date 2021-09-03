@@ -528,7 +528,7 @@ class CompilerException(Exception, export.Exportable):
 
         return out
 
-    def importantance(self):
+    def importantance(self) -> int:
         """
         Importance used to order exceptions when reporting multiple, lower is more important
 
@@ -610,7 +610,7 @@ class TypeNotFoundException(RuntimeException):
         self.ns = ns
         self.set_location(type.get_location())
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 20
 
 
@@ -647,7 +647,7 @@ class ExternalException(RuntimeException):
 
         return out
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 60
 
 
@@ -690,7 +690,7 @@ class WrappingRuntimeException(RuntimeException):
     def get_causes(self) -> List[CompilerException]:
         return [self.__cause__]
 
-    def importantance(self):
+    def importantance(self) -> int:
         # less likely to be the cause then out child
         return self.__cause__.importantance() + 1
 
@@ -716,35 +716,35 @@ class OptionalValueException(RuntimeException):
         self.instance = instance
         self.attribute = attribute
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 61
 
 
 class IndexException(RuntimeException):
     """Exception raised when an index definition is invalid"""
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 10
 
 
 class TypingException(RuntimeException):
     """Base class for exceptions raised during the typing phase of compilation"""
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 10
 
 
 class DirectExecuteException(TypingException):
     """Exception raised when direct execute is called on a wrong object"""
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 11
 
 
 class KeyException(RuntimeException):
     pass
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 70
 
 
@@ -777,7 +777,7 @@ class NotFoundException(RuntimeException):
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 20
 
 
@@ -796,7 +796,7 @@ class DoubleSetException(RuntimeException):
         )
         RuntimeException.__init__(self, stmt, msg)
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 51
 
 
@@ -818,7 +818,7 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.resultvariable = rv
         self.reverse = reverse
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 50
 
 
@@ -832,7 +832,7 @@ class DuplicateException(TypingException):
     def format(self) -> str:
         return "%s (original at (%s)) (duplicate at (%s))" % (self.get_message(), self.location, self.other.get_location())
 
-    def importantance(self):
+    def importantance(self) -> int:
         return 40
 
 

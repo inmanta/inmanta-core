@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 from inmanta import data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
-from inmanta.protocol import exceptions, methods, methods_v2, handle
+from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI

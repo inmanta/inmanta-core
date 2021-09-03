@@ -22,7 +22,7 @@ import uuid
 from asyncio import CancelledError
 from collections import defaultdict
 from json import JSONDecodeError
-from typing import Dict, List, MutableMapping, Optional, Union
+from typing import Dict, List, MutableMapping, Optional, Sequence, Union
 
 import tornado
 from pyformance import timer
@@ -283,7 +283,7 @@ class RESTServer(RESTBase):
         return global_url_map
 
     async def start(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
     ) -> None:
         """
         Start the server on the current ioloop

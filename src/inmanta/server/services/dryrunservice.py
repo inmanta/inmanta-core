@@ -22,7 +22,7 @@ from typing import List, Optional, cast
 
 from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
-from inmanta.protocol import methods, handle
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import (
@@ -151,7 +151,9 @@ class DyrunService(protocol.ServerSlice):
         return 200, {"dryrun": dryrun}
 
     @handle(methods.dryrun_update, dryrun_id="id", env="tid")
-    async def dryrun_update(self, env: data.Environment, dryrun_id: uuid.UUID, resource: ResourceVersionIdStr, changes: JsonType) -> Apireturn:
+    async def dryrun_update(
+        self, env: data.Environment, dryrun_id: uuid.UUID, resource: ResourceVersionIdStr, changes: JsonType
+    ) -> Apireturn:
         async with self.dryrun_lock:
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             await data.DryRun.update_resource(dryrun_id, resource, payload)

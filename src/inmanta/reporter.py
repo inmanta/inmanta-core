@@ -126,7 +126,7 @@ class InfluxReporter(AsyncReporter):
         except Exception:
             LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
 
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None):
+    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
         http_client = AsyncHTTPClient()
 
         if self.autocreate_database and not self._did_create_database:

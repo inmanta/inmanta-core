@@ -19,8 +19,8 @@ import os
 import re
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional
-from asyncpg.types import Type
 
+from asyncpg.types import Type
 from jinja2 import Environment, PackageLoader
 
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
