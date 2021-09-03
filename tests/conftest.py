@@ -809,7 +809,7 @@ class SnippetCompilationTest(KeepOnFail):
 
     def _patch_process_env(self, project: Project) -> None:
         """
-        Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
+        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
         assert project.virtualenv.virtual_python is not None

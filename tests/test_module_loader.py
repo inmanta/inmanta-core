@@ -18,15 +18,17 @@
 import logging
 import os
 import shutil
-from typing import List
+from typing import List, Tuple
 
 import py
 import pytest
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import ModuleNotFoundException, ModuleV1, ModuleV2, Project
+from inmanta.module import ModuleNotFoundException, ModuleV1, ModuleV2, Project, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter
+from inmanta.ast.statements import Statement
+from inmanta.ast.blocks import BasicBlock
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
@@ -257,3 +259,46 @@ def test_load_module_v1_and_v2_installed(
     assert f"Module {module_name} is installed as a V1 module and a V2 module: V1 will be ignored." in caplog.text
     assert module_name in project.modules
     assert isinstance(project.modules[module_name], ModuleV2)
+
+
+def test_load_module_recursive_v2_module_depends_on_v1(local_module_package_index, snippetcompiler) -> None:
+    """
+    A V2 module cannot depend on a V1 module. This test case ensure that the load_module_recursive() method
+    raises an error when a dependency of a V2 module is only available as a V1 module.
+
+    Dependency graph:  v2_depends_on_v1 (V2)  --->  mod1 (V1)
+    """
+    project = snippetcompiler.setup_for_snippet(
+        snippet="import v2_depends_on_v1", python_package_source=local_module_package_index
+    )
+    with pytest.raises(ModuleLoadingException, match="could not find module mod1"):
+        project.load_module_recursive(install=True)
+
+
+def test_load_module_recursive_complex_module_dependencies(local_module_package_index, snippetcompiler) -> None:
+    """
+    Test whether the load_module_recursive() method works correctly when complex, circular dependencies exist between modules.
+
+    Dependency graph:
+
+    complex_module_dependencies_mod1  --------------------->  complex_module_dependencies_mod2
+           |   ^                      <---------------------             |   ^
+           |   |                                                         |   |
+           v   |                                                         v   |
+    complex_module_dependencies_mod1::submod                  complex_module_dependencies_mod2::submod
+    """
+    project = snippetcompiler.setup_for_snippet(
+        snippet="import complex_module_dependencies_mod1", autostd=False, python_package_source=local_module_package_index
+    )
+    assert "complex_module_dependencies_mod1" not in project.modules
+    assert "complex_module_dependencies_mod2" not in project.modules
+    loaded_namespaces: List[str] = set(ns for ns, _, _ in project.load_module_recursive(install=True))
+    assert "complex_module_dependencies_mod1" in project.modules
+    assert "complex_module_dependencies_mod2" in project.modules
+    expected_namespaces = {
+        "complex_module_dependencies_mod1",
+        "complex_module_dependencies_mod1::submod",
+        "complex_module_dependencies_mod2",
+        "complex_module_dependencies_mod2::submod",
+    }
+    assert loaded_namespaces == expected_namespaces
