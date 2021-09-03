@@ -19,7 +19,7 @@
 import logging
 import warnings
 from enum import Enum
-from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
+from typing import Any, Dict, List, Mapping, Optional, TextIO, Type, Union
 
 
 class InmantaWarning(Warning):
@@ -27,7 +27,7 @@ class InmantaWarning(Warning):
     Base class for Inmanta Warnings.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: Any):
         Warning.__init__(self, *args)
 
 

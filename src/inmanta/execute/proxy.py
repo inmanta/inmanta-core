@@ -205,7 +205,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
         return DynamicProxy.return_value(instance[key])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._get_instance())
 
     def __iter__(self):
@@ -219,7 +219,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict):
+    def __init__(self, mydict) -> None:
         DynamicProxy.__init__(self, mydict)
 
     def __getitem__(self, key):
@@ -229,7 +229,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
 
         return DynamicProxy.return_value(instance[key])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._get_instance())
 
     def __iter__(self):
