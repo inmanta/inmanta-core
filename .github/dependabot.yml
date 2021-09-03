@@ -8,7 +8,3 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  ignore:
-      # Breaking change, see #2729
-    - dependency-name: "openapi-spec-validator"
-      versions: [">=0.3.0"]
