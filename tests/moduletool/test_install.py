@@ -570,17 +570,26 @@ def test_project_install_incompatible_versions(
     Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
     """
     # declare conflicting module parameters
-    module_name: str = "v2mod"
-    module_version: version.Version = version.Version("1.0.0")
-    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"{module_name}>42")
+    current_version: version.Version = version.Version("1.0.0")
+    req_v1_on_v1: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"v1mod1>42")
+    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"v2mod>42")
 
-    # prepare v1 module
+    # prepare v1 modules
     v1_modules_path: str = os.path.join(str(tmpdir), "libs")
-    v1mod_path: str = os.path.join(v1_modules_path, "v1mod")
-    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod_path)
-    with open(os.path.join(v1mod_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
+    v1mod1_path: str = os.path.join(v1_modules_path, "v1mod1")
+    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod1_path)
+    with open(os.path.join(v1mod1_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
         config: Dict[str, object] = yaml.safe_load(fh)
-        config["requires"] = [str(req_v1_on_v2)]
+        config["name"] = "v1mod1"
+        config["version"] = str(current_version)
+        fh.seek(0)
+        yaml.dump(config, fh)
+    v1mod2_path: str = os.path.join(v1_modules_path, "v1mod2")
+    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod2_path)
+    with open(os.path.join(v1mod2_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
+        config: Dict[str, object] = yaml.safe_load(fh)
+        config["name"] = "v1mod2"
+        config["requires"] = [str(req_v1_on_v2), str(req_v1_on_v1)]
         fh.seek(0)
         yaml.dump(config, fh)
 
@@ -588,17 +597,18 @@ def test_project_install_incompatible_versions(
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), module_name),
-        new_version=module_version,
-        new_name=module_name,
+        os.path.join(str(tmpdir), "v2mod"),
+        new_version=current_version,
+        new_name="v2mod",
         publish_index=index,
     )
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         f"""
-        import v1mod
-        import {module_name}
+        import v1mod2
+        import v1mod1
+        import v2mod
         """,
         autostd=False,
         add_to_module_path=[v1_modules_path],
@@ -612,10 +622,12 @@ def test_project_install_incompatible_versions(
     ):
         ProjectTool().execute("install", [])
 
-    assert (
-        f"requirement {req_v1_on_v2} on module {module_name} not fulfilled, now at version {module_version}"
-        in (rec.message for rec in caplog.records)
-    )
+    log_messages: Set[str] = {rec.message for rec in caplog.records}
+    expected: Set[str] = {
+        f"requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}",
+        f"requirement {req_v1_on_v2} on module v2mod not fulfilled, now at version {current_version}",
+    }
+    assert expected.issubset(log_messages)
 
 
 def test_project_install_incompatible_dependencies(
