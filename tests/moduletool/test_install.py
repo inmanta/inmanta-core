@@ -68,6 +68,9 @@ def run_module_install(module_path: str, editable: bool, set_path_argument: bool
 
 @dataclass
 class PipIndex:
+    """
+    Local pip index that makes use of dir2pi to publish its artifacts.
+    """
     artifact_dir: str
 
     @property

@@ -789,11 +789,14 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         autostd: bool = True,
-        install_v2_modules: List[LocalPackagePath] = None,
-        add_to_module_path: List[str] = None,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        add_to_module_path: Optional[List[str]] = None,
         python_package_source: Optional[List[str]] = None,
     ) -> Project:
         """
+        Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
+        env.process_env).
+
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_source: The python package repository that should be configured on the Inmanta project in order to

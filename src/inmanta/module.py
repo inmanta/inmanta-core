@@ -1764,7 +1764,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def get_version(self) -> version.Version:
         """
-        Return the version of this module
+        Return the version of this module. This is the actually installed version, which might differ from the version declared
+        in its metadata (e.g. by a .dev0 tag).
         """
         return version.Version(self._metadata.version)
 
