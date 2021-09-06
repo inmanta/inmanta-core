@@ -22,17 +22,15 @@ import os
 import re
 import shutil
 import subprocess
-import yaml
 from dataclasses import dataclass
 from importlib.abc import Loader
 from itertools import chain
-from pkg_resources import Requirement
-from typing import Iterator, List, Optional, Sequence, Tuple, Union
-from unittest.mock import patch
+from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 import py
 import pytest
 import yaml
+from pkg_resources import Requirement
 
 from inmanta import const, env, loader, module
 from inmanta.ast import CompilerException
@@ -71,6 +69,7 @@ class PipIndex:
     """
     Local pip index that makes use of dir2pi to publish its artifacts.
     """
+
     artifact_dir: str
 
     @property
@@ -118,7 +117,9 @@ def module_from_template(
         config["egg_info"] = {"tag_build": ".dev0"}
     if new_name is not None:
         os.rename(
-            os.path.join(dest_dir, const.PLUGINS_PACKAGE, module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])),
+            os.path.join(
+                dest_dir, const.PLUGINS_PACKAGE, module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
+            ),
             os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
         )
         config["metadata"]["name"] = module.ModuleV2Source.get_python_package_name(new_name)
@@ -344,7 +345,11 @@ def test_module_install(
 
 @pytest.mark.parametrize("dev", [True, False])
 def test_module_install_version(
-    tmpdir: py.path.local, tmpvenv_active: Tuple[py.path.local, py.path.local], projects_dir: str, modules_v2_dir: str, dev: bool
+    tmpdir: py.path.local,
+    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    projects_dir: str,
+    modules_v2_dir: str,
+    dev: bool,
 ) -> None:
     """
     Make sure that the module install results in a module instance with the appropriate version information.
@@ -356,7 +361,6 @@ def test_module_install_version(
     plain_version: version.Version = version.Version("1.2.3")
     full_version: version.Version = plain_version if not dev else version.Version(f"{plain_version}.dev0")
 
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
@@ -436,8 +440,8 @@ def test_project_install_preinstalled(
 
     # preinstall older version of module
     module_path: str = os.path.join(str(tmpdir), module_name)
-    metadata: module.ModuleV2Metadata = module_from_template(os.path.join(
-        modules_v2_dir, module_name), module_path, dev_version=True, install=True, editable=editable
+    metadata: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, module_name), module_path, dev_version=True, install=True, editable=editable
     )
 
     def assert_module_install() -> None:
@@ -447,18 +451,15 @@ def test_project_install_preinstalled(
         assert env_module_file is not None
         install_path: str = module_path if editable else env.process_env.site_packages_dir
         assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
-        assert (
-            env.process_env.get_installed_packages(only_editable=editable).get(f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None)
-            == version.Version(metadata.version + ".dev0")
-        )
+        assert env.process_env.get_installed_packages(only_editable=editable).get(
+            f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
+        ) == version.Version(metadata.version + ".dev0")
 
     assert_module_install()
 
     # set up project and modules
     project_path: str = os.path.join(str(tmpdir), "project")
-    setup_simple_project(
-        projects_dir, project_path, ["std", module_name], index_urls=[local_module_package_index]
-    )
+    setup_simple_project(projects_dir, project_path, ["std", module_name], index_urls=[local_module_package_index])
 
     os.chdir(project_path)
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
@@ -515,7 +516,11 @@ def test_project_install_modules_cache_invalid(
         snippetcompiler_clean.setup_for_snippet("")
         # install older v2 module
         module_from_template(
-            v2_template_path, os.path.join(str(tmpdir), module_name, "dev"), new_version=v2_version, dev_version=True, install=True
+            v2_template_path,
+            os.path.join(str(tmpdir), module_name, "dev"),
+            new_version=v2_version,
+            dev_version=True,
+            install=True,
         )
     else:
         # install module as v1
@@ -545,7 +550,7 @@ def test_project_install_modules_cache_invalid(
         match=(
             "Not all modules were loaded correctly as a result of transient dependencies."
             " A recompile should load them correctly."
-        )
+        ),
     ):
         ProjectTool().execute("install", [])
 
@@ -556,10 +561,7 @@ def test_project_install_modules_cache_invalid(
         else f"Compiler has loaded module {module_name} as v1 but it has later been installed as v2 as a side effect."
     )
 
-    assert (
-        message
-        in (rec.message for rec in caplog.records)
-    )
+    assert message in (rec.message for rec in caplog.records)
 
 
 def test_project_install_incompatible_versions(
@@ -574,8 +576,8 @@ def test_project_install_incompatible_versions(
     """
     # declare conflicting module parameters
     current_version: version.Version = version.Version("1.0.0")
-    req_v1_on_v1: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"v1mod1>42")
-    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"v2mod>42")
+    req_v1_on_v1: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse("v1mod1>42")
+    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse("v2mod>42")
 
     # prepare v1 modules
     v1_modules_path: str = os.path.join(str(tmpdir), "libs")
@@ -608,7 +610,7 @@ def test_project_install_incompatible_versions(
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
-        f"""
+        """
         import v1mod2
         import v1mod1
         import v2mod
@@ -680,11 +682,12 @@ def test_project_install_incompatible_dependencies(
         match=(
             "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts before"
             " attempting another compile. Run `pip check` to check for any incompatibilities."
-        )
+        ),
     ):
         ProjectTool().execute("install", [])
 
     assert any(
-        re.match("Incompatibility between constraint more-itertools~=[78].0 and installed version [78]\\..*", rec.message) is not None
+        re.match("Incompatibility between constraint more-itertools~=[78].0 and installed version [78]\\..*", rec.message)
+        is not None
         for rec in caplog.records
     )
