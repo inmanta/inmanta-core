@@ -41,7 +41,7 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Any]] = {}
+    __command_functions: Dict[str, Dict[str, object]] = {}
 
     @classmethod
     def add(
@@ -77,7 +77,7 @@ class Commander(object):
         cls.__command_functions = {}
 
     @classmethod
-    def commands(cls) -> Dict[str, Dict[str, Any]]:
+    def commands(cls) -> Dict[str, Dict[str, object]]:
         """
         Return a list of commands
         """
@@ -96,7 +96,7 @@ class command(object):  # noqa: N801
         parser_config: Optional[ParserConfigType] = None,
         require_project: bool = False,
         aliases: List[str] = [],
-    ):
+    ) -> None:
         self.name = name
         self.help = help_msg
         self.require_project = require_project
