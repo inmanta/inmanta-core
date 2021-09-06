@@ -452,7 +452,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         except DistributionNotFound:
             return None
         except version.InvalidVersion:
-            raise InvalidModuleException(f"Package {package} was installed but it has no valid version.")
+            raise InvalidModuleException(f"Package {dist.project_name} was installed but it has no valid version.")
 
     @classmethod
     def get_python_package_name(cls, module_name: str) -> str:
@@ -526,7 +526,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             project,
             path,
             is_editable_install=os.path.exists(os.path.join(path, const.PLUGINS_PACKAGE)),
-            version=cls.get_installed_version(module_name),
+            installed_version=cls.get_installed_version(module_name),
         )
 
     def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
@@ -2177,10 +2177,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
         project: Optional[Project],
         path: str,
         is_editable_install: bool = False,
-        version: Optional[version.Version] = None,
+        installed_version: Optional[version.Version] = None,
     ) -> None:
         self._is_editable_install = is_editable_install
-        self._version: Optional[version.Version] = version
+        self._version: Optional[version.Version] = installed_version
         try:
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
