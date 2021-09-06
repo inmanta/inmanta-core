@@ -450,7 +450,7 @@ install_requires =
     )
     mod: module.ModuleV2 = module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     assert mod.metadata.name == "inmanta-module-mod1"
-    assert mod.metadata.version == version.Version("1.2.3")
+    assert mod.metadata.version == "1.2.3"
     assert mod.metadata.license == "Apache 2.0"
 
 
