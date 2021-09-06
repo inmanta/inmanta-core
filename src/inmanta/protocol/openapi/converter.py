@@ -22,10 +22,12 @@ from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
+from pydantic.typing import NoneType
+from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
 from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
-from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
+from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
     Header,
@@ -410,10 +412,49 @@ class OperationHandler:
 
     def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[Dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation
-        if return_type is not None and return_type != inspect.Signature.empty:
-            return_properties: Optional[Dict[str, Schema]] = None
+
+        if return_type is None or return_type == inspect.Signature.empty:
+            return None
+
+        return_properties: Optional[Dict[str, Schema]] = None
+
+        if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
+            # Dealing with the special case of ReturnValue[...]
+            links_type = self.type_converter.get_openapi_type(Dict[str, str])
+            links_type.title = "Links"
+            links_type.nullable = True
+
+            warnings_type = self.type_converter.get_openapi_type(List[str])
+            warnings_type.title = "Warnings"
+
+            return_properties = {
+                "links": links_type,
+                "metadata": Schema(
+                    title="Metadata",
+                    nullable=True,
+                    type="object",
+                    properties={
+                        "warnings": warnings_type,
+                    },
+                ),
+            }
+
+            type_args = get_args(return_type, evaluate=True)
+            if not type_args or len(type_args) != 1:
+                raise RuntimeError(
+                    "ReturnValue definition should take one type Argument, e.g. ReturnValue[None].  "
+                    f"Got this instead: {type_args}"
+                )
+
+            if not url_method_properties.envelope:
+                raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
+
+            if type_args[0] != NoneType:
+                return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
+
+        else:
             openapi_return_type = self.type_converter.get_openapi_type(return_type)
             if url_method_properties.envelope:
                 return_properties = {url_method_properties.envelope_key: openapi_return_type}
-            return {"application/json": MediaType(schema=Schema(type="object", properties=return_properties))}
-        return None
+
+        return {"application/json": MediaType(schema=Schema(type="object", properties=return_properties))}

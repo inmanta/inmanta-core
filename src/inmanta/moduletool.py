@@ -421,7 +421,7 @@ class ModuleTool(ModuleLikeTool):
             return self.construct_module(project, path)
         else:
             project = self.get_project(load=True)
-            return project.get_module(module)
+            return project.get_module(module, allow_v1=True)
 
     def get_modules(self, module: str = None):
         if module is not None:
