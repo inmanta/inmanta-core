@@ -1324,7 +1324,7 @@ class Project(ModuleLike[ProjectMetadata]):
         parts = full_module_name.split("::")
         module_name = parts[0]
 
-        if module_name in self.modules:
+        if module_name in self.modules and (allow_v1 or isinstance(self.modules[module_name], ModuleV2)):
             return self.modules[module_name]
         return self.load_module(module_name, install=install, allow_v1=allow_v1)
 
@@ -1343,12 +1343,12 @@ class Project(ModuleLike[ProjectMetadata]):
         # deterministic as possible
         imports: List[DefineImport] = [x for x in self.get_imports()]
 
-        v2_modules: Set[str] = set()
+        v2_modules: Set[str] = set()  # Set of modules that should be loaded as a V2 module
         done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
 
         def require_v2(module_name: str) -> None:
             """
-            Promote a module to v2, requiring it to be loaded as v2.
+            Ensure that the module with the given name gets loaded as a V2 module in a next iteration.
             """
             if module_name in v2_modules:
                 # already v2
@@ -1387,7 +1387,9 @@ class Project(ModuleLike[ProjectMetadata]):
                     # get imports and add to list
                     subs_imports: List[DefineImport] = module.get_imports(subs)
                     imports.extend(subs_imports)
-                    if not v1_mode:
+                    if isinstance(module, ModuleV2):
+                        # A V2 module can only depend on V2 modules. Ensure that all dependencies
+                        # of this module will be loaded as a V2 module.
                         for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
                             require_v2(dep_module_name)
             except (InvalidModuleException, ModuleNotFoundException) as e:

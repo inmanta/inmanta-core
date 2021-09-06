@@ -37,6 +37,7 @@ import time
 import traceback
 import uuid
 import venv
+from configparser import ConfigParser
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
@@ -350,7 +351,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config():
+def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -809,7 +810,7 @@ class SnippetCompilationTest(KeepOnFail):
 
     def _patch_process_env(self, project: Project) -> None:
         """
-        Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
+        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
         assert project.virtualenv.virtual_python is not None
@@ -927,7 +928,7 @@ class SnippetCompilationTest(KeepOnFail):
 
 
 @pytest.fixture(scope="session")
-def snippetcompiler_global():
+def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
@@ -935,7 +936,9 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
+def snippetcompiler(
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+) -> Iterator[SnippetCompilationTest]:
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
@@ -944,7 +947,7 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir):
+def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
     ast = SnippetCompilationTest()
     ast.setUpClass()
     ast.setup_func(modules_dir)
