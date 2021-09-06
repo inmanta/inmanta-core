@@ -267,7 +267,7 @@ class OrchestrationService(protocol.ServerSlice):
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input: JsonType, key: str, default: Any) -> Any:
+        def safe_get(input: JsonType, key: str, default: object) -> object:
             if not isinstance(input, dict):
                 return default
             if key not in input:

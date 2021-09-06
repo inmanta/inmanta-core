@@ -29,7 +29,7 @@ from inmanta.data.model import ReleasedResourceState
 
 
 class InvalidFilter(Exception):
-    def __init__(self, message: str, *args: Any) -> None:
+    def __init__(self, message: str, *args: object) -> None:
         super().__init__(message, *args)
         self.message = message
 

@@ -68,7 +68,7 @@ class ReturnClient(Client):
         super().__init__(name, with_rest_client=False)
         self.session = session
 
-    async def _call(self, method_properties: common.MethodProperties, args: Any, kwargs: Any) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
             if method_properties.timeout:

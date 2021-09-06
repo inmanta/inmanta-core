@@ -142,7 +142,7 @@ class PluginMeta(type):
     A metaclass that registers subclasses in the parent class.
     """
 
-    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, Any]) -> None:
+    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> None:
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
             cls.add_function(subclass)
@@ -206,7 +206,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-    def _load_signature(self, function: Callable[..., Any]) -> List[Tuple]:
+    def _load_signature(self, function: Callable[..., object]) -> List[Tuple]:
         """
         Load the signature from the given python function
         """
@@ -490,7 +490,7 @@ def plugin(
             Create class to register the function and return the function itself
             """
 
-            def wrapper(self, *args: Any, **kwargs: Any) -> Any:
+            def wrapper(self, *args: object, **kwargs: object) -> Any:
                 """
                 Python will bind the function as method into the class
                 """
