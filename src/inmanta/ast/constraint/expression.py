@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Type
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, RuntimeException, TypingException
-from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer
+from inmanta.ast.statements import ExpressionStatement, ReferenceStatement, Resumer
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
 from inmanta.execute.dataflow import DataflowGraph
