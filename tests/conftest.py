@@ -799,8 +799,8 @@ class SnippetCompilationTest(KeepOnFail):
 
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
-        :param python_package_sources: The python package repository that should be configured on the Inmanta project in order to
-                                      discover V2 modules.
+        :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
+            to discover V2 modules.
         """
         self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources)
         loader.PluginModuleFinder.reset()

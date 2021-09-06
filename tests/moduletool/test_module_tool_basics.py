@@ -22,7 +22,6 @@ import shutil
 import subprocess
 import sys
 import warnings
-from packaging import version
 from typing import Iterator, Type
 
 import py
@@ -41,6 +40,7 @@ from inmanta.module import (
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
+from packaging import version
 from test_app_cli import app
 
 
