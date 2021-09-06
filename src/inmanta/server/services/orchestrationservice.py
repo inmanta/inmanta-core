@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Set, cast
 
 import asyncpg
 
@@ -416,7 +416,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep = cast(ResourceIdStr, [rid + ",v=%s" % version_id for rid in undep])
+        undep = [ResourceIdStr(rid + ",v=%s" % version_id) for rid in undep]
 
         now = datetime.datetime.now().astimezone()
 
@@ -436,7 +436,7 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         skippable = await model.get_skipped_for_undeployable()
-        skippable = cast(ResourceIdStr, [rid + ",v=%s" % version_id for rid in skippable])
+        skippable = [ResourceIdStr(rid + ",v=%s" % version_id) for rid in skippable]
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,

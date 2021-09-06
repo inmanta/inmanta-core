@@ -17,7 +17,7 @@
 """
 import datetime
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools

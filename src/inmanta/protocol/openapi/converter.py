@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema

@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -68,7 +68,9 @@ class ReturnClient(Client):
         super().__init__(name, with_rest_client=False)
         self.session = session
 
-    async def _call(self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]) -> common.Result:
+    async def _call(
+        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+    ) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
             if method_properties.timeout:
