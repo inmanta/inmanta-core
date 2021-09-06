@@ -537,7 +537,7 @@ def test_project_install_modules_cache_invalid(
         import {module_name}
         """,
         autostd=False,
-        python_package_source=[index.url, local_module_package_index],
+        python_package_sources=[index.url, local_module_package_index],
     )
 
     if not preinstall_v2:
@@ -617,7 +617,7 @@ def test_project_install_incompatible_versions(
         """,
         autostd=False,
         add_to_module_path=[v1_modules_path],
-        python_package_source=[index.url],
+        python_package_sources=[index.url],
     )
 
     # install project
@@ -672,7 +672,7 @@ def test_project_install_incompatible_dependencies(
         import {module.ModuleV2.get_name_from_metadata(v2mod2)}
         """,
         autostd=False,
-        python_package_source=[index.url, "https://pypi.org/simple"],
+        python_package_sources=[index.url, "https://pypi.org/simple"],
     )
 
     # install project

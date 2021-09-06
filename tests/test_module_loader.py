@@ -201,7 +201,7 @@ def test_load_module_v2_module_using_install(
     """
     module_name = "minimalv2module"
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", python_package_source=[local_module_package_index]
+        snippet=f"import {module_name}", python_package_sources=[local_module_package_index]
     )
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
@@ -271,7 +271,7 @@ def test_load_module_recursive_v2_module_depends_on_v1(
     Dependency graph:  v2_depends_on_v1 (V2)  --->  mod1 (V1)
     """
     project = snippetcompiler.setup_for_snippet(
-        snippet="import v2_depends_on_v1", python_package_source=local_module_package_index
+        snippet="import v2_depends_on_v1", python_package_sources=[local_module_package_index]
     )
     if preload_v1_module:
         project.get_module("mod1", allow_v1=True)
@@ -294,7 +294,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     complex_module_dependencies_mod1::submod                  complex_module_dependencies_mod2::submod
     """
     project = snippetcompiler.setup_for_snippet(
-        snippet="import complex_module_dependencies_mod1", autostd=False, python_package_source=local_module_package_index
+        snippet="import complex_module_dependencies_mod1", autostd=False, python_package_sources=[local_module_package_index]
     )
     assert "complex_module_dependencies_mod1" not in project.modules
     assert "complex_module_dependencies_mod2" not in project.modules

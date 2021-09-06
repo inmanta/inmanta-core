@@ -1815,9 +1815,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
                 mainmod = self._project.get_module(impor, install=v1_mode, allow_v1=v1_mode)
-                version = mainmod.version
+                vers: version.Version = mainmod.version
                 # track submodules for cycle avoidance
-                out[impor] = mode + " " + version
+                out[impor] = mode + " " + str(vers)
                 if recursive:
                     todo.extend([statement.name for statement in mainmod.get_imports(impor)])
 

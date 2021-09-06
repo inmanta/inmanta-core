@@ -791,7 +791,7 @@ class SnippetCompilationTest(KeepOnFail):
         autostd: bool = True,
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         add_to_module_path: Optional[List[str]] = None,
-        python_package_source: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -799,10 +799,10 @@ class SnippetCompilationTest(KeepOnFail):
 
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
-        :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
+        :param python_package_sources: The python package repository that should be configured on the Inmanta project in order to
                                       discover V2 modules.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_source)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
@@ -838,10 +838,10 @@ class SnippetCompilationTest(KeepOnFail):
         loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(
-        self, snippet: str, add_to_module_path: Optional[List[str]] = None, python_package_source: Optional[List[str]] = None
+        self, snippet: str, add_to_module_path: Optional[List[str]] = None, python_package_sources: Optional[List[str]] = None
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
-        python_package_source = python_package_source if python_package_source is not None else []
+        python_package_sources = python_package_sources if python_package_sources is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -853,13 +853,13 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """.rstrip()
             )
-            if python_package_source:
+            if python_package_sources:
                 cfg.write(
                     "".join(
                         f"""
                 - {{type: package, url: {source} }}
                         """.rstrip()
-                        for source in python_package_source
+                        for source in python_package_sources
                     )
                 )
         self.main = os.path.join(self.project_dir, "main.cf")

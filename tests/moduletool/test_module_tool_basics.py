@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import warnings
+from packaging import version
 from typing import Iterator, Type
 
 import py
@@ -171,12 +172,12 @@ install_requires =
     metadata_file.write(metadata_contents("1.2"))
     mod = module_type(None, module_path.strpath)
 
-    assert mod.version == "1.2"
+    assert mod.version == version.Version("1.2")
     if v1:
         assert mod.compiler_version == "2017.2"
 
     mod.rewrite_version("1.3.1")
-    assert mod.version == "1.3.1"
+    assert mod.version == version.Version("1.3.1")
     if v1:
         assert mod.compiler_version == "2017.2"
     assert metadata_file.read().strip() == metadata_contents("1.3.1")
@@ -283,7 +284,7 @@ async def test_version_argument(modules_repo):
     module_path = os.path.join(modules_repo, "mod-version")
 
     mod = module.ModuleV1(None, module_path)
-    assert mod.version == "1.2"
+    assert mod.version == version.Version("1.2")
 
     args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
     process = await asyncio.subprocess.create_subprocess_exec(
@@ -449,7 +450,7 @@ install_requires =
     )
     mod: module.ModuleV2 = module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     assert mod.metadata.name == "inmanta-module-mod1"
-    assert mod.metadata.version == "1.2.3"
+    assert mod.metadata.version == version.Version("1.2.3")
     assert mod.metadata.license == "Apache 2.0"
 
 
