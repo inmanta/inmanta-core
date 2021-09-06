@@ -22,10 +22,10 @@ import subprocess
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
+import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import NamedType
-from inmanta.ast.type import Type as InmantaType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
@@ -77,7 +77,7 @@ class Context(object):
     def get_resolver(self) -> Resolver:
         return self.resolver
 
-    def get_type(self, name: LocatableString) -> InmantaType:
+    def get_type(self, name: LocatableString) -> inmanta_type.Type:
         """
         Get a type from the configuration model.
         """
@@ -260,7 +260,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[InmantaType]:
+    def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
         """
         Convert a string representation of a type to a type
         """
@@ -280,26 +280,26 @@ class Plugin(NamedType, metaclass=PluginMeta):
             return None
 
         # quickfix issue #1774
-        allowed_element_type: InmantaType.Type = InmantaType.Type()
+        allowed_element_type: inmanta_type.Type = inmanta_type.Type()
         if arg_type == "list":
-            return InmantaType.TypedList(allowed_element_type)
+            return inmanta_type.TypedList(allowed_element_type)
         if arg_type == "dict":
-            return InmantaType.TypedDict(allowed_element_type)
+            return inmanta_type.TypedDict(allowed_element_type)
 
         plugin_line: Range = Range(self.location.file, self.location.lnr, 1, self.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(arg_type, plugin_line, 0, None)
 
-        # stack of transformations to be applied to the base InmantaType.Type
+        # stack of transformations to be applied to the base inmanta_type.Type
         # transformations will be applied right to left
-        transformation_stack: List[Callable[[InmantaType.Type], InmantaType.Type]] = []
+        transformation_stack: List[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
 
         if locatable_type.value.endswith("?"):
             locatable_type.value = locatable_type.value[0:-1]
-            transformation_stack.append(InmantaType.NullableType)
+            transformation_stack.append(inmanta_type.NullableType)
 
         if locatable_type.value.endswith("[]"):
             locatable_type.value = locatable_type.value[0:-2]
-            transformation_stack.append(InmantaType.TypedList)
+            transformation_stack.append(inmanta_type.TypedList)
 
         return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
@@ -362,7 +362,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
         Argument = Tuple[str, ...]
-        arg_types: Dict[str, Tuple[Argument, Optional[InmantaType.Type]]] = {
+        arg_types: Dict[str, Tuple[Argument, Optional[inmanta_type.Type]]] = {
             arg[0]: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
         }
         for k, v in kwargs.items():
