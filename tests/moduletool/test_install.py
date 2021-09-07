@@ -513,7 +513,7 @@ def test_project_install_modules_cache_invalid(
     # preinstall module
     if preinstall_v2:
         # set up project, including activation of venv
-        snippetcompiler_clean.setup_for_snippet("")
+        snippetcompiler_clean.setup_for_snippet("", install_project=False)
         # install older v2 module
         module_from_template(
             v2_template_path,
@@ -527,6 +527,7 @@ def test_project_install_modules_cache_invalid(
         snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
+            install_project=False,
         )
         ProjectTool().execute("install", [])
 
@@ -537,6 +538,7 @@ def test_project_install_modules_cache_invalid(
         import {module_name}
         """,
         autostd=False,
+        install_project=False,
         python_package_sources=[index.url, local_module_package_index],
     )
 
@@ -616,6 +618,7 @@ def test_project_install_incompatible_versions(
         import v2mod
         """,
         autostd=False,
+        install_project=False,
         add_to_module_path=[v1_modules_path],
         python_package_sources=[index.url],
     )
@@ -672,6 +675,7 @@ def test_project_install_incompatible_dependencies(
         import {module.ModuleV2.get_name_from_metadata(v2mod2)}
         """,
         autostd=False,
+        install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
     )
 
