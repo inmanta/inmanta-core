@@ -88,7 +88,7 @@ class SubConstructor(ExpressionStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: Dict[object, object], instance: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
         """
         Evaluate this statement
         """
@@ -142,7 +142,7 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen = set()  # type: Set[int]
 
-    def receive_result(self, value: object, location: Location) -> None:
+    def receive_result(self, value: object, location: ResultVariable) -> None:
         if id(value) in self.seen:
             return
         self.seen.add(id(value))
