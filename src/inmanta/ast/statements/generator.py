@@ -93,6 +93,8 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
+        # this assertion is because the typing of this method is not correct
+        # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
         condition = self.implements.constraint.execute(requires, instance, queue)
         try:
@@ -149,6 +151,8 @@ class GradualFor(ResultCollector[object]):
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
+        # this assertion is because the typing of this method is not correct
+        # it should logically always hold, but we can't express this as types yet
         assert isinstance(loopvar, ResultVariable)
         loopvar.set_provider(self.stmt)
         loopvar.set_value(value, self.stmt.location)
