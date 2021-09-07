@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,11 +17,18 @@
 """
 import os
 
+import py.path
 import pytest
+from typing import Dict
+from packaging.version import Version
 
+from inmanta.module import ModuleV2
+from inmanta.env import process_env
 from inmanta.config import Config
 from inmanta.moduletool import ModuleTool
-from moduletool.common import add_file, clone_repo
+from moduletool.common import add_file, clone_repo, module_from_template, PipIndex
+from inmanta.env import LocalPackagePath
+from pkg_resources import Requirement
 
 
 @pytest.mark.parametrize(
@@ -66,3 +73,45 @@ def test_module_update_with_install_mode_master(
     assert os.path.exists(extra_file_mod2) == mod2_should_be_updated
     extra_file_mod8 = os.path.join(libs_folder, "mod8", file_name_extra_file)
     assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
+
+
+def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
+    """
+    Assert that the `inmanta module update` command works correctly when executed on a project with a V2 module.
+    """
+    module_name = "elaboratev2module"
+    original_minimalv2module = os.path.join(modules_v2_dir, module_name)  # Has version 1.2.3
+
+    # TODO:
+    #  * Test constraint at module level instead of only the project level
+    #  * Test constraint on V1 module
+    #  * Add test that verifies the code path on the exception branch (Corrupt module in the model)
+
+    def assert_version_installed(module_name: str, version: str) -> None:
+        package_name = ModuleV2.get_package_name_for(module_name)
+        installed_packages: Dict[str, Version] = process_env.get_installed_packages()
+        assert package_name in installed_packages
+        assert str(installed_packages[package_name]) == version
+
+    pip_index = PipIndex(artifact_dir=os.path.join(str(tmpdir), "pip-index"))
+    for version in ["1.2.4", "1.2.5"]:
+        mod_dir = os.path.join(tmpdir, f"elaboratev2module-v{version}")
+        module_from_template(
+            source_dir=original_minimalv2module,
+            dest_dir=mod_dir,
+            new_version=Version(version),
+            install=False,
+            publish_index=pip_index,
+        )
+
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="import elaboratev2module",
+        autostd=False,
+        install_v2_modules=[LocalPackagePath(path=original_minimalv2module)],
+        python_package_sources=[pip_index.url],
+        project_requires=[Requirement.parse(f"{module_name}<1.2.5")]
+    )
+
+    assert_version_installed(module_name=module_name, version="1.2.3")
+    ModuleTool().update()
+    assert_version_installed(module_name=module_name, version="1.2.4")

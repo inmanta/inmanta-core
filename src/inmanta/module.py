@@ -1606,7 +1606,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_imported_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        imports.add("std")
+        if self.autostd:
+            imports.add("std")
         specs: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
 
         def get_spec(name: str) -> "List[InmantaModuleRequirement]":

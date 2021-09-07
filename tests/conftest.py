@@ -57,7 +57,7 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, env, loader, moduletool, protocol, resources
+from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -73,6 +73,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from pkg_resources import Requirement
 from libpip2pi.commands import dir2pi
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages
@@ -788,9 +789,10 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         autostd: bool = True,
-        install_v2_modules: List[LocalPackagePath] = [],
-        add_to_module_path: List[str] = [],
-        python_package_source: Optional[str] = None,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[Requirement]] = None,
     ) -> Project:
         """
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
@@ -798,7 +800,7 @@ class SnippetCompilationTest(KeepOnFail):
         :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
                                       discover V2 modules.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_source)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
@@ -834,8 +836,15 @@ class SnippetCompilationTest(KeepOnFail):
         loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(
-        self, snippet: str, add_to_module_path: List[str] = [], python_package_source: Optional[str] = None
+        self,
+        snippet: str,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[Requirement]] = None,
     ) -> None:
+        add_to_module_path = add_to_module_path if add_to_module_path is not None else []
+        python_package_sources = python_package_sources if python_package_sources is not None else []
+        project_requires = project_requires if project_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -847,8 +856,18 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """
             )
-            if python_package_source:
-                cfg.write(f"    - {{type: package, url: {python_package_source} }}")
+            if python_package_sources:
+                cfg.write(
+                    "".join(
+                        f"""
+                - {{type: package, url: {source} }}
+                        """.rstrip()
+                        for source in python_package_sources
+                    )
+                )
+            if project_requires:
+                cfg.write("\n            requires:\n")
+                cfg.write("\n".join(f"                - {req}" for req in project_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
@@ -1161,12 +1180,11 @@ def tmpvenv_active(
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
-
     :return: The path to the index
     """
     with tempfile.TemporaryDirectory() as artifact_dir:
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            moduletool.ModuleTool().build(path=path, output_dir=artifact_dir)
+            ModuleTool().build(path=path, output_dir=artifact_dir)
         dir2pi(argv=["dir2pi", artifact_dir])
         yield os.path.join(artifact_dir, "simple")

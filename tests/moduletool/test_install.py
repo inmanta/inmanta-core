@@ -20,20 +20,31 @@ import json
 import os
 import shutil
 import subprocess
+
 from importlib.abc import Loader
 from itertools import chain
-from typing import List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import py
 import pytest
 import yaml
-
+from pkg_resources import Requirement
 from inmanta import env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.module import ModuleLoadingException
-from inmanta.moduletool import ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project
+from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
+from moduletool.common import BadModProvider, install_project, module_from_template, PipIndex
+from packaging import version
+
+
+@pytest.fixture
+def build_venv_active(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Yields an active virtual environment that is suitable to build modules with.
+    """
+    env.process_env.install_from_index([Requirement.parse("build")])
+    yield tmpvenv_active
 
 
 def run_module_install(python_path: str, module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -47,13 +58,41 @@ def run_module_install(python_path: str, module_path: str, editable: bool, set_p
     """
     if not set_path_argument:
         os.chdir(module_path)
-    # patch env.process_env
-    old_process_env: str = env.process_env.python_path
-    env.process_env.__init__(python_path=python_path)
-    try:
-        ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
-    finally:
-        env.process_env.__init__(python_path=old_process_env)
+    ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+
+
+def setup_simple_project(
+    projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
+) -> module.ProjectMetadata:
+    """
+    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
+
+    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
+    :param path: The path to the directory to create the project in.
+    :param imports: The modules to import in the project.
+    :param index_urls: The urls to any Python indexes to declare as module source.
+    :param github_source: Whether to add the inmanta github as a module source.
+    """
+    index_urls = index_urls if index_urls is not None else []
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
+    metadata: module.ProjectMetadata
+    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
+        metadata = module.ProjectMetadata.parse(fh.read())
+        metadata.repo = [
+            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
+            *(
+                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
+                if github_source
+                else []
+            ),
+        ]
+        fh.seek(0)
+        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
+        fh.write(yaml.dump(json.loads(metadata.json())))
+        fh.truncate()
+    with open(os.path.join(path, "main.cf"), "w") as fh:
+        fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    return metadata
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -235,13 +274,13 @@ def setup_simple_project(
 ) -> module.ProjectMetadata:
     """
     Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
-
     :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
     :param path: The path to the directory to create the project in.
     :param imports: The modules to import in the project.
     :param index_urls: The urls to any Python indexes to declare as module source.
     :param github_source: Whether to add the inmanta github as a module source.
     """
+    index_urls = index_urls if index_urls is not None else []
     shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
     metadata: module.ProjectMetadata
     with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
