@@ -295,7 +295,7 @@ python -m pip $@
         with open(path, "r", encoding="utf-8") as fd:
             return fd.read().strip()
 
-    def _set_current_requirements_hash(self, new_hash):
+    def _set_current_requirements_hash(self, new_hash: str) -> None:
         """
         Set the current requirements hash
         """

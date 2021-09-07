@@ -47,7 +47,7 @@ from inmanta.data.paging import (
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
 )
-from inmanta.protocol import methods, methods_v2
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
@@ -104,7 +104,7 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = {}
+        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -172,7 +172,7 @@ class ResourceService(protocol.ServerSlice):
         except KeyError:
             pass
 
-    def close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
         """Close the given logger for the given env.
         :param env: The environment to close the logger for
         :param logger: The logger to close, if the logger is none it is retrieved
@@ -202,7 +202,7 @@ class ResourceService(protocol.ServerSlice):
         log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    @protocol.handle(methods.get_resource, resource_id="id", env="tid")
+    @handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(
         self,
         env: data.Environment,
@@ -242,7 +242,7 @@ class ResourceService(protocol.ServerSlice):
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
 
-    @protocol.handle(methods.get_resources_for_agent, env="tid")
+    @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
@@ -730,7 +730,7 @@ class ResourceService(protocol.ServerSlice):
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
-    @protocol.handle(methods_v2.resource_details, env="tid")
+    @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
 
         details = await data.Resource.get_resource_details(env.id, rid)
@@ -738,7 +738,7 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
         return details
 
-    @protocol.handle(methods_v2.resource_history, env="tid")
+    @handle(methods_v2.resource_history, env="tid")
     async def resource_history(
         self,
         env: data.Environment,
@@ -791,7 +791,7 @@ class ResourceService(protocol.ServerSlice):
         )
         return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))
 
-    @protocol.handle(methods_v2.resource_logs, env="tid")
+    @handle(methods_v2.resource_logs, env="tid")
     async def resource_logs(
         self,
         env: data.Environment,

@@ -41,13 +41,13 @@ class Client(object):
 
     def __init__(self, host: Optional[str], port: Optional[int]) -> None:
         if host is None:
-            self.host = cast(str, cmdline_rest_transport.host.get())
+            self.host = cmdline_rest_transport.host.get()
         else:
             self.host = host
             Config.set("cmdline_rest_transport", "host", host)
 
         if port is None:
-            self.port = cast(int, cmdline_rest_transport.port.get())
+            self.port = cmdline_rest_transport.port.get()
         else:
             self.port = port
             Config.set("cmdline_rest_transport", "port", str(port))
@@ -295,7 +295,7 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     )
 
 
-def save_config(client: Client, env: Dict[str, str]):
+def save_config(client: Client, env: Dict[str, str]) -> None:
     cfg = """
 [config]
 fact-expire = 1800

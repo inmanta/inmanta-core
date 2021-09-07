@@ -1065,7 +1065,7 @@ class Agent(SessionEndpoint):
 
         self.agent_map: Optional[Dict[str, str]] = agent_map
 
-    async def _init_agent_map(self):
+    async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():
             LOGGER.info("Using the autostart_agent_map configured on the server")
             env_id = self.get_environment()
@@ -1079,7 +1079,7 @@ class Agent(SessionEndpoint):
         elif self.agent_map is None:
             self.agent_map = cfg.agent_map.get()
 
-    async def _init_endpoint_names(self):
+    async def _init_endpoint_names(self) -> None:
         if self.hostname is not None:
             await self.add_end_point_name(self.hostname)
         else:
@@ -1097,7 +1097,7 @@ class Agent(SessionEndpoint):
         for instance in self._instances.values():
             await instance.stop()
 
-    async def start_connected(self):
+    async def start_connected(self) -> None:
         """
         This method is required because:
             1) The client transport is required to retrieve the autostart_agent_map from the server.

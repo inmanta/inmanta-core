@@ -22,7 +22,7 @@ from typing import List, Optional, cast
 
 from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
-from inmanta.protocol import methods
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import (
@@ -60,7 +60,7 @@ class DyrunService(protocol.ServerSlice):
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
 
-    @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
+    @handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
@@ -124,7 +124,7 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    @protocol.handle(methods.dryrun_list, env="tid")
+    @handle(methods.dryrun_list, env="tid")
     async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:
         query_args = {}
         query_args["environment"] = env.id
@@ -142,7 +142,7 @@ class DyrunService(protocol.ServerSlice):
             {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo} for x in dryruns]},
         )
 
-    @protocol.handle(methods.dryrun_report, dryrun_id="id", env="tid")
+    @handle(methods.dryrun_report, dryrun_id="id", env="tid")
     async def dryrun_report(self, env: data.Environment, dryrun_id: uuid.UUID) -> Apireturn:
         dryrun = await data.DryRun.get_by_id(dryrun_id)
         if dryrun is None:
@@ -150,8 +150,10 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    @protocol.handle(methods.dryrun_update, dryrun_id="id", env="tid")
-    async def dryrun_update(self, env: data.Environment, dryrun_id: uuid.UUID, resource: str, changes: JsonType) -> Apireturn:
+    @handle(methods.dryrun_update, dryrun_id="id", env="tid")
+    async def dryrun_update(
+        self, env: data.Environment, dryrun_id: uuid.UUID, resource: ResourceVersionIdStr, changes: JsonType
+    ) -> Apireturn:
         async with self.dryrun_lock:
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             await data.DryRun.update_resource(dryrun_id, resource, payload)

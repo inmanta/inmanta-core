@@ -33,6 +33,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generic,
     Iterable,
     List,
     NewType,
@@ -218,8 +219,19 @@ def json_encode(value: Any) -> str:
     return json.dumps(value, default=util.internal_json_encoder)
 
 
-class Field(object):
-    def __init__(self, field_type, required=False, unique=False, reference=False, part_of_primary_key=False, **kwargs) -> None:
+T = TypeVar("T")
+
+
+class Field(Generic[T]):
+    def __init__(
+        self,
+        field_type: Type[T],
+        required: bool = False,
+        unique: bool = False,
+        reference: bool = False,
+        part_of_primary_key: bool = False,
+        **kwargs: Any,
+    ) -> None:
 
         self._field_type = field_type
         self._required = required
@@ -235,7 +247,7 @@ class Field(object):
 
         self._unique = unique
 
-    def get_field_type(self):
+    def get_field_type(self) -> Type[T]:
         return self._field_type
 
     field_type = property(get_field_type)
@@ -250,7 +262,7 @@ class Field(object):
 
     default = property(get_default)
 
-    def get_default_value(self) -> Any:
+    def get_default_value(self) -> T:
         return copy.copy(self._default_value)
 
     default_value = property(get_default_value)
@@ -280,7 +292,7 @@ class DataDocument(object):
     performed.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         self._data = kwargs
 
     def to_dict(self) -> JsonType:
@@ -1203,14 +1215,14 @@ class Setting(object):
         self,
         name: str,
         typ: str,
-        default: m.EnvSettingType = None,
-        doc: str = None,
-        validator: Callable[[m.EnvSettingType], m.EnvSettingType] = None,
+        default: Optional[m.EnvSettingType] = None,
+        doc: Optional[str] = None,
+        validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
         recompile: bool = False,
         update_model: bool = False,
         agent_restart: bool = False,
         allowed_values: Optional[List[m.EnvSettingType]] = None,
-    ):
+    ) -> None:
         """
         :param name: The name of the setting.
         :param type: The type of the value. This type is mainly used for documentation purpose.
@@ -3924,7 +3936,7 @@ class DryRun(BaseDocument):
     resources: Dict[str, Any] = Field(field_type=dict, default={})
 
     @classmethod
-    async def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+    async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: m.ResourceVersionIdStr, dryrun_data: JsonType) -> None:
         """
         Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
         if the resource has not been saved yet.
@@ -3945,7 +3957,7 @@ class DryRun(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def create(cls, environment, model, total, todo):
+    async def create(cls, environment: uuid.UUID, model: int, total: int, todo: int) -> "DryRun":
         obj = cls(
             environment=environment,
             model=model,
@@ -3957,7 +3969,7 @@ class DryRun(BaseDocument):
         await obj.insert()
         return obj
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         dict_result = BaseDocument.to_dict(self)
         resources = {r["id"]: r for r in dict_result["resources"].values()}
         dict_result["resources"] = resources
