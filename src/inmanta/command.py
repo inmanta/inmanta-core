@@ -18,7 +18,7 @@
 
 
 import argparse
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
 ParserConfigType = Callable[[argparse.ArgumentParser], None]
