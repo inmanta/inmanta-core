@@ -19,7 +19,7 @@ import logging
 from typing import Dict, List, cast
 
 from inmanta import data
-from inmanta.protocol import methods
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
@@ -47,7 +47,7 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
-    @protocol.handle(methods.upload_code, code_id="id", env="tid")
+    @handle(methods.upload_code, code_id="id", env="tid")
     async def upload_code(self, env: data.Environment, code_id: int, resource: str, sources: JsonType) -> Apireturn:
         code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is not None:
@@ -67,7 +67,7 @@ class CodeService(protocol.ServerSlice):
 
         return 200
 
-    @protocol.handle(methods.upload_code_batched, code_id="id", env="tid")
+    @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
         # validate
         for rtype, sources in resources.items():
@@ -116,7 +116,7 @@ class CodeService(protocol.ServerSlice):
 
         return 200
 
-    @protocol.handle(methods.get_code, code_id="id", env="tid")
+    @handle(methods.get_code, code_id="id", env="tid")
     async def get_code(self, env: data.Environment, code_id: int, resource: str) -> Apireturn:
         code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is None:

@@ -17,10 +17,17 @@
 """
 
 
+import argparse
+from typing import Callable, Dict, List, Optional
+
+FunctionType = Callable[[argparse.Namespace], None]
+ParserConfigType = Callable[[argparse.ArgumentParser], None]
+
+
 class CLIException(Exception):
     def __init__(self, exitcode: int, *args, **kwargs):
         self.exitcode = exitcode
-        super(CLIException, self).__init__(*args, **kwargs)
+        super(CLIException, self).__init__(*args)
 
 
 class ShowUsageException(Exception):
@@ -34,10 +41,18 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions = {}
+    __command_functions: Dict[str, Dict[str, object]] = {}
 
     @classmethod
-    def add(cls, name: str, function, help_msg: str, parser_config, require_project=False, aliases=[]) -> None:
+    def add(
+        cls,
+        name: str,
+        function: FunctionType,
+        help_msg: str,
+        parser_config: Optional[ParserConfigType],
+        require_project: bool = False,
+        aliases: List[str] = [],
+    ) -> None:
         """
         Add a new export function
         """
@@ -55,14 +70,14 @@ class Commander(object):
     config = None
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         """
         Return a list of commands
         """
         cls.__command_functions = {}
 
     @classmethod
-    def commands(cls):
+    def commands(cls) -> Dict[str, Dict[str, object]]:
         """
         Return a list of commands
         """
@@ -74,14 +89,21 @@ class command(object):  # noqa: N801
     A decorator that registers an export function
     """
 
-    def __init__(self, name, help_msg, parser_config=None, require_project=False, aliases=[]):
+    def __init__(
+        self,
+        name: str,
+        help_msg: str,
+        parser_config: Optional[ParserConfigType] = None,
+        require_project: bool = False,
+        aliases: List[str] = [],
+    ) -> None:
         self.name = name
         self.help = help_msg
         self.require_project = require_project
         self.parser_config = parser_config
         self.aliases = aliases
 
-    def __call__(self, function):
+    def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
