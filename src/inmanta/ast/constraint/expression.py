@@ -323,7 +323,7 @@ class Not(UnaryOperator):
         return not arg
 
 
-@stable_api
+@stable_api.stable_api
 class Regex(UnaryOperator):
     """
     An operator that does regex matching
