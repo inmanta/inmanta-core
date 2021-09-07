@@ -599,4 +599,4 @@ version: 0.0.1dev0"""
             out_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                out_fd.close()
