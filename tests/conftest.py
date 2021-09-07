@@ -821,7 +821,7 @@ class SnippetCompilationTest(KeepOnFail):
         env.process_env.notify_change()
         os.makedirs(path, exist_ok=True)
 
-    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = None) -> None:
+    def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
