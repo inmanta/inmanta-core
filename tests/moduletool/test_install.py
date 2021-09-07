@@ -170,6 +170,7 @@ def setup_simple_project(
         fh.truncate()
     with open(os.path.join(path, "main.cf"), "w") as fh:
         fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    module.Project.set(module.Project(path, autostd=False))
     return metadata
 
 
