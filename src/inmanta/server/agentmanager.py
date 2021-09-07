@@ -33,7 +33,7 @@ from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
-from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
@@ -199,7 +199,7 @@ class AgentManager(ServerSlice, SessionListener):
         to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
-    @protocol.handle(methods_v2.all_agents_action, env="tid")
+    @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
         if env.halted:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
@@ -208,7 +208,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await self._unpause_agent(env)
 
-    @protocol.handle(methods_v2.agent_action, env="tid")
+    @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
         if env.halted:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
@@ -630,15 +630,15 @@ class AgentManager(ServerSlice, SessionListener):
         return saved
 
     # External APIS
-    @protocol.handle(methods.get_agent_process, agent_sid="id")
+    @handle(methods.get_agent_process, agent_sid="id")
     async def get_agent_process(self, agent_sid: uuid.UUID) -> Apireturn:
         return await self.get_agent_process_report(agent_sid)
 
-    @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
+    @handle(methods.trigger_agent, agent_id="id", env="tid")
     async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
         raise NotImplementedError()
 
-    @protocol.handle(methods.list_agent_processes)
+    @handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
         environment: Optional[UUID],
@@ -695,7 +695,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return 200, {"processes": processes}
 
-    @protocol.handle(methods.list_agents, env="tid")
+    @handle(methods.list_agents, env="tid")
     async def list_agents(
         self,
         env: Optional[data.Environment],
@@ -735,7 +735,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
 
-    @protocol.handle(methods.get_state, env="tid")
+    @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
         tid: UUID = env.id
         if isinstance(tid, str):
@@ -811,7 +811,7 @@ class AutostartedAgentManager(ServerSlice):
     are managed by `:py:class:AgentManager`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
         self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs

@@ -474,7 +474,7 @@ class ResourceHandler(object):
         f: Future[T] = Future()
 
         # This function is not typed because of generics, the used methods and currying
-        def run():
+        def run() -> None:
             try:
                 result = func()
                 if result is not None:

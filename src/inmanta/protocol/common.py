@@ -779,7 +779,7 @@ class MethodProperties(object):
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
-    def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
+    def build_call(self, args: List[object], kwargs: Dict[str, object] = {}) -> Request:
         """
         Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """

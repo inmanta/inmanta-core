@@ -24,7 +24,7 @@ import asyncpg
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.protocol import methods, methods_v2
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound, ServerError
 from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -62,34 +62,34 @@ class ProjectService(protocol.ServerSlice):
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     # v1 handlers
-    @protocol.handle(methods.create_project)
+    @handle(methods.create_project)
     async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
         return 200, {"project": (await self.project_create(name, project_id)).dict()}
 
-    @protocol.handle(methods.delete_project, project_id="id", api_version=1)
+    @handle(methods.delete_project, project_id="id", api_version=1)
     async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
         await self.project_delete(project_id)
         return 200
 
-    @protocol.handle(methods.modify_project, project_id="id")
+    @handle(methods.modify_project, project_id="id")
     async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
         return 200, {"project": (await self.project_modify(project_id, name)).dict()}
 
-    @protocol.handle(methods.list_projects)
+    @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
         project_list: List[JsonType] = [x.dict() for x in await self.project_list()]
         for project in project_list:
             project["environments"] = [x["id"] for x in project["environments"]]
         return 200, {"projects": project_list}
 
-    @protocol.handle(methods.get_project, project_id="id")
+    @handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:
         project_model = (await self.project_get(project_id)).dict()
         project_model["environments"] = [e.id for e in await data.Environment.get_list(project=project_id)]
         return 200, {"project": project_model}
 
     # v2 handlers
-    @protocol.handle(methods_v2.project_create)
+    @handle(methods_v2.project_create)
     async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
         if project_id is None:
             project_id = uuid.uuid4()
@@ -102,7 +102,7 @@ class ProjectService(protocol.ServerSlice):
 
         return project.to_dto()
 
-    @protocol.handle(methods_v2.project_delete, project_id="id", api_version=2)
+    @handle(methods_v2.project_delete, project_id="id", api_version=2)
     async def project_delete(self, project_id: uuid.UUID) -> None:
         project = await data.Project.get_by_id(project_id)
         if project is None:
@@ -115,7 +115,7 @@ class ProjectService(protocol.ServerSlice):
 
         await project.delete()
 
-    @protocol.handle(methods_v2.project_modify, project_id="id")
+    @handle(methods_v2.project_modify, project_id="id")
     async def project_modify(self, project_id: uuid.UUID, name: str) -> model.Project:
         try:
             project = await data.Project.get_by_id(project_id)
@@ -129,7 +129,7 @@ class ProjectService(protocol.ServerSlice):
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError(f"A project with name {name} already exists.")
 
-    @protocol.handle(methods_v2.project_list)
+    @handle(methods_v2.project_list)
     async def project_list(self) -> List[model.Project]:
         project_list = []
 
@@ -141,7 +141,7 @@ class ProjectService(protocol.ServerSlice):
 
         return project_list
 
-    @protocol.handle(methods_v2.project_get, project_id="id")
+    @handle(methods_v2.project_get, project_id="id")
     async def project_get(self, project_id: uuid.UUID) -> model.Project:
         project = await data.Project.get_by_id(project_id)
 
