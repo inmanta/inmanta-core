@@ -47,7 +47,7 @@ def build_venv_active(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> It
     """
     Yields an active virtual environment that is suitable to build modules with.
     """
-    env.process_env.install_from_index([Requirement.parse("virtualenv")])
+    env.process_env.install_from_index([Requirement.parse("build")])
     yield tmpvenv_active
 
 
