@@ -56,8 +56,9 @@ from typing import (
 )
 
 import more_itertools
+import pkg_resources
 import yaml
-from pkg_resources import Requirement, parse_requirements, parse_version
+from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
 import inmanta.warnings
@@ -371,8 +372,11 @@ gitprovider = CLIGitProvider()
 
 class ModuleSource(Generic[TModule]):
     def get_installed_module(self, project: "Project", module_name: str) -> Optional[TModule]:
+        """
+        Returns a module object for a module if it is installed.
+        """
         path: Optional[str] = self.path_for(module_name)
-        return self.from_path(project, path) if path is not None else None
+        return self.from_path(project, module_name, path) if path is not None else None
 
     def get_module(
         self, project: "Project", module_spec: List[InmantaModuleRequirement], install: bool = False
@@ -414,7 +418,10 @@ class ModuleSource(Generic[TModule]):
 
     @classmethod
     @abstractmethod
-    def from_path(cls, project: Optional["Project"], path: str) -> TModule:
+    def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> TModule:
+        """
+        Returns a module instance given a path to it.
+        """
         raise NotImplementedError("Abstract method")
 
     def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
@@ -431,6 +438,21 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
         env.process_env.init_namespace(const.PLUGINS_PACKAGE)
+
+    @classmethod
+    def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
+        """
+        Returns the version for a module if it is installed.
+        """
+        if module_name.startswith(ModuleV2.PKG_NAME_PREFIX):
+            raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
+        try:
+            dist: Distribution = pkg_resources.get_distribution(cls.get_python_package_name(module_name))
+            return version.Version(dist.version)
+        except DistributionNotFound:
+            return None
+        except version.InvalidVersion:
+            raise InvalidModuleException(f"Package {dist.project_name} was installed but it has no valid version.")
 
     @classmethod
     def get_python_package_name(cls, module_name: str) -> str:
@@ -467,14 +489,14 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             python_package: str = self.get_python_package_name(module_name)
             namespace_package: str = self.get_namespace_package_name(module_name)
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
-        return self.from_path(project, path)
+        return self.from_path(project, module_name, path)
 
     def path_for(self, name: str) -> Optional[str]:
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
         """
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
-            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
+            raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = self.get_namespace_package_name(name)
         mod_spec: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(package)
         if mod_spec is None:
@@ -499,13 +521,18 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(f"Invalid module: found plugins package but the module has no {ModuleV2.MODULE_FILE}.")
 
     @classmethod
-    def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV2":
-        return ModuleV2(project, path, is_editable_install=os.path.exists(os.path.join(path, const.PLUGINS_PACKAGE)))
+    def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> "ModuleV2":
+        return ModuleV2(
+            project,
+            path,
+            is_editable_install=os.path.exists(os.path.join(path, const.PLUGINS_PACKAGE)),
+            installed_version=cls.get_installed_version(module_name),
+        )
 
     def _get_module_name(self, module_spec: List[InmantaModuleRequirement]) -> str:
         module_name: str = super()._get_module_name(module_spec)
         if module_name.startswith(ModuleV2.PKG_NAME_PREFIX.replace("-", "_")):
-            raise Exception("PythonRepo instances work with inmanta module names, not Python package names.")
+            raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         return module_name
 
 
@@ -518,7 +545,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         module_name: str = self._get_module_name(module_spec)
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
-            return self.from_path(project, path)
+            return self.from_path(project, module_name, path)
         else:
             if project.downloadpath is None:
                 raise CompilerException(
@@ -537,7 +564,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         return self.local_repo.path_for(name)
 
     @classmethod
-    def from_path(cls, project: Optional["Project"], path: str) -> "ModuleV1":
+    def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> "ModuleV1":
         return ModuleV1(project, path)
 
 
@@ -1504,7 +1531,7 @@ class Project(ModuleLike[ProjectMetadata]):
                 - Python downgrades transient dependency a to a<2
             2.
                 - latest v2 mod a is installed
-                - some v1 mod depends on a<2
+                - some v1 (or even v2 when in install mode) mod depends on a<2
                 - after loading, during plugin requirements install, `pip install a<2` is run
                 - Python downgrades direct dependency a to a<2
         In both cases, a<2 might be a valid version, but since it was installed transiently after the compiler has loaded module
@@ -1528,11 +1555,11 @@ class Project(ModuleLike[ProjectMetadata]):
                     result = False
                 elif installed.version != module.version:
                     LOGGER.warning(
-                        "Compiler has loaded module %(name)s==%(loaded_version)s but"
-                        " %(name)s==%(installed_version)s has later been installed as a side effect.",
-                        name=name,
-                        loaded_version=module.version,
-                        installed_version=installed.version,
+                        "Compiler has loaded module %s==%s but %s==%s has later been installed as a side effect.",
+                        name,
+                        module.version,
+                        name,
+                        installed.version,
                     )
                     result = False
         return result
@@ -1735,11 +1762,12 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             fd.write(new_module_def)
         self._metadata = new_metadata
 
-    def get_version(self) -> str:
+    def get_version(self) -> version.Version:
         """
-        Return the version of this module
+        Return the version of this module. This is the actually installed version, which might differ from the version declared
+        in its metadata (e.g. by a .dev0 tag).
         """
-        return str(self._metadata.version)
+        return version.Version(self._metadata.version)
 
     version = property(get_version)
 
@@ -1787,9 +1815,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
                 mainmod = self._project.get_module(impor, install=v1_mode, allow_v1=v1_mode)
-                version = mainmod.version
+                vers: version.Version = mainmod.version
                 # track submodules for cycle avoidance
-                out[impor] = mode + " " + version
+                out[impor] = mode + " " + str(vers)
                 if recursive:
                     todo.extend([statement.name for statement in mainmod.get_imports(impor)])
 
@@ -2144,12 +2172,24 @@ class ModuleV2(Module[ModuleV2Metadata]):
     GENERATION = ModuleGeneration.V2
     PKG_NAME_PREFIX = "inmanta-module-"
 
-    def __init__(self, project: Optional[Project], path: str, is_editable_install: bool = False) -> None:
+    def __init__(
+        self,
+        project: Optional[Project],
+        path: str,
+        is_editable_install: bool = False,
+        installed_version: Optional[version.Version] = None,
+    ) -> None:
         self._is_editable_install = is_editable_install
+        self._version: Optional[version.Version] = installed_version
         try:
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+
+    def get_version(self) -> version.Version:
+        return self._version if self._version is not None else super().get_version()
+
+    version = property(get_version)
 
     def ensure_versioned(self) -> None:
         if self._is_editable_install:

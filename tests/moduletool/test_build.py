@@ -147,7 +147,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     setup_cfg_file = os.path.join(module_copy_dir, "setup.cfg")
     config_parser = configparser.ConfigParser()
     config_parser.read(setup_cfg_file)
-    config_parser.set("options.package_data", "inmanta_plugins.minimalv2module", "setup.cfg")
+    config_parser.set("options.package_data", "*", "setup.cfg")
     with open(setup_cfg_file, "w") as fd:
         config_parser.write(fd)
 
