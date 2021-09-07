@@ -53,11 +53,10 @@ class Reference(ExpressionStatement):
         return out
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
-        if resultcollector is not None:
-            var.listener(resultcollector, self.location)
+        var.listener(resultcollector, self.location)
         out = {self.name: var}  # type : Dict[object, ResultVariable]
         return out
 

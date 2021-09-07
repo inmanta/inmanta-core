@@ -127,7 +127,7 @@ class ExpressionStatement(DynamicStatement):
         raise NotImplementedError()
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, ResultVariable]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach

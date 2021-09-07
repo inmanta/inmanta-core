@@ -21,6 +21,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Type
 
 import inmanta.execute.dataflow as dataflow
+from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
 from inmanta.ast.statements import ExpressionStatement, ReferenceStatement, Resumer
 from inmanta.ast.type import Bool, create_function
@@ -322,6 +323,7 @@ class Not(UnaryOperator):
         return not arg
 
 
+@stable_api
 class Regex(UnaryOperator):
     """
     An operator that does regex matching
