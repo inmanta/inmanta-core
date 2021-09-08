@@ -351,7 +351,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
 
 
 def test_compiler_exception_output(snippetcompiler):
-    snippetcompiler.setup_for_snippet_external(
+    snippetcompiler.setup_for_snippet(
         """
 entity Test:
     number attr
@@ -360,7 +360,7 @@ end
 implement Test using std::none
 
 o = Test(attr="1234")
-"""
+        """
     )
 
     output = (
@@ -386,7 +386,7 @@ caused by:
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
 def test_minus_x_option(snippetcompiler, cmd):
-    snippetcompiler.setup_for_snippet_external(
+    snippetcompiler.setup_for_snippet(
         """
 entity Test:
     nuber attr
@@ -417,7 +417,7 @@ def test_warning_config_dir_option_on_server_command(tmpdir):
 @pytest.mark.timeout(20)
 def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     non_existing_config_file = os.path.join(tmpdir, "non_existing_config_file")
-    snippetcompiler.setup_for_snippet_external(
+    snippetcompiler.setup_for_snippet(
         """
 entity Test:
     number attr
