@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
+import shutil
 from typing import Dict
 
 import py.path
@@ -28,6 +29,7 @@ from inmanta.module import ModuleV2
 from inmanta.moduletool import ModuleTool
 from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
 from packaging.version import Version
+from inmanta.parser import ParserException
 
 
 @pytest.mark.parametrize(
@@ -74,17 +76,29 @@ def test_module_update_with_install_mode_master(
     assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
 
 
-def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
+@pytest.mark.parametrize("corrupt_module", [True, False])
+def test_module_update_with_v2_module(
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, corrupt_module: bool
+) -> None:
     """
     Assert that the `inmanta module update` command works correctly when executed on a project with a V2 module.
+
+    :param corrupt_module: Whether the module to be updated contains a syntax error or not.
     """
     module_name = "elaboratev2module"
-    original_minimalv2module = os.path.join(modules_v2_dir, module_name)  # Has version 1.2.3
+    original_elaboratev2module_dir = os.path.join(modules_v2_dir, module_name)  # Has version 1.2.3
+    patched_elaboratev2module_dir = os.path.join(tmpdir, module_name)
+    shutil.copytree(original_elaboratev2module_dir, patched_elaboratev2module_dir)
 
-    # TODO:
-    #  * Test constraint at module level instead of only the project level
-    #  * Test constraint on V1 module
-    #  * Add test that verifies the code path on the exception branch (Corrupt module in the model)
+    if corrupt_module:
+        model_file = os.path.join(patched_elaboratev2module_dir, "model", "_init.cf")
+        with open(model_file, "w", encoding="utf-8") as fd:
+            # Introduce syntax error in the module
+            fd.write("""
+entity:
+    string message
+end
+            """)
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2.get_package_name_for(module_name)
@@ -96,7 +110,7 @@ def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str
     for version in ["1.2.4", "1.2.5"]:
         mod_dir = os.path.join(tmpdir, f"elaboratev2module-v{version}")
         module_from_template(
-            source_dir=original_minimalv2module,
+            source_dir=original_elaboratev2module_dir,
             dest_dir=mod_dir,
             new_version=Version(version),
             install=False,
@@ -106,7 +120,7 @@ def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str
     snippetcompiler_clean.setup_for_snippet(
         snippet="import elaboratev2module",
         autostd=False,
-        install_v2_modules=[LocalPackagePath(path=original_minimalv2module)],
+        install_v2_modules=[LocalPackagePath(path=patched_elaboratev2module_dir)],
         python_package_sources=[pip_index.url],
         project_requires=[Requirement.parse(f"{module_name}<1.2.5")],
     )
@@ -114,3 +128,15 @@ def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str
     assert_version_installed(module_name=module_name, version="1.2.3")
     ModuleTool().update()
     assert_version_installed(module_name=module_name, version="1.2.4")
+
+
+# TODO:
+#  * Test constraint at module level instead of only the project level
+#  * Test constraint on V1 module
+
+def test_module_update_syntax_error_in_project(
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean
+) -> None:
+    snippetcompiler_clean.setup_for_snippet(snippet="entity", autostd=False)
+    with pytest.raises(ParserException):
+        ModuleTool().update()
