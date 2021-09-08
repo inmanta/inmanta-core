@@ -26,7 +26,6 @@ from itertools import groupby
 import pytest
 
 import inmanta.compiler as compiler
-from conftest import SnippetCompilationTest
 from inmanta import config
 from inmanta.ast import AttributeException, RuntimeException
 from inmanta.module import Project
@@ -39,18 +38,16 @@ class CompilerBaseTest(object):
         if not os.path.isdir(self.project_dir):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
         self.mainfile = mainfile
-        self.snippetcompiler: SnippetCompilationTest = SnippetCompilationTest()
 
     def setUp(self):
+        project = Project(self.project_dir, autostd=False)
+        if self.mainfile is not None:
+            project.main_file = self.mainfile
+        Project.set(project)
         self.state_dir = tempfile.mkdtemp()
         config.Config.set("config", "state-dir", self.state_dir)
-        self.snippetcompiler.setUpClass()
-        self.snippetcompiler.setup_func()
-        project: Project = self.snippetcompiler.setup_for_snippet(self.mainfile if self.mainfile is not None else "", autostd=False)
 
     def tearDown(self):
-        self.snippetcompiler.tear_down_func()
-        self.snippetcompiler.tearDownClass()
         shutil.rmtree(self.state_dir)
 
 

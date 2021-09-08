@@ -822,9 +822,8 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
         env.process_env.notify_change()
-        os.makedirs(path, exist_ok=True)
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
