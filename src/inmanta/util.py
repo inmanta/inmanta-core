@@ -32,7 +32,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Set, Tuple, TypeVar, Union
+from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -76,7 +76,7 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     return directory
 
 
-def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]):
+def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
@@ -128,7 +128,12 @@ class Scheduler(object):
         self._scheduled: Dict[Callable, object] = {}
         self._stopped = False
 
-    def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
+    def add_action(
+        self,
+        action: Union[Callable[[], None], Coroutine[None, None, None]],
+        interval: float,
+        initial_delay: Optional[float] = None,
+    ) -> None:
         """
         Add a new action
 
@@ -326,13 +331,13 @@ class TaskHandler(object):
         self._await_tasks: Set[Task] = set()
         self._stopped = False
 
-    def is_stopped(self):
+    def is_stopped(self) -> bool:
         return self._stopped
 
-    def is_running(self):
+    def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
+    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop: bool = True) -> Task:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.

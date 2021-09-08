@@ -65,7 +65,7 @@ class MetricsService(protocol.ServerSlice):
             )
             self._influx_db_reporter.start()
 
-    def start_auto_benchmark(self):
+    def start_auto_benchmark(self) -> None:
         """ Add all auto benchmarking to pyformance"""
         gauge("self.spec.cpu", CPUMicroBenchMark())
 

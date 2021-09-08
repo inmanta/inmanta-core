@@ -40,6 +40,7 @@ from inmanta.module import (
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
+from packaging import version
 from test_app_cli import app
 
 
@@ -171,12 +172,12 @@ install_requires =
     metadata_file.write(metadata_contents("1.2"))
     mod = module_type(None, module_path.strpath)
 
-    assert mod.version == "1.2"
+    assert mod.version == version.Version("1.2")
     if v1:
         assert mod.compiler_version == "2017.2"
 
     mod.rewrite_version("1.3.1")
-    assert mod.version == "1.3.1"
+    assert mod.version == version.Version("1.3.1")
     if v1:
         assert mod.compiler_version == "2017.2"
     assert metadata_file.read().strip() == metadata_contents("1.3.1")
@@ -283,7 +284,7 @@ async def test_version_argument(modules_repo):
     module_path = os.path.join(modules_repo, "mod-version")
 
     mod = module.ModuleV1(None, module_path)
-    assert mod.version == "1.2"
+    assert mod.version == version.Version("1.2")
 
     args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
     process = await asyncio.subprocess.create_subprocess_exec(

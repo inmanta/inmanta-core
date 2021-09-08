@@ -37,6 +37,7 @@ import time
 import traceback
 import uuid
 import venv
+from configparser import ConfigParser
 from types import ModuleType
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
@@ -351,7 +352,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config():
+def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -795,32 +796,35 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires: Optional[List[Requirement]] = None,
     ) -> Project:
         """
+        Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
+        env.process_env).
+
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
-        :param python_package_source: The python package repository that should be configured on the Inmanta project in order to
-                                      discover V2 modules.
+        :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
+            to discover V2 modules.
         """
         self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
-        self._patch_process_env(project)
+        self._patch_process_env()
         self._install_v2_modules(project, install_v2_modules)
         return project
 
-    def _patch_process_env(self, project: Project) -> None:
+    def _patch_process_env(self) -> None:
         """
-        Patch env.process_env to accomodate the SnippetCompilationTest's switching between active environments within a single
+        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
-        assert project.virtualenv.virtual_python is not None
-        env.process_env.__init__(python_path=project.virtualenv.virtual_python)
+        env.process_env.__init__(env_path=self.env)
         path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
         env.process_env.notify_change()
         os.makedirs(path, exist_ok=True)
 
-    def _install_v2_modules(self, project: Project, install_v2_modules: List[LocalPackagePath] = []) -> None:
+    def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+        install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
             with tempfile.TemporaryDirectory() as build_dir:
@@ -854,7 +858,7 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo:
                 - {{type: git, url: {self.repo} }}
-            """
+            """.rstrip()
             )
             if python_package_sources:
                 cfg.write(
@@ -946,7 +950,7 @@ class SnippetCompilationTest(KeepOnFail):
 
 
 @pytest.fixture(scope="session")
-def snippetcompiler_global():
+def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
@@ -954,7 +958,9 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
+def snippetcompiler(
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+) -> Iterator[SnippetCompilationTest]:
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
@@ -963,7 +969,7 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir):
+def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
     ast = SnippetCompilationTest()
     ast.setUpClass()
     ast.setup_func(modules_dir)
@@ -1159,7 +1165,7 @@ def tmpvenv_active(
     sys.prefix = base
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
-    env.process_env.__init__(python_path=python_path)
+    env.process_env.__init__(python_path=str(python_path))
     # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
     env.process_env.init_namespace(const.PLUGINS_PACKAGE)
     env.process_env.notify_change()
