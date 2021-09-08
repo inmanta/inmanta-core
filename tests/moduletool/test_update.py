@@ -16,19 +16,18 @@
     Contact: code@inmanta.com
 """
 import os
+from typing import Dict
 
 import py.path
 import pytest
-from typing import Dict
-from packaging.version import Version
-
-from inmanta.module import ModuleV2
-from inmanta.env import process_env
-from inmanta.config import Config
-from inmanta.moduletool import ModuleTool
-from moduletool.common import add_file, clone_repo, module_from_template, PipIndex
-from inmanta.env import LocalPackagePath
 from pkg_resources import Requirement
+
+from inmanta.config import Config
+from inmanta.env import LocalPackagePath, process_env
+from inmanta.module import ModuleV2
+from inmanta.moduletool import ModuleTool
+from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
+from packaging.version import Version
 
 
 @pytest.mark.parametrize(
@@ -109,7 +108,7 @@ def test_module_update_with_v2_module(tmpdir: py.path.local, modules_v2_dir: str
         autostd=False,
         install_v2_modules=[LocalPackagePath(path=original_minimalv2module)],
         python_package_sources=[pip_index.url],
-        project_requires=[Requirement.parse(f"{module_name}<1.2.5")]
+        project_requires=[Requirement.parse(f"{module_name}<1.2.5")],
     )
 
     assert_version_installed(module_name=module_name, version="1.2.3")

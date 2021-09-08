@@ -22,14 +22,11 @@ import logging
 import time
 import uuid
 from typing import Any, Dict
-import os
 
 import pytest
 from pkg_resources import parse_version
 from pydantic.tools import lru_cache
-from libpip2pi.commands import dir2pi
 
-from inmanta.moduletool import ModuleTool
 from _pytest.mark import MarkDecorator
 from inmanta import data
 from inmanta.protocol import Client

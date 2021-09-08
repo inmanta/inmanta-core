@@ -49,6 +49,7 @@ import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
+from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
@@ -74,7 +75,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
-from pkg_resources import Requirement
 from libpip2pi.commands import dir2pi
 
 # Import the utils module differently when conftest is put into the inmanta_tests packages

@@ -15,24 +15,24 @@
 
     Contact: code@inmanta.com
 """
+import configparser
 import os
+import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from subprocess import CalledProcessError
 from typing import Optional, Sequence, Union
-import shutil
-import configparser
 
 import yaml
-from dataclasses import dataclass
 from pkg_resources import Requirement
-from packaging import version
 
 from inmanta import const, module
 from inmanta.config import Config
 from inmanta.module import InstallMode
 from inmanta.moduletool import ModuleTool
 from libpip2pi.commands import dir2pi
+from packaging import version
 
 
 def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[InstallMode] = None):
@@ -246,9 +246,7 @@ def module_from_template(
         config["metadata"]["name"] = module.ModuleV2Source.get_python_package_name(new_name)
     if new_requirements:
         config["options"]["install_requires"] = "\n    ".join(
-            str(
-                req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req)
-            )
+            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
             for req in new_requirements
         )
     with open(config_file, "w") as fh:

@@ -16,13 +16,11 @@
     Contact: code@inmanta.com
 """
 import argparse
-import configparser
 import json
 import os
 import re
 import shutil
 import subprocess
-
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple
@@ -31,12 +29,13 @@ import py
 import pytest
 import yaml
 from pkg_resources import Requirement
+
 from inmanta import env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.module import ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, install_project, module_from_template, PipIndex
+from moduletool.common import BadModProvider, PipIndex, install_project, module_from_template
 from packaging import version
 
 
