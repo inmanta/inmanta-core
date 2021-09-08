@@ -27,27 +27,31 @@ If the Tracker object is an ImplementsTracker, the object is created in an Imple
 
 """
 
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    from inmanta.ast.blocks import BasicBlock
+    from inmanta.ast.statements.generator import SubConstructor
+    from inmanta.execute.runtime import Instance
+
 
 class Tracker(object):
-
-    pass
-
-
-class ModuleTracker(Tracker):
-    def __init__(self, block):
-        self.block = block
-        self.namespace = block.namespace
-
-    def get_next(self):
+    def get_next(self) -> "List[Tracker]":
         return []
 
 
+class ModuleTracker(Tracker):
+    def __init__(self, block: "BasicBlock") -> None:
+        self.block = block
+        self.namespace = block.namespace
+
+
 class ImplementsTracker(Tracker):
-    def __init__(self, subc, instance):
+    def __init__(self, subc: "SubConstructor", instance: "Instance") -> None:
         self.instance = instance
         self.subc = subc
         self.implements = subc.implements
         self.implementations = self.implements.implementations
 
-    def get_next(self):
+    def get_next(self) -> "List[Tracker]":
         return self.instance.trackers
