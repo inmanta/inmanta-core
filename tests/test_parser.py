@@ -466,7 +466,7 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+    assert stmt.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
 def test_regex_backslash():
@@ -479,7 +479,7 @@ a = /\\/
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == re.compile(r"\\")
+    assert stmt.regex == re.compile(r"\\")
 
 
 def test_regex_escape():
@@ -492,7 +492,7 @@ a = /\/1/
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == re.compile(r"\/1")
+    assert stmt.regex == re.compile(r"\/1")
 
 
 def test_regex_twice():
@@ -507,7 +507,7 @@ c = /\/1/
     assert len(statements) == 3
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == re.compile(r"\/1")
+    assert stmt.regex == re.compile(r"\/1")
 
 
 def test_1584_regex_error():
@@ -541,7 +541,7 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
     assert str(stmt.name) == "uuid"
     assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), Regex)
-    assert stmt.get_expression().children[1].value == re.compile(
+    assert stmt.get_expression().regex == re.compile(
         r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
     )
 

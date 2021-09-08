@@ -89,7 +89,7 @@ class DynamicStatement(Statement):
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
