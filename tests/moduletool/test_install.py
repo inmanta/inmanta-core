@@ -67,7 +67,6 @@ def setup_simple_project(
 ) -> module.ProjectMetadata:
     """
     Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
-
     :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
     :param path: The path to the directory to create the project in.
     :param imports: The modules to import in the project.
@@ -276,14 +275,7 @@ def test_module_install_version(
 ) -> None:
     """
     Make sure that the module install results in a module instance with the appropriate version information.
-
     :param dev: whether to add a dev tag to the version
-    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
-    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
-    :param path: The path to the directory to create the project in.
-    :param imports: The modules to import in the project.
-    :param index_urls: The urls to any Python indexes to declare as module source.
-    :param github_source: Whether to add the inmanta github as a module source.
     """
     module_name: str = "minimalv2module"
     module_path: str = os.path.join(str(tmpdir), module_name)
@@ -301,28 +293,8 @@ def test_module_install_version(
     os.chdir(project_dir)
 
     ModuleTool().install(editable=True, path=module_path)
-    module: module.Module = ModuleTool().get_module(module_name)
-    assert module.version == full_version
-    index_urls = index_urls if index_urls is not None else []
-    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
-    metadata: module.ProjectMetadata
-    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
-        metadata = module.ProjectMetadata.parse(fh.read())
-        metadata.repo = [
-            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
-            *(
-                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
-                if github_source
-                else []
-            ),
-        ]
-        fh.seek(0)
-        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
-        fh.write(yaml.dump(json.loads(metadata.json())))
-        fh.truncate()
-    with open(os.path.join(path, "main.cf"), "w") as fh:
-        fh.write("\n".join(f"import {module_name}" for module_name in imports))
-    return metadata
+    mod: module.Module = ModuleTool().get_module(module_name)
+    assert mod.version == full_version
 
 
 @pytest.mark.parametrize(
