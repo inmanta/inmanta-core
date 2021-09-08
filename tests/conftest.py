@@ -922,8 +922,11 @@ class SnippetCompilationTest(KeepOnFail):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
-        self.setup_for_snippet(snippet)
+        """
+        Set up project to expect an error during compilation or project install.
+        """
         try:
+            self.setup_for_snippet(snippet)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
