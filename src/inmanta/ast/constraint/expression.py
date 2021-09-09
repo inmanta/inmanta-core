@@ -324,21 +324,20 @@ class Not(UnaryOperator):
 
 
 @stable_api.stable_api
-class Regex(UnaryOperator):
+class Regex(BinaryOperator):
     """
     An operator that does regex matching
     """
 
     def __init__(self, op1: ExpressionStatement, op2: str):
         self.regex = re.compile(op2)
-        # This class used to inherit from BinaryOperator,
-        # We make this call to the shared super class to maintain backward compatibility
-        Operator.__init__(self, "regex", [op1, Literal(self.regex)])
+        super().__init__("regex", op1, Literal(self.regex))
 
-    def _un_op(self, arg1: object) -> object:
+    def _bin_op(self, arg1: object, arg2: object) -> object:
         """
         @see Operator#_op
         """
+        assert arg2 == self.regex
         if not isinstance(arg1, str):
             raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % (arg1, type(arg1)))
 
