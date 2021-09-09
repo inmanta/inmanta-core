@@ -117,8 +117,8 @@ class PagingCounts:
 
 
 class InvalidQueryParameter(Exception):
-    def __init__(self, message: str, *args: object) -> None:
-        super(InvalidQueryParameter, self).__init__(message, *args)
+    def __init__(self, message: str) -> None:
+        super(InvalidQueryParameter, self).__init__(message)
         self.message = message
 
 
