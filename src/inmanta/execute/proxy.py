@@ -33,8 +33,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
-    from inmanta.execute.runtime import Instance
     from inmanta.ast.entity import Entity
+    from inmanta.execute.runtime import Instance
 
 
 class UnsetException(RuntimeException):
