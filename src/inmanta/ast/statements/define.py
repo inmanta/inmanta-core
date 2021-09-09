@@ -150,7 +150,7 @@ class DefineEntity(TypeDefinitionStatement):
         self.type.location = lname.location
 
     def add_attribute(
-        self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement = None
+        self, attr_type: LocatableString, name: LocatableString, default_value: Optional[ExpressionStatement] = None
     ) -> None:
         """
         Add an attribute to this entity
@@ -324,7 +324,7 @@ class DefineImplement(DefinitionStatement):
         implementations: List[LocatableString],
         select: ExpressionStatement,
         inherit: bool = False,
-        comment: LocatableString = None,
+        comment: Optional[LocatableString] = None,
     ) -> None:
         DefinitionStatement.__init__(self)
         self.entity = entity_name

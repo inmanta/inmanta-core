@@ -2041,7 +2041,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
         project: Project,
         modulename: str,
         requirements: Iterable[InmantaModuleRequirement],
-        path: str = None,
+        path: Optional[str] = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
     ) -> "ModuleV1":

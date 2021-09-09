@@ -24,7 +24,7 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 from uuid import UUID
 
 import asyncpg
@@ -33,6 +33,7 @@ from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
+from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
@@ -123,7 +124,7 @@ class AgentManager(ServerSlice, SessionListener):
     running an agent instance, which might be the primary for a logical agent.
     """
 
-    def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
+    def __init__(self, closesessionsonstart: bool = True, fact_back_off: Optional[int] = None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
 
         if fact_back_off is None:
@@ -145,7 +146,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
-        self._session_listener_actions: queues.Queue = queues.Queue()
+        self._session_listener_actions: queues.Queue[SessionAction] = queues.Queue()
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -758,7 +759,7 @@ class AgentManager(ServerSlice, SessionListener):
         result = await client.get_status()
         return result.code, result.get_result()
 
-    async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+    async def request_parameter(self, env_id: uuid.UUID, resource_id: ResourceIdStr) -> Apireturn:
         """
         Request the value of a parameter from an agent
         """
@@ -910,7 +911,7 @@ class AutostartedAgentManager(ServerSlice):
             raise ShutdownInProgress()
 
         agent_map: Dict[str, str]
-        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))  # we know the type of this map
 
         # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
         # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
@@ -951,7 +952,7 @@ class AutostartedAgentManager(ServerSlice):
         Note: Always call under agent_lock
         """
         agent_map: Dict[str, str]
-        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))
         config: str
         config = await self._make_agent_config(env, agents, agent_map)
 
@@ -1010,11 +1011,11 @@ class AutostartedAgentManager(ServerSlice):
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
-        agent_deploy_splay: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-        agent_deploy_interval: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+        agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME))
+        agent_deploy_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL))
 
-        agent_repair_splay: int = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
-        agent_repair_interval: int = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+        agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME))
+        agent_repair_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL))
 
         # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
         if "internal" not in agent_names:

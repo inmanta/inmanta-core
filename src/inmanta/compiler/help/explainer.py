@@ -29,19 +29,19 @@ from inmanta.ast.statements.generator import Constructor
 from inmanta.execute.runtime import OptionVariable
 
 
-def bold(content: str = None) -> str:
+def bold(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[1m"
     return "\033[1m{0}\033[0m".format(content)
 
 
-def underline(content: str = None) -> str:
+def underline(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[4m"
     return "\033[4m{0}\033[0m".format(content)
 
 
-def noformat(content: str = None) -> str:
+def noformat(content: Optional[str] = None) -> str:
     return "\033[0m"
 
 
