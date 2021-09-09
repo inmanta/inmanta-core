@@ -466,6 +466,7 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
     assert len(statements) == 1
     stmt = statements[0].value
     assert isinstance(stmt, Regex)
+    assert stmt.children[1].value == stmt.regex
     assert stmt.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 

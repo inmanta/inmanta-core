@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Type
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
-from inmanta.ast.statements import ExpressionStatement, ReferenceStatement, Resumer
+from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
 from inmanta.execute.dataflow import DataflowGraph
@@ -286,7 +286,7 @@ class UnaryOperator(Operator):
         This method calls the implementation of the operator
         """
         # pylint: disable-msg=W0142
-        return self._un_op(*args)
+        return self._un_op(args[0])
 
     @abstractmethod
     def _un_op(self, arg: object) -> object:
@@ -324,19 +324,20 @@ class Not(UnaryOperator):
 
 
 @stable_api.stable_api
-class Regex(UnaryOperator):
+class Regex(BinaryOperator):
     """
     An operator that does regex matching
     """
 
     def __init__(self, op1: ExpressionStatement, op2: str):
         self.regex = re.compile(op2)
-        UnaryOperator.__init__(self, "regex", op1)
+        super().__init__("regex", op1, Literal(self.regex))
 
-    def _un_op(self, arg1: object) -> object:
+    def _bin_op(self, arg1: object, arg2: object) -> object:
         """
         @see Operator#_op
         """
+        assert arg2 == self.regex
         if not isinstance(arg1, str):
             raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % (arg1, type(arg1)))
 
