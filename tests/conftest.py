@@ -1189,6 +1189,7 @@ def unload_modules_for_path(path: str) -> None:
     """
     Unload any modules that are loaded from a given path.
     """
+
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
