@@ -217,7 +217,10 @@ class CompileRun(object):
             if not repo_url:
                 if not os.path.exists(os.path.join(project_dir, "project.yml")):
                     await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set")
-                await self._end_stage(0)
+                LOGGER.info("Installing missing modules")
+                await self._run_compile_stage(
+                    "Installing missing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                )
             else:
                 await self._end_stage(0)
                 # checkout repo
