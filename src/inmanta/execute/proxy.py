@@ -21,7 +21,6 @@ from copy import copy
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
-from inmanta.ast.entity import Entity
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
@@ -35,6 +34,7 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
     from inmanta.execute.runtime import Instance
+    from inmanta.ast.entity import Entity
 
 
 class UnsetException(RuntimeException):
@@ -162,7 +162,7 @@ class DynamicProxy:
     def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
 
-    def _type(self) -> Entity:
+    def _type(self) -> "Entity":
         """
         Return the type of the proxied instance
         """
