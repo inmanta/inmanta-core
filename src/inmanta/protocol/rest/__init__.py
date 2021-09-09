@@ -465,7 +465,7 @@ class RESTBase(util.TaskHandler):
                 if "sid" not in message:
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = message["sid"]
+                sid = uuid.UUID(message["sid"])
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
