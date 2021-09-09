@@ -621,7 +621,10 @@ class ResourceHandler(object):
             if not self.can_reload():
                 return False
             result = self.run_sync(_call_resource_did_dependency_change)
-            if not result.result or result.code != 200:
+            if not result.result:
+                raise Exception(f"Failed to determine whether resource should reload")
+
+            if result.code != 200:
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
             return result.result["data"]
