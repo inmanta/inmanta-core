@@ -1,0 +1,6 @@
+description: "Compiler no longer installs modules on the fly, `inmanta project install` needs to be run to install required modules"
+change-type: "major"
+sections:
+  upgrade-note: "{{description}}"
+destination-branches:
+  - master
