@@ -819,11 +819,11 @@ def resource_action_log(ctx: click.Context) -> None:
 
 
 def validate_resource_version_id(
-    ctx: click.Context, option: Union[click.Option, click.Parameter], value: ResourceVersionIdStr
+    ctx: click.Context, option: Union[click.Option, click.Parameter], value: str
 ) -> ResourceVersionIdStr:
     if not Id.is_resource_version_id(value):
         raise click.BadParameter(value)
-    return value
+    return ResourceVersionIdStr(value)
 
 
 @resource_action_log.command(name="list")
