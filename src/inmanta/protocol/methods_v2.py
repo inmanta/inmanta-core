@@ -657,3 +657,57 @@ def resource_logs(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def get_compile_reports(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "requested.desc",
+) -> List[model.CompileReport]:
+    """
+    Get the compile reports from an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of instances that are returned
+     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned compile reports.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`,
+                for example `?filter.success=True`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30.568353`
+                returns compile reports that were requested between the specified dates.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `filter.success=True&filter.completed=True` returns compile reports
+                that are completed and successful.
+                The following options are available:
+                success: whether the compile was successful or not
+                started: whether the compile has been started or not
+                completed: whether the compile has been completed or not
+                requested: return the logs matching the timestamp constraints. Valid constraints are of the form
+                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+                    in UTC timezone. For example:
+                    `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30.568353`.
+                    Multiple constraints can be specified, in which case only compile reports that match all constraints will be
+                    returned.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `timestamp.desc`
+                (case insensitive).
+                Only sorting by `requested` is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching compile reports
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """

@@ -106,6 +106,32 @@ def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.da
         return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
 
 
+def parse_range_operator(v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
+    """
+    Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
+    """
+
+    def transform_single(single: str) -> Tuple[RangeOperator, datetime.datetime]:
+        split: List[str] = single.split(":", maxsplit=1)
+        if len(split) != 2:
+            raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
+        operator: RangeOperator
+        try:
+            operator = RangeOperator.parse(split[0])
+        except ValueError:
+            raise ValueError("Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single))
+        bound = parse_range_value_to_date(single, split[1])
+        return (operator, bound)
+
+    if isinstance(v, str):
+        return [transform_single(v)]
+
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return [transform_single(x) for x in v]
+
+    raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
+
+
 class ResourceLogFilterModel(FilterModel):
     minimal_log_level: Optional[const.LogLevel]
     timestamp: Optional[DateRangeConstraint]
@@ -133,32 +159,8 @@ class ResourceLogFilterModel(FilterModel):
 
     @validator("timestamp", pre=True)
     @classmethod
-    def parse_range_operator(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
-        """
-        Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
-        """
-
-        def transform_single(single: str) -> Tuple[RangeOperator, datetime.datetime]:
-            split: List[str] = single.split(":", maxsplit=1)
-            if len(split) != 2:
-                raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
-            operator: RangeOperator
-            try:
-                operator = RangeOperator.parse(split[0])
-            except ValueError:
-                raise ValueError(
-                    "Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single)
-                )
-            bound = parse_range_value_to_date(single, split[1])
-            return (operator, bound)
-
-        if isinstance(v, str):
-            return [transform_single(v)]
-
-        if isinstance(v, list) and all(isinstance(x, str) for x in v):
-            return [transform_single(x) for x in v]
-
-        raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
+    def parse_timestamp(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
+        return parse_range_operator(v)
 
 
 def get_log_levels_for_filter(minimal_log_level: const.LogLevel) -> List[str]:
@@ -181,5 +183,66 @@ class ResourceLogFilterValidator(FilterValidator):
             query["msg"] = (QueryType.CONTAINS_PARTIAL, validated_filter.message)
         if validated_filter.action:
             query["action"] = (QueryType.CONTAINS, validated_filter.action)
+
+        return query
+
+
+def parse_single(v: object, property_name: str) -> object:
+    """
+    Transform list values to their single element value.
+    """
+    if isinstance(v, list):
+        return more_itertools.one(
+            v,
+            too_short=ValueError(f"Empty '{property_name}' filter provided"),
+            too_long=ValueError(f"Multiple values provided for '{property_name}' filter: {v}"),
+        )
+
+    return v
+
+
+class CompileReportFilterModel(FilterModel):
+    requested: Optional[DateRangeConstraint]
+    started: Optional[bool]
+    completed: Optional[bool]
+    success: Optional[bool]
+
+    @validator("started", pre=True)
+    @classmethod
+    def _started_single(cls, v: object) -> object:
+        return parse_single(v, "started")
+
+    @validator("completed", pre=True)
+    @classmethod
+    def _completed_single(cls, v: object) -> object:
+        return parse_single(v, "completed")
+
+    @validator("success", pre=True)
+    @classmethod
+    def _success_single(cls, v: object) -> object:
+        return parse_single(v, "success")
+
+    @validator("requested", pre=True)
+    @classmethod
+    def parse_requested(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
+        return parse_range_operator(v)
+
+
+class CompileReportFilterValidator(FilterValidator):
+    @property
+    def model(self) -> Type[CompileReportFilterModel]:
+        return CompileReportFilterModel
+
+    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
+        validated_filter: CompileReportFilterModel = self.validate_filters(filter)
+        query: Dict[str, QueryFilter] = {}
+        if validated_filter.requested:
+            query["requested"] = (QueryType.RANGE, validated_filter.requested)
+        if validated_filter.success is not None:
+            query["success"] = (QueryType.EQUALS, validated_filter.success)
+        if validated_filter.started is not None:
+            query["started"] = (QueryType.IS_NOT_NULL, None) if validated_filter.started else (QueryType.EQUALS, None)
+        if validated_filter.completed is not None:
+            query["completed"] = (QueryType.IS_NOT_NULL, None) if validated_filter.completed else (QueryType.EQUALS, None)
 
         return query

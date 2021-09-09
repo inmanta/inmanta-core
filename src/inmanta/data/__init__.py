@@ -958,6 +958,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return "WHERE " + " AND ".join(filter_statements)
 
     @classmethod
+    def _join_filter_statements_without_where(cls, filter_statements: List[str]) -> str:
+        return " AND " + " AND ".join(filter_statements)
+
+    @classmethod
     def _get_list_query_pagination_parameters(
         cls,
         database_order: DatabaseOrder,
@@ -2044,6 +2048,28 @@ class Report(BaseDocument):
         )
 
 
+class CompileReportOrder(DatabaseOrder):
+    """ Represents the ordering by which compile reports should be sorted"""
+
+    valid_sort_pattern: Pattern = re.compile("^(requested)\\.(asc|desc)$", re.IGNORECASE)
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "CompileReportOrder":
+        match = cls.valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            validated_order_by_column, validated_order = Compile._validate_order_strict(
+                order_by_column=order_by_column, order=match.groups()[1].upper()
+            )
+            return CompileReportOrder(
+                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=datetime.datetime
+            )
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
+
+
 @stable_api
 class Compile(BaseDocument):
     """
@@ -2190,6 +2216,102 @@ class Compile(BaseDocument):
     ) -> None:
         query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
+
+    @classmethod
+    def _get_paging_item_count_query(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        id_column_name: ColumnNameStr,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Any,
+    ) -> Tuple[str, List[Any]]:
+        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
+            database_order, id_column_name, first_id, last_id, start, end, **query
+        )
+        sql_query = f"""{select_clause}
+                    FROM {cls.table_name()}
+                    WHERE environment = ${len(values) + 1}
+                    """
+        values.append(cls._get_value(environment))
+        if len(common_filter_statements) > 0:
+            sql_query += cls._join_filter_statements_without_where(common_filter_statements)
+
+        return sql_query, values
+
+    @classmethod
+    async def get_compile_reports(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.CompileReport]:
+        order_by_column = database_order.get_order_by_db_column_name()
+        order = database_order.get_order()
+        filter_statements, values = cls._get_list_query_pagination_parameters(
+            database_order=database_order,
+            id_column=ColumnNameStr("id"),
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            **query,
+        )
+        db_query = f"""SELECT id, remote_id, environment, requested,
+                    started, completed, do_export, force_update,
+                    metadata, environment_variables, success, version
+                    FROM {cls.table_name()}
+                    WHERE environment=${len(values) + 1} """
+        values.append(cls._get_value(environment))
+        if len(filter_statements) > 0:
+            db_query += cls._join_filter_statements_without_where(filter_statements)
+        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
+        if backward_paging:
+            backward_paging_order = order.invert().name
+
+            db_query += f" ORDER BY {order_by_column} {backward_paging_order}, id {backward_paging_order}"
+        else:
+            db_query += f" ORDER BY {order_by_column} {order}, id {order}"
+        if limit is not None:
+            if limit > DBLIMIT:
+                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
+            elif limit > 0:
+                db_query += " LIMIT " + str(limit)
+
+        if backward_paging:
+            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
+                        ORDER BY matching_records.{order_by_column} {order}, matching_records.id {order}"""
+
+        compile_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
+        compile_records = cast(Iterable[Record], compile_records)
+
+        dtos = [
+            m.CompileReport(
+                id=compile["id"],
+                remote_id=compile["remote_id"],
+                environment=compile["environment"],
+                requested=compile["requested"],
+                started=compile["started"],
+                completed=compile["completed"],
+                success=compile["success"],
+                version=compile["version"],
+                do_export=compile["do_export"],
+                force_update=compile["force_update"],
+                metadata=json.loads(compile["metadata"]),
+                environment_variables=json.loads(compile["environment_variables"]),
+            )
+            for compile in compile_records
+        ]
+        return dtos
 
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(

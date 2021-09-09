@@ -21,8 +21,23 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from urllib import parse
 
-from inmanta.data import ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts, Resource, ResourceAction
-from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceHistory, ResourceIdStr
+from inmanta.data import (
+    ColumnNameStr,
+    Compile,
+    DatabaseOrder,
+    InvalidFieldNameException,
+    PagingCounts,
+    Resource,
+    ResourceAction,
+)
+from inmanta.data.model import (
+    BaseModel,
+    CompileReport,
+    LatestReleasedResource,
+    PagingBoundaries,
+    ResourceHistory,
+    ResourceIdStr,
+)
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -123,6 +138,27 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
             environment, self.resource_id, database_order, ColumnNameStr("timestamp"), first_id, last_id, start, end, **query
+        )
+        result = await self.data_class.select_query(sql_query, values, no_obj=True)
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+
+class CompileReportPagingCountsProvider(PagingCountsProvider):
+    def __init__(self, data_class: Type[Compile]) -> None:
+        self.data_class = data_class
+
+    async def count_items_for_paging(
+        self,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Any,
+    ) -> PagingCounts:
+        sql_query, values = self.data_class._get_paging_item_count_query(
+            environment, database_order, ColumnNameStr("id"), first_id, last_id, start, end, **query
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
@@ -408,4 +444,37 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
                 first_id=None,
                 end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
                 last_id=None,
+            )
+
+
+class CompileReportPagingHandler(PagingHandler[CompileReport]):
+    def __init__(
+        self,
+        counts_provider: PagingCountsProvider,
+    ) -> None:
+        super().__init__(counts_provider)
+
+    def get_base_url(self) -> str:
+        return "/api/v2/compilereport"
+
+    def get_first_id_name(self) -> str:
+        return "first_id"
+
+    def get_last_id_name(self) -> str:
+        return "last_id"
+
+    def _get_paging_boundaries(self, dtos: List[CompileReport], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=dtos[0].requested,
+                first_id=dtos[0].id,
+                end=dtos[-1].requested,
+                last_id=dtos[-1].id,
+            )
+        else:
+            return PagingBoundaries(
+                start=dtos[-1].requested,
+                first_id=dtos[-1].id,
+                end=dtos[0].requested,
+                last_id=dtos[0].id,
             )
