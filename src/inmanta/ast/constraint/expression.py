@@ -286,7 +286,7 @@ class UnaryOperator(Operator):
         This method calls the implementation of the operator
         """
         # pylint: disable-msg=W0142
-        return self._un_op(*args)
+        return self._un_op(args[0])
 
     @abstractmethod
     def _un_op(self, arg: object) -> object:
