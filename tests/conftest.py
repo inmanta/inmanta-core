@@ -1169,11 +1169,31 @@ def tmpvenv_active(
 
     yield tmpvenv
 
+    unload_modules_for_path(site_packages)
+
+
+@pytest.fixture
+def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+    """
+    Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
+    active one.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    venv: env.VirtualEnv = env.VirtualEnv(venv_dir)
+    venv.use_virtual_env()
+    yield venv
+    unload_modules_for_path(venv.site_packages_dir)
+
+
+def unload_modules_for_path(path: str) -> None:
+    """
+    Unload any modules that are loaded from a given path.
+    """
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
 
-    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)]
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()

@@ -24,6 +24,7 @@ from asyncio import subprocess
 
 import pytest
 
+from inmanta import env
 from inmanta.app import cmd_parser, compiler_features
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
@@ -114,7 +115,7 @@ def test_module_help(inmanta_config, capsys):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("add_types", [True, False])
-async def test_export_to_json(tmpdir, add_types):
+async def test_export_to_json(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, add_types):
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
     path_project_yml_file = workspace.join("project.yml")
@@ -137,6 +138,21 @@ std::ConfigFile(host=vm1, path="/test", content="")
     )
 
     os.chdir(workspace)
+
+    install_args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "project",
+        "install",
+    ]
+    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        install_process.kill()
+        await install_process.communicate()
+        raise e
 
     args = [sys.executable, "-m", "inmanta.app", "export", "-j", "dump.json"]
     if add_types:
@@ -161,7 +177,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
 @pytest.mark.parametrize("set_server", [True, False])
 @pytest.mark.parametrize("set_port", [True, False])
 @pytest.mark.asyncio
-async def test_export(tmpdir, server, client, push_method, set_server, set_port):
+async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
 
@@ -208,6 +224,21 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
     os.chdir(workspace)
 
+    install_args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "project",
+        "install",
+    ]
+    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        install_process.kill()
+        await install_process.communicate()
+        raise e
+
     args = [
         sys.executable,
         "-m",
@@ -245,7 +276,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
 
 @pytest.mark.asyncio
-async def test_export_with_specific_export_plugin(tmpdir, client):
+async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
     result = await client.create_project("test")
@@ -321,8 +352,23 @@ def other_exporter(exporter: Exporter) -> None:
 
     os.chdir(workspace)
 
+    install_args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "project",
+        "install",
+    ]
+    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        install_process.kill()
+        await install_process.communicate()
+        raise e
+
     args = [
-        sys.executable,
+        tmpvenv_active_inherit.python_path,
         "-m",
         "inmanta.app",
         "export",
