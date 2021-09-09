@@ -199,6 +199,7 @@ class CompileRun(object):
             env = await data.Environment.get_by_id(environment_id)
 
             env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            assert self.stage
             await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
 
             if env is None:
@@ -516,7 +517,7 @@ class CompilerService(ServerSlice):
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
-    ):
+    ) -> int:
         if wait_time == 0:
             wait: float = 0
         else:

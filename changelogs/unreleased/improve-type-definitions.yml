@@ -1,0 +1,5 @@
+description: Improve type annotations on compiler
+change-type: patch
+destination-branches:
+  - iso4
+  - master
