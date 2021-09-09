@@ -590,6 +590,8 @@ def p_boolean_expression(p: YaccProduction) -> None:
     | expression AND expression
     | expression OR expression"""
     operator = Operator.get_operator_class(str(p[2]))
+    if operator is None:
+        raise ParserException(p[1].location, str(p[1]), f"Invalid operator {str(p[1])}")
     p[0] = operator(p[1], p[3])
     attach_lnr(p, 2)
 

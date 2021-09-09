@@ -52,7 +52,9 @@ class Reference(ExpressionStatement):
         out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
-    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+    ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
         out = {self.name: var}  # type : Dict[object, ResultVariable]
@@ -87,7 +89,7 @@ class Reference(ExpressionStatement):
     def __str__(self) -> str:
         return self.name
 
-    def __repr__(self, *args, **kwargs):
+    def __repr__(self) -> str:
         return self.name
 
 
@@ -213,7 +215,9 @@ class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
     Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
+    def __init__(
+        self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: Optional[ResultCollector]
+    ) -> None:
         super().__init__(target, instance, attribute, resultcollector)
 
     def target_value(self) -> object:
@@ -241,7 +245,9 @@ class AttributeReference(Reference):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.requires_emit_gradual(resolver, queue, None)
 
-    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+    ) -> Dict[object, ResultVariable]:
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
@@ -272,5 +278,5 @@ class AttributeReference(Reference):
         assert self.instance is not None
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
 
-    def __repr__(self, *args, **kwargs):
+    def __repr__(self) -> str:
         return "%s.%s" % (repr(self.instance), self.attribute)
