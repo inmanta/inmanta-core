@@ -128,12 +128,12 @@ def test_module_update_with_v2_module(
 
     module_path = os.path.join(tmpdir, "modulepath")
     os.mkdir(module_path)
-    mod9_dir = clone_repo(modules_repo, "mod9", module_path, tag="3.2.1")
+    mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
 
     snippetcompiler_clean.setup_for_snippet(
         snippet="""
         import module1
-        import mod9
+        import mod11
         """,
         autostd=False,
         install_v2_modules=[
@@ -144,17 +144,17 @@ def test_module_update_with_v2_module(
         python_package_sources=[pip_index.url],
         project_requires=[
             InmantaModuleRequirement.parse("module1<1.2.5"),
-            InmantaModuleRequirement.parse("mod9<4.2.0"),
+            InmantaModuleRequirement.parse("mod11<4.2.0"),
         ],
     )
 
     assert_version_installed(module_name="module1", version="1.2.3")
     assert_version_installed(module_name="module2", version="2.0.1")
-    assert ModuleV1(project=None, path=mod9_dir).version == Version("3.2.1")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
     ModuleTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0")
-    assert ModuleV1(project=None, path=mod9_dir).version == Version("4.1.2")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
 
 
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:

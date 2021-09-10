@@ -130,12 +130,12 @@ def modules_repo(git_modules_dir) -> str:
     add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
     add_file(mod8, "mastersignal", "present", "last commit")
 
-    mod7 = make_module_simple(reporoot, "mod9")
-    add_file(mod7, "file", "test", "release version 3.2.1", version="3.2.1")
-    add_file(mod7, "file", "test", "release version 3.2.1", version="4.0.0")
-    add_file(mod7, "file", "test", "release version 3.2.1", version="4.1.0")
-    add_file(mod7, "file", "test", "release version 3.2.1", version="4.1.2")
-    add_file(mod7, "file", "test", "release version 3.2.1", version="4.2.0")
+    mod11 = make_module_simple(reporoot, "mod11")
+    add_file(mod11, "file", "test", "release version 3.2.1", version="3.2.1")
+    add_file(mod11, "file", "test", "release version 4.0.0", version="4.0.0")
+    add_file(mod11, "file", "test", "release version 4.1.0", version="4.1.0")
+    add_file(mod11, "file", "test", "release version 4.1.2", version="4.1.2")
+    add_file(mod11, "file", "test", "release version 4.2.0", version="4.2.0")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]
