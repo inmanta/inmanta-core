@@ -77,7 +77,7 @@ class ResourceFilterModel(FilterModel):
     status: Optional[List[ReleasedResourceState]]
 
 
-class ResourceFilterValidator(FilterValidator):
+class ResourceFilterValidator(FilterValidator[ResourceFilterModel]):
     @property
     def model(self) -> Type[ResourceFilterModel]:
         return ResourceFilterModel
@@ -167,7 +167,7 @@ def get_log_levels_for_filter(minimal_log_level: const.LogLevel) -> List[str]:
     return [level.value for level in const.LogLevel if level.to_int >= minimal_log_level.to_int]
 
 
-class ResourceLogFilterValidator(FilterValidator):
+class ResourceLogFilterValidator(FilterValidator[ResourceLogFilterModel]):
     @property
     def model(self) -> Type[ResourceLogFilterModel]:
         return ResourceLogFilterModel
@@ -228,7 +228,7 @@ class CompileReportFilterModel(FilterModel):
         return parse_range_operator(v)
 
 
-class CompileReportFilterValidator(FilterValidator):
+class CompileReportFilterValidator(FilterValidator[CompileReportFilterModel]):
     @property
     def model(self) -> Type[CompileReportFilterModel]:
         return CompileReportFilterModel

@@ -2051,7 +2051,7 @@ class Report(BaseDocument):
 class CompileReportOrder(DatabaseOrder):
     """ Represents the ordering by which compile reports should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(requested)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern[str] = re.compile("^(requested)\\.(asc|desc)$", re.IGNORECASE)
 
     @classmethod
     def parse_from_string(
@@ -2223,8 +2223,8 @@ class Compile(BaseDocument):
         environment: uuid.UUID,
         database_order: DatabaseOrder,
         id_column_name: ColumnNameStr,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,
@@ -2788,7 +2788,9 @@ class ResourceAction(BaseDocument):
 class ResourceOrder(DatabaseOrder):
     """ Represents the ordering by which resources should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern[str] = re.compile(
+        "^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE
+    )
 
     @classmethod
     def parse_from_string(
@@ -2818,7 +2820,7 @@ class ResourceOrder(DatabaseOrder):
 class ResourceHistoryOrder(DatabaseOrder):
     """ Represents the ordering by which resource history should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(date)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern[str] = re.compile("^(date)\\.(asc|desc)$", re.IGNORECASE)
 
     @classmethod
     def parse_from_string(
@@ -2841,7 +2843,7 @@ class ResourceHistoryOrder(DatabaseOrder):
 class ResourceLogOrder(DatabaseOrder):
     """ Represents the ordering by which resource logs should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(timestamp)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern[str] = re.compile("^(timestamp)\\.(asc|desc)$", re.IGNORECASE)
 
     @classmethod
     def parse_from_string(
