@@ -18,6 +18,7 @@
 
 import asyncio
 import os
+import py
 import shutil
 import sys
 from asyncio import subprocess
@@ -48,6 +49,28 @@ def app(args):
         return
 
     options.func(options)
+
+
+async def install_project(python_env: env.PythonEnvironment, project_dir: py.path.local) -> None:
+    """
+    Install a project and its modules via the `inmanta project install` command.
+    """
+    args = [
+        python_env.python_path,
+        "-m",
+        "inmanta.app",
+        "project",
+        "install",
+    ]
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
+    )
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
 
 
 def test_help(inmanta_config, capsys):
@@ -137,22 +160,9 @@ std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
 
-    os.chdir(workspace)
+    await install_project(tmpvenv_active_inherit, workspace)
 
-    install_args = [
-        tmpvenv_active_inherit.python_path,
-        "-m",
-        "inmanta.app",
-        "project",
-        "install",
-    ]
-    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
-        install_process.kill()
-        await install_process.communicate()
-        raise e
+    os.chdir(workspace)
 
     args = [sys.executable, "-m", "inmanta.app", "export", "-j", "dump.json"]
     if add_types:
@@ -222,22 +232,9 @@ std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
 
-    os.chdir(workspace)
+    await install_project(tmpvenv_active_inherit, workspace)
 
-    install_args = [
-        tmpvenv_active_inherit.python_path,
-        "-m",
-        "inmanta.app",
-        "project",
-        "install",
-    ]
-    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
-        install_process.kill()
-        await install_process.communicate()
-        raise e
+    os.chdir(workspace)
 
     args = [
         sys.executable,
@@ -350,22 +347,9 @@ def other_exporter(exporter: Exporter) -> None:
     init_cf_file = model_dir.join("_init.cf")
     init_cf_file.write("")
 
-    os.chdir(workspace)
+    await install_project(tmpvenv_active_inherit, workspace)
 
-    install_args = [
-        tmpvenv_active_inherit.python_path,
-        "-m",
-        "inmanta.app",
-        "project",
-        "install",
-    ]
-    install_process = await subprocess.create_subprocess_exec(*install_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    try:
-        (stdout, stderr) = await asyncio.wait_for(install_process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
-        install_process.kill()
-        await install_process.communicate()
-        raise e
+    os.chdir(workspace)
 
     args = [
         tmpvenv_active_inherit.python_path,
