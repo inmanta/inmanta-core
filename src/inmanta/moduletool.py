@@ -568,7 +568,6 @@ version: 0.0.1dev0"""
                 loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
 
                 # get AST
-                # Bypass the module cache in order to pick up new modules installed in a previous iteration.
                 my_project.get_complete_ast()
                 # get current full set of requirements
                 specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
@@ -588,7 +587,7 @@ version: 0.0.1dev0"""
                     last_failure = CompilerException("Module update did not converge")
             except CompilerException as e:
                 last_failure = e
-                # model is corrupt.
+                # model is corrupt
                 LOGGER.info(
                     "The model is not currently in an executable state, performing intermediate updates", stack_info=True
                 )
