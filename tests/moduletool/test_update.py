@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import os
-import shutil
 from typing import Dict
 
 import py.path
@@ -25,7 +24,7 @@ from pkg_resources import Requirement
 
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
-from inmanta.module import ModuleV2
+from inmanta.module import ModuleV2, InmantaModuleRequirement, ModuleV1
 from inmanta.moduletool import ModuleTool
 from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
 from packaging.version import Version
@@ -37,8 +36,12 @@ from inmanta.parser import ParserException
     [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
 )
 def test_module_update_with_install_mode_master(
-    tmpdir, modules_repo, kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated
-):
+    tmpdir: py.path.local,
+    modules_repo: str,
+    kwargs_update_method: Dict[str, str],
+    mod2_should_be_updated: bool,
+    mod8_should_be_updated: bool,
+) -> None:
     # Make a copy of masterproject_multi_mod
     masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
     clone_repo(modules_repo, "masterproject_multi_mod", tmpdir)
@@ -76,29 +79,19 @@ def test_module_update_with_install_mode_master(
     assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
 
 
-@pytest.mark.parametrize("corrupt_module", [True, False])
+@pytest.mark.parametrize("corrupt_module", [False, True])
 def test_module_update_with_v2_module(
-    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, corrupt_module: bool
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, modules_repo: str, corrupt_module: bool
 ) -> None:
     """
     Assert that the `inmanta module update` command works correctly when executed on a project with a V2 module.
 
     :param corrupt_module: Whether the module to be updated contains a syntax error or not.
     """
-    module_name = "elaboratev2module"
-    original_elaboratev2module_dir = os.path.join(modules_v2_dir, module_name)  # Has version 1.2.3
-    patched_elaboratev2module_dir = os.path.join(tmpdir, module_name)
-    shutil.copytree(original_elaboratev2module_dir, patched_elaboratev2module_dir)
+    template_module_name = "elaboratev2module"
+    template_module_dir = os.path.join(modules_v2_dir, template_module_name)
 
-    if corrupt_module:
-        model_file = os.path.join(patched_elaboratev2module_dir, "model", "_init.cf")
-        with open(model_file, "w", encoding="utf-8") as fd:
-            # Introduce syntax error in the module
-            fd.write("""
-entity:
-    string message
-end
-            """)
+    pip_index = PipIndex(artifact_dir=os.path.join(str(tmpdir), "pip-index"))
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2.get_package_name_for(module_name)
@@ -106,33 +99,63 @@ end
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 
-    pip_index = PipIndex(artifact_dir=os.path.join(str(tmpdir), "pip-index"))
-    for version in ["1.2.4", "1.2.5"]:
-        mod_dir = os.path.join(tmpdir, f"elaboratev2module-v{version}")
-        module_from_template(
-            source_dir=original_elaboratev2module_dir,
-            dest_dir=mod_dir,
-            new_version=Version(version),
-            install=False,
-            publish_index=pip_index,
-        )
-
-    snippetcompiler_clean.setup_for_snippet(
-        snippet="import elaboratev2module",
-        autostd=False,
-        install_v2_modules=[LocalPackagePath(path=patched_elaboratev2module_dir)],
-        python_package_sources=[pip_index.url],
-        project_requires=[Requirement.parse(f"{module_name}<1.2.5")],
+    for module_name, versions in {"module2": ["2.0.1", "2.1.0", "2.2.0", "3.0.1"], "module1": ["1.2.4", "1.2.5"]}.items():
+        for current_version in versions:
+            module_dir = os.path.join(tmpdir, f"{module_name}-v{current_version}")
+            module_from_template(
+                source_dir=template_module_dir,
+                dest_dir=module_dir,
+                new_version=Version(current_version),
+                new_name=module_name,
+                new_requirements=[
+                    InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))
+                ] if module_name == "module1" else None,
+                install=False,
+                publish_index=pip_index,
+                new_content_init_cf="import module2" if module_name == "module1" else None,
+            )
+    patched_module_dir = os.path.join(tmpdir, f"module1-v1.2.3")
+    module_from_template(
+        source_dir=template_module_dir,
+        dest_dir=patched_module_dir,
+        new_version=Version("1.2.3"),
+        new_name="module1",
+        new_requirements=[InmantaModuleRequirement(Requirement.parse("module2"))],
+        install=False,
+        publish_index=pip_index,
+        new_content_init_cf="entity" if corrupt_module else None,  # Introduce syntax error in the module
     )
 
-    assert_version_installed(module_name=module_name, version="1.2.3")
+    module_path = os.path.join(tmpdir, "modulepath")
+    os.mkdir(module_path)
+    mod9_dir = clone_repo(modules_repo, "mod9", module_path, tag="3.2.1")
+
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="""
+        import module1
+        import mod9
+        """,
+        autostd=False,
+        install_v2_modules=[
+            LocalPackagePath(path=os.path.join(tmpdir, f"module2-v2.0.1")),
+            LocalPackagePath(path=patched_module_dir),
+        ],
+        add_to_module_path=[module_path],
+        python_package_sources=[pip_index.url],
+        project_requires=[
+            InmantaModuleRequirement.parse(f"module1<1.2.5"),
+            InmantaModuleRequirement.parse(f"mod9<4.2.0"),
+        ],
+    )
+
+    assert_version_installed(module_name="module1", version="1.2.3")
+    assert_version_installed(module_name="module2", version="2.0.1")
+    assert ModuleV1(project=None, path=mod9_dir).version == Version("3.2.1")
     ModuleTool().update()
-    assert_version_installed(module_name=module_name, version="1.2.4")
+    assert_version_installed(module_name="module1", version="1.2.4")
+    assert_version_installed(module_name="module2", version="2.2.0")
+    assert ModuleV1(project=None, path=mod9_dir).version == Version("4.1.2")
 
-
-# TODO:
-#  * Test constraint at module level instead of only the project level
-#  * Test constraint on V1 module
 
 def test_module_update_syntax_error_in_project(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean

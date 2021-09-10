@@ -157,9 +157,15 @@ def install_project(modules_dir, name, config=True):
     return coroot
 
 
-def clone_repo(source_dir, repo_name, destination_dir):
+def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: Optional[str] = None) -> str:
+    """
+    :param tag: Clone commit with the given tag.
+    """
+    additional_clone_args = ["-b", tag] if tag is not None else []
     subprocess.check_output(
-        ["git", "clone", os.path.join(source_dir, repo_name)], cwd=destination_dir, stderr=subprocess.STDOUT
+        ["git", "clone", *additional_clone_args, os.path.join(source_dir, repo_name)],
+        cwd=destination_dir,
+        stderr=subprocess.STDOUT,
     )
     subprocess.check_output(
         ["git", "config", "user.email", '"test@test.example"'],
@@ -169,6 +175,7 @@ def clone_repo(source_dir, repo_name, destination_dir):
     subprocess.check_output(
         ["git", "config", "user.name", "Tester test"], cwd=os.path.join(destination_dir, repo_name), stderr=subprocess.STDOUT
     )
+    return os.path.join(destination_dir, repo_name)
 
 
 class BadModProvider(object):
@@ -212,6 +219,7 @@ def module_from_template(
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
+    new_content_init_cf: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -226,6 +234,7 @@ def module_from_template(
         python environment unless editable is True.
     :param editable: Whether to install the module in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
+    :param new_content_init_cf: The new content of the _init.cf file.
     """
     # preinstall older version of module
     shutil.copytree(source_dir, dest_dir)
@@ -249,6 +258,10 @@ def module_from_template(
             str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
             for req in new_requirements
         )
+    if new_content_init_cf is not None:
+        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+        with open(init_cf_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_cf)
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:

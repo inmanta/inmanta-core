@@ -555,6 +555,9 @@ version: 0.0.1dev0"""
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 
+            # Load the newly installed modules into the modules cache
+            my_project.load_module_recursive(bypass_module_cache=True)
+
         attempt = 0
         done = False
         last_failure = None
@@ -562,7 +565,10 @@ version: 0.0.1dev0"""
         while not done and attempt < MAX_UPDATE_ATTEMPT:
             LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
             try:
+                loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
+
                 # get AST
+                # Bypass the module cache in order to pick up new modules installed in a previous iteration.
                 my_project.get_complete_ast()
                 # get current full set of requirements
                 specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
@@ -571,10 +577,18 @@ version: 0.0.1dev0"""
                 else:
                     modules = [module]
                 do_update(specs, modules)
-                done = True
+
+                loaded_mods_post_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
+                if loaded_mods_pre_update == loaded_mods_post_update:
+                    # No changes => state has converged
+                    done = True
+                else:
+                    # New modules were downloaded or existing modules were updated to a new version. Perform another pass to
+                    # make sure that all dependencies, defined in these new modules, are taken into account.
+                    last_failure = CompilerException("Module update did not converge")
             except CompilerException as e:
                 last_failure = e
-                # model is corrupt
+                # model is corrupt.
                 LOGGER.info(
                     "The model is not currently in an executable state, performing intermediate updates", stack_info=True
                 )
@@ -587,8 +601,7 @@ version: 0.0.1dev0"""
                 else:
                     modules = [module]
                 do_update(specs, modules)
-                # this should resolve the exception, get_complete_ast should find additional modules/constraints
-                attempt += 1
+            attempt += 1
 
         if last_failure is not None and not done:
             raise last_failure

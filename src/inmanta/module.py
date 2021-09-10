@@ -1302,7 +1302,6 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
         return self.__load_ast()
 
-    @lru_cache()
     def get_imports(self) -> List[DefineImport]:
         (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
@@ -1313,7 +1312,6 @@ class Project(ModuleLike[ProjectMetadata]):
             imports.insert(0, imp)
         return imports
 
-    @lru_cache()
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
         start = time()
         # load ast
@@ -1338,7 +1336,9 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
+    def get_module(
+        self, full_module_name: str, install: bool = False, allow_v1: bool = False, bypass_module_cache: bool = False
+    ) -> "Module":
         """
         Get a module instance for a given module name. Caches modules by top level name for later access.
 
@@ -1347,15 +1347,28 @@ class Project(ModuleLike[ProjectMetadata]):
         :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
             installing v1 modules.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
         module_name = parts[0]
 
-        if module_name in self.modules and (allow_v1 or isinstance(self.modules[module_name], ModuleV2)):
+        def use_module_cache() -> bool:
+            if bypass_module_cache:
+                return False
+            if module_name not in self.modules:
+                return False
+            if not allow_v1 and not isinstance(self.modules[module_name], ModuleV2):
+                # Reload module because it was loaded as a V1 module, while it should be loaded as a V2 module
+                return False
+            return True
+
+        if use_module_cache():
             return self.modules[module_name]
         return self.load_module(module_name, install=install, allow_v1=allow_v1)
 
-    def load_module_recursive(self, install: bool = False) -> List[Tuple[str, List[Statement], BasicBlock]]:
+    def load_module_recursive(
+        self, install: bool = False, bypass_module_cache: bool = False
+    ) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
         Load a specific module and all submodules into this project.
 
@@ -1363,6 +1376,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         :param install: Run in install mode, installing modules that have not yet been installed, instead of only
             installing v1 modules.
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
@@ -1400,7 +1414,9 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
-                module: Module = self.get_module(module_name, install=install, allow_v1=v1_mode)
+                module: Module = self.get_module(
+                    module_name, install=install, allow_v1=v1_mode, bypass_module_cache=bypass_module_cache,
+                )
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])

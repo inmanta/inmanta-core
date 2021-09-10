@@ -66,7 +66,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import Project
+from inmanta.module import Project, InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
@@ -793,7 +793,7 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[Requirement]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -803,6 +803,8 @@ class SnippetCompilationTest(KeepOnFail):
         :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
             to discover V2 modules.
+        :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
+                                 file
         """
         self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires)
         loader.PluginModuleFinder.reset()
@@ -844,7 +846,7 @@ class SnippetCompilationTest(KeepOnFail):
         snippet: str,
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[Requirement]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
