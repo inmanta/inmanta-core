@@ -240,9 +240,7 @@ class CompileRun(object):
                     branch = await self.get_branch()
                     if branch is not None and repo_branch != branch:
                         if should_update:
-                            await self._run_compile_stage(
-                                "Fetching new branch heads", ["git", "fetch"], project_dir
-                            )
+                            await self._run_compile_stage("Fetching new branch heads", ["git", "fetch"], project_dir)
                         result = await self._run_compile_stage(
                             f"Switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
@@ -252,9 +250,7 @@ class CompileRun(object):
 
                 # update project
                 if should_update:
-                    await self._run_compile_stage(
-                        "Pulling updates", ["git", "pull"], project_dir
-                    )
+                    await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     await update_modules()
             else:
                 if not repo_url:

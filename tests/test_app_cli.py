@@ -18,11 +18,11 @@
 
 import asyncio
 import os
-import py
 import shutil
 import sys
 from asyncio import subprocess
 
+import py
 import pytest
 
 from inmanta import env
