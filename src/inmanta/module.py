@@ -1415,7 +1415,10 @@ class Project(ModuleLike[ProjectMetadata]):
             try:
                 # get module
                 module: Module = self.get_module(
-                    module_name, install=install, allow_v1=v1_mode, bypass_module_cache=bypass_module_cache,
+                    module_name,
+                    install=install,
+                    allow_v1=v1_mode,
+                    bypass_module_cache=bypass_module_cache,
                 )
                 # get NS
                 for i in range(1, len(parts) + 1):

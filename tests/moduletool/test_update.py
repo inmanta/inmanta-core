@@ -24,11 +24,11 @@ from pkg_resources import Requirement
 
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
-from inmanta.module import ModuleV2, InmantaModuleRequirement, ModuleV1
+from inmanta.module import InmantaModuleRequirement, ModuleV1, ModuleV2
 from inmanta.moduletool import ModuleTool
+from inmanta.parser import ParserException
 from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
 from packaging.version import Version
-from inmanta.parser import ParserException
 
 
 @pytest.mark.parametrize(
@@ -107,14 +107,14 @@ def test_module_update_with_v2_module(
                 dest_dir=module_dir,
                 new_version=Version(current_version),
                 new_name=module_name,
-                new_requirements=[
-                    InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))
-                ] if module_name == "module1" else None,
+                new_requirements=[InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))]
+                if module_name == "module1"
+                else None,
                 install=False,
                 publish_index=pip_index,
                 new_content_init_cf="import module2" if module_name == "module1" else None,
             )
-    patched_module_dir = os.path.join(tmpdir, f"module1-v1.2.3")
+    patched_module_dir = os.path.join(tmpdir, "module1-v1.2.3")
     module_from_template(
         source_dir=template_module_dir,
         dest_dir=patched_module_dir,
@@ -137,14 +137,14 @@ def test_module_update_with_v2_module(
         """,
         autostd=False,
         install_v2_modules=[
-            LocalPackagePath(path=os.path.join(tmpdir, f"module2-v2.0.1")),
+            LocalPackagePath(path=os.path.join(tmpdir, "module2-v2.0.1")),
             LocalPackagePath(path=patched_module_dir),
         ],
         add_to_module_path=[module_path],
         python_package_sources=[pip_index.url],
         project_requires=[
-            InmantaModuleRequirement.parse(f"module1<1.2.5"),
-            InmantaModuleRequirement.parse(f"mod9<4.2.0"),
+            InmantaModuleRequirement.parse("module1<1.2.5"),
+            InmantaModuleRequirement.parse("mod9<4.2.0"),
         ],
     )
 
@@ -157,9 +157,7 @@ def test_module_update_with_v2_module(
     assert ModuleV1(project=None, path=mod9_dir).version == Version("4.1.2")
 
 
-def test_module_update_syntax_error_in_project(
-    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean
-) -> None:
+def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
     snippetcompiler_clean.setup_for_snippet(snippet="entity", autostd=False)
     with pytest.raises(ParserException):
         ModuleTool().update()

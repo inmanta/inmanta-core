@@ -49,7 +49,6 @@ import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
-from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
@@ -66,7 +65,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import Project, InmantaModuleRequirement
+from inmanta.module import InmantaModuleRequirement, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
