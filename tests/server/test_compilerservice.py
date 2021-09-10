@@ -358,7 +358,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await compile_and_assert(env, True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
-    assert stages["Installing missing modules"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
@@ -368,11 +368,10 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # no export
     compile, stages = await compile_and_assert(env, False)
     assert stages["Init"]["returncode"] == 0
-    assert stages["Installing missing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
-    assert len(stages) == 3
+    assert len(stages) == 2
     assert compile.version is None
 
     # env vars
@@ -381,11 +380,10 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert len(compile.request.environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
-    assert stages["Installing missing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {marker}" in out
-    assert len(stages) == 3
+    assert len(stages) == 2
     assert compile.version is None
 
     # switch branch

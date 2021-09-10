@@ -233,6 +233,10 @@ class CompileRun(object):
                     result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
                     if result.returncode is None or result.returncode > 0:
                         return False, None
+                    LOGGER.info("Installing modules")
+                    await self._run_compile_stage(
+                        "Installing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                    )
 
                 elif force_update or self.request.force_update:
                     result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
@@ -242,16 +246,15 @@ class CompileRun(object):
                         result = await self._run_compile_stage(
                             f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
+                        LOGGER.info("Installing missing modules")
+                        await self._run_compile_stage(
+                            "Installing missing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                        )
 
                 if force_update or self.request.force_update:
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
                     await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
-                else:
-                    LOGGER.info("Installing missing modules")
-                    await self._run_compile_stage(
-                        "Installing missing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
-                    )
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
