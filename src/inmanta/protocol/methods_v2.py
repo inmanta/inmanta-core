@@ -698,8 +698,8 @@ def get_compile_reports(
                 completed: whether the compile has been completed or not
                 requested: return the logs matching the timestamp constraints. Valid constraints are of the form
                     "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
-                    in UTC timezone. For example:
-                    `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30.568353`.
+                    in UTC timezone. Specifying microseconds is optional. For example:
+                    `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30`.
                     Multiple constraints can be specified, in which case only compile reports that match all constraints will be
                     returned.
     :param sort: Return the results sorted according to the parameter value.
