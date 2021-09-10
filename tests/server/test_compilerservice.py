@@ -389,8 +389,8 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # switch branch
     compile, stages = await compile_and_assert(env2, False)
     assert stages["Init"]["returncode"] == 0
-    assert stages[f"switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
-    assert stages["Installing missing modules"]["returncode"] == 0
+    assert stages[f"Switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
@@ -400,25 +400,23 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # update with no update
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
-    assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 4
     assert compile.version is None
 
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
-    assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 4
     assert compile.version is None
 
 
@@ -494,12 +492,11 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         # stages
         init = reports["Init"]
         assert not init["errstream"]
-        assert "project found in" in init["outstream"] and "and no repository set" in init["outstream"]
+        assert "no project found in" in init["outstream"] and "and no repository set" in init["outstream"]
 
-        # compile
-        comp = reports["Recompiling configuration model"]
-        assert "Unable to find an inmanta project (project.yml expected)" in comp["errstream"]
-        assert comp["returncode"] == 1
+        # no compile report
+        assert len(reports) == 1
+
         return report["requested"], report["started"], report["completed"]
 
     r1, s1, f1 = assert_report(u1)

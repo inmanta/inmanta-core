@@ -185,6 +185,11 @@ class CompileRun(object):
                 sub_process.kill()
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
+        """
+        Runs this compile run.
+
+        :return: Tuple of a boolean representing success and the compile data, if any.
+        """
         success = False
         now = datetime.datetime.now().astimezone()
         await self.request.update_fields(started=now)
@@ -213,48 +218,65 @@ class CompileRun(object):
                 await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
                 os.mkdir(project_dir)
 
+            async def update_modules() -> None:
+                LOGGER.info("Updating modules")
+                await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+
+            async def install_modules() -> None:
+                LOGGER.info("Installing modules")
+                await self._run_compile_stage(
+                    "Installing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                )
+
             repo_url: str = env.repo_url
             repo_branch: str = env.repo_branch
-            if not repo_url:
-                if not os.path.exists(os.path.join(project_dir, "project.yml")):
-                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set")
-                LOGGER.info("Installing missing modules")
-                await self._run_compile_stage(
-                    "Installing missing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
-                )
-            else:
+            if os.path.exists(os.path.join(project_dir, "project.yml")):
                 await self._end_stage(0)
-                # checkout repo
 
-                if not os.path.exists(os.path.join(project_dir, ".git")):
-                    cmd = ["git", "clone", repo_url, "."]
-                    if repo_branch:
-                        cmd.extend(["-b", repo_branch])
-                    result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
-                    if result.returncode is None or result.returncode > 0:
-                        return False, None
-                    LOGGER.info("Installing modules")
-                    await self._run_compile_stage(
-                        "Installing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
-                    )
+                should_update: bool = force_update or self.request.force_update
 
-                elif force_update or self.request.force_update:
-                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
+                # switch branches
                 if repo_branch:
                     branch = await self.get_branch()
                     if branch is not None and repo_branch != branch:
+                        if should_update:
+                            await self._run_compile_stage(
+                                "Fetching new branch heads", ["git", "fetch"], project_dir
+                            )
                         result = await self._run_compile_stage(
-                            f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
+                            f"Switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
                         )
-                        LOGGER.info("Installing missing modules")
-                        await self._run_compile_stage(
-                            "Installing missing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
-                        )
+                        if not should_update:
+                            # if we update, update procedure will install modules
+                            await install_modules()
 
-                if force_update or self.request.force_update:
-                    await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
-                    LOGGER.info("Installing and updating modules")
-                    await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+                # update project
+                if should_update:
+                    await self._run_compile_stage(
+                        "Pulling updates", ["git", "pull"], project_dir
+                    )
+                    await update_modules()
+            else:
+                if not repo_url:
+                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set.")
+                    await self._end_stage(1)
+                    return False, None
+
+                if len(os.listdir(project_dir)) > 0:
+                    await self._warning(f"Failed to compile: no project found in {project_dir} but directory is not empty.")
+                    await self._end_stage(1)
+                    return False, None
+
+                await self._end_stage(0)
+
+                # clone repo and install project
+                cmd = ["git", "clone", repo_url, "."]
+                if repo_branch:
+                    cmd.extend(["-b", repo_branch])
+                result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
+                if result.returncode is None or result.returncode > 0:
+                    return False, None
+                await install_modules()
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
