@@ -30,7 +30,7 @@ from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, Hashable, List, Optional, Tuple, cast
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
@@ -336,20 +336,26 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
+            async def warn(message: str) -> None:
+                if self.stage is not None:
+                    self._warning(message)
+                else:
+                    LOGGER.warning(message)
+
             with compile_data_json_file as file:
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
                         return success, model.CompileData.parse_raw(compile_data_json)
                     except json.JSONDecodeError:
-                        LOGGER.warning(
-                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
                     except pydantic.ValidationError:
-                        LOGGER.warning(
-                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
             return success, None
 
