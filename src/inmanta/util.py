@@ -152,7 +152,7 @@ class Scheduler(object):
 
         LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
 
-        def action_function():
+        def action_function() -> None:
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
@@ -273,7 +273,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return o.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
-        return o.to_dict()
+        return o.to_dict()  # type: ignore
 
     if isinstance(o, enum.Enum):
         return o.name
@@ -388,11 +388,11 @@ class TaskHandler(object):
 
 
 class CycleException(Exception):
-    def __init__(self, node):
+    def __init__(self, node: str) -> None:
         self.nodes = [node]
         self.done = False
 
-    def add(self, node):
+    def add(self, node: str) -> None:
         if not self.done:
             if node not in self.nodes:
                 self.nodes.insert(0, node)

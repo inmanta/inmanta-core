@@ -358,7 +358,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """
         return {}
 
-    def define_features(self) -> List["Feature"]:
+    def define_features(self) -> List["Feature[object]"]:
         """Return a list of feature that this slice offers"""
         return []
 

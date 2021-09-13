@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+from typing import Iterable
+
 from inmanta.stable_api import stable_api
 
 
@@ -37,7 +39,7 @@ class Unknown(AnyType):
     def __init__(self, source: object) -> None:
         self.source = source
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable[object]:
         return iter([])
 
 
@@ -45,11 +47,11 @@ class NoneValue(object):
     def __eq__(self, other: object) -> bool:
         return isinstance(other, NoneValue)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(None)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "null"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "null"

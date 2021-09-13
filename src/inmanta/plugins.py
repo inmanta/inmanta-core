@@ -142,7 +142,7 @@ class PluginMeta(type):
     A metaclass that registers subclasses in the parent class.
     """
 
-    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> None:
+    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
             cls.add_function(subclass)
@@ -303,7 +303,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
         return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
-    def _is_instance(self, value: Any, arg_type: Type) -> bool:
+    def _is_instance(self, value: object, arg_type: Type[object]) -> bool:
         """
         Check if value is of arg_type
         """
@@ -315,7 +315,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
         return isinstance(value, arg_type)
 
-    def check_args(self, args: List[Any], kwargs: Dict[str, object]) -> bool:
+    def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature
         """
@@ -347,7 +347,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
                 % (",".join(present_kwargs.intersection(present_positional_args)), self.__class__.__function_name__),
             )
 
-        def is_valid(expected_arg, expected_type, arg):
+        def is_valid(expected_arg: Tuple[Optional[Type[object]], str], expected_type: Type[object], arg: object) -> bool:
             if isinstance(arg, Unknown):
                 return False
 
@@ -396,13 +396,13 @@ class Plugin(NamedType, metaclass=PluginMeta):
                 if len(result[0]) == 0:
                     raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
         """
         self.check_requirements()
 
-        def new_arg(arg):
+        def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
                 return arg
             elif isinstance(arg, Unknown) and self.is_accept_unknowns():
@@ -463,7 +463,7 @@ def plugin(
     commands: Optional[List[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> None:  # noqa: H801
+) -> Callable:  # noqa: H801
     """
     Python decorator to register functions with inmanta as plugin
 
