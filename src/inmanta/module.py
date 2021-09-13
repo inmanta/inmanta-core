@@ -132,6 +132,13 @@ class InmantaModuleRequirement:
     def __str__(self) -> str:
         return str(self._requirement).replace("-", "_")
 
+    def __hash__(self) -> int:
+        hashCmp = (
+            self._requirement.hashCmp,
+            self.project_name,
+        )
+        return hash(hashCmp)
+
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
         if "-" in spec:

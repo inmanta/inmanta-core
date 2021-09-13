@@ -1,0 +1,6 @@
+name: many_dependencies
+description: A module with all different types of dependencies (python dependencies + inmanta dependencies)
+license: Apache 2.0
+version: 1.2.1
+requires:
+    - v1_module==1.1.1
