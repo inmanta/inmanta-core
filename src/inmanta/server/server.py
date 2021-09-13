@@ -67,7 +67,7 @@ class Server(protocol.ServerSlice):
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
-    def define_features(self) -> List[Feature]:
+    def define_features(self) -> List[Feature[object]]:
         return [dashboard_feature]
 
     async def prestart(self, server: protocol.Server) -> None:
