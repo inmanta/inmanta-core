@@ -74,7 +74,7 @@ APILIMIT = 1000
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name, start, count, last_values):  # noqa: N805
+    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -117,13 +117,13 @@ class PagingCounts:
 
 
 class InvalidQueryParameter(Exception):
-    def __init__(self, message: str, *args) -> None:
-        super(InvalidQueryParameter, self).__init__(message, *args)
+    def __init__(self, message: str) -> None:
+        super(InvalidQueryParameter, self).__init__(message)
         self.message = message
 
 
 class InvalidFieldNameException(Exception):
-    def __init__(self, message: str, *args) -> None:
+    def __init__(self, message: str, *args: object) -> None:
         super().__init__(message, *args)
         self.message = message
 
@@ -150,7 +150,7 @@ class PagingOrder(str, enum.Enum):
 
 
 class InvalidSort(Exception):
-    def __init__(self, message: str, *args) -> None:
+    def __init__(self, message: str, *args: object) -> None:
         super(InvalidSort, self).__init__(message, *args)
         self.message = message
 
@@ -214,7 +214,7 @@ class DatabaseOrder(metaclass=ABCMeta):
             return order_by_column_value
 
 
-def json_encode(value: Any) -> str:
+def json_encode(value: object) -> str:
     # see json_encode in tornado.escape
     return json.dumps(value, default=util.internal_json_encoder)
 
@@ -230,7 +230,7 @@ class Field(Generic[T]):
         unique: bool = False,
         reference: bool = False,
         part_of_primary_key: bool = False,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> None:
 
         self._field_type = field_type
@@ -292,7 +292,7 @@ class DataDocument(object):
     performed.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: object) -> None:
         self._data = kwargs
 
     def to_dict(self) -> JsonType:
@@ -303,7 +303,7 @@ class DataDocument(object):
 
 
 class DocumentMeta(type):
-    def __new__(cls, class_name, bases, dct):
+    def __new__(cls, class_name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
         dct["_fields"] = {}
         for name, field in dct.items():
             if isinstance(field, Field):
@@ -342,11 +342,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         return cls.__name__.lower()
 
-    def __init__(self, from_postgres: bool = False, **kwargs: Any) -> None:
+    def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
         self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
 
     @classmethod
-    def _create_dict(cls, from_postgres: bool, kwargs: Dict[str, Any]) -> JsonType:
+    def _create_dict(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
         result = {}
         fields = cls._fields.copy()
 
@@ -408,11 +408,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return self._get_composed_filter(offset=offset, **query)
 
     @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
+    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
-    def _new_id(cls):
+    def _new_id(cls) -> uuid.UUID:
         """
         Generate a new ID. Override to use something else than uuid4
         """
@@ -435,7 +435,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         finally:
             cls._connection_pool = None
 
-    def _get_field(self, name):
+    def _get_field(self, name: str) -> Optional[Field]:
         if hasattr(self.__class__, name):
             field = getattr(self.__class__, name)
             if isinstance(field, Field):
@@ -443,7 +443,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return None
 
-    def __getattribute__(self, name):
+    def __getattribute__(self, name: str) -> object:
         if name[0] == "_":
             return object.__getattribute__(self, name)
 
@@ -456,7 +456,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return object.__getattribute__(self, name)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
             return object.__setattr__(self, name, value)
 
@@ -507,24 +507,28 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def _fetchval(cls, query, *values):
+    async def _fetchval(cls, query: str, *values: object) -> object:
         async with cls._connection_pool.acquire() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetchrow(cls, query, *values) -> Record:
+    async def _fetchrow(cls, query: str, *values: object) -> Record:
         async with cls._connection_pool.acquire() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
-    async def _fetch_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None):
+    async def _fetch_query(
+        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> List[Record]:
         if connection is None:
             async with cls._connection_pool.acquire() as con:
                 return await con.fetch(query, *values)
         return await connection.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values, connection: Optional[asyncpg.connection.Connection] = None) -> str:
+    async def _execute_query(
+        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> str:
         if connection:
             return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
@@ -550,7 +554,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         async with cls._connection_pool.acquire() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
-    def add_default_values_when_undefined(self, **kwargs):
+    def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
         for name, field in self._fields.items():
             if name not in kwargs:
@@ -573,7 +577,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
-    def _get_set_statement(self, **kwargs):
+    def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
         counter = 1
         parts_of_set_statement = []
         values = []
@@ -617,7 +621,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def get_one(
-        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query
+        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query: object
     ) -> Optional[TBaseDocument]:
         results = await cls.get_list(connection=connection, **query)
         if results:
@@ -661,13 +665,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
-        order_by_column: str = None,
+        order_by_column: Optional[str] = None,
         order: str = "ASC",
-        limit: int = None,
-        offset: int = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Any,
+        **query: object,
     ) -> List[TBaseDocument]:
         """
         Get a list of documents matching the filter args
@@ -702,7 +706,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         end: Optional[Any] = None,
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Any,
+        **query: object,
     ) -> List[TBaseDocument]:
         """
         Get a list of documents matching the filter args, with paging support
@@ -742,7 +746,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
-    async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query):
+    async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query: object) -> int:
         """
         Delete all documents that match the given query
         """
@@ -756,7 +760,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return record_count
 
     @classmethod
-    def _get_composed_filter(cls, offset: int = 1, col_name_prefix: str = None, **query: Any) -> Tuple[str, List[Any]]:
+    def _get_composed_filter(
+        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: object
+    ) -> Tuple[str, List[object]]:
         filter_statements = []
         values = []
         index_count = max(1, offset)
@@ -769,7 +775,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str = None) -> Tuple[str, List[object]]:
+    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
         if value is None:
             return (name + " IS NULL", [])
         filter_statement = name + "=$" + str(index)
@@ -799,7 +805,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def get_composed_filter_with_query_types(
-        cls, offset: int = 1, col_name_prefix: str = None, **query: QueryFilter
+        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: QueryFilter
     ) -> Tuple[List[str], List[object]]:
         filter_statements = []
         values: List[object] = []
@@ -845,7 +851,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return filter_statement
 
     @classmethod
-    def get_is_not_null_filter(cls, name: str, col_name_prefix: str = None) -> Tuple[str, List[object]]:
+    def get_is_not_null_filter(cls, name: str, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not null.
         """
@@ -855,7 +861,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, [])
 
     @classmethod
-    def get_contains_filter(cls, name: str, value: object, index: int, col_name_prefix: str = None) -> Tuple[str, List[object]]:
+    def get_contains_filter(
+        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
+    ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
         collection.
@@ -868,7 +876,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def get_contains_partial_filter(
-        cls, name: str, value: object, index: int, col_name_prefix: str = None
+        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
@@ -883,7 +891,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def get_range_filter(
-        cls, name: str, value: DateRangeConstraint, index: int, col_name_prefix: str = None
+        cls, name: str, value: DateRangeConstraint, index: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
@@ -1064,7 +1072,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return select_clause, values, common_filter_statements
 
-    async def delete(self, connection: asyncpg.connection.Connection = None) -> None:
+    async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Delete this document
         """
@@ -1076,7 +1084,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self.delete()
 
     @classmethod
-    async def select_query(cls, query, values, no_obj=False, connection: Optional[asyncpg.connection.Connection] = None):
+    async def select_query(
+        cls, query: str, values: List[object], no_obj: bool = False, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> "BaseDocument":
         async def perform_query(con: asyncpg.connection.Connection) -> object:
             async with con.transaction():
                 result = []
@@ -1131,7 +1141,7 @@ class Project(BaseDocument):
         return m.Project(id=self.id, name=self.name, environments=[])
 
 
-def convert_boolean(value: Any) -> bool:
+def convert_boolean(value: object) -> bool:
     if isinstance(value, bool):
         return value
 
@@ -1140,7 +1150,7 @@ def convert_boolean(value: Any) -> bool:
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
-def convert_int(value: Any) -> Union[int, float]:
+def convert_int(value: object) -> Union[int, float]:
     if isinstance(value, (int, float)):
         return value
 
@@ -1169,13 +1179,13 @@ def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
     return value
 
 
-def translate_to_postgres_type(type):
+def translate_to_postgres_type(type: str) -> str:
     if type not in TYPE_MAP:
         raise Exception("Type '" + type + "' is not a valid type for a settings entry")
     return TYPE_MAP[type]
 
 
-def convert_agent_trigger_method(value):
+def convert_agent_trigger_method(value: object) -> str:
     if isinstance(value, const.AgentTriggerMethod):
         return value
     value = str(value)
@@ -1666,7 +1676,7 @@ class AgentProcess(BaseDocument):
         sid: uuid.UUID,
         now: datetime.datetime,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ):
+    ) -> None:
         """
         Update the last_seen parameter of the process and mark as not expired.
         """
@@ -1694,7 +1704,7 @@ class AgentProcess(BaseDocument):
             await aps.update_fields(connection=connection, expired=now)
 
     @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET expired=$1
@@ -1785,7 +1795,7 @@ class AgentInstance(BaseDocument):
         if not endpoints:
             return
 
-        async def _execute_query(con: asyncpg.connection.Connection):
+        async def _execute_query(con: asyncpg.connection.Connection) -> None:
             await con.executemany(
                 f"""
                 INSERT INTO
@@ -1824,7 +1834,7 @@ class AgentInstance(BaseDocument):
                 await ai.update_fields(connection=connection, expired=now)
 
     @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None):
+    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET expired=$1
@@ -1898,14 +1908,14 @@ class Agent(BaseDocument):
         return base
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict):
+    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
         if "primary" in field_dict:
             field_dict["id_primary"] = field_dict["primary"]
             del field_dict["primary"]
         return field_dict
 
     @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
+    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
         kwargs = cls._convert_field_names_to_db_column_names(kwargs)
         return cls._create_dict(from_postgres, kwargs)
 
@@ -2001,7 +2011,7 @@ class Agent(BaseDocument):
                     await agent.update_fields(last_failover=now, primary=None, connection=connection)
 
     @classmethod
-    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None):
+    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET id_primary=NULL
@@ -2241,7 +2251,7 @@ class LogLine(DataDocument):
         level: Union[int, const.LogLevel],
         msg: str,
         timestamp: Optional[datetime.datetime] = None,
-        **kwargs,
+        **kwargs: object,
     ) -> "LogLine":
         if timestamp is None:
             timestamp = datetime.datetime.now().astimezone()
@@ -2288,16 +2298,16 @@ class ResourceAction(BaseDocument):
     change = Field(field_type=const.Change)
     send_event = Field(field_type=bool)
 
-    def __init__(self, from_postgres=False, **kwargs):
+    def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID):
+    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
         return await cls.get_one(action_id=doc_id)
 
     @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
+    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
         if from_postgres and result.get("messages"):
@@ -2414,7 +2424,7 @@ class ResourceAction(BaseDocument):
         end: Optional[Any] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
-    ):
+    ) -> List["ResourceAction"]:
         order_by_column = database_order.get_order_by_db_column_name()
         order = database_order.get_order()
         filter_statements, values = cls._get_list_query_pagination_parameters(
@@ -2500,20 +2510,20 @@ class ResourceAction(BaseDocument):
         return sql_query, values
 
     @classmethod
-    async def get(cls, action_id, connection: Optional[asyncpg.connection.Connection] = None):
+    async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
         return await cls.get_one(action_id=action_id, connection=connection)
 
-    def set_field(self, name, value):
+    def set_field(self, name: str, value: object) -> None:
         self._updates[name] = value
 
-    def add_logs(self, messages):
+    def add_logs(self, messages: Optional[str]) -> None:
         if not messages:
             return
         if "messages" not in self._updates:
             self._updates["messages"] = []
         self._updates["messages"] += messages
 
-    def add_changes(self, changes):
+    def add_changes(self, changes: Dict[m.ResourceIdStr, Dict[str, object]]) -> None:
         for resource, values in changes.items():
             for field, change in values.items():
                 if "changes" not in self._updates:
@@ -2522,7 +2532,7 @@ class ResourceAction(BaseDocument):
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
 
-    async def save(self, connection: Optional[asyncpg.connection.Connection] = None):
+    async def save(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         Save the changes
         """
@@ -2532,7 +2542,7 @@ class ResourceAction(BaseDocument):
         self._updates = {}
 
     @classmethod
-    async def purge_logs(cls):
+    async def purge_logs(cls) -> None:
         environments = await Environment.get_list()
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
@@ -2637,7 +2647,9 @@ class ResourceAction(BaseDocument):
 class ResourceOrder(DatabaseOrder):
     """ Represents the ordering by which resources should be sorted"""
 
-    valid_sort_pattern: Pattern = re.compile("^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE)
+    valid_sort_pattern: Pattern[str] = re.compile(
+        "^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE
+    )
 
     @classmethod
     def parse_from_string(
@@ -2760,20 +2772,6 @@ class Resource(BaseDocument):
         self.attribute_hash = m.hexdigest()
 
     @classmethod
-    async def get_resources_for_attribute_hash(cls, environment, hashes):
-        """
-        Get all resources listed in resource_version_ids
-        """
-        hashes_as_str = "(" + ",".join(["$" + str(i) for i in range(2, len(hashes) + 2)]) + ")"
-        query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
-        values = [cls._get_value(environment)] + [cls._get_value(h) for h in hashes]
-        result = await cls._fetch_query(query, *values)
-        resources_list = []
-        for res in result:
-            resources_list.append(cls(from_postgres=True, **res))
-        return resources_list
-
-    @classmethod
     async def get_resources(
         cls,
         environment: uuid.UUID,
@@ -2796,7 +2794,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_undeployable(cls, environment, version):
+    async def get_undeployable(cls, environment: uuid.UUID, version: int) -> List["Resource"]:
         """
         Returns a list of resources with an undeployable state
         """
@@ -2903,7 +2901,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version(
-        cls, environment: uuid.UUID, version: int, agent: str = None, no_obj: bool = False
+        cls, environment: uuid.UUID, version: int, agent: Optional[str] = None, no_obj: bool = False
     ) -> List["Resource"]:
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
@@ -2950,6 +2948,7 @@ class Resource(BaseDocument):
         )
         if len(resources) > 0:
             return resources[0]
+        return None
 
     @classmethod
     def _get_released_resources_base_query(
@@ -3115,7 +3114,9 @@ class Resource(BaseDocument):
         return cls(**attr)
 
     @classmethod
-    async def get_deleted_resources(cls, environment, current_version, current_resources):
+    async def get_deleted_resources(
+        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceVersionIdStr]
+    ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
         the latest version of the resource from a released model.
@@ -3488,7 +3489,7 @@ class ConfigurationModel(BaseDocument):
     undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
     skipped_for_undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: object) -> None:
         super(ConfigurationModel, self).__init__(**kwargs)
         self._status = {}
         self._done = 0
@@ -3502,7 +3503,7 @@ class ConfigurationModel(BaseDocument):
         return self._done
 
     @classmethod
-    async def _get_status_field(cls, environment: uuid.UUID, values: str) -> dict:
+    async def _get_status_field(cls, environment: uuid.UUID, values: str) -> Dict[str, str]:
         """
         This field is required to ensure backward compatibility on the API.
         """
@@ -3516,10 +3517,10 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_list(
         cls,
-        order_by_column: str = None,
+        order_by_column: Optional[str] = None,
         order: str = "ASC",
-        limit: int = None,
-        offset: int = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
@@ -3621,7 +3622,7 @@ class ConfigurationModel(BaseDocument):
         result = await cls._fetchrow(query, cls._get_value(environment))
         if not result:
             return None
-        return result["version"]
+        return int(result["version"])
 
     @classmethod
     async def get_agents(cls, environment: uuid.UUID, version: int) -> List[str]:
@@ -3715,7 +3716,9 @@ class ConfigurationModel(BaseDocument):
         self.deployed = True
 
     @classmethod
-    async def mark_done_if_done(cls, environment, version, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def mark_done_if_done(
+        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
             """
             Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding

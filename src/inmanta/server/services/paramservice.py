@@ -17,10 +17,11 @@
 """
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
+from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import handle, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
@@ -212,22 +213,25 @@ class ParameterService(protocol.ServerSlice):
     @handle(methods.set_parameters, env="tid")
     async def set_parameters(self, env: data.Environment, parameters: List[Dict[str, Any]]) -> Apireturn:
         recompile = False
-        compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
-            "type": "param",
-            "params": [],
-        }
+
+        params: List[Tuple[str, ResourceIdStr]] = []
         for param in parameters:
-            name = param["id"]
+            name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
-            resource_id = param["resource_id"] if "resource_id" in param else None
+            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
 
             result = await self._update_param(env, name, value, source, resource_id, metadata)
             if result:
                 recompile = True
-                compile_metadata["params"].append((name, resource_id))
+                params.append((name, resource_id))
+
+        compile_metadata = {
+            "message": "Recompile model because one or more parameters were updated",
+            "type": "param",
+            "params": params,
+        }
 
         warnings = None
         if recompile:
