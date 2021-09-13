@@ -480,7 +480,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
-        allow_pre_releases = project.install_mode in {InstallMode.prerelease, InstallMode.master}
+        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
         except env.PackageNotFound:
