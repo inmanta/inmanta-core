@@ -33,7 +33,7 @@ from pkg_resources import Requirement
 from inmanta import env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.module import ModuleLoadingException, InstallMode
+from inmanta.module import InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, PipIndex, install_project, module_from_template
 from packaging import version
@@ -370,9 +370,12 @@ def test_project_install_preinstalled(
         assert env_module_file is not None
         install_path: str = module_path if editable else env.process_env.site_packages_dir
         assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
-        assert env.process_env.get_installed_packages(only_editable=editable).get(
-            f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
-        ) == new_version
+        assert (
+            env.process_env.get_installed_packages(only_editable=editable).get(
+                f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
+            )
+            == new_version
+        )
 
     assert_module_install()
 
@@ -629,7 +632,7 @@ def test_project_install_allow_pre_releases(
             os.path.join(str(tmpdir), f"mod-{module_version}"),
             new_name=module_name,
             new_version=version.Version(module_version),
-            publish_index=index
+            publish_index=index,
         )
 
     # set up project
