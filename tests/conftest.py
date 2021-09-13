@@ -876,9 +876,9 @@ class SnippetCompilationTest(KeepOnFail):
                 )
             if project_requires:
                 cfg.write("\n            requires:\n")
-                cfg.write("\n".join(f"                - {req}" for req in project_requires) + "\n")
+                cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
-                cfg.write(f"            install_mode: {install_mode.value}\n")
+                cfg.write(f"\n            install_mode: {install_mode.value}")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)

@@ -480,8 +480,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
+        allow_pre_releases = project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
-            env.process_env.install_from_index(requirements, self.urls)
+            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -667,11 +668,13 @@ class InstallMode(str, enum.Enum):
     release = "release"
     """
     Only use a released version that is compatible with the current compiler and any version constraints defined in the
-    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata` and :class:`ModuleV2Metadata`).
+    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata`, :class:`ModuleV1Metadata` and
+    :class:`ModuleV2Metadata`).
 
-    A version is released when there is a tag on a commit. This tag should be a valid version identifier (PEP440) and should
-    not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is compatible
-    with all constraints.
+    A V1 module is considered released when there is a tag on a commit. V2 are considered released when the module is pushed
+    to a Python package repository. For both types of modules, the version identifier should be PEP440 compliant and
+    should not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is
+    compatible with all constraints.
     """
 
     prerelease = "prerelease"
@@ -681,7 +684,8 @@ class InstallMode(str, enum.Enum):
 
     master = "master"
     """
-    Use the module's master branch.
+    For V1 modules: Use the module's master branch.
+    For V2 modules: Equivalent to :attr:`InstallMode.prerelease`
     """
 
 

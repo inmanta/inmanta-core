@@ -33,7 +33,7 @@ from pkg_resources import Requirement
 from inmanta import env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.module import ModuleLoadingException
+from inmanta.module import ModuleLoadingException, InstallMode
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, PipIndex, install_project, module_from_template
 from packaging import version
@@ -611,3 +611,45 @@ def test_project_install_incompatible_dependencies(
         is not None
         for rec in caplog.records
     )
+
+
+@pytest.mark.parametrize("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
+def test_project_install_allow_pre_releases(
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
+) -> None:
+    """
+    Test whether the `inmanta module install` command takes into account the `install_mode` configured on the inmanta project.
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    module_template_path: str = os.path.join(modules_v2_dir, "elaboratev2module")
+    module_name: str = "mod"
+    package_name: str = module.ModuleV2.get_package_name_for(module_name)
+    for module_version in ["1.0.0", "1.0.1.dev0"]:
+        module_from_template(
+            module_template_path,
+            os.path.join(str(tmpdir), f"mod-{module_version}"),
+            new_name=module_name,
+            new_version=module_version,
+            publish_index=index,
+            dev_version=module_version.endswith(".dev0"),  # TODO: CHECK
+        )
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"import {module_name}",
+        autostd=False,
+        python_package_sources=[index.url],
+        install_mode=install_mode,
+    )
+
+    os.chdir(module.Project.get().path)
+    ProjectTool().execute("install", [])
+
+    if install_mode is None or install_mode == InstallMode.release:
+        expected_version = version.Version("1.0.0")
+    else:
+        expected_version = version.Version("1.0.1.dev0")
+    installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    assert package_name in installed_packages
+    assert installed_packages[package_name] == expected_version
