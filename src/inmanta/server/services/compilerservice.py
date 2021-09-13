@@ -353,7 +353,7 @@ class CompileRun(object):
 
             async def warn(message: str) -> None:
                 if self.stage is not None:
-                    self._warning(message)
+                    await self._warning(message)
                 else:
                     LOGGER.warning(message)
 
