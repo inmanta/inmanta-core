@@ -124,7 +124,7 @@ class InmantaModuleRequirement:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, InmantaModuleRequirement):
             return NotImplemented
-        return self.project_name == other.project_name and self._requirement == other._requirement
+        return self._requirement == other._requirement
 
     def __contains__(self, version: str) -> bool:
         return version in self._requirement
@@ -133,11 +133,7 @@ class InmantaModuleRequirement:
         return str(self._requirement).replace("-", "_")
 
     def __hash__(self) -> int:
-        hashCmp = (
-            self._requirement.hashCmp,
-            self.project_name,
-        )
-        return hash(hashCmp)
+        return self._requirement.__hash__()
 
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
