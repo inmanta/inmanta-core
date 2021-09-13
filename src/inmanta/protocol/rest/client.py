@@ -92,7 +92,7 @@ class RESTClient(RESTBase):
         return "%s://%s:%d" % (protocol, host, port)
 
     async def call(
-        self, properties: common.MethodProperties, args: List, kwargs: Optional[Dict[str, Any]] = None
+        self, properties: common.MethodProperties, args: List[object], kwargs: Optional[Dict[str, Any]] = None
     ) -> common.Result:
         if kwargs is None:
             kwargs = {}

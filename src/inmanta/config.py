@@ -111,7 +111,7 @@ class Config(object):
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> str:
+    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[str]:
         ...
 
     # noinspection PyNoneFunctionAssignment

@@ -408,7 +408,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return self._get_composed_filter(offset=offset, **query)
 
     @classmethod
-    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: object) -> JsonType:
+    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
         return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
@@ -761,8 +761,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def _get_composed_filter(
-        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: Any
-    ) -> Tuple[str, List[Any]]:
+        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: object
+    ) -> Tuple[str, List[object]]:
         filter_statements = []
         values = []
         index_count = max(1, offset)

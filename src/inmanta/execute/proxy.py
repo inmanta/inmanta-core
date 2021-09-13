@@ -118,7 +118,7 @@ class DynamicProxy:
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, Tuple[object], int, float, bool, "DynamicProxy"]:
+    def return_value(cls, value: object) -> Union[None, str, Tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
         """
@@ -263,7 +263,7 @@ class IteratorProxy(DynamicProxy):
     Proxy an iterator call
     """
 
-    def __init__(self, iterator: Iterable) -> None:
+    def __init__(self, iterator: Iterable[object]) -> None:
         DynamicProxy.__init__(self, iterator)
 
     def __iter__(self):
