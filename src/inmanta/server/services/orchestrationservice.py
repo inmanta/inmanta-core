@@ -217,7 +217,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         agents = set()
         # lookup for all RV's, lookup by resource id
-        rv_dict = {}
+        rv_dict: Dict[ResourceVersionIdStr, data.Resource] = {}
         # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
         provides_tree: Dict[str, List[str]] = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
@@ -274,7 +274,7 @@ class OrchestrationService(protocol.ServerSlice):
                 return default
             return input[key]
 
-        metadata = safe_get(version_info, const.EXPORT_META_DATA, {})
+        metadata: JsonType = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
         failed = compile_state == const.Compilestate.failed
 
@@ -389,8 +389,8 @@ class OrchestrationService(protocol.ServerSlice):
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy: bool = await env.get(data.PUSH_ON_AUTO_DEPLOY)
-            agent_trigger_method_on_autodeploy = await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
+            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
+            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
@@ -416,14 +416,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep = [ResourceIdStr(rid + ",v=%s" % version_id) for rid in undep]
+        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
 
         now = datetime.datetime.now().astimezone()
 
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            undep,
+            undep_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,
@@ -436,11 +436,11 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         skippable = await model.get_skipped_for_undeployable()
-        skippable = [ResourceIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            skippable,
+            skippable_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,

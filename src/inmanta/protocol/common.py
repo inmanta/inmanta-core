@@ -457,7 +457,7 @@ class MethodProperties(object):
         """
         sig = inspect.signature(self.function)
 
-        def to_tuple(param: Parameter):
+        def to_tuple(param: Parameter) -> Tuple[object, Optional[object]]:
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -922,7 +922,9 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
-def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
+def encode_token(
+    client_types: List[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
+) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
@@ -1007,6 +1009,11 @@ class Result(object):
             return self._result
         raise Exception("The result is not yet available")
 
+    @property
+    def result(self) -> Optional[JsonType]:
+        return self.get_result()
+
+    @result.setter
     def set_result(self, value: Optional[JsonType]) -> None:
         if not self.available():
             self._result = value
@@ -1024,11 +1031,6 @@ class Result(object):
         while count < timeout:
             time.sleep(0.1)
             count += 0.1
-
-    result = property(get_result, set_result)
-    """
-    The result object dict.
-    """
 
     def callback(self, fnc: Callable[["Result"], None]) -> None:
         """

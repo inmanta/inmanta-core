@@ -227,7 +227,7 @@ class DelayedResultVariable(ResultVariable[T]):
 
     __slots__ = ("queued", "queues", "listeners")
 
-    def __init__(self, queue: "QueueScheduler", value: T = None) -> None:
+    def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
         self.queued = False
         self.queues = queue
@@ -816,7 +816,7 @@ class Resolver(object):
         self.namespace = namespace
         self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
-    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -856,7 +856,7 @@ class NamespaceResolver(Resolver):
         if parent.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
-    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
         if root is not None:
             return self.parent.lookup(name, root)
         return self.parent.lookup(name, self.root)
@@ -883,7 +883,7 @@ class ExecutionContext(Resolver):
                 node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
                 var.set_dataflow_node(node_ref)
 
-    def lookup(self, name: str, root: Namespace = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
         if "::" in name:
             return self.resolver.lookup(name, root)
         if name in self.slots:
