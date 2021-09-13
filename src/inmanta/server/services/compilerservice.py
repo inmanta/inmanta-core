@@ -159,6 +159,31 @@ class CompileRun(object):
         else:
             return None
 
+    async def get_upstream_branch(self) -> Optional[str]:
+        """
+        Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
+        """
+        try:
+            sub_process = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "--symbolic-full-name",
+                "@{upstream}",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self._project_dir,
+            )
+            out, err = await sub_process.communicate()
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
+
+        if sub_process.returncode != 0:
+            return None
+
+        return out.decode().strip()
+
     async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
@@ -258,7 +283,8 @@ class CompileRun(object):
 
                     # update project
                     if should_update:
-                        if repo_url:
+                        # only pull changes if there is an upstream branch
+                        if await self.get_upstream_branch():
                             yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                         yield update_modules()
                 else:
