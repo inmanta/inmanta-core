@@ -213,7 +213,6 @@ def module_from_template(
     dest_dir: str,
     *,
     new_version: Optional[version.Version] = None,
-    dev_version: bool = False,
     new_name: Optional[str] = None,
     new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     install: bool = False,
@@ -227,7 +226,6 @@ def module_from_template(
     :param source_dir: The directory where the original module lives.
     :param dest_dir: The directory to use to copy the original to and to stage any changes in.
     :param new_version: The new version for the module, if any.
-    :param dev_version: Whether to tag the version with a dev tag.
     :param new_name: The new name of the inmanta module, if any.
     :param new_requirements: The new requirements for the module, if any.
     :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
@@ -243,8 +241,8 @@ def module_from_template(
     config.read(config_file)
     if new_version is not None:
         config["metadata"]["version"] = str(new_version)
-    if dev_version:
-        config["egg_info"] = {"tag_build": ".dev0"}
+        if new_version.is_devrelease:
+            config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
     if new_name is not None:
         os.rename(
             os.path.join(

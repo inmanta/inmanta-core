@@ -278,14 +278,12 @@ def test_module_install_version(
     """
     module_name: str = "minimalv2module"
     module_path: str = os.path.join(str(tmpdir), module_name)
-    plain_version: version.Version = version.Version("1.2.3")
-    full_version: version.Version = plain_version if not dev else version.Version(f"{plain_version}.dev0")
+    module_version: version.Version = version.Version("1.2.3") if not dev else version.Version("1.2.3.dev0")
 
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
-        new_version=plain_version,
-        dev_version=dev,
+        new_version=module_version,
     )
     project_dir: str = os.path.join(str(tmpdir), "project")
     setup_simple_project(projects_dir, project_dir, [])
@@ -293,7 +291,7 @@ def test_module_install_version(
 
     ModuleTool().install(editable=True, path=module_path)
     mod: module.Module = ModuleTool().get_module(module_name)
-    assert mod.version == full_version
+    assert mod.version == module_version
 
 
 @pytest.mark.parametrize(
@@ -360,8 +358,9 @@ def test_project_install_preinstalled(
 
     # preinstall older version of module
     module_path: str = os.path.join(str(tmpdir), module_name)
-    metadata: module.ModuleV2Metadata = module_from_template(
-        os.path.join(modules_v2_dir, module_name), module_path, dev_version=True, install=True, editable=editable
+    new_version = version.Version("1.2.3.dev0")
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name), module_path, new_version=new_version, install=True, editable=editable
     )
 
     def assert_module_install() -> None:
@@ -373,7 +372,7 @@ def test_project_install_preinstalled(
         assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
         assert env.process_env.get_installed_packages(only_editable=editable).get(
             f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
-        ) == version.Version(metadata.version + ".dev0")
+        ) == new_version
 
     assert_module_install()
 
@@ -438,8 +437,7 @@ def test_project_install_modules_cache_invalid(
         module_from_template(
             v2_template_path,
             os.path.join(str(tmpdir), module_name, "dev"),
-            new_version=v2_version,
-            dev_version=True,
+            new_version=version.Version(f"{v2_version}.dev0"),
             install=True,
         )
     else:
@@ -630,9 +628,8 @@ def test_project_install_allow_pre_releases(
             module_template_path,
             os.path.join(str(tmpdir), f"mod-{module_version}"),
             new_name=module_name,
-            new_version=module_version,
-            publish_index=index,
-            dev_version=module_version.endswith(".dev0"),  # TODO: CHECK
+            new_version=version.Version(module_version),
+            publish_index=index
         )
 
     # set up project
