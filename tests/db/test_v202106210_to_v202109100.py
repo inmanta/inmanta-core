@@ -21,12 +21,10 @@ from typing import AsyncIterator, Awaitable, Callable, List
 import pytest
 from asyncpg import Connection
 
-from conftest import AsyncCleaner
 from db.common import PGRestore
 from inmanta import protocol
-from inmanta.const import ResourceAction, LogLevel
+from inmanta.const import LogLevel, ResourceAction
 from inmanta.data.model import ResourceLog
-from inmanta.protocol import methods, methods_v2
 from inmanta.server.bootloader import InmantaBootloader
 
 
@@ -49,9 +47,7 @@ async def migrate_v202106210_to_v202109100(
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_valid_loglevels(
-    migrate_v202106210_to_v202109100: Callable[[], Awaitable[None]],postgresql_client
-) -> None:
+async def test_valid_loglevels(migrate_v202106210_to_v202109100: Callable[[], Awaitable[None]], postgresql_client) -> None:
     """
     Test whether the value column was added to the resource table.
     """
@@ -63,8 +59,7 @@ async def test_valid_loglevels(
 
     # This call fails if invalid log levels are in the DB
     result = await client.resource_logs(
-        tid="18c3a11d-132f-4293-987c-de797eb36244",
-        rid="std::AgentConfig[internal,agentname=localhost],v=1"
+        tid="18c3a11d-132f-4293-987c-de797eb36244", rid="std::AgentConfig[internal,agentname=localhost],v=1"
     )
 
     assert result.code == 200
