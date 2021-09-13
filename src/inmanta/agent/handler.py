@@ -95,7 +95,7 @@ class InvalidOperation(Exception):
 
 @stable_api
 def cache(
-    func: T_FUNC = None,
+    func: Optional[T_FUNC] = None,
     ignore: typing.List[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
@@ -126,12 +126,12 @@ def cache(
             with the value as argument.
     """
 
-    def actual(f) -> T_FUNC:
+    def actual(f: Callable) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
 
-        def wrapper(self, *args, **kwds):
+        def wrapper(self, *args: object, **kwds: object) -> object:
 
             kwds.update(dict(zip(myargs, args)))
 
@@ -169,7 +169,7 @@ class HandlerContext(object):
         resource: resources.Resource,
         dry_run: bool = False,
         action_id: Optional[uuid.UUID] = None,
-        logger: logging.Logger = None,
+        logger: Optional[logging.Logger] = None,
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
@@ -187,6 +187,7 @@ class HandlerContext(object):
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
         self._logs: List[data.LogLine] = []
+        self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
         else:
@@ -353,7 +354,7 @@ class HandlerContext(object):
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: Sequence, kwargs: dict) -> None:
+    def log_msg(self, level: int, msg: str, args: Sequence[object], kwargs: Dict[str, object]) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -369,7 +370,7 @@ class HandlerContext(object):
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
-    def debug(self, msg: str, *args, **kwargs) -> None:
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'DEBUG'.
 
@@ -382,7 +383,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.DEBUG, msg, args, kwargs)
 
-    def info(self, msg: str, *args, **kwargs) -> None:
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'INFO'.
 
@@ -395,7 +396,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.INFO, msg, args, kwargs)
 
-    def warning(self, msg: str, *args, **kwargs) -> None:
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'WARNING'.
 
@@ -408,7 +409,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.WARNING, msg, args, kwargs)
 
-    def error(self, msg: str, *args, **kwargs) -> None:
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'ERROR'.
 
@@ -419,13 +420,13 @@ class HandlerContext(object):
         """
         self.log_msg(logging.ERROR, msg, args, kwargs)
 
-    def exception(self, msg: str, *args, exc_info=True, **kwargs) -> None:
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         """
         Convenience method for logging an ERROR with exception information.
         """
         self.error(msg, *args, exc_info=exc_info, **kwargs)
 
-    def critical(self, msg: str, *args, **kwargs) -> None:
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'CRITICAL'.
 
@@ -451,7 +452,7 @@ class ResourceHandler(object):
     :param io: The io object to use.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: "IOBase" = None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
 
         if io is None:
@@ -583,7 +584,7 @@ class ResourceHandler(object):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: dict) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
@@ -620,6 +621,9 @@ class ResourceHandler(object):
             if not self.can_reload():
                 return False
             result = self.run_sync(_call_resource_did_dependency_change)
+            if not result.result:
+                raise Exception("Failed to determine whether resource should reload")
+
             if result.code != 200:
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
@@ -705,7 +709,7 @@ class ResourceHandler(object):
                     exception=repr(e),
                 )
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
@@ -718,7 +722,7 @@ class ResourceHandler(object):
         """
         return {}
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
         and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
@@ -767,7 +771,7 @@ class ResourceHandler(object):
         result = self.run_sync(call)
         if result.code == 404:
             return None
-        elif result.code == 200:
+        elif result.result and result.code == 200:
             file_contents = base64.b64decode(result.result["content"])
             actual_hash_of_file = hash_file(file_contents)
             if hash_id != actual_hash_of_file:
@@ -846,7 +850,9 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
+    def update_resource(
+        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
+    ) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -874,7 +880,7 @@ class CRUDHandler(ResourceHandler):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
         """
         Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 

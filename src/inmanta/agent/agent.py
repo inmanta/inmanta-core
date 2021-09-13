@@ -940,10 +940,10 @@ class Agent(SessionEndpoint):
 
     def __init__(
         self,
-        hostname: str = None,
+        hostname: Optional[str] = None,
         agent_map: Optional[Dict[str, str]] = None,
         code_loader: bool = True,
-        environment: uuid.UUID = None,
+        environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
         cricital_pool_size: int = 5,
     ):
