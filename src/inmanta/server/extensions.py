@@ -105,10 +105,10 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
+        self._features: Dict[str, Dict[str, Feature[object]]] = defaultdict(lambda: {})
         self._feature_config: Dict[str, Dict[str, Any]] = self._load_feature_config()
 
-    def get_features(self) -> List[Feature]:
+    def get_features(self) -> List[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
     def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:

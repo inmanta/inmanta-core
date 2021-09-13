@@ -423,7 +423,7 @@ class ModuleTool(ModuleLikeTool):
             project = self.get_project(load=True)
             return project.get_module(module, allow_v1=True)
 
-    def get_modules(self, module: str = None) -> List[Module]:
+    def get_modules(self, module: Optional[str] = None) -> List[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
@@ -632,14 +632,14 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
-    def status(self, module: str = None) -> None:
+    def status(self, module: Optional[str] = None) -> None:
         """
         Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
             mod.status()
 
-    def push(self, module: str = None) -> None:
+    def push(self, module: Optional[str] = None) -> None:
         """
         Push all modules
         """

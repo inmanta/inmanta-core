@@ -53,7 +53,7 @@ class Location(object):
         return {"file": self.file, "lnr": self.lnr}
 
     @staticmethod
-    def from_dict(ctx: JsonType) -> None:
+    def from_dict(ctx: JsonType) -> "Location":
         return Location(**ctx)
 
 
