@@ -30,7 +30,7 @@ from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import AsyncIterator, Awaitable, Callable, Dict, Hashable, List, Optional, Tuple, cast
+from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
@@ -220,9 +220,7 @@ class CompileRun(object):
 
             async def update_modules() -> data.Report:
                 LOGGER.info("Updating modules")
-                return await self._run_compile_stage(
-                    "Updating modules", inmanta_path + ["modules", "update"], project_dir
-                )
+                return await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
 
             async def install_modules() -> data.Report:
                 LOGGER.info("Installing modules")
@@ -350,6 +348,7 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
+
             async def warn(message: str) -> None:
                 if self.stage is not None:
                     self._warning(message)
