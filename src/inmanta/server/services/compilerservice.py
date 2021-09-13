@@ -220,7 +220,9 @@ class CompileRun(object):
 
             async def update_modules() -> data.Report:
                 LOGGER.info("Updating modules")
-                return await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+                return await self._run_compile_stage(
+                    "Updating modules", [*inmanta_path, "-vvv", "-X", "modules", "update"], project_dir
+                )
 
             async def install_modules() -> data.Report:
                 LOGGER.info("Installing modules")
