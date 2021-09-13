@@ -2626,6 +2626,110 @@ class Compile(BaseDocument):
         ]
         return dtos
 
+    @classmethod
+    async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
+        query = f"""
+            WITH RECURSIVE compiledetails AS (
+            SELECT
+                c.id,
+                c.remote_id,
+                c.environment,
+                c.requested,
+                c.started,
+                c.completed,
+                c.success,
+                c.version,
+                c.do_export,
+                c.force_update,
+                c.metadata,
+                c.environment_variables,
+                c.compile_data,
+                c.substitute_compile_id,
+                r.id as report_id,
+                r.started report_started,
+                r.completed report_completed,
+                r.command,
+                r.name,
+                r.errstream,
+                r.outstream,
+                r.returncode
+            FROM
+                {cls.table_name()} c LEFT JOIN public.report r on c.id = r.compile
+            WHERE
+                c.environment = $1 AND c.id = $2
+            UNION
+                SELECT
+                    comp.id,
+                    comp.remote_id,
+                    comp.environment,
+                    comp.requested,
+                    comp.started,
+                    comp.completed,
+                    comp.success,
+                    comp.version,
+                    comp.do_export,
+                    comp.force_update,
+                    comp.metadata,
+                    comp.environment_variables,
+                    comp.compile_data,
+                    comp.substitute_compile_id,
+                    rep.id as report_id,
+                    rep.started as report_started,
+                    rep.completed as report_completed,
+                    rep.command,
+                    rep.name,
+                    rep.errstream,
+                    rep.outstream,
+                    rep.returncode
+                FROM
+                    {cls.table_name()} comp
+                    INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
+                    LEFT JOIN public.report rep on comp.id = rep.compile
+        ) SELECT * FROM compiledetails;
+        """
+        values = [cls._get_value(environment), cls._get_value(id)]
+        result = await cls.select_query(query, values, no_obj=True)
+        result = cast(List[Record], result)
+
+        if not result:
+            return None
+        # Get the details from the actual compile, and the reports from the substitute
+        records = list(filter(lambda r: r["id"] == id, result))
+        if not records:
+            return None
+        record = records[0]
+        reports = [
+            m.Report(
+                id=report["report_id"],
+                started=report["report_started"],
+                completed=report["report_completed"],
+                command=report["command"],
+                name=report["name"],
+                errstream=report["errstream"],
+                outstream=report["outstream"],
+                returncode=report["returncode"],
+            )
+            for report in result
+            if report.get("report_id")
+        ]
+
+        return m.CompileDetails(
+            id=record["id"],
+            remote_id=record["remote_id"],
+            environment=record["environment"],
+            requested=record["requested"],
+            started=record["started"],
+            completed=record["completed"],
+            success=record["success"],
+            version=record["version"],
+            do_export=record["do_export"],
+            force_update=record["force_update"],
+            metadata=json.loads(record["metadata"]),
+            environment_variables=json.loads(record["environment_variables"]),
+            compile_data=record["compile_data"],
+            reports=reports if reports else None,
+        )
+
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(
             id=self.id,

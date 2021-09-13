@@ -711,3 +711,13 @@ def get_compile_reports(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(
+    path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.ResourceDetails:
+    """
+    :return: The details of a compile
+    :raise NotFound: This exception is raised when the referenced environment or compile is not found
+    """
