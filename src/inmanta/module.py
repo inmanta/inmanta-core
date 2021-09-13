@@ -671,10 +671,11 @@ class InstallMode(str, enum.Enum):
     ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata`, :class:`ModuleV1Metadata` and
     :class:`ModuleV2Metadata`).
 
-    A V1 module is considered released when there is a tag on a commit. V2 are considered released when the module is pushed
-    to a Python package repository. For both types of modules, the version identifier should be PEP440 compliant and
-    should not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is
-    compatible with all constraints.
+    A module is considered released in the following situations:
+      * For V1 modules: There is a tag on a commit. This tag is a valid, pep440 compliant version identifier and it's not a
+                        prelease version.
+      * For V2 modules: The python package was published on a Python package repository, the version identifier is pep440
+                        compliant and is not a prerelease version.
     """
 
     prerelease = "prerelease"

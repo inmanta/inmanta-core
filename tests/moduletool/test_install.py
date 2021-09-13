@@ -615,7 +615,7 @@ def test_project_install_incompatible_dependencies(
 
 
 @pytest.mark.parametrize("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
-def test_project_install_allow_pre_releases(
+def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
 ) -> None:
     """
