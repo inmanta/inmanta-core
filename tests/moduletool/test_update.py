@@ -24,7 +24,7 @@ from pkg_resources import Requirement
 
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
-from inmanta.module import InmantaModuleRequirement, ModuleV1, ModuleV2
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
@@ -80,13 +80,25 @@ def test_module_update_with_install_mode_master(
 
 
 @pytest.mark.parametrize("corrupt_module", [False, True])
+@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
 def test_module_update_with_v2_module(
-    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, modules_repo: str, corrupt_module: bool
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    modules_repo: str,
+    corrupt_module: bool,
+    install_mode: InstallMode,
 ) -> None:
     """
     Assert that the `inmanta module update` command works correctly when executed on a project with a V2 module.
 
     :param corrupt_module: Whether the module to be updated contains a syntax error or not.
+
+    Dependency graph:
+
+        -> Inmanta project
+            -> module1 (v2) -> module2 (v2)
+            -> mod11 (v1)
     """
     template_module_name = "elaboratev2module"
     template_module_dir = os.path.join(modules_v2_dir, template_module_name)
@@ -99,7 +111,12 @@ def test_module_update_with_v2_module(
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 
-    for module_name, versions in {"module2": ["2.0.1", "2.1.0", "2.2.0", "3.0.1"], "module1": ["1.2.4", "1.2.5"]}.items():
+    for module_name, versions in {
+        "module2": ["2.0.1", "2.1.0", "2.2.0", "2.2.1.dev0", "3.0.1"],
+        "module1": ["1.2.4", "1.2.5"],
+    }.items():
+        # Module1 only has patch updates and Module2 has minor and major updates.
+        # This ensure that the test covers the different types of version bumps.
         for current_version in versions:
             module_dir = os.path.join(tmpdir, f"{module_name}-v{current_version}")
             module_from_template(
@@ -120,6 +137,9 @@ def test_module_update_with_v2_module(
         dest_dir=patched_module_dir,
         new_version=Version("1.2.3"),
         new_name="module1",
+        # Add a dependency on module2, without setting an explicit version constraint. Later version of module1
+        # do set a version constraint on the dependency on module2. This way it is verified whether the module update
+        # command takes into account the version constraints set in a new version of a module.
         new_requirements=[InmantaModuleRequirement(Requirement.parse("module2"))],
         install=False,
         publish_index=pip_index,
@@ -131,6 +151,8 @@ def test_module_update_with_v2_module(
     mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
 
     snippetcompiler_clean.setup_for_snippet(
+        # Don't import module2 in the inmanta project. An import for module2 is present in module1 instead.
+        # This tests whether the module update command takes into account all transitive dependencies.
         snippet="""
         import module1
         import mod11
@@ -146,6 +168,7 @@ def test_module_update_with_v2_module(
             InmantaModuleRequirement.parse("module1<1.2.5"),
             InmantaModuleRequirement.parse("mod11<4.2.0"),
         ],
+        install_mode=install_mode,
     )
 
     assert_version_installed(module_name="module1", version="1.2.3")
@@ -153,7 +176,7 @@ def test_module_update_with_v2_module(
     assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
     ModuleTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
-    assert_version_installed(module_name="module2", version="2.2.0")
+    assert_version_installed(module_name="module2", version="2.2.0" if install_mode == InstallMode.release else "2.2.1.dev0")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
 
 

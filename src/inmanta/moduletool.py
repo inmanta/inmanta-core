@@ -546,7 +546,12 @@ version: 0.0.1dev0"""
                 if module in v2_modules
             ]
             if v2_python_specs:
-                env.process_env.install_from_index(v2_python_specs, my_project.module_source.urls, upgrade=True)
+                env.process_env.install_from_index(
+                    v2_python_specs,
+                    my_project.module_source.urls,
+                    upgrade=True,
+                    allow_pre_releases=my_project.install_mode != InstallMode.release,
+                )
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])

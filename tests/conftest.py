@@ -65,7 +65,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import InmantaModuleRequirement, Project
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
@@ -793,6 +793,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -804,8 +805,10 @@ class SnippetCompilationTest(KeepOnFail):
             to discover V2 modules.
         :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
                                  file
+        :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
+                             no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
@@ -846,6 +849,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -872,7 +876,9 @@ class SnippetCompilationTest(KeepOnFail):
                 )
             if project_requires:
                 cfg.write("\n            requires:\n")
-                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+                cfg.write("\n".join(f"                - {req}" for req in project_requires) + "\n")
+            if install_mode:
+                cfg.write(f"            install_mode: {install_mode.value}\n")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
