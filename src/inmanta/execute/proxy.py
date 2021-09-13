@@ -148,7 +148,7 @@ class DynamicProxy:
 
         return DynamicProxy(value)
 
-    def __getattr__(self, attribute: str) -> "DynamicProxy":
+    def __getattr__(self, attribute: str):
         instance = self._get_instance()
 
         try:

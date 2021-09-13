@@ -106,7 +106,7 @@ class Config(object):
 
     @overload
     @classmethod
-    def get(cls, section: Optional[str] = None) -> ConfigParser:
+    def get(cls) -> ConfigParser:
         ...
 
     @overload
