@@ -76,18 +76,22 @@ def test_to_v2():
     Test whether the `to_v2()` method of `ModuleV1Metadata` works correctly.
     """
     v1_metadata = module.ModuleV1Metadata(
-        name="test",
+        name="a_test_module",
         description="A description",
         version="1.2.3",
         license="Apache 2.0",
         compiler_version="4.5.6",
-        requires=["mod1", "mod2"],
+        requires=["module_dep_1", "module_dep_2"],
     )
     v2_metadata = v1_metadata.to_v2()
     for attr_name in ["description", "version", "license"]:
         assert v1_metadata.__getattribute__(attr_name) == v2_metadata.__getattribute__(attr_name)
-    assert f"{module.ModuleV2.PKG_NAME_PREFIX}{v1_metadata.name}" == v2_metadata.name
-    assert [f"{module.ModuleV2.PKG_NAME_PREFIX}{req}" for req in v1_metadata.requires] == v2_metadata.install_requires
+
+    def _convert_module_to_package_name(module_name: str) -> str:
+        return f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
+
+    assert _convert_module_to_package_name(v1_metadata.name) == v2_metadata.name
+    assert [_convert_module_to_package_name(req) for req in v1_metadata.requires] == v2_metadata.install_requires
 
 
 def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
