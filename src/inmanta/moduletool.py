@@ -208,8 +208,13 @@ class ProjectTool(ModuleLikeTool):
         )
         subparser.add_parser(
             "install",
-            help="""
+            help="Install all modules required for this project.",
+            description="""
 Install all modules required for this project.
+
+This commands installs missing modules in the development venv, but doesn't update already installed modules if that's not
+required to satisfy the module version constraints. Use `inmanta modules update` instead if the already installed modules need
+to be updated to the latest compatible version.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the different Inmanta modules.
@@ -302,8 +307,9 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser(
             "update",
-            help="""
-Update all modules to the latest version compatible with the given module version constraints.
+            help="Update all modules to the latest version compatible with the module version constraints.",
+            description="""
+Update all modules to the latest version compatible with the module version constraints.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the updated modules.
@@ -312,7 +318,8 @@ with the dependencies specified by the updated modules.
 
         install: ArgumentParser = subparser.add_parser(
             "install",
-            help="""
+            help="Install a module in the active Python environment.",
+            description="""
 Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
 of a project.
 
