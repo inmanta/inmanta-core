@@ -563,7 +563,7 @@ version: 0.0.1dev0"""
             LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
             try:
                 # get AST
-                my_project.get_complete_ast()
+                my_project.load_module_recursive(install=True)
                 # get current full set of requirements
                 specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:

@@ -72,8 +72,8 @@ def test_v1_and_v2_module_installed_simultaneously(
     def compile_and_verify(
         expected_message: str, expect_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
-        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules, autostd=False)
         caplog.clear()
+        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules, autostd=False)
         snippetcompiler_clean.do_export()
         assert expected_message in capsys.readouterr().out
         got_warning = f"Module {module_name} is installed as a V1 module and a V2 module" in caplog.text
@@ -139,7 +139,9 @@ def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, all
     """
     module_name = "elaboratev1module"
     module_dir = os.path.join(modules_dir, module_name)
-    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}", add_to_module_path=[module_dir])
+    project: Project = snippetcompiler.setup_for_snippet(
+        snippet=f"import {module_name}", add_to_module_path=[module_dir], install_project=False
+    )
 
     assert module_name not in project.modules
     if allow_v1:
@@ -156,12 +158,12 @@ def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     and that module is not yet present in the module path.
     """
     module_name = "std"
-    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}")
+    project: Project = snippetcompiler.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
     # Remove std module in downloadpath created by other test case
     shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
-    project.load_module(module_name=module_name, allow_v1=True)
+    project.load_module(module_name=module_name, install=True, allow_v1=True)
     assert module_name in project.modules
     assert module_name in os.listdir(project.downloadpath)
 
@@ -181,7 +183,9 @@ def test_load_module_v2_already_installed(
     module_name = "elaboratev2module"
     module_dir = os.path.join(modules_v2_dir, module_name)
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", install_v2_modules=[LocalPackagePath(module_dir, editable_install)]
+        snippet=f"import {module_name}",
+        install_v2_modules=[LocalPackagePath(module_dir, editable_install)],
+        install_project=False,
     )
 
     assert module_name not in project.modules
@@ -201,7 +205,7 @@ def test_load_module_v2_module_using_install(
     """
     module_name = "minimalv2module"
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", python_package_sources=[local_module_package_index]
+        snippet=f"import {module_name}", python_package_sources=[local_module_package_index], install_project=False
     )
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
@@ -221,7 +225,7 @@ def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool):
     """
     module_name = "non_existing_module"
     snippetcompiler_clean.modules_dir = None
-    project: Project = snippetcompiler_clean.setup_for_snippet(snippet=f"import {module_name}")
+    project: Project = snippetcompiler_clean.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
     with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
         project.load_module(module_name=module_name, install=True, allow_v1=allow_v1)
 
@@ -249,6 +253,7 @@ def test_load_module_v1_and_v2_installed(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet=f"import {module_name}",
         install_v2_modules=[LocalPackagePath(module_dir_v2, editable=False)],
+        install_project=False,
     )
 
     assert module_name not in project.modules
@@ -271,7 +276,9 @@ def test_load_module_recursive_v2_module_depends_on_v1(
     Dependency graph:  v2_depends_on_v1 (V2)  --->  mod1 (V1)
     """
     project = snippetcompiler.setup_for_snippet(
-        snippet="import v2_depends_on_v1", python_package_sources=[local_module_package_index]
+        snippet="import v2_depends_on_v1",
+        python_package_sources=[local_module_package_index],
+        install_project=False,
     )
     if preload_v1_module:
         project.get_module("mod1", allow_v1=True)
@@ -294,7 +301,10 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     complex_module_dependencies_mod1::submod                  complex_module_dependencies_mod2::submod
     """
     project = snippetcompiler.setup_for_snippet(
-        snippet="import complex_module_dependencies_mod1", autostd=False, python_package_sources=[local_module_package_index]
+        snippet="import complex_module_dependencies_mod1",
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        install_project=False,
     )
     assert "complex_module_dependencies_mod1" not in project.modules
     assert "complex_module_dependencies_mod2" not in project.modules

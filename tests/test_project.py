@@ -22,6 +22,7 @@ from typing import cast
 import pytest
 
 from inmanta.data import model
+from inmanta.module import ModuleLoadingException, Project
 from inmanta.server import SLICE_ENVIRONMENT
 from inmanta.server.services.environmentservice import EnvironmentAction, EnvironmentListener, EnvironmentService
 from utils import log_contains
@@ -340,3 +341,14 @@ async def test_environment_listener(server, client_v2, caplog):
     assert environment_listener.updated_counter == 2
     assert environment_listener.cleared_counter == 1
     assert environment_listener.deleted_counter == 1
+
+
+def test_project_load_no_install(snippetcompiler_clean) -> None:
+    """
+    Verify that loading a project does not install any modules.
+    """
+    project: Project = snippetcompiler_clean.setup_for_snippet("", autostd=True, install_project=False)
+    with pytest.raises(ModuleLoadingException, match="could not find module std"):
+        project.load()
+    project.install_modules()
+    project.load()

@@ -160,20 +160,20 @@ def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
 
 
 def test_project_options_in_config(git_modules_dir, modules_repo, capsys):
-    coroot = install_project(git_modules_dir, "projectA")
-    with open("project.yml", "w", encoding="utf-8") as fh:
-        fh.write(
-            """name: projectA
+    coroot = install_project(
+        git_modules_dir,
+        "projectA",
+        config_content=f"""
+name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
 downloadpath: libs
-repo: %s
+repo: {modules_repo}
 freeze_recursive: true
 freeze_operator: ==
-"""
-            % modules_repo
-        )
+        """.strip(),
+    )
 
     def verify():
         out, err = capsys.readouterr()

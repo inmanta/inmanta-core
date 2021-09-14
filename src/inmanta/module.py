@@ -1272,6 +1272,12 @@ class Project(ModuleLike[ProjectMetadata]):
         """
         self.load_module_recursive(install=True)
         self.verify()
+        # do python install
+        pyreq = self.collect_python_requirements()
+        if len(pyreq) > 0:
+            self.virtualenv.install_from_list(pyreq)
+            # installing new dependencies into the virtual environment might introduce new conflicts
+            self.verify_python_environment()
 
     def load(self) -> None:
         if not self.loaded:
@@ -1280,26 +1286,7 @@ class Project(ModuleLike[ProjectMetadata]):
             self.get_complete_ast()
             self.loaded = True
             self.verify()
-
-            try:
-                self.load_plugins()
-            except CompilerException:
-                # do python install
-                pyreq = self.collect_python_requirements()
-                if len(pyreq) > 0:
-                    try:
-                        # install reqs, with cache
-                        self.virtualenv.install_from_list(pyreq)
-                        self.load_plugins()
-                    except CompilerException:
-                        # cache could be damaged, ignore it
-                        self.virtualenv.install_from_list(pyreq, cache=False)
-                        self.load_plugins()
-
-                    # installing new dependencies into the virtual environment might introduce new conflicts
-                    self.verify_python_environment()
-                else:
-                    self.load_plugins()
+            self.load_plugins()
 
     @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
@@ -1347,8 +1334,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
-        :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
-            installing v1 modules.
+        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
+            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
         """
         parts = full_module_name.split("::")
@@ -1364,8 +1351,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         For each module, return a triple of name, statements, basicblock
 
-        :param install: Run in install mode, installing modules that have not yet been installed, instead of only
-            installing v1 modules.
+        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
+            all modules are expected to be preinstalled.
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
@@ -1433,8 +1420,8 @@ class Project(ModuleLike[ProjectMetadata]):
         modules.
 
         :param module_name: The name of the module.
-        :param install: Run in install mode, installing any modules that have not yet been installed, instead of only
-            installing v1 modules.
+        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
+            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
         """
         if not self.is_using_virtual_env():
@@ -1450,7 +1437,7 @@ class Project(ModuleLike[ProjectMetadata]):
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
-                module = self.module_source_v1.get_module(self, module_reqs, install=True)
+                module = self.module_source_v1.get_module(self, module_reqs, install=install)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
