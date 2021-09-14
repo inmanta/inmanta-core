@@ -212,7 +212,7 @@ class ProjectTool(ModuleLikeTool):
             description="""
 Install all modules required for this project.
 
-This commands installs missing modules in the development venv, but doesn't update already installed modules if that's not
+This command installs missing modules in the development venv, but doesn't update already installed modules if that's not
 required to satisfy the module version constraints. Use `inmanta modules update` instead if the already installed modules need
 to be updated to the latest compatible version.
 
