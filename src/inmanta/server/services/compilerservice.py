@@ -30,7 +30,7 @@ from asyncio import CancelledError, Task
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, Hashable, List, Optional, Tuple, cast
+from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
@@ -159,6 +159,31 @@ class CompileRun(object):
         else:
             return None
 
+    async def get_upstream_branch(self) -> Optional[str]:
+        """
+        Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
+        """
+        try:
+            sub_process = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "--symbolic-full-name",
+                "@{upstream}",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self._project_dir,
+            )
+            out, err = await sub_process.communicate()
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
+
+        if sub_process.returncode != 0:
+            return None
+
+        return out.decode().strip()
+
     async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
@@ -185,6 +210,11 @@ class CompileRun(object):
                 sub_process.kill()
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
+        """
+        Runs this compile run.
+
+        :return: Tuple of a boolean representing success and the compile data, if any.
+        """
         success = False
         now = datetime.datetime.now().astimezone()
         await self.request.update_fields(started=now)
@@ -213,37 +243,74 @@ class CompileRun(object):
                 await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
                 os.mkdir(project_dir)
 
-            repo_url: str = env.repo_url
-            repo_branch: str = env.repo_branch
-            if not repo_url:
-                if not os.path.exists(os.path.join(project_dir, "project.yml")):
-                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set")
-                await self._end_stage(0)
-            else:
-                await self._end_stage(0)
-                # checkout repo
+            async def update_modules() -> data.Report:
+                LOGGER.info("Updating modules")
+                return await self._run_compile_stage(
+                    "Updating modules", [*inmanta_path, "-vvv", "-X", "modules", "update"], project_dir
+                )
 
-                if not os.path.exists(os.path.join(project_dir, ".git")):
+            async def install_modules() -> data.Report:
+                LOGGER.info("Installing modules")
+                return await self._run_compile_stage(
+                    "Installing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                )
+
+            async def setup() -> AsyncIterator[Awaitable[data.Report]]:
+                """
+                Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
+                """
+                repo_url: str = env.repo_url
+                repo_branch: str = env.repo_branch
+                if os.path.exists(os.path.join(project_dir, "project.yml")):
+                    yield self._end_stage(0)
+
+                    should_update: bool = force_update or self.request.force_update
+
+                    # switch branches
+                    if repo_branch:
+                        branch = await self.get_branch()
+                        if branch is not None and repo_branch != branch:
+                            if should_update:
+                                yield self._run_compile_stage("Fetching new branch heads", ["git", "fetch"], project_dir)
+                            yield self._run_compile_stage(
+                                f"Switching branch from {branch} to {repo_branch}",
+                                ["git", "checkout", repo_branch],
+                                project_dir,
+                            )
+                            if not should_update:
+                                # if we update, update procedure will install modules
+                                yield install_modules()
+
+                    # update project
+                    if should_update:
+                        # only pull changes if there is an upstream branch
+                        if await self.get_upstream_branch():
+                            yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                        yield update_modules()
+                else:
+                    if not repo_url:
+                        await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set.")
+                        yield self._end_stage(1)
+                        return
+
+                    if len(os.listdir(project_dir)) > 0:
+                        await self._warning(f"Failed to compile: no project found in {project_dir} but directory is not empty.")
+                        yield self._end_stage(1)
+                        return
+
+                    yield self._end_stage(0)
+
+                    # clone repo and install project
                     cmd = ["git", "clone", repo_url, "."]
                     if repo_branch:
                         cmd.extend(["-b", repo_branch])
-                    result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
-                    if result.returncode is None or result.returncode > 0:
-                        return False, None
+                    yield self._run_compile_stage("Cloning repository", cmd, project_dir)
+                    yield install_modules()
 
-                elif force_update or self.request.force_update:
-                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
-                if repo_branch:
-                    branch = await self.get_branch()
-                    if branch is not None and repo_branch != branch:
-                        result = await self._run_compile_stage(
-                            f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
-                        )
-
-                if force_update or self.request.force_update:
-                    await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
-                    LOGGER.info("Installing and updating modules")
-                    await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+            async for stage in setup():
+                stage_result: data.Report = await stage
+                if stage_result.returncode is None or stage_result.returncode > 0:
+                    return False, None
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
@@ -286,7 +353,9 @@ class CompileRun(object):
             env_vars_compile: Dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
-            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
+            result: data.Report = await self._run_compile_stage(
+                "Recompiling configuration model", cmd, project_dir, env=env_vars_compile
+            )
             success = result.returncode == 0
             if not success:
                 if self.request.do_export:
@@ -307,20 +376,27 @@ class CompileRun(object):
             LOGGER.exception("An error occured while recompiling")
 
         finally:
+
+            async def warn(message: str) -> None:
+                if self.stage is not None:
+                    await self._warning(message)
+                else:
+                    LOGGER.warning(message)
+
             with compile_data_json_file as file:
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
                         return success, model.CompileData.parse_raw(compile_data_json)
                     except json.JSONDecodeError:
-                        LOGGER.warning(
-                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
                     except pydantic.ValidationError:
-                        LOGGER.warning(
-                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
             return success, None
 

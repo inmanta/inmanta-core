@@ -788,7 +788,9 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(
         self,
         snippet: str,
+        *,
         autostd: bool = True,
+        install_project: bool = True,
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
@@ -799,6 +801,7 @@ class SnippetCompilationTest(KeepOnFail):
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
         env.process_env).
 
+        :param install_project: Install the project and all its modules. This is required to be able to compile the model.
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
@@ -815,6 +818,8 @@ class SnippetCompilationTest(KeepOnFail):
         project.use_virtual_env()
         self._patch_process_env()
         self._install_v2_modules(project, install_v2_modules)
+        if install_project:
+            project.install_modules()
         return project
 
     def _patch_process_env(self) -> None:
@@ -823,9 +828,8 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
         env.process_env.notify_change()
-        os.makedirs(path, exist_ok=True)
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
@@ -934,8 +938,11 @@ class SnippetCompilationTest(KeepOnFail):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
-        self.setup_for_snippet(snippet)
+        """
+        Set up project to expect an error during compilation or project install.
+        """
         try:
+            self.setup_for_snippet(snippet)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -1179,11 +1186,32 @@ def tmpvenv_active(
 
     yield tmpvenv
 
+    unload_modules_for_path(site_packages)
+
+
+@pytest.fixture
+def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+    """
+    Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
+    active one.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    venv: env.VirtualEnv = env.VirtualEnv(venv_dir)
+    venv.use_virtual_env()
+    yield venv
+    unload_modules_for_path(venv.site_packages_dir)
+
+
+def unload_modules_for_path(path: str) -> None:
+    """
+    Unload any modules that are loaded from a given path.
+    """
+
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
 
-    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)]
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()

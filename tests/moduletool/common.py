@@ -29,7 +29,7 @@ from pkg_resources import Requirement
 
 from inmanta import const, module
 from inmanta.config import Config
-from inmanta.module import InstallMode
+from inmanta.module import InstallMode, Project
 from inmanta.moduletool import ModuleTool
 from libpip2pi.commands import dir2pi
 from packaging import version
@@ -147,13 +147,20 @@ def make_module_simple_deps(reporoot, name, depends=[], project=False, version="
     return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
-def install_project(modules_dir, name, config=True):
+def install_project(modules_dir, name, config=True, config_content: Optional[str] = None):
+    """
+    Install a project without verifying it.
+    """
     subroot = tempfile.mkdtemp()
     coroot = os.path.join(subroot, name)
     subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=subroot, stderr=subprocess.STDOUT)
     os.chdir(coroot)
+    if config_content:
+        with open("project.yml", "w", encoding="utf-8") as fh:
+            fh.write(config_content)
     if config:
         Config.load_config()
+    Project.get().load_module_recursive(install=True)
     return coroot
 
 

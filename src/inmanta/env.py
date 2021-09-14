@@ -291,7 +291,7 @@ Singleton representing the Python environment this process is running in.
 
 class VirtualEnv(ActiveEnv):
     """
-    Creates and uses a virtual environment for this process
+    Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")

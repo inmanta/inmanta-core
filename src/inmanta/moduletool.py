@@ -573,7 +573,7 @@ version: 0.0.1dev0"""
                 loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
 
                 # get AST
-                my_project.get_complete_ast()
+                my_project.load_module_recursive(install=True)
                 # get current full set of requirements
                 specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:

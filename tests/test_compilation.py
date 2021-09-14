@@ -22,12 +22,14 @@ import shutil
 import tempfile
 import unittest
 from itertools import groupby
+from typing import Dict, Tuple
 
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta import config
-from inmanta.ast import AttributeException, RuntimeException
+from inmanta import config, const, env
+from inmanta.ast import AttributeException, Namespace, RuntimeException
+from inmanta.ast.type import Type as InmantaType
 from inmanta.module import Project
 
 
@@ -47,6 +49,25 @@ class CompilerBaseTest(object):
         self.state_dir = tempfile.mkdtemp()
         config.Config.set("config", "state-dir", self.state_dir)
 
+    def _patch_process_env(self) -> None:
+        project: Project = Project.get()
+        if env.process_env.python_path == project.virtualenv.python_path:
+            return
+        # initialize the venv if it hasn't been initialized yet
+        project.use_virtual_env()
+        # patch process_env
+        env.process_env.__init__(python_path=project.virtualenv.python_path)
+        env.process_env.notify_change()
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
+
+    def install_and_compile(self) -> Tuple[Dict[str, InmantaType], Namespace]:
+        # patch process_env so no packages are installed in the development environment
+        self._patch_process_env()
+        # install modules
+        project: Project = Project.get()
+        project.install_modules()
+        return compiler.do_compile()
+
     def tearDown(self):
         shutil.rmtree(self.state_dir)
 
@@ -57,7 +78,7 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_1")
 
     def test_compile(self):
-        (types, _) = compiler.do_compile()
+        (types, _) = self.install_and_compile()
         instances = types["__config__::Host"].get_all_instances()
         assert len(instances) == 1
         i = instances[0]
@@ -71,7 +92,7 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_2")
 
     def test_compile(self):
-        (types, _) = compiler.do_compile()
+        (types, _) = self.install_and_compile()
         instances = types["__config__::ManagedDevice"].get_all_instances()
         assert sorted([i.get_attribute("name").get_value() for i in instances]) == [1, 2, 3, 4, 5]
 
@@ -83,7 +104,7 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
     def test_compile(self):
         with pytest.raises(RuntimeException):
-            compiler.do_compile()
+            self.install_and_compile()
 
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
@@ -92,7 +113,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_index")
 
     def test_compile(self):
-        (_, scopes) = compiler.do_compile()
+        (_, scopes) = self.install_and_compile()
         variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
 
         p = re.compile(r"(f\d+h\d+)(a\d+)?")
@@ -126,7 +147,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
     def test_compile(self):
         with pytest.raises(AttributeException):
-            compiler.do_compile()
+            self.install_and_compile()
 
 
 class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
@@ -135,7 +156,7 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_138")
 
     def test_compile(self):
-        (types, _) = compiler.do_compile()
+        (types, _) = self.install_and_compile()
         assert (
             types["std::Host"].get_all_instances()[0].get_attribute("agent").get_value().get_attribute("names").get_value()
             is not None
@@ -152,7 +173,7 @@ class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_plugin_typing")
 
     def test_compile(self):
-        (_, scopes) = compiler.do_compile()
+        (_, scopes) = self.install_and_compile()
         root = scopes.get_child("__config__")
 
         def verify(name):
@@ -178,7 +199,7 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
 
     def test_compile(self):
         with pytest.raises(RuntimeException) as e:
-            compiler.do_compile()
+            self.install_and_compile()
         text = e.value.format_trace(indent="  ")
         print(text)
         assert (

@@ -37,6 +37,7 @@ def test_code_manager(tmpdir: py.path.local):
     shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir)
     Project.set(project)
+    project.install_modules()
     project.load()
 
     project.load_module("single_plugin_file", allow_v1=True)
@@ -224,7 +225,7 @@ def test_venv_path(tmpdir: py.path.local, projects_dir: str):
             project: Project = Project(project_dir, venv_path=venv_path)
         Project.set(project)
         # don't load full project, only AST so we don't have to deal with module finder cleanup
-        project.load_module_recursive()
+        project.load_module_recursive(install=True)
 
     # Use default venv dir
     default_venv_dir = os.path.join(project_dir, ".env")
