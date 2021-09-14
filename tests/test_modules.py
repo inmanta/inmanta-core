@@ -20,14 +20,16 @@ import logging
 import os
 import shutil
 import unittest
-from typing import List
+from importlib.abc import Loader
+from typing import List, Optional, Tuple
 from unittest import mock
 
 import pytest
 
 from _io import StringIO
-from inmanta import module
+from inmanta import env, module
 from inmanta.env import LocalPackagePath
+from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 
 
 def test_module():
@@ -189,3 +191,50 @@ def test_get_requirements(
     assert set(mod.get_strict_python_requirements_as_list()) == set(strict_python_requirements)
     assert set(mod.get_module_requirements()) == set(module_requirements)
     assert set(mod.requires()) == set(module.InmantaModuleRequirement.parse(req) for req in module_requirements)
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_module_v2_source_get_installed_module_editable(
+    snippetcompiler,
+    modules_v2_dir: str,
+    editable: bool,
+) -> None:
+    """
+    Make sure ModuleV2Source.get_installed_module identifies editable installations correctly.
+    """
+    module_name: str = "minimalv2module"
+    module_dir: str = os.path.join(modules_v2_dir, module_name)
+    snippetcompiler.setup_for_snippet(
+        f"import {module_name}",
+        autostd=False,
+        install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
+    )
+
+    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
+    assert module is not None
+    # os.path.realpath because snippetcompiler uses symlinks
+    assert os.path.realpath(mod.path) == (
+        module_dir if editable else os.path.join(env.process_env.site_packages_dir, "inmanta_plugins", module_name)
+    )
+    assert mod._is_editable_install == editable
+
+
+def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
+    """
+    Make sure ModuleV2Source.path_for does not include modules loaded by the v1 module loader.
+    """
+    # install and load std as v1
+    snippetcompiler.setup_for_snippet("import std")
+    module.Project.get().load_plugins()
+
+    # make sure the v1 module finder is configured and discovered by env.process_env
+    assert PluginModuleFinder.MODULE_FINDER is not None
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
+    assert module_info is not None
+    path, loader = module_info
+    assert path is not None
+    assert isinstance(loader, PluginModuleLoader)
+
+    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    assert source.path_for("std") is None
