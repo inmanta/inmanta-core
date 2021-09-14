@@ -147,3 +147,41 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
         needs_versioning_warning=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
     )
+
+
+@pytest.mark.parametrize(
+    "v1_module, all_python_requirements,strict_python_requirements,module_requirements",
+    [
+        (
+            True,
+            ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"],
+            ["jinja2~=3.2.1"],
+            ["v2_module==1.2.3", "v1_module==1.1.1"],
+        ),
+        (False, ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"], ["jinja2~=3.2.1"], ["v2_module==1.2.3"]),
+    ],
+)
+def test_get_requirements(
+    modules_dir: str,
+    modules_v2_dir: str,
+    v1_module: bool,
+    all_python_requirements: List[str],
+    strict_python_requirements: List[str],
+    module_requirements: List[str],
+) -> None:
+    """
+    Test the different methods to get the requirements of a module.
+    """
+    module_name = "many_dependencies"
+
+    if v1_module:
+        module_dir = os.path.join(modules_dir, module_name)
+        mod = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
+    else:
+        module_dir = os.path.join(modules_v2_dir, module_name)
+        mod = module.ModuleV2(module.DummyProject(autostd=False), module_dir)
+
+    assert set(mod.get_all_python_requirements_as_list()) == set(all_python_requirements)
+    assert set(mod.get_strict_python_requirements_as_list()) == set(strict_python_requirements)
+    assert set(mod.get_module_requirements()) == set(module_requirements)
+    assert set(mod.requires()) == set(module.InmantaModuleRequirement.parse(req) for req in module_requirements)
