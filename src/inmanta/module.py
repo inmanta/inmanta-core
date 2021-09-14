@@ -1099,6 +1099,14 @@ class ModuleLike(ABC, Generic[T]):
     def get_name_from_metadata(cls, metadata: T) -> str:
         raise NotImplementedError()
 
+    @classmethod
+    @abstractmethod
+    def add_requirement(cls, requirement: InmantaModuleRequirement) -> None:
+        """
+        Add a new module requirement to the meta-data.
+        """
+        raise NotImplementedError()
+
     def _load_file(self, ns: Namespace, file: str) -> Tuple[List[Statement], BasicBlock]:
         ns.location = Location(file, 1)
         statements = []  # type: List[Statement]
@@ -1610,6 +1618,10 @@ class Project(ModuleLike[ProjectMetadata]):
             mod_list.append(self.modules[name])
 
         return mod_list
+
+    def add_requirement(cls, requirement: InmantaModuleRequirement):
+        # TODO: Implement
+        pass
 
     def requires(self) -> "List[InmantaModuleRequirement]":
         """

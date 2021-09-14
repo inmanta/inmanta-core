@@ -284,6 +284,9 @@ class ModuleTool(ModuleLikeTool):
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
+        add = subparser.add_parser("add", help="Add a module dependency to an Inmanta module or project.")
+        add.add_argument("module", help="The name of the module. Optionally, a version constraint can be added", required=True)
+
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
         lst.add_argument(
             "-r", help="Output a list of requires that can be included in project.yml", dest="requires", action="store_true"
@@ -365,6 +368,25 @@ class ModuleTool(ModuleLikeTool):
         )
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+
+
+    def add(self, module: str) -> None:
+        """
+        Add a module dependency to an Inmanta module or project.
+        """
+        if os.path.exists("project.yml"):
+            obj = Project(path=os.getcwd())
+        elif os.path.exists("module.yml"):
+            obj = ModuleV1(project=None, path=os.getcwd())
+        else:
+            try:
+                obj = ModuleV2(project=None, path=os.getcwd())
+            except ModuleMetadataFileNotFound:
+                # TODO: Create custom exception???
+                # TODO: Change exit code???
+                raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
+        # TODO: Add constraint!
+
 
     def v1tov2(self, module: str) -> None:
         """
