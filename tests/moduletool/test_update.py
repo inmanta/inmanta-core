@@ -169,6 +169,7 @@ def test_module_update_with_v2_module(
             InmantaModuleRequirement.parse("mod11<4.2.0"),
         ],
         install_mode=install_mode,
+        install_project=False,
     )
 
     assert_version_installed(module_name="module1", version="1.2.3")
