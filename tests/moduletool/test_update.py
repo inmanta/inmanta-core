@@ -181,6 +181,6 @@ def test_module_update_with_v2_module(
 
 
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
-    snippetcompiler_clean.setup_for_snippet(snippet="entity", autostd=False)
+    snippetcompiler_clean.setup_for_snippet(snippet="entity", autostd=False, install_project=False)
     with pytest.raises(ParserException):
         ModuleTool().update()
