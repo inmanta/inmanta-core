@@ -206,7 +206,12 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
-        subparser.add_parser("install", help="Install all modules required for this project")
+        subparser.add_parser("install", help="""
+Install all modules required for this project.
+
+This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
+with the dependencies specified by the different Inmanta modules.
+        """.strip())
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
@@ -292,9 +297,19 @@ class ModuleTool(ModuleLikeTool):
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar="command", help="the command to  execute")
 
-        subparser.add_parser("update", help="Update all modules used in this project")
+        subparser.add_parser("update", help="""
+Update all modules to the latest version compatible with the given module version constraints.
 
-        install: ArgumentParser = subparser.add_parser("install", help="Install a module.")
+This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
+with the dependencies specified by the updated modules.
+        """.strip())
+
+        install: ArgumentParser = subparser.add_parser("install", help="""
+Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context of a project.
+
+This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
+with the dependencies specified by the installed module.
+        """.strip())
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
 
@@ -527,7 +542,7 @@ version: 0.0.1dev0"""
 
     def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
         """
-        Update all modules from their source
+        Update all modules to the latest version compatible with the given module version constraints.
         """
 
         if project is None:
