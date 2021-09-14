@@ -308,7 +308,7 @@ class ModuleTool(ModuleLikeTool):
         subparser.add_parser(
             "update",
             help="Update all modules to the latest version compatible with the module version constraints and install missing "
-                 "modules",
+            "modules",
             description="""
 Update all modules to the latest version compatible with the module version constraints and install missing modules.
 
