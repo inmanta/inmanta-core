@@ -76,12 +76,12 @@ def test_to_v2():
     Test whether the `to_v2()` method of `ModuleV1Metadata` works correctly.
     """
     v1_metadata = module.ModuleV1Metadata(
-        name="test_module",
+        name="a_test_module",
         description="A description",
         version="1.2.3",
         license="Apache 2.0",
         compiler_version="4.5.6",
-        requires=["module_dep1", "module_dep2"],
+        requires=["module_dep_1", "module_dep_2"],
     )
     v2_metadata = v1_metadata.to_v2()
     for attr_name in ["description", "version", "license"]:
