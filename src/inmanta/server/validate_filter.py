@@ -17,11 +17,11 @@
 """
 import datetime
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Dict, List, Optional, Tuple, Type
 
 import dateutil
 import more_itertools
-from pydantic import BaseModel, Extra, ValidationError, validator
+from pydantic import BaseModel, ValidationError, validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeOperator
@@ -34,67 +34,18 @@ class InvalidFilter(Exception):
         self.message = message
 
 
-class FilterModel(BaseModel, extra=Extra.forbid):
-    pass
-
-
-T = TypeVar("T", bound=FilterModel)
-
-
-class FilterValidator(ABC, Generic[T]):
+def parse_single_value(v: object) -> object:
     """
-    This class provides methods to validate and process filters as received via the API.
+    Transform list values to their single element value.
     """
+    if isinstance(v, list):
+        return more_itertools.one(
+            v,
+            too_short=ValueError("Empty filter provided"),
+            too_long=ValueError(f"Multiple values provided for filter: {v}"),
+        )
 
-    @property
-    @abstractmethod
-    def model(self) -> Type[T]:
-        raise NotImplementedError()
-
-    def validate_filters(self, filter: Dict[str, List[str]]) -> T:
-        """
-        Validate filters as received via the API and return a corresponding pydantic structure.
-        """
-        try:
-            return self.model(**filter)
-        except ValidationError as e:
-            raise InvalidFilter(f"Filter validation failed: {str(e)}, values provided: {str(filter)}") from e
-
-    @abstractmethod
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
-        """
-        Processes filters and returns a structured query filter object.
-
-        :raises InvalidFilter: The supplied filter is invalid.
-        """
-        raise NotImplementedError()
-
-
-class ResourceFilterModel(FilterModel):
-    resource_type: Optional[List[str]]
-    agent: Optional[List[str]]
-    resource_id_value: Optional[List[str]]
-    status: Optional[List[ReleasedResourceState]]
-
-
-class ResourceFilterValidator(FilterValidator[ResourceFilterModel]):
-    @property
-    def model(self) -> Type[ResourceFilterModel]:
-        return ResourceFilterModel
-
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
-        validated_filter: ResourceFilterModel = self.validate_filters(filter)
-        query: Dict[str, QueryFilter] = {}
-        if validated_filter.resource_type:
-            query["resource_type"] = (QueryType.CONTAINS_PARTIAL, validated_filter.resource_type)
-        if validated_filter.agent:
-            query["agent"] = (QueryType.CONTAINS_PARTIAL, validated_filter.agent)
-        if validated_filter.resource_id_value:
-            query["resource_id_value"] = (QueryType.CONTAINS_PARTIAL, validated_filter.resource_id_value)
-        if validated_filter.status:
-            query["status"] = (QueryType.CONTAINS, validated_filter.status)
-
-        return query
+    return v
 
 
 def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.datetime:
@@ -106,7 +57,7 @@ def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.da
         return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
 
 
-def parse_range_operator(v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
+def parse_range_operator(v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
     """
     Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
     """
@@ -123,6 +74,9 @@ def parse_range_operator(v: object) -> List[Tuple[RangeOperator, datetime.dateti
         bound = parse_range_value_to_date(single, split[1])
         return (operator, bound)
 
+    if v is None:
+        return None
+
     if isinstance(v, str):
         return [transform_single(v)]
 
@@ -132,17 +86,89 @@ def parse_range_operator(v: object) -> List[Tuple[RangeOperator, datetime.dateti
     raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
 
 
-class ResourceLogFilterModel(FilterModel):
-    minimal_log_level: Optional[const.LogLevel]
-    timestamp: Optional[DateRangeConstraint]
-    message: Optional[List[str]]
-    action: Optional[List[const.ResourceAction]]
+class Filter(ABC):
+    @abstractmethod
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        pass
 
-    @validator("minimal_log_level", pre=True)
+
+class BooleanEqualityFilter(BaseModel, Filter):
+    field: Optional[bool]
+    validate_field: classmethod = validator("field", pre=True, allow_reuse=True)(parse_single_value)
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field is not None:
+            return (QueryType.EQUALS, self.field)
+        return None
+
+
+class BooleanIsNotNullFilter(BooleanEqualityFilter, Filter):
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field is not None:
+            return (QueryType.IS_NOT_NULL, None) if self.field else (QueryType.EQUALS, None)
+        return None
+
+
+class DateRangeFilter(BaseModel, Filter):
+    field: Optional[DateRangeConstraint]
+
+    @validator("field", pre=True)
     @classmethod
-    def _deleted_single(cls, v: object) -> object:
+    def parse_requested(cls, v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
+        return parse_range_operator(v)
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.RANGE, self.field)
+        return None
+
+
+class ContainsPartialFilter(BaseModel, Filter):
+    field: Optional[List[str]]
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.CONTAINS_PARTIAL, self.field)
+        return None
+
+
+class ContainsFilter(BaseModel, Filter):
+    field: Optional[List[str]]
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.CONTAINS, self.field)
+        return None
+
+
+class ContainsFilterResourceState(BaseModel, Filter):
+    # Pydantic doesn't support Generic models on python 3.6
+    field: Optional[List[ReleasedResourceState]]
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.CONTAINS, self.field)
+        return None
+
+
+class ContainsFilterResourceAction(BaseModel, Filter):
+    # Pydantic doesn't support Generic models on python 3.6
+    field: Optional[List[const.ResourceAction]]
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.CONTAINS, self.field)
+        return None
+
+
+class LogLevelFilter(BaseModel, Filter):
+    field: Optional[const.LogLevel]
+
+    @validator("field", pre=True)
+    @classmethod
+    def _field_single(cls, v: object) -> object:
         """
-        Transform list values to their single element value.
+        Transform a list to a single log level
         """
         if isinstance(v, list):
             try:
@@ -157,92 +183,87 @@ class ResourceLogFilterModel(FilterModel):
                 raise ValueError(f"{v} is not a valid log level")
         return v
 
-    @validator("timestamp", pre=True)
-    @classmethod
-    def parse_timestamp(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
-        return parse_range_operator(v)
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field is not None:
+            return (QueryType.CONTAINS, self._get_log_levels_for_filter(self.field))
+        return None
+
+    def _get_log_levels_for_filter(self, minimal_log_level: const.LogLevel) -> List[str]:
+        return [level.value for level in const.LogLevel if level.to_int >= minimal_log_level.to_int]
 
 
-def get_log_levels_for_filter(minimal_log_level: const.LogLevel) -> List[str]:
-    return [level.value for level in const.LogLevel if level.to_int >= minimal_log_level.to_int]
+class FilterValidator(ABC):
+    """
+    This class provides methods to validate and process filters as received via the API.
+    """
 
-
-class ResourceLogFilterValidator(FilterValidator[ResourceLogFilterModel]):
     @property
-    def model(self) -> Type[ResourceLogFilterModel]:
-        return ResourceLogFilterModel
+    @abstractmethod
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        pass
 
     def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
-        validated_filter: ResourceLogFilterModel = self.validate_filters(filter)
-        query: Dict[str, QueryFilter] = {}
-        if validated_filter.minimal_log_level:
-            query["level"] = (QueryType.CONTAINS, get_log_levels_for_filter(validated_filter.minimal_log_level))
-        if validated_filter.timestamp:
-            query["timestamp"] = (QueryType.RANGE, validated_filter.timestamp)
-        if validated_filter.message:
-            query["msg"] = (QueryType.CONTAINS_PARTIAL, validated_filter.message)
-        if validated_filter.action:
-            query["action"] = (QueryType.CONTAINS, validated_filter.action)
+        """
+        Processes filters and returns a structured query filter object.
 
+        :raises InvalidFilter: The supplied filter is invalid.
+        """
+
+        query: Dict[str, QueryFilter] = {}
+        for filter_name, filter_class in self.allowed_filters.items():
+            try:
+                validated_query_type = filter_class(field=filter.get(filter_name)).to_query_type()
+                if validated_query_type is not None:
+                    query[filter_name] = validated_query_type
+            except ValidationError as e:
+                raise InvalidFilter(
+                    f"Filter validation failed while parsing {filter_name}: {str(e)}, values provided: {str(filter)}"
+                ) from e
+        not_allowed_filters = set(filter.keys()) - set(self.allowed_filters.keys())
+        if len(not_allowed_filters) > 0:
+            raise InvalidFilter(f"The following filters are not supported: {not_allowed_filters}")
         return query
 
 
-def parse_single(v: object, property_name: str) -> object:
-    """
-    Transform list values to their single element value.
-    """
-    if isinstance(v, list):
-        return more_itertools.one(
-            v,
-            too_short=ValueError(f"Empty '{property_name}' filter provided"),
-            too_long=ValueError(f"Multiple values provided for '{property_name}' filter: {v}"),
-        )
-
-    return v
-
-
-class CompileReportFilterModel(FilterModel):
-    requested: Optional[DateRangeConstraint]
-    started: Optional[bool]
-    completed: Optional[bool]
-    success: Optional[bool]
-
-    @validator("started", pre=True)
-    @classmethod
-    def _started_single(cls, v: object) -> object:
-        return parse_single(v, "started")
-
-    @validator("completed", pre=True)
-    @classmethod
-    def _completed_single(cls, v: object) -> object:
-        return parse_single(v, "completed")
-
-    @validator("success", pre=True)
-    @classmethod
-    def _success_single(cls, v: object) -> object:
-        return parse_single(v, "success")
-
-    @validator("requested", pre=True)
-    @classmethod
-    def parse_requested(cls, v: object) -> List[Tuple[RangeOperator, datetime.datetime]]:
-        return parse_range_operator(v)
-
-
-class CompileReportFilterValidator(FilterValidator[CompileReportFilterModel]):
+class ResourceFilterValidator(FilterValidator):
     @property
-    def model(self) -> Type[CompileReportFilterModel]:
-        return CompileReportFilterModel
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "resource_type": ContainsPartialFilter,
+            "agent": ContainsPartialFilter,
+            "resource_id_value": ContainsPartialFilter,
+            "status": ContainsFilterResourceState,
+        }
+
+
+class ResourceLogFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "minimal_log_level": LogLevelFilter,
+            "timestamp": DateRangeFilter,
+            "message": ContainsPartialFilter,
+            "action": ContainsFilterResourceAction,
+        }
 
     def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
-        validated_filter: CompileReportFilterModel = self.validate_filters(filter)
-        query: Dict[str, QueryFilter] = {}
-        if validated_filter.requested:
-            query["requested"] = (QueryType.RANGE, validated_filter.requested)
-        if validated_filter.success is not None:
-            query["success"] = (QueryType.EQUALS, validated_filter.success)
-        if validated_filter.started is not None:
-            query["started"] = (QueryType.IS_NOT_NULL, None) if validated_filter.started else (QueryType.EQUALS, None)
-        if validated_filter.completed is not None:
-            query["completed"] = (QueryType.IS_NOT_NULL, None) if validated_filter.completed else (QueryType.EQUALS, None)
-
+        # Change the api names of the filters to the names used internally in the database
+        query = super().process_filters(filter)
+        if query.get("minimal_log_level"):
+            filter_value = query.pop("minimal_log_level")
+            query["level"] = filter_value
+        if query.get("message"):
+            filter_value = query.pop("message")
+            query["msg"] = filter_value
         return query
+
+
+class CompileReportFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "requested": DateRangeFilter,
+            "success": BooleanEqualityFilter,
+            "started": BooleanIsNotNullFilter,
+            "completed": BooleanIsNotNullFilter,
+        }

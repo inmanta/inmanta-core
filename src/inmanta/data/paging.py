@@ -144,9 +144,6 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
 
 
 class CompileReportPagingCountsProvider(PagingCountsProvider):
-    def __init__(self, data_class: Type[Compile]) -> None:
-        self.data_class = data_class
-
     async def count_items_for_paging(
         self,
         environment: uuid.UUID,
@@ -157,11 +154,7 @@ class CompileReportPagingCountsProvider(PagingCountsProvider):
         end: Optional[Any] = None,
         **query: Any,
     ) -> PagingCounts:
-        sql_query, values = self.data_class._get_paging_item_count_query(
-            environment, database_order, ColumnNameStr("id"), first_id, last_id, start, end, **query
-        )
-        result = await self.data_class.select_query(sql_query, values, no_obj=True)
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+        return await Compile.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
 
 
 class PagingHandler(ABC, Generic[T]):

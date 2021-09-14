@@ -690,7 +690,7 @@ class CompilerService(ServerSlice):
         except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message)
 
-        paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider(data.Compile))
+        paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider())
         metadata = await paging_handler.prepare_paging_metadata(
             env.id, dtos, limit=limit, database_order=compile_report_order, db_query=query
         )

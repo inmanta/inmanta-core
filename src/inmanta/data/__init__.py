@@ -25,7 +25,6 @@ import logging
 import re
 import uuid
 import warnings
-from abc import ABCMeta
 from collections import defaultdict
 from configparser import RawConfigParser
 from itertools import chain
@@ -155,19 +154,35 @@ class InvalidSort(Exception):
         self.message = message
 
 
-class DatabaseOrder(metaclass=ABCMeta):
+class DatabaseOrder:
     """Represents an ordering for database queries"""
+
+    validator_dataclass: "BaseDocument"
+    valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "DatabaseOrder":
+        valid_sort_pattern: Pattern[str] = re.compile(f"^({'|'.join(cls.valid_sort_columns)})\\.(asc|desc)$", re.IGNORECASE)
+        match = valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            validated_order_by_column, validated_order = cls.validator_dataclass._validate_order_strict(
+                order_by_column=order_by_column, order=match.groups()[1].upper()
+            )
+            return DatabaseOrder(order_by_column=validated_order_by_column, order=validated_order)
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
 
     def __init__(
         self,
         order_by_column: ColumnNameStr,
         order: PagingOrder,
-        order_by_column_type: Union[Type[datetime.datetime], Type[int], Type[str]],
     ) -> None:
         """The order_by_column and order parameters should be validated"""
         self.order_by_column = order_by_column
         self.order = order
-        self.order_by_column_type = order_by_column_type
 
     def get_order_by_db_column_name(self) -> ColumnNameStr:
         """The validated column name string as it should be used in the database queries"""
@@ -182,7 +197,7 @@ class DatabaseOrder(metaclass=ABCMeta):
 
     def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
         """ The type of the order by column"""
-        return self.order_by_column_type
+        return self.valid_sort_columns[self.order_by_column]
 
     def get_order_by_column_attribute(self) -> str:
         """ The name of the column that the results should be ordered by """
@@ -212,6 +227,48 @@ class DatabaseOrder(metaclass=ABCMeta):
             return int(order_by_column_value)
         else:
             return order_by_column_value
+
+    @property
+    def id_column(self):
+        return "id"
+
+    def as_start_filter(
+        self,
+        offset: int,
+        start: Optional[Any] = None,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+    ) -> Tuple[List[str], List[object]]:
+        filter_statements = []
+        values: List[object] = []
+        if start is not None and first_id:
+            filter_statements.append(
+                f"({self.get_order_by_db_column_name()}, {self.id_column}) > (${str(offset)}, ${str(offset + 1)})"
+            )
+            values.append(BaseDocument._get_value(start))
+            values.append(BaseDocument._get_value(first_id))
+        elif start is not None:
+            filter_statements.append(f"{self.get_order_by_db_column_name()} > ${str(offset)}")
+            values.append(BaseDocument._get_value(start))
+        return filter_statements, values
+
+    def as_end_filter(
+        self,
+        offset: int,
+        end: Optional[Any] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+    ) -> Tuple[List[str], List[object]]:
+        filter_statements = []
+        values: List[object] = []
+        if end is not None and last_id:
+            filter_statements.append(
+                f"({self.get_order_by_db_column_name()}, {self.id_column}) < (${str(offset)}, ${str(offset + 1)})"
+            )
+            values.append(BaseDocument._get_value(end))
+            values.append(BaseDocument._get_value(last_id))
+        elif end is not None:
+            filter_statements.append(f"{self.get_order_by_db_column_name()} < ${str(offset)}")
+            values.append(BaseDocument._get_value(end))
+        return filter_statements, values
 
 
 def json_encode(value: Any) -> str:
@@ -955,11 +1012,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def _join_filter_statements(cls, filter_statements: List[str]) -> str:
-        return "WHERE " + " AND ".join(filter_statements)
+        if filter_statements:
+            return "WHERE " + " AND ".join(filter_statements)
+        return ""
 
     @classmethod
-    def _join_filter_statements_without_where(cls, filter_statements: List[str]) -> str:
-        return " AND " + " AND ".join(filter_statements)
+    def _continue_filter_statements(cls, filter_statements: List[str]) -> str:
+        if filter_statements:
+            return " AND " + " AND ".join(filter_statements)
+        return ""
 
     @classmethod
     def _get_list_query_pagination_parameters(
@@ -2048,28 +2109,6 @@ class Report(BaseDocument):
         )
 
 
-class CompileReportOrder(DatabaseOrder):
-    """ Represents the ordering by which compile reports should be sorted"""
-
-    valid_sort_pattern: Pattern[str] = re.compile("^(requested)\\.(asc|desc)$", re.IGNORECASE)
-
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "CompileReportOrder":
-        match = cls.valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = Compile._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-            return CompileReportOrder(
-                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=datetime.datetime
-            )
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
-
-
 @stable_api
 class Compile(BaseDocument):
     """
@@ -2218,29 +2257,26 @@ class Compile(BaseDocument):
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     @classmethod
-    def _get_paging_item_count_query(
+    async def count_items_for_paging(
         cls,
         environment: uuid.UUID,
         database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         **query: Any,
-    ) -> Tuple[str, List[Any]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
+    ) -> PagingCounts:
+        qb = QueryBuilder(
+            f"""FROM {cls.table_name()}
+                """,
+            cls._get_value(environment),
+            initial_filter_statements=["environment = $1 "],
         )
-        sql_query = f"""{select_clause}
-                    FROM {cls.table_name()}
-                    WHERE environment = ${len(values) + 1}
-                    """
-        values.append(cls._get_value(environment))
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements_without_where(common_filter_statements)
-
-        return sql_query, values
+        qb.filter(*cls.get_composed_filter_with_query_types(offset=qb.offset, col_name_prefix=None, **query))
+        qb.page_count(database_order, first_id, last_id, start, end)
+        result = await cls.select_query(qb.sql_query, qb.values, no_obj=True)
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
     @classmethod
     async def get_compile_reports(
@@ -2255,43 +2291,22 @@ class Compile(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List[m.CompileReport]:
-        order_by_column = database_order.get_order_by_db_column_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("id"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query = f"""SELECT id, remote_id, environment, requested,
+        base_query = f"""SELECT id, remote_id, environment, requested,
                     started, completed, do_export, force_update,
                     metadata, environment_variables, success, version
                     FROM {cls.table_name()}
-                    WHERE environment=${len(values) + 1} """
-        values.append(cls._get_value(environment))
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements_without_where(filter_statements)
+                    """
+
+        db_query = QueryBuilder(base_query, cls._get_value(environment), initial_filter_statements=["environment=$1"])
+        db_query.filter(*cls.get_composed_filter_with_query_types(offset=db_query.offset, col_name_prefix=None, **query))
+        db_query.filter(*database_order.as_start_filter(db_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(db_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
         backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
+        db_query.order_and_limit(database_order, limit, backward_paging)
 
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}, id {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}, id {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.id {order}"""
-
-        compile_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
+        compile_records = await cls.select_query(db_query.sql_query, db_query.values, no_obj=True, connection=connection)
         compile_records = cast(Iterable[Record], compile_records)
 
         dtos = [
@@ -2783,83 +2798,6 @@ class ResourceAction(BaseDocument):
             changes=self.changes,
             change=self.change,
         )
-
-
-class ResourceOrder(DatabaseOrder):
-    """ Represents the ordering by which resources should be sorted"""
-
-    valid_sort_pattern: Pattern[str] = re.compile(
-        "^(resource_type|agent|status|resource_id_value)\\.(asc|desc)$", re.IGNORECASE
-    )
-
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceOrder":
-        match = cls.valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = Resource._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-
-            return ResourceOrder(order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str)
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
-
-    def get_order_by_db_column_name(self) -> ColumnNameStr:
-        return ColumnNameStr(
-            f"{super().get_order_by_db_column_name()}{'::text' if self._should_be_treated_as_string() else ''}"
-        )
-
-    def _should_be_treated_as_string(self) -> bool:
-        """Ensure that records are sorted alphabetically by status instead of the enum order"""
-        return self.order_by_column == "status"
-
-
-class ResourceHistoryOrder(DatabaseOrder):
-    """ Represents the ordering by which resource history should be sorted"""
-
-    valid_sort_pattern: Pattern[str] = re.compile("^(date)\\.(asc|desc)$", re.IGNORECASE)
-
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceHistoryOrder":
-        match = cls.valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            # Sorting based on the date of the configuration model
-            validated_order_by_column, validated_order = ConfigurationModel._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-            return ResourceHistoryOrder(
-                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=str
-            )
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
-
-
-class ResourceLogOrder(DatabaseOrder):
-    """ Represents the ordering by which resource logs should be sorted"""
-
-    valid_sort_pattern: Pattern[str] = re.compile("^(timestamp)\\.(asc|desc)$", re.IGNORECASE)
-
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceLogOrder":
-        match = cls.valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = ResourceAction._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-            return ResourceLogOrder(
-                order_by_column=validated_order_by_column, order=validated_order, order_by_column_type=datetime.datetime
-            )
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
 
 
 @stable_api
@@ -4153,6 +4091,153 @@ class DryRun(BaseDocument):
         resources = {r["id"]: r for r in dict_result["resources"].values()}
         dict_result["resources"] = resources
         return dict_result
+
+
+class ResourceOrder(DatabaseOrder):
+    """ Represents the ordering by which resources should be sorted"""
+
+    validator_dataclass = Resource
+    valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceOrder":
+        database_order = super().parse_from_string(sort)
+        return ResourceOrder(database_order.order_by_column, database_order.order)
+
+    def get_order_by_db_column_name(self) -> ColumnNameStr:
+        return ColumnNameStr(
+            f"{super().get_order_by_db_column_name()}{'::text' if self._should_be_treated_as_string() else ''}"
+        )
+
+    def _should_be_treated_as_string(self) -> bool:
+        """Ensure that records are sorted alphabetically by status instead of the enum order"""
+        return self.order_by_column == "status"
+
+
+class ResourceHistoryOrder(DatabaseOrder):
+    """ Represents the ordering by which resource history should be sorted"""
+
+    # Sorting based on the date of the configuration model
+    validator_dataclass = ConfigurationModel
+    valid_sort_columns = {"date": datetime.datetime}
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceHistoryOrder":
+        database_order = super().parse_from_string(sort)
+        return ResourceHistoryOrder(database_order.order_by_column, database_order.order)
+
+
+class ResourceLogOrder(DatabaseOrder):
+    """ Represents the ordering by which resource logs should be sorted"""
+
+    validator_dataclass = ResourceAction
+    valid_sort_columns = {"timestamp": datetime.datetime}
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "ResourceLogOrder":
+        database_order = super().parse_from_string(sort)
+        return ResourceLogOrder(database_order.order_by_column, database_order.order)
+
+
+class CompileReportOrder(DatabaseOrder):
+    """ Represents the ordering by which compile reports should be sorted"""
+
+    validator_dataclass = Compile
+    valid_sort_columns = {"requested": datetime.datetime}
+
+    @classmethod
+    def parse_from_string(
+        cls,
+        sort: str,
+    ) -> "CompileReportOrder":
+        database_order = super().parse_from_string(sort)
+        return CompileReportOrder(database_order.order_by_column, database_order.order)
+
+
+class QueryBuilder:
+    def __init__(self, base_query: str, *values: List[object], initial_filter_statements: Optional[List[str]] = None) -> None:
+        self.sql_query = base_query
+        self.values = list(values)
+        if initial_filter_statements:
+            self.sql_query += BaseDocument._join_filter_statements(initial_filter_statements)
+        self.filter_started = bool(initial_filter_statements)
+
+    @property
+    def offset(self):
+        return len(self.values) + 1
+
+    def filter(self, filter_statements: List[str], values: List[object]) -> "QueryBuilder":
+        if self.filter_started:
+            self.sql_query += BaseDocument._continue_filter_statements(filter_statements)
+        else:
+            self.sql_query += BaseDocument._join_filter_statements(filter_statements)
+            self.filter_started = True
+        self.values.extend(values)
+        return self
+
+    def order_and_limit(
+        self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
+    ) -> "QueryBuilder":
+        order = db_order.get_order()
+        order_by_column = db_order.get_order_by_db_column_name()
+
+        if backward_paging:
+            backward_paging_order = order.invert().name
+
+            self.sql_query += f" ORDER BY {order_by_column} {backward_paging_order}, id {backward_paging_order}"
+        else:
+            self.sql_query += f" ORDER BY {order_by_column} {order}, id {order}"
+        if limit is not None:
+            if limit > DBLIMIT:
+                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
+            elif limit > 0:
+                self.sql_query += " LIMIT " + str(limit)
+
+        if backward_paging:
+            self.sql_query = f"""SELECT * FROM ({self.sql_query}) AS matching_records
+                                ORDER BY matching_records.{order_by_column} {order},
+                                         matching_records.{db_order.id_column} {order}"""
+
+        return self
+
+    def page_count(
+        self,
+        db_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+    ) -> "QueryBuilder":
+        order = db_order.get_order()
+        if "ASC" in order:
+            before_filter_statements, before_values = db_order.as_end_filter(self.offset, end, last_id)
+            self.values.extend(before_values)
+            after_filter_statements, after_values = db_order.as_start_filter(self.offset, start, first_id)
+            self.values.extend(after_values)
+        else:
+            before_filter_statements, before_values = db_order.as_start_filter(self.offset, start, first_id)
+            self.values.extend(before_values)
+            after_filter_statements, after_values = db_order.as_end_filter(self.offset, end, last_id)
+            self.values.extend(after_values)
+        before_filter = BaseDocument._join_filter_statements(before_filter_statements)
+        after_filter = BaseDocument._join_filter_statements(after_filter_statements)
+        id_column_name = db_order.id_column
+        select_clause = (
+            f"SELECT COUNT({id_column_name}) as count_total, "
+            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
+            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
+        )
+        self.sql_query = f"{select_clause} " f"{self.sql_query} "
+        return self
 
 
 _classes = [
