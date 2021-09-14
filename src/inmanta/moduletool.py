@@ -307,9 +307,10 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser(
             "update",
-            help="Update all modules to the latest version compatible with the module version constraints.",
+            help="Update all modules to the latest version compatible with the module version constraints and install missing "
+                 "modules",
             description="""
-Update all modules to the latest version compatible with the module version constraints.
+Update all modules to the latest version compatible with the module version constraints and install missing modules.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the updated modules.
