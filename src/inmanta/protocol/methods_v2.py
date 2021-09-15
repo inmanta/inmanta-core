@@ -674,7 +674,7 @@ def get_compile_reports(
     Get the compile reports from an environment
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
-     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
+    :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
             because the order by column might contain non-unique values
     :param last_id: The id to use as a continuation token for paging, in combination with the 'end' value,
             because the order by column might contain non-unique values
