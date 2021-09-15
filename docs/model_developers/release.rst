@@ -64,13 +64,13 @@ Or for the current project
 Distributing Inmanta modules
 ############################
 
-Inmanta modules can be distributed in two different way: using a Git repository (V1 modules) or using a Python package (V2
+Inmanta modules can be distributed in two different ways: using a Git repository (V1 modules) or using a Python package (V2
 modules).
 
 Git repository distribution format
 ----------------------------------
 
-Distributing an V1 module using a Git repository happens by storing the source code of that module on a Git repository
+Distributing a V1 module using a Git repository happens by storing the source code of that module on a Git repository
 that is accessible by the Inmanta orchestrator. The orchestrator will clone the source code of the module and install it in the
 Inmanta project.
 
