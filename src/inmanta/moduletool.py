@@ -773,7 +773,9 @@ class V2ModuleBuilder:
         """
         rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
-        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore={"__pycache__"})
+        files_in_python_package_dir = self._get_files_in_directory(
+            abs_path_namespace_package, ignore={"__pycache__", "__cfcache__"}
+        )
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
