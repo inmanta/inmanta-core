@@ -169,7 +169,7 @@ For example the following module.yml from the :doc:`../quickstart`
     version: 0.1
 
 The *requires* key can be used to define the dependencies of this module on other Inmanta modules. Each entry in the list
-should contains the name of an Inmanta module, optionally associated with a version constraint. These version specs use `PEP440
+should contain the name of an Inmanta module, optionally associated with a version constraint. These version specs use `PEP440
 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new entry to the requires list should be done
 using the ``inmanta module add <module-name>`` command.
 
