@@ -212,7 +212,7 @@ def test_module_v2_source_get_installed_module_editable(
 
     source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
     mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
-    assert module is not None
+    assert mod is not None
     # os.path.realpath because snippetcompiler uses symlinks
     assert os.path.realpath(mod.path) == (
         module_dir if editable else os.path.join(env.process_env.site_packages_dir, "inmanta_plugins", module_name)
