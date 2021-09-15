@@ -483,8 +483,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
+        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
-            env.process_env.install_from_index(requirements, self.urls)
+            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -670,11 +671,14 @@ class InstallMode(str, enum.Enum):
     release = "release"
     """
     Only use a released version that is compatible with the current compiler and any version constraints defined in the
-    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata` and :class:`ModuleV2Metadata`).
+    ``requires`` lists for the project or any other modules (see :class:`ProjectMetadata`, :class:`ModuleV1Metadata` and
+    :class:`ModuleV2Metadata`).
 
-    A version is released when there is a tag on a commit. This tag should be a valid version identifier (PEP440) and should
-    not be a prerelease version. Inmanta selects the latest available version (version sort based on PEP440) that is compatible
-    with all constraints.
+    A module is considered released in the following situations:
+      * For V1 modules: There is a tag on a commit. This tag is a valid, pep440 compliant version identifier and it's not a
+                        prelease version.
+      * For V2 modules: The python package was published on a Python package repository, the version identifier is pep440
+                        compliant and is not a prerelease version.
     """
 
     prerelease = "prerelease"
@@ -684,7 +688,8 @@ class InstallMode(str, enum.Enum):
 
     master = "master"
     """
-    Use the module's master branch.
+    For V1 modules: Use the module's master branch.
+    For V2 modules: Equivalent to :attr:`InstallMode.prerelease`
     """
 
 
@@ -1292,7 +1297,6 @@ class Project(ModuleLike[ProjectMetadata]):
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
         return self.__load_ast()
 
-    @lru_cache()
     def get_imports(self) -> List[DefineImport]:
         (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
@@ -1303,7 +1307,6 @@ class Project(ModuleLike[ProjectMetadata]):
             imports.insert(0, imp)
         return imports
 
-    @lru_cache()
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
         start = time()
         # load ast
@@ -1328,7 +1331,9 @@ class Project(ModuleLike[ProjectMetadata]):
         self.load()
         return self.modules
 
-    def get_module(self, full_module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
+    def get_module(
+        self, full_module_name: str, install: bool = False, allow_v1: bool = False, bypass_module_cache: bool = False
+    ) -> "Module":
         """
         Get a module instance for a given module name. Caches modules by top level name for later access.
 
@@ -1337,15 +1342,28 @@ class Project(ModuleLike[ProjectMetadata]):
         :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
             all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
         module_name = parts[0]
 
-        if module_name in self.modules and (allow_v1 or isinstance(self.modules[module_name], ModuleV2)):
+        def use_module_cache() -> bool:
+            if bypass_module_cache:
+                return False
+            if module_name not in self.modules:
+                return False
+            if not allow_v1 and not isinstance(self.modules[module_name], ModuleV2):
+                # Reload module because it was loaded as a V1 module, while it should be loaded as a V2 module
+                return False
+            return True
+
+        if use_module_cache():
             return self.modules[module_name]
         return self.load_module(module_name, install=install, allow_v1=allow_v1)
 
-    def load_module_recursive(self, install: bool = False) -> List[Tuple[str, List[Statement], BasicBlock]]:
+    def load_module_recursive(
+        self, install: bool = False, bypass_module_cache: bool = False
+    ) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
         Load a specific module and all submodules into this project.
 
@@ -1353,6 +1371,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
             all modules are expected to be preinstalled.
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
@@ -1390,7 +1409,12 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
-                module: Module = self.get_module(module_name, install=install, allow_v1=v1_mode)
+                module: Module = self.get_module(
+                    module_name,
+                    install=install,
+                    allow_v1=v1_mode,
+                    bypass_module_cache=bypass_module_cache,
+                )
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
@@ -1625,7 +1649,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def collect_imported_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        imports.add("std")
+        if self.autostd:
+            imports.add("std")
         specs: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
 
         def get_spec(name: str) -> "List[InmantaModuleRequirement]":

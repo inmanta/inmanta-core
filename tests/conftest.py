@@ -58,14 +58,14 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, env, loader, moduletool, protocol, resources
+from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import Project
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
@@ -794,6 +794,8 @@ class SnippetCompilationTest(KeepOnFail):
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -804,8 +806,12 @@ class SnippetCompilationTest(KeepOnFail):
         :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
             to discover V2 modules.
+        :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
+                                 file
+        :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
+                             no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
@@ -842,10 +848,16 @@ class SnippetCompilationTest(KeepOnFail):
         loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(
-        self, snippet: str, add_to_module_path: Optional[List[str]] = None, python_package_sources: Optional[List[str]] = None
+        self,
+        snippet: str,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
+        project_requires = project_requires if project_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -866,6 +878,11 @@ class SnippetCompilationTest(KeepOnFail):
                         for source in python_package_sources
                     )
                 )
+            if project_requires:
+                cfg.write("\n            requires:\n")
+                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+            if install_mode:
+                cfg.write(f"\n            install_mode: {install_mode.value}")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
@@ -1204,12 +1221,11 @@ def unload_modules_for_path(path: str) -> None:
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
-
     :return: The path to the index
     """
     with tempfile.TemporaryDirectory() as artifact_dir:
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            moduletool.ModuleTool().build(path=path, output_dir=artifact_dir)
+            ModuleTool().build(path=path, output_dir=artifact_dir)
         dir2pi(argv=["dir2pi", artifact_dir])
         yield os.path.join(artifact_dir, "simple")
