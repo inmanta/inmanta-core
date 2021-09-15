@@ -32,7 +32,6 @@ Further information about Inmanta VS Code extension is available on `this <https
 Setting up Python virtual environments
 ########################################
 
-
 For every project that you work on, we recommend using a new virtual environment.
 If you are unfamiliar with venv's, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
 
@@ -48,8 +47,7 @@ Then activate it by running:
 
     source ~/.virtualenvs/my_project/bin/activate
 
-**Upgrading your ``pip`` will save you a lot of time and troubleshooting.**
-
+**Upgrading your** ``pip`` **will save you a lot of time and troubleshooting.**
 
 You can do so by running:
 
@@ -73,7 +71,13 @@ There are two scenarios:
 Working on a New Project
 ========================
 
-To create a new project:
+To create a new project you need to install some essential packages as follows:
+
+.. code-block:: bash
+
+    pip install inmanta-core pytest-inmanta
+
+Create a new project using the inmanta-project-template:
 
 .. code-block:: bash
 
@@ -81,25 +85,22 @@ To create a new project:
 
     cookiecutter https://github.com/inmanta/inmanta-project-template.git
 
-
-For more details go :ref:`here <project-creation-guide>`.
-
-You need to install some essential packages as follows:
-
-.. code-block:: bash
-
-    pip install inmanta-core pytest-inmanta
-
-
-Once you are done with creating a project, you can ``cd`` into that directory and open VS Code by running:
+Navigate into the project and install the module dependencies using the inmanta CLI tool:
 
 .. code-block:: bash
 
     cd <project_name>
 
+    inmanta project install
+
+V1 modules will be downloaded to the ``downloadpath`` configured in the ``project.yml`` file. V2 modules are installed in the
+active Python environment. For more details go :ref:`here <project-creation-guide>`. Once you are done with creating a project,
+you can open VS Code by running:
+
+.. code-block:: bash
+
     code .
 
-Upon opening your vs code, and the ``main.cf`` file, you should see modules downloading in ``libs`` directory.
 
 .. _dgs-existing-project:
 
@@ -112,14 +113,19 @@ When working on an existing project, you need to ``clone`` them first:
 
     git clone <project_url>
 
-
-They also come with ``requirements.txt`` or ``requirements.dev.txt`` to install the required modules:
+They also come with a ``requirements.dev.txt`` to install the development dependencies:
 
 .. code-block:: bash
 
-    pip install -r requirements.txt
+    cd <project_name>
 
     pip install -r requirements.dev.txt
+
+The module dependencies are installed using the inmanta CLI tool:
+
+.. code-block:: bash
+
+    inmanta project install
 
 
 Set project sources
@@ -185,18 +191,11 @@ There are also guides :ref:`here <moddev-module>` and `here <https://github.com/
 Working on an Existing Module
 =============================
 
-Modules that you want to work on, have to be imported in the ``main.cf`` file that is located in your main project directory. For instance:
-
-.. code-block:: inmanta
-
-    import vyos
-
-To download the imported modules in your ``main.cf`` file run:
+Modules that you want to work on, have to be add to your Inmanta project using the following command. This command also installs the module into the project.
 
 .. code-block:: bash
 
-    inmanta compile
-
+    inmanta module add <module-name>
 
 When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them.
 
