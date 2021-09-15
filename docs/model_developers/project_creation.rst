@@ -61,11 +61,11 @@ For example, the ``main.cf`` below calls the print plugin from the std module.
 .. note::
     The std module is the only module that does not have to be imported explicitly.
 
-Before the project can be executed, the std module has to be added to the *requires* section in the ``project.yml`` file and the
-module needs to be installed in the development venv. This is done by executing the following command in the project directory:
+Before the project can be executed, the std module has to be installed. This is done by executing the following command in the
+project directory:
 
 .. code-block:: bash
 
-    inmanta module add std
+    inmanta project install
 
 The example can be executed with ``inmanta compile``. This prints out "hello world" on stdout.
