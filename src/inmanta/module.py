@@ -1364,6 +1364,7 @@ class Project(ModuleLike[ProjectMetadata]):
     def load_module_recursive(
         self, install: bool = False, bypass_module_cache: bool = False
     ) -> List[Tuple[str, List[Statement], BasicBlock]]:
+        # TODO: docstring
         """
         Load a specific module and all submodules into this project.
 
@@ -1381,6 +1382,12 @@ class Project(ModuleLike[ProjectMetadata]):
 
         v2_modules: Set[str] = set()  # Set of modules that should be loaded as a V2 module
         done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
+        """
+        Represents modules we've already loaded.
+        Invariants:
+            - `top_level in done` iff the top level module has been set up
+            - `sub_mod in done[top_level]` iff submod's AST has been loaded and its imports have been added to the queue
+        """
 
         def require_v2(module_name: str) -> None:
             """
@@ -1396,6 +1403,21 @@ class Project(ModuleLike[ProjectMetadata]):
                 del done[module_name]
                 del ast_by_top_level_mod[module_name]
 
+        def setup_module(module: Module) -> None:
+            """
+            Sets up a top level module. Loads all its v2 module requirements.
+            """
+            if module_name in done:
+                # already set up
+                return
+            for requirement in module.get_module_requirements():
+                self.get_module(
+                    InmantaModuleRequirement.parse(requirement).key,
+                    install=install,
+                    allow_v1=False,
+                    bypass_module_cache=bypass_module_cache,
+                )
+
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
             ns: str = imp.name
@@ -1409,12 +1431,14 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
+                # TODO: make sure this doesn't install v2
                 module: Module = self.get_module(
                     module_name,
                     install=install,
                     allow_v1=v1_mode,
                     bypass_module_cache=bypass_module_cache,
                 )
+                setup_module(module)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = "::".join(parts[0:i])
@@ -1467,6 +1491,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if module is None:
             raise ModuleNotFoundException(
+                # TODO: update error message to say something about adding the module dependency?
                 f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install`."
             )
 

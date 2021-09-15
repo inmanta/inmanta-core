@@ -413,6 +413,7 @@ class ModuleTool(ModuleLikeTool):
             except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
 
+    # TODO: this and other moduletool commands
     def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
