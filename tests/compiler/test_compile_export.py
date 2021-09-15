@@ -130,7 +130,7 @@ def test_export_compile_data_to_file_categories(
     report_exnc,
     tempfile_export,
 ) -> None:
-    snippetcompiler.setup_for_snippet(snippet)
+    snippetcompiler.setup_for_snippet(snippet, install_project=not issubclass(exception, ParserException))
     compile_data: CompileData = tempfile_export(exception)
     assert len(compile_data.errors) == 1
     assert compile_data.errors[0].category == category

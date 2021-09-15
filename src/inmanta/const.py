@@ -166,7 +166,6 @@ class LogLevel(str, Enum):
     INFO = "INFO"
     DEBUG = "DEBUG"
     TRACE = "TRACE"
-    NOTSET = "NOTSET"
 
     @property
     def to_int(self) -> int:
@@ -193,7 +192,6 @@ LOG_LEVEL_AS_INTEGER = {
     LogLevel.INFO: 20,
     LogLevel.DEBUG: 10,
     LogLevel.TRACE: 3,
-    LogLevel.NOTSET: 1,
 }
 
 

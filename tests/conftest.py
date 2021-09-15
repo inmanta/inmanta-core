@@ -58,14 +58,14 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, env, loader, moduletool, protocol, resources
+from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import Project
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
@@ -788,27 +788,38 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet(
         self,
         snippet: str,
+        *,
         autostd: bool = True,
+        install_project: bool = True,
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
         env.process_env).
 
+        :param install_project: Install the project and all its modules. This is required to be able to compile the model.
         :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
         :param add_to_module_path: Additional directories that should be added to the module path.
         :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
             to discover V2 modules.
+        :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
+                                 file
+        :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
+                             no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources)
+        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
         self._install_v2_modules(project, install_v2_modules)
+        if install_project:
+            project.install_modules()
         return project
 
     def _patch_process_env(self) -> None:
@@ -817,9 +828,8 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        path: str = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE)
         env.process_env.notify_change()
-        os.makedirs(path, exist_ok=True)
+        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
@@ -838,10 +848,16 @@ class SnippetCompilationTest(KeepOnFail):
         loader.PluginModuleFinder.reset()
 
     def setup_for_snippet_external(
-        self, snippet: str, add_to_module_path: Optional[List[str]] = None, python_package_sources: Optional[List[str]] = None
+        self,
+        snippet: str,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
+        project_requires = project_requires if project_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -862,6 +878,11 @@ class SnippetCompilationTest(KeepOnFail):
                         for source in python_package_sources
                     )
                 )
+            if project_requires:
+                cfg.write("\n            requires:\n")
+                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+            if install_mode:
+                cfg.write(f"\n            install_mode: {install_mode.value}")
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
@@ -917,8 +938,11 @@ class SnippetCompilationTest(KeepOnFail):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
-        self.setup_for_snippet(snippet)
+        """
+        Set up project to expect an error during compilation or project install.
+        """
         try:
+            self.setup_for_snippet(snippet)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -1162,11 +1186,32 @@ def tmpvenv_active(
 
     yield tmpvenv
 
+    unload_modules_for_path(site_packages)
+
+
+@pytest.fixture
+def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+    """
+    Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
+    active one.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    venv: env.VirtualEnv = env.VirtualEnv(venv_dir)
+    venv.use_virtual_env()
+    yield venv
+    unload_modules_for_path(venv.site_packages_dir)
+
+
+def unload_modules_for_path(path: str) -> None:
+    """
+    Unload any modules that are loaded from a given path.
+    """
+
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
 
-    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, base)]
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
     for mod_name in loaded_modules:
         del sys.modules[mod_name]
     importlib.invalidate_caches()
@@ -1176,12 +1221,11 @@ def tmpvenv_active(
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
-
     :return: The path to the index
     """
     with tempfile.TemporaryDirectory() as artifact_dir:
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            moduletool.ModuleTool().build(path=path, output_dir=artifact_dir)
+            ModuleTool().build(path=path, output_dir=artifact_dir)
         dir2pi(argv=["dir2pi", artifact_dir])
         yield os.path.join(artifact_dir, "simple")

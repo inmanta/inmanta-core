@@ -16,26 +16,21 @@
     Contact: code@inmanta.com
 """
 
-import inmanta.compiler as compiler
+import pytest
+
 from inmanta.module import ModuleLoadingException
 
 
 def test_issue_120_bad_import(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import ip::ip""")
-    try:
-        compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except ModuleLoadingException as e:
-        assert e.location.lnr == 1
+    with pytest.raises(ModuleLoadingException) as excinfo:
+        snippetcompiler.setup_for_snippet("""import ip::ip""")
+    assert excinfo.value.location.lnr == 1
 
 
 def test_issue_120_bad_import_extra(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import slorpf""")
-    try:
-        compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except ModuleLoadingException as e:
-        assert e.location.lnr == 1
+    with pytest.raises(ModuleLoadingException) as excinfo:
+        snippetcompiler.setup_for_snippet("""import slorpf""")
+    assert excinfo.value.location.lnr == 1
 
 
 def test_1480_1767_invalid_repo(snippetcompiler_clean):
