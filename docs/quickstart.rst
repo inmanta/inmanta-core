@@ -217,13 +217,17 @@ Then, create the inmanta project and environment:
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
+Install all module dependencies into the project:
+
+.. code-block:: sh
+
+    inmanta project install
+
 Finally compile the project and deploy it:
 
 .. code-block:: sh
 
     inmanta -vvv  export -d
-
-The first time you run this command, it may take a while, as all dependencies are downloaded.
 
 When the model is sent to the server, it will start deploying the configuration.
 To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the
