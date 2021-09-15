@@ -1,0 +1,11 @@
+---
+description: Removed NOTSET loglevel from all API's
+change-type: minor
+destination-branches: [iso4]
+sections:
+    bugfix: "{{description}}"
+    upgrade-note: |
+        NOTSET is no longer accepted as a log level by the agent's context logger.
+        It was not a valid log level before, but it was accepted by the agent.
+
+
