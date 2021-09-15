@@ -90,10 +90,10 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   * ``version``: The version of the module. Modules must use semantic versioning.
   * ``license``: The license under which the module is distributed.
 
-* The ``install_requires`` config option in the ``options`` section of the ``setup.cfg` file defines the dependencies of the
-   module on other Inmanta modules and external Python libraries. These version specs use
-   `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new module dependency to the module
-   should be done using the ``inmanta module add`` command instead of altering the ``setup.cfg`` file by hand.
+* The ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file defines the dependencies of the
+  module on other Inmanta modules and external Python libraries. These version specs use
+  `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new module dependency to the module
+  should be done using the ``inmanta module add`` command instead of altering the ``setup.cfg`` file by hand.
 
 * All other config is required for ``setuptools`` to correctly build the package. It is documented `here <https://setuptools.readthedocs.io/en/latest/userguide/declarative_config.html>`_.
 
@@ -171,7 +171,7 @@ For example the following module.yml from the :doc:`../quickstart`
 The *requires* key can be used to define the dependencies of this module on other Inmanta modules. Each entry in the list
 should contains the name of an Inmanta module, optionally associated with a version constraint. These version specs use `PEP440
 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new entry to the requires list should be done
-using the `inmanta module add <module-name>` command.
+using the ``inmanta module add <module-name>`` command.
 
 An example of a ``module.yml`` file that defines requires:
 
@@ -299,7 +299,7 @@ for example the public PyPi repository.
 The orchestrator server generally (see
 :ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
 repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
- for supplying the agents with the appropriate ``inmanta_plugins`` packages.
+for supplying the agents with the appropriate ``inmanta_plugins`` packages.
 
 
 .. _modules-distribution-advanced-concepts:

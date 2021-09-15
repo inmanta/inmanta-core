@@ -191,12 +191,11 @@ There are also guides :ref:`here <moddev-module>` and `here <https://github.com/
 Working on an Existing Module
 =============================
 
-Modules that you want to work on, have to be add to your Inmanta project using the following command. This command also installs
- the module into the project.
+Modules that you want to work on, have to be add to your Inmanta project using the following command. This command also installs the module into the project.
 
 .. code-block:: bash
 
-    inmanta modules add <module-name>
+    inmanta module add <module-name>
 
 When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them.
 
