@@ -1410,7 +1410,7 @@ class Project(ModuleLike[ProjectMetadata]):
             Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
             any of these requirements have already been loaded as v1, queues them for reload.
             """
-            for requirement in module.get_module_requirements():
+            for requirement in module_like.get_module_requirements():
                 req_name: str = InmantaModuleRequirement.parse(requirement).key
                 # load module
                 self.get_module(
