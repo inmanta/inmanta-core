@@ -356,16 +356,16 @@ class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
     def _get_paging_boundaries(self, dtos: List[LatestReleasedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[0].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[-1].resource_version_id,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[-1].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[0].resource_version_id,
             )
 
@@ -391,16 +391,16 @@ class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[0].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[-1].attribute_hash,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[-1].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[0].attribute_hash,
             )
 
@@ -426,16 +426,16 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
             )
 

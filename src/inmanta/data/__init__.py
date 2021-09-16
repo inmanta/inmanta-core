@@ -156,12 +156,10 @@ class InvalidSort(Exception):
 
 
 class DatabaseOrder:
-    """Represents an ordering for database queries
-
-    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
-    """
+    """Represents an ordering for database queries"""
 
     valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -180,7 +178,7 @@ class DatabaseOrder:
             validated_order_by_column, validated_order = cls.validator_dataclass()._validate_order_strict(
                 order_by_column=order_by_column, order=match.groups()[1].upper()
             )
-            return DatabaseOrder(order_by_column=validated_order_by_column, order=validated_order)
+            return cls(order_by_column=validated_order_by_column, order=validated_order)
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
     def __init__(
@@ -192,7 +190,7 @@ class DatabaseOrder:
         self.order_by_column = order_by_column
         self.order = order
 
-    def get_order_by_db_column_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self) -> ColumnNameStr:
         """The validated column name string as it should be used in the database queries"""
         return self.order_by_column
 
@@ -207,7 +205,7 @@ class DatabaseOrder:
         """ The type of the order by column"""
         return self.valid_sort_columns[self.order_by_column]
 
-    def get_order_by_column_attribute(self) -> str:
+    def get_order_by_column_api_name(self) -> str:
         """ The name of the column that the results should be ordered by """
         return self.order_by_column
 
@@ -254,12 +252,12 @@ class DatabaseOrder:
         relation = ">" if start else "<"
         if column_value is not None and id_value:
             filter_statements.append(
-                f"({self.get_order_by_db_column_name()}, {self.id_column}) {relation} (${str(offset)}, ${str(offset + 1)})"
+                f"({self.get_order_by_column_db_name()}, {self.id_column}) {relation} (${str(offset)}, ${str(offset + 1)})"
             )
             values.append(BaseDocument._get_value(column_value))
             values.append(BaseDocument._get_value(id_value))
         elif column_value is not None:
-            filter_statements.append(f"{self.get_order_by_db_column_name()} {relation} ${str(offset)}")
+            filter_statements.append(f"{self.get_order_by_column_db_name()} {relation} ${str(offset)}")
             values.append(BaseDocument._get_value(column_value))
         return filter_statements, values
 
@@ -283,28 +281,18 @@ class DatabaseOrder:
 
 
 class ResourceOrder(DatabaseOrder):
-    """Represents the ordering by which resources should be sorted
-
-    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
-    """
+    """Represents the ordering by which resources should be sorted"""
 
     valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Resource
 
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceOrder":
-        database_order = super().parse_from_string(sort)
-        return ResourceOrder(database_order.order_by_column, database_order.order)
-
-    def get_order_by_db_column_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self) -> ColumnNameStr:
         return ColumnNameStr(
-            f"{super().get_order_by_db_column_name()}{'::text' if self._should_be_treated_as_string() else ''}"
+            f"{super().get_order_by_column_db_name()}{'::text' if self._should_be_treated_as_string() else ''}"
         )
 
     def _should_be_treated_as_string(self) -> bool:
@@ -313,67 +301,37 @@ class ResourceOrder(DatabaseOrder):
 
 
 class ResourceHistoryOrder(DatabaseOrder):
-    """Represents the ordering by which resource history should be sorted
-
-    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
-    """
+    """Represents the ordering by which resource history should be sorted """
 
     valid_sort_columns = {"date": datetime.datetime}
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         # Sorting based on the date of the configuration model
         return ConfigurationModel
 
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceHistoryOrder":
-        database_order = super().parse_from_string(sort)
-        return ResourceHistoryOrder(database_order.order_by_column, database_order.order)
-
 
 class ResourceLogOrder(DatabaseOrder):
-    """Represents the ordering by which resource logs should be sorted
-
-    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
-    """
+    """Represents the ordering by which resource logs should be sorted """
 
     valid_sort_columns = {"timestamp": datetime.datetime}
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return ResourceAction
 
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "ResourceLogOrder":
-        database_order = super().parse_from_string(sort)
-        return ResourceLogOrder(database_order.order_by_column, database_order.order)
-
 
 class CompileReportOrder(DatabaseOrder):
-    """Represents the ordering by which compile reports should be sorted
-
-    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
-    """
+    """Represents the ordering by which compile reports should be sorted """
 
     valid_sort_columns = {"requested": datetime.datetime}
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Compile
-
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "CompileReportOrder":
-        database_order = super().parse_from_string(sort)
-        return CompileReportOrder(database_order.order_by_column, database_order.order)
 
 
 class BaseQueryBuilder(ABC):
@@ -508,7 +466,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          """
         if self.db_order:
             order = self.db_order.get_order()
-            order_by_column = self.db_order.get_order_by_db_column_name()
+            order_by_column = self.db_order.get_order_by_column_db_name()
             if self.backward_paging:
                 backward_paging_order = order.invert().name
                 full_query += f" ORDER BY {order_by_column} {backward_paging_order}, id {backward_paging_order}"
@@ -521,7 +479,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                 full_query += " LIMIT " + str(self.limit)
         if self.db_order and self.backward_paging:
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records
-                            ORDER BY matching_records.{self.db_order.get_order_by_db_column_name()} {self.db_order.get_order()},
+                            ORDER BY matching_records.{self.db_order.get_order_by_column_db_name()} {self.db_order.get_order()},
                                      matching_records.{self.db_order.id_column} {self.db_order.get_order()}"""
 
         return full_query, self.values
@@ -1359,7 +1317,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         start_filter_statements, start_values = cls._add_start_filter(
             len(values),
-            database_order.get_order_by_db_column_name(),
+            database_order.get_order_by_column_db_name(),
             id_column,
             start,
             first_id,
@@ -1368,7 +1326,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values.extend(start_values)
         end_filter_statements, end_values = cls._add_end_filter(
             len(values),
-            database_order.get_order_by_db_column_name(),
+            database_order.get_order_by_column_db_name(),
             id_column,
             end,
             last_id,
@@ -1417,7 +1375,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         end: Optional[Any] = None,
         **query: Tuple[QueryType, object],
     ) -> Tuple[str, List[object], List[str]]:
-        order_by_column = database_order.get_order_by_db_column_name()
+        order_by_column = database_order.get_order_by_column_db_name()
         order = database_order.get_order()
         (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
 
@@ -2616,6 +2574,8 @@ class Compile(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List[m.CompileReport]:
+        cls._validate_paging_parameters(start, end, first_id, last_id)
+
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                     started, completed, do_export, force_update,
@@ -2880,7 +2840,7 @@ class ResourceAction(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List["ResourceAction"]:
-        order_by_column = database_order.get_order_by_db_column_name()
+        order_by_column = database_order.get_order_by_column_db_name()
         order = database_order.get_order()
         filter_statements, values = cls._get_list_query_pagination_parameters(
             database_order=database_order,
@@ -3429,7 +3389,7 @@ class Resource(BaseDocument):
         """
         Get all resources that are in a released version, sorted, paged and filtered
         """
-        order_by_column = database_order.get_order_by_db_column_name()
+        order_by_column = database_order.get_order_by_column_db_name()
         order = database_order.get_order()
         filter_statements, values = cls._get_list_query_pagination_parameters(
             database_order=database_order,
@@ -3765,7 +3725,7 @@ class Resource(BaseDocument):
         end: Optional[datetime.datetime] = None,
         limit: Optional[int] = None,
     ) -> List[m.ResourceHistory]:
-        order_by_column = database_order.get_order_by_db_column_name()
+        order_by_column = database_order.get_order_by_column_db_name()
         order = database_order.get_order()
 
         select_clause = """

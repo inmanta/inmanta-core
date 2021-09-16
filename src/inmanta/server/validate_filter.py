@@ -87,7 +87,13 @@ def parse_range_operator(v: object) -> Optional[List[Tuple[RangeOperator, dateti
 
 
 class Filter(ABC, BaseModel):
-    """ A pydantic model for a specific filter """
+    """A pydantic model for a specific filter
+    Subclasses are expected to have property named `field`, representing the value to be validated.
+    The `to_query_type` method describes how to interpret this as filter in for a database query by providing the correct
+    `QueryType`
+    """
+
+    # Pydantic doesn't support Generic BaseModels on python 3.6
 
     @abstractmethod
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
