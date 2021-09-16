@@ -283,7 +283,10 @@ class DatabaseOrder:
 
 
 class ResourceOrder(DatabaseOrder):
-    """ Represents the ordering by which resources should be sorted"""
+    """Represents the ordering by which resources should be sorted
+
+    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
+    """
 
     valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
 
@@ -310,7 +313,10 @@ class ResourceOrder(DatabaseOrder):
 
 
 class ResourceHistoryOrder(DatabaseOrder):
-    """ Represents the ordering by which resource history should be sorted"""
+    """Represents the ordering by which resource history should be sorted
+
+    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
+    """
 
     valid_sort_columns = {"date": datetime.datetime}
 
@@ -329,7 +335,10 @@ class ResourceHistoryOrder(DatabaseOrder):
 
 
 class ResourceLogOrder(DatabaseOrder):
-    """ Represents the ordering by which resource logs should be sorted"""
+    """Represents the ordering by which resource logs should be sorted
+
+    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
+    """
 
     valid_sort_columns = {"timestamp": datetime.datetime}
 
@@ -347,7 +356,10 @@ class ResourceLogOrder(DatabaseOrder):
 
 
 class CompileReportOrder(DatabaseOrder):
-    """ Represents the ordering by which compile reports should be sorted"""
+    """Represents the ordering by which compile reports should be sorted
+
+    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
+    """
 
     valid_sort_columns = {"requested": datetime.datetime}
 
@@ -396,12 +408,12 @@ class BaseQueryBuilder(ABC):
         return ""
 
     @abstractmethod
-    def from_clause(self, from_clause: str):
+    def from_clause(self, from_clause: str) -> "BaseQueryBuilder":
         """ Set the from clause of the query"""
         pass
 
     @property
-    def offset(self):
+    def offset(self) -> int:
         """ The current offset of the values to be used for filter statements"""
         return len(self.values) + 1
 
