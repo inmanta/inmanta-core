@@ -496,6 +496,13 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
     ) -> None:
+        """
+        :param select_clause: The select clause of the query, optional, `page_count()` can be used to provide a query builder
+                              with a specific select clause
+        :param from_clause: The from clause of the query
+        :param filter_statements: A list of filters for the query
+        :param values: The values to be used for the filter statements
+        """
         super().__init__(select_clause, from_clause, filter_statements, values)
 
     def page_count(
