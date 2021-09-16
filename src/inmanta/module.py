@@ -1372,16 +1372,26 @@ class Project(ModuleLike[ProjectMetadata]):
         return self.modules
 
     def get_module(
-        self, full_module_name: str, install: bool = False, allow_v1: bool = False, bypass_module_cache: bool = False
+        self,
+        full_module_name: str,
+        *,
+        allow_v1: bool = False,
+        install_v1: bool = False,
+        install_v2: bool = False,
+        bypass_module_cache: bool = False,
     ) -> "Module":
         """
-        Get a module instance for a given module name. Caches modules by top level name for later access.
+        Get a module instance for a given module name. Caches modules by top level name for later access. The install parameters
+        allow to install the module if it has not been installed yet. If both install parameters are False, the module is
+        expected to be preinstalled.
 
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
-        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
+            allow_v1=False.
+        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
+            package with the corresponding name.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
@@ -1399,7 +1409,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if use_module_cache():
             return self.modules[module_name]
-        return self.load_module(module_name, install=install, allow_v1=allow_v1)
+        return self.load_module(module_name, allow_v1=allow_v1, install_v1=install_v1, install_v2=install_v2)
 
     def load_module_recursive(
         self, install: bool = False, bypass_module_cache: bool = False
@@ -1454,8 +1464,8 @@ class Project(ModuleLike[ProjectMetadata]):
                 # load module
                 self.get_module(
                     requirement.key,
-                    install=install,
                     allow_v1=False,
+                    install_v2=install,
                     bypass_module_cache=bypass_module_cache,
                 )
                 # queue AST reload
@@ -1519,8 +1529,9 @@ class Project(ModuleLike[ProjectMetadata]):
                 # TODO: make sure this doesn't install v2
                 module: Module = self.get_module(
                     module_name,
-                    install=install,
                     allow_v1=module_name not in v2_modules,
+                    install_v1=install,
+                    install_v2=False,
                     bypass_module_cache=bypass_module_cache,
                 )
                 setup_module(module)
@@ -1530,15 +1541,24 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
-    def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
+    def load_module(
+        self,
+        module_name: str,
+        *,
+        allow_v1: bool = False,
+        install_v1: bool = False,
+        install_v2: bool = False,
+    ) -> "Module":
         """
-        Get a module instance for a given module name. Should be called prior to configuring the module finder to include v1
-        modules.
+        Get a module instance for a given module name. The install parameters allow to install the module if it has not been
+        installed yet. If both install parameters are False, the module is expected to be preinstalled.
 
         :param module_name: The name of the module.
-        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
+            allow_v1=False.
+        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
+            package with the corresponding name.
         """
         if not self.is_using_virtual_env():
             self.virtualenv.use_virtual_env()
@@ -1549,11 +1569,11 @@ class Project(ModuleLike[ProjectMetadata]):
 
         module: Optional[Module]
         try:
-            module = self.module_source.get_module(self, module_reqs, install=install)
+            module = self.module_source.get_module(self, module_reqs, install=install_v2)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
-                module = self.module_source_v1.get_module(self, module_reqs, install=install)
+                module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
