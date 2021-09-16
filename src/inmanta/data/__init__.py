@@ -156,7 +156,10 @@ class InvalidSort(Exception):
 
 
 class DatabaseOrder:
-    """Represents an ordering for database queries"""
+    """Represents an ordering for database queries
+
+    valid_sort_columns: describes the names and types of the columns that are valid for this DatabaseOrder
+    """
 
     valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
 
@@ -362,7 +365,8 @@ class CompileReportOrder(DatabaseOrder):
 
 
 class BaseQueryBuilder(ABC):
-    """Provides a way to build up a sql query from its parts"""
+    """Provides a way to build up a sql query from its parts.
+    Each method returns a new query builder instance, with the additional parameters processed"""
 
     def __init__(
         self,
@@ -371,6 +375,15 @@ class BaseQueryBuilder(ABC):
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
     ) -> None:
+        """
+        The parameters are the parts of an sql query,
+        which can also be added to the builder with the appropriate methods
+
+        :param select_clause: The select clause of the query
+        :param from_clause: From clause of the query
+        :param filter_statements: A list of filters for the query
+        :param values: The values to be used for the filter statements
+        """
         self.select_clause = select_clause
         self._from_clause = from_clause
         self.filter_statements = filter_statements or []
@@ -382,21 +395,20 @@ class BaseQueryBuilder(ABC):
             return "WHERE " + " AND ".join(filter_statements)
         return ""
 
+    @abstractmethod
     def from_clause(self, from_clause: str):
         """ Set the from clause of the query"""
-        self._from_clause = from_clause
-        return self
+        pass
 
     @property
     def offset(self):
         """ The current offset of the values to be used for filter statements"""
         return len(self.values) + 1
 
+    @abstractmethod
     def filter(self, filter_statements: List[str], values: List[object]) -> "BaseQueryBuilder":
         """ Add filters to the query """
-        self.filter_statements += filter_statements
-        self.values += values
-        return self
+        pass
 
     @abstractmethod
     def build(self) -> Tuple[str, List[object]]:
@@ -417,6 +429,16 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         limit: Optional[int] = None,
         backward_paging: Optional[bool] = False,
     ) -> None:
+        """
+        :param select_clause: The select clause of the query
+        :param from_clause: The from clause of the query
+        :param filter_statements: A list of filters for the query
+        :param values: The values to be used for the filter statements
+        :param db_order: The DatabaseOrder describing how the results should be ordered
+        :param limit: Limit the results to this amount
+        :param backward_paging: Whether the ordering of the results should be inverted,
+                                used when going backward through the pages
+        """
         super().__init__(select_clause, from_clause, filter_statements, values)
         self.db_order = db_order
         self.limit = limit
@@ -424,17 +446,46 @@ class SimpleQueryBuilder(BaseQueryBuilder):
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """ Set the select clause of the query """
-        self.select_clause = select_clause
-        return self
+        return SimpleQueryBuilder(
+            select_clause,
+            self._from_clause,
+            self.filter_statements,
+            self.values,
+            self.db_order,
+            self.limit,
+            self.backward_paging,
+        )
+
+    def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
+        """ Set the from clause of the query"""
+        return SimpleQueryBuilder(
+            self.select_clause,
+            from_clause,
+            self.filter_statements,
+            self.values,
+            self.db_order,
+            self.limit,
+            self.backward_paging,
+        )
 
     def order_and_limit(
         self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
     ) -> "SimpleQueryBuilder":
         """ Set the order and limit of the query """
-        self.db_order = db_order
-        self.limit = limit
-        self.backward_paging = backward_paging
-        return self
+        return SimpleQueryBuilder(
+            self.select_clause, self._from_clause, self.filter_statements, self.values, db_order, limit, backward_paging
+        )
+
+    def filter(self, filter_statements: List[str], values: List[object]) -> "SimpleQueryBuilder":
+        return SimpleQueryBuilder(
+            self.select_clause,
+            self._from_clause,
+            self.filter_statements + filter_statements,
+            self.values + values,
+            self.db_order,
+            self.limit,
+            self.backward_paging,
+        )
 
     def build(self) -> Tuple[str, List[object]]:
         if not self.select_clause:
@@ -470,20 +521,14 @@ class PageCountQueryBuilder(BaseQueryBuilder):
 
     def __init__(
         self,
-        db_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
+        select_clause: Optional[str] = None,
         from_clause: Optional[str] = None,
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
     ) -> None:
-        super().__init__(None, from_clause, filter_statements, values)
-        # Set the select clause with _page_count()
-        self._page_count(db_order, first_id, last_id, start, end)
+        super().__init__(select_clause, from_clause, filter_statements, values)
 
-    def _page_count(
+    def page_count(
         self,
         db_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
@@ -493,16 +538,17 @@ class PageCountQueryBuilder(BaseQueryBuilder):
     ) -> "PageCountQueryBuilder":
         """ Determine the filters and select clause for a page count query"""
         order = db_order.get_order()
+        values = []
         if "ASC" in order:
             before_filter_statements, before_values = db_order.as_end_filter(self.offset, end, last_id)
-            self.values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_start_filter(self.offset, start, first_id)
-            self.values.extend(after_values)
+            values.extend(before_values)
+            after_filter_statements, after_values = db_order.as_start_filter(self.offset + len(before_values), start, first_id)
+            values.extend(after_values)
         else:
             before_filter_statements, before_values = db_order.as_start_filter(self.offset, start, first_id)
-            self.values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_end_filter(self.offset, end, last_id)
-            self.values.extend(after_values)
+            values.extend(before_values)
+            after_filter_statements, after_values = db_order.as_end_filter(self.offset + len(before_values), end, last_id)
+            values.extend(after_values)
         before_filter = self._join_filter_statements(before_filter_statements)
         after_filter = self._join_filter_statements(after_filter_statements)
         id_column_name = db_order.id_column
@@ -511,8 +557,16 @@ class PageCountQueryBuilder(BaseQueryBuilder):
             f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
             f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
         )
-        self.select_clause = select_clause
-        return self
+        return PageCountQueryBuilder(select_clause, self._from_clause, self.filter_statements, self.values + values)
+
+    def from_clause(self, from_clause: str) -> "PageCountQueryBuilder":
+        """ Set the from clause of the query"""
+        return PageCountQueryBuilder(self.select_clause, from_clause, self.filter_statements, self.values)
+
+    def filter(self, filter_statements: List[str], values: List[object]) -> "PageCountQueryBuilder":
+        return PageCountQueryBuilder(
+            self.select_clause, self._from_clause, self.filter_statements + filter_statements, self.values + values
+        )
 
     def build(self) -> Tuple[str, List[object]]:
         if not self.select_clause:
@@ -2530,20 +2584,16 @@ class Compile(BaseDocument):
         end: Optional[Any] = None,
         **query: Any,
     ) -> PagingCounts:
-        query_builder = PageCountQueryBuilder(
-            database_order,
-            first_id,
-            last_id,
-            start,
-            end,
+        base_query = PageCountQueryBuilder(
             from_clause=f"FROM {cls.table_name()}",
             filter_statements=[" environment = $1 "],
             values=[cls._get_value(environment)],
         )
-        query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
         )
-        sql_query, values = query_builder.build()
+        sql_query, values = filtered_query.build()
         result = await cls.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
@@ -2568,15 +2618,16 @@ class Compile(BaseDocument):
             filter_statements=[" environment = $1 "],
             values=[cls._get_value(environment)],
         )
-        query_builder.filter(
+        filtered_query = query_builder.filter(
             *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
         )
-        query_builder.filter(*database_order.as_start_filter(query_builder.offset, start, first_id))
-        query_builder.filter(*database_order.as_end_filter(query_builder.offset, end, last_id))
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
         order = database_order.get_order()
         backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        query_builder.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = query_builder.build()
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
 
         compile_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
         compile_records = cast(Iterable[Record], compile_records)
