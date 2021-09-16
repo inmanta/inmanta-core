@@ -158,11 +158,12 @@ class InvalidSort(Exception):
 class DatabaseOrder:
     """Represents an ordering for database queries"""
 
+    valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
+
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
+        """ The class used for checking whether the ordering is valid for a table"""
         return BaseDocument
-
-    valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
 
     @classmethod
     def parse_from_string(
@@ -234,7 +235,7 @@ class DatabaseOrder:
 
     @property
     def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database ordering"""
+        """Name of the id column of this database order"""
         return ColumnNameStr("id")
 
     def as_filter(
@@ -281,11 +282,11 @@ class DatabaseOrder:
 class ResourceOrder(DatabaseOrder):
     """ Represents the ordering by which resources should be sorted"""
 
+    valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
+
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Resource
-
-    valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
 
     @classmethod
     def parse_from_string(
@@ -308,12 +309,12 @@ class ResourceOrder(DatabaseOrder):
 class ResourceHistoryOrder(DatabaseOrder):
     """ Represents the ordering by which resource history should be sorted"""
 
+    valid_sort_columns = {"date": datetime.datetime}
+
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         # Sorting based on the date of the configuration model
         return ConfigurationModel
-
-    valid_sort_columns = {"date": datetime.datetime}
 
     @classmethod
     def parse_from_string(
@@ -327,11 +328,11 @@ class ResourceHistoryOrder(DatabaseOrder):
 class ResourceLogOrder(DatabaseOrder):
     """ Represents the ordering by which resource logs should be sorted"""
 
+    valid_sort_columns = {"timestamp": datetime.datetime}
+
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return ResourceAction
-
-    valid_sort_columns = {"timestamp": datetime.datetime}
 
     @classmethod
     def parse_from_string(
@@ -345,11 +346,11 @@ class ResourceLogOrder(DatabaseOrder):
 class CompileReportOrder(DatabaseOrder):
     """ Represents the ordering by which compile reports should be sorted"""
 
+    valid_sort_columns = {"requested": datetime.datetime}
+
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Compile
-
-    valid_sort_columns = {"requested": datetime.datetime}
 
     @classmethod
     def parse_from_string(
@@ -361,7 +362,7 @@ class CompileReportOrder(DatabaseOrder):
 
 
 class BaseQueryBuilder(ABC):
-    """Provides a way to build up a query from its parts"""
+    """Provides a way to build up a sql query from its parts"""
 
     def __init__(
         self,
@@ -403,8 +404,8 @@ class BaseQueryBuilder(ABC):
         pass
 
 
-class QueryBuilder(BaseQueryBuilder):
-    """ A query builder suitable for most ordered queries """
+class SimpleQueryBuilder(BaseQueryBuilder):
+    """ A query builder suitable for most queries """
 
     def __init__(
         self,
@@ -421,15 +422,15 @@ class QueryBuilder(BaseQueryBuilder):
         self.limit = limit
         self.backward_paging = backward_paging
 
-    def select(self, select_clause: str) -> "QueryBuilder":
+    def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """ Set the select clause of the query """
         self.select_clause = select_clause
         return self
 
     def order_and_limit(
         self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
-    ) -> "QueryBuilder":
-        """ Set the order and limit tof the query """
+    ) -> "SimpleQueryBuilder":
+        """ Set the order and limit of the query """
         self.db_order = db_order
         self.limit = limit
         self.backward_paging = backward_paging
@@ -465,7 +466,7 @@ class QueryBuilder(BaseQueryBuilder):
 
 class PageCountQueryBuilder(BaseQueryBuilder):
     """A specific query builder for counting records before and after
-    the current page returned by a select query, as well as the total number"""
+    the current page returned by a select query, as well as the total number of records"""
 
     def __init__(
         self,
@@ -479,7 +480,7 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         values: Optional[List[object]] = None,
     ) -> None:
         super().__init__(None, from_clause, filter_statements, values)
-        # Set the select clause from _page_count()
+        # Set the select clause with _page_count()
         self._page_count(db_order, first_id, last_id, start, end)
 
     def _page_count(
@@ -2549,7 +2550,7 @@ class Compile(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List[m.CompileReport]:
-        query_builder = QueryBuilder(
+        query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                     started, completed, do_export, force_update,
                     metadata, environment_variables, success, version """,
