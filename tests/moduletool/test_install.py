@@ -16,29 +16,26 @@
     Contact: code@inmanta.com
 """
 import argparse
-import configparser
 import json
 import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import py
 import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import const, env, loader, module
+from inmanta import env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.module import ModuleLoadingException
+from inmanta.module import InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from libpip2pi.commands import dir2pi
-from moduletool.common import BadModProvider, install_project
+from moduletool.common import BadModProvider, PipIndex, install_project, module_from_template
 from packaging import version
 
 
@@ -64,87 +61,11 @@ def run_module_install(module_path: str, editable: bool, set_path_argument: bool
     ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
 
 
-@dataclass
-class PipIndex:
-    """
-    Local pip index that makes use of dir2pi to publish its artifacts.
-    """
-
-    artifact_dir: str
-
-    @property
-    def url(self) -> str:
-        return f"{self.artifact_dir}/simple"
-
-    def publish(self) -> None:
-        dir2pi(argv=["dir2pi", self.artifact_dir])
-
-
-def module_from_template(
-    source_dir: str,
-    dest_dir: str,
-    *,
-    new_version: Optional[version.Version] = None,
-    dev_version: bool = False,
-    new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
-    install: bool = False,
-    editable: bool = False,
-    publish_index: Optional[PipIndex] = None,
-) -> module.ModuleV2Metadata:
-    """
-    Creates a v2 module from a template.
-
-    :param source_dir: The directory where the original module lives.
-    :param dest_dir: The directory to use to copy the original to and to stage any changes in.
-    :param new_version: The new version for the module, if any.
-    :param dev_version: Whether to tag the version with a dev tag.
-    :param new_name: The new name of the inmanta module, if any.
-    :param new_requirements: The new requirements for the module, if any.
-    :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
-        python environment unless editable is True.
-    :param editable: Whether to install the module in editable mode, ignored if install is False.
-    :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
-    """
-    # preinstall older version of module
-    shutil.copytree(source_dir, dest_dir)
-    config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
-    config: configparser.ConfigParser = configparser.ConfigParser()
-    config.read(config_file)
-    if new_version is not None:
-        config["metadata"]["version"] = str(new_version)
-    if dev_version:
-        config["egg_info"] = {"tag_build": ".dev0"}
-    if new_name is not None:
-        os.rename(
-            os.path.join(
-                dest_dir, const.PLUGINS_PACKAGE, module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
-            ),
-            os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
-        )
-        config["metadata"]["name"] = module.ModuleV2Source.get_python_package_name(new_name)
-    if new_requirements:
-        config["options"]["install_requires"] = "\n    ".join(
-            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
-            for req in new_requirements
-        )
-    with open(config_file, "w") as fh:
-        config.write(fh)
-    if install:
-        ModuleTool().install(editable=editable, path=dest_dir)
-    if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
-        publish_index.publish()
-    with open(config_file, "r") as fh:
-        return module.ModuleV2Metadata.parse(fh)
-
-
 def setup_simple_project(
     projects_dir: str, path: str, imports: List[str], *, index_urls: Optional[List[str]] = None, github_source: bool = True
 ) -> module.ProjectMetadata:
     """
     Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
-
     :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
     :param path: The path to the directory to create the project in.
     :param imports: The modules to import in the project.
@@ -170,6 +91,7 @@ def setup_simple_project(
         fh.truncate()
     with open(os.path.join(path, "main.cf"), "w") as fh:
         fh.write("\n".join(f"import {module_name}" for module_name in imports))
+    module.Project.set(module.Project(path, autostd=False))
     return metadata
 
 
@@ -353,27 +275,24 @@ def test_module_install_version(
 ) -> None:
     """
     Make sure that the module install results in a module instance with the appropriate version information.
-
     :param dev: whether to add a dev tag to the version
     """
     module_name: str = "minimalv2module"
     module_path: str = os.path.join(str(tmpdir), module_name)
-    plain_version: version.Version = version.Version("1.2.3")
-    full_version: version.Version = plain_version if not dev else version.Version(f"{plain_version}.dev0")
+    module_version: version.Version = version.Version("1.2.3") if not dev else version.Version("1.2.3.dev0")
 
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
-        new_version=plain_version,
-        dev_version=dev,
+        new_version=module_version,
     )
     project_dir: str = os.path.join(str(tmpdir), "project")
     setup_simple_project(projects_dir, project_dir, [])
     os.chdir(project_dir)
 
     ModuleTool().install(editable=True, path=module_path)
-    module: module.Module = ModuleTool().get_module(module_name)
-    assert module.version == full_version
+    mod: module.Module = ModuleTool().get_module(module_name)
+    assert mod.version == module_version
 
 
 @pytest.mark.parametrize(
@@ -440,8 +359,9 @@ def test_project_install_preinstalled(
 
     # preinstall older version of module
     module_path: str = os.path.join(str(tmpdir), module_name)
-    metadata: module.ModuleV2Metadata = module_from_template(
-        os.path.join(modules_v2_dir, module_name), module_path, dev_version=True, install=True, editable=editable
+    new_version = version.Version("1.2.3.dev0")
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name), module_path, new_version=new_version, install=True, editable=editable
     )
 
     def assert_module_install() -> None:
@@ -451,9 +371,12 @@ def test_project_install_preinstalled(
         assert env_module_file is not None
         install_path: str = module_path if editable else env.process_env.site_packages_dir
         assert env_module_file == os.path.join(install_path, *fq_mod_name.split("."), "__init__.py")
-        assert env.process_env.get_installed_packages(only_editable=editable).get(
-            f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
-        ) == version.Version(metadata.version + ".dev0")
+        assert (
+            env.process_env.get_installed_packages(only_editable=editable).get(
+                f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name}", None
+            )
+            == new_version
+        )
 
     assert_module_install()
 
@@ -513,13 +436,12 @@ def test_project_install_modules_cache_invalid(
     # preinstall module
     if preinstall_v2:
         # set up project, including activation of venv
-        snippetcompiler_clean.setup_for_snippet("")
+        snippetcompiler_clean.setup_for_snippet("", install_project=False)
         # install older v2 module
         module_from_template(
             v2_template_path,
             os.path.join(str(tmpdir), module_name, "dev"),
-            new_version=v2_version,
-            dev_version=True,
+            new_version=version.Version(f"{v2_version}.dev0"),
             install=True,
         )
     else:
@@ -527,6 +449,7 @@ def test_project_install_modules_cache_invalid(
         snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
+            install_project=False,
         )
         ProjectTool().execute("install", [])
 
@@ -537,6 +460,7 @@ def test_project_install_modules_cache_invalid(
         import {module_name}
         """,
         autostd=False,
+        install_project=False,
         python_package_sources=[index.url, local_module_package_index],
     )
 
@@ -616,6 +540,7 @@ def test_project_install_incompatible_versions(
         import v2mod
         """,
         autostd=False,
+        install_project=False,
         add_to_module_path=[v1_modules_path],
         python_package_sources=[index.url],
     )
@@ -672,6 +597,7 @@ def test_project_install_incompatible_dependencies(
         import {module.ModuleV2.get_name_from_metadata(v2mod2)}
         """,
         autostd=False,
+        install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
     )
 
@@ -691,3 +617,44 @@ def test_project_install_incompatible_dependencies(
         is not None
         for rec in caplog.records
     )
+
+
+@pytest.mark.parametrize("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
+def test_project_install_with_install_mode(
+    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
+) -> None:
+    """
+    Test whether the `inmanta module install` command takes into account the `install_mode` configured on the inmanta project.
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    module_template_path: str = os.path.join(modules_v2_dir, "elaboratev2module")
+    module_name: str = "mod"
+    package_name: str = module.ModuleV2.get_package_name_for(module_name)
+    for module_version in ["1.0.0", "1.0.1.dev0"]:
+        module_from_template(
+            module_template_path,
+            os.path.join(str(tmpdir), f"mod-{module_version}"),
+            new_name=module_name,
+            new_version=version.Version(module_version),
+            publish_index=index,
+        )
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"import {module_name}",
+        autostd=False,
+        python_package_sources=[index.url],
+        install_mode=install_mode,
+    )
+
+    os.chdir(module.Project.get().path)
+    ProjectTool().execute("install", [])
+
+    if install_mode is None or install_mode == InstallMode.release:
+        expected_version = version.Version("1.0.0")
+    else:
+        expected_version = version.Version("1.0.1.dev0")
+    installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    assert package_name in installed_packages
+    assert installed_packages[package_name] == expected_version

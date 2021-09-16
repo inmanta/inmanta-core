@@ -220,13 +220,8 @@ def test_module_corruption(git_modules_dir, modules_repo):
     # clear cache
     Project._project = None
 
-    # attempt to update, mod10 is wrong, but only after the update
-    app(["modules", "update"])
-
     with pytest.raises(ParserException):
-        # clear cache
-        Project._project = None
-        # attempt to update, mod10 is wrong, can not be fixed
+        # mod 10 is updated to a version that contains a syntax error
         app(["modules", "update"])
 
     # unfreeze deps to allow update

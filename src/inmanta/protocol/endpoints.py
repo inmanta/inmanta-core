@@ -180,7 +180,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
-    async def start_connected(self):
+    async def start_connected(self) -> None:
         """
         This method is called after starting the client transport, but before sending the first heartbeat.
         """
@@ -344,7 +344,9 @@ class Client(Endpoint):
         self._version_match = version_match
         self._exact_version = exact_version
 
-    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(
+        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+    ) -> common.Result:
         """
         Execute a call and return the result
         """
@@ -377,7 +379,8 @@ class Client(Endpoint):
         if method is None:
             raise AttributeError("Method with name %s is not defined for this client" % name)
 
-        def wrap(*args: List, **kwargs: Dict) -> common.Result:
+        def wrap(*args: object, **kwargs: object) -> Coroutine[Any, Any, common.Result]:
+            assert method
             method.function(*args, **kwargs)
             return self._call(method_properties=method, args=args, kwargs=kwargs)
 
@@ -394,11 +397,11 @@ class SyncClient(object):
         self.timeout = timeout
         self._client = Client(self.name, self.timeout)
 
-    def __getattr__(self, name: str) -> Callable:
-        def async_call(*args: List, **kwargs: Dict) -> None:
+    def __getattr__(self, name: str) -> Callable[..., object]:
+        def async_call(*args: List[object], **kwargs: Dict[str, object]) -> object:
             method = getattr(self._client, name)
 
-            def method_call() -> None:
+            def method_call() -> object:
                 return method(*args, **kwargs)
 
             try:
@@ -418,7 +421,9 @@ class SessionClient(Client):
         super().__init__(name, timeout)
         self._sid = sid
 
-    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(
+        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+    ) -> common.Result:
         """
         Execute the rpc call
         """

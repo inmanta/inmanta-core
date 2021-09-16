@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 from pyformance.meters import Gauge
 
@@ -9,4 +9,4 @@ class MetricsRegistry:
 
 global_registry: Callable[[], MetricsRegistry]
 
-def gauge(key: str, gauge: Gauge=None) -> Gauge: ...
+def gauge(key: str, gauge: Optional[Gauge]=None) -> Gauge: ...

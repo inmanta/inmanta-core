@@ -20,14 +20,16 @@ import logging
 import os
 import shutil
 import unittest
-from typing import List
+from importlib.abc import Loader
+from typing import List, Optional, Tuple
 from unittest import mock
 
 import pytest
 
 from _io import StringIO
-from inmanta import module
+from inmanta import env, module
 from inmanta.env import LocalPackagePath
+from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 
 
 def test_module():
@@ -76,18 +78,22 @@ def test_to_v2():
     Test whether the `to_v2()` method of `ModuleV1Metadata` works correctly.
     """
     v1_metadata = module.ModuleV1Metadata(
-        name="test",
+        name="a_test_module",
         description="A description",
         version="1.2.3",
         license="Apache 2.0",
         compiler_version="4.5.6",
-        requires=["mod1", "mod2"],
+        requires=["module_dep_1", "module_dep_2"],
     )
     v2_metadata = v1_metadata.to_v2()
     for attr_name in ["description", "version", "license"]:
         assert v1_metadata.__getattribute__(attr_name) == v2_metadata.__getattribute__(attr_name)
-    assert f"{module.ModuleV2.PKG_NAME_PREFIX}{v1_metadata.name}" == v2_metadata.name
-    assert [f"{module.ModuleV2.PKG_NAME_PREFIX}{req}" for req in v1_metadata.requires] == v2_metadata.install_requires
+
+    def _convert_module_to_package_name(module_name: str) -> str:
+        return f"{module.ModuleV2.PKG_NAME_PREFIX}{module_name.replace('_', '-')}"
+
+    assert _convert_module_to_package_name(v1_metadata.name) == v2_metadata.name
+    assert [_convert_module_to_package_name(req) for req in v1_metadata.requires] == v2_metadata.install_requires
 
 
 def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
@@ -100,8 +106,8 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
     def compile_and_assert_warning(
         module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
-        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules)
         caplog.clear()
+        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules)
         snippetcompiler_clean.do_export()
         warning_message = f"Module {module_name} is not version controlled, we recommend you do this as soon as possible."
         assert (warning_message in caplog.text) is needs_versioning_warning
@@ -147,3 +153,88 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
         needs_versioning_warning=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=True)],
     )
+
+
+@pytest.mark.parametrize(
+    "v1_module, all_python_requirements,strict_python_requirements,module_requirements",
+    [
+        (
+            True,
+            ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"],
+            ["jinja2~=3.2.1"],
+            ["v2_module==1.2.3", "v1_module==1.1.1"],
+        ),
+        (False, ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"], ["jinja2~=3.2.1"], ["v2_module==1.2.3"]),
+    ],
+)
+def test_get_requirements(
+    modules_dir: str,
+    modules_v2_dir: str,
+    v1_module: bool,
+    all_python_requirements: List[str],
+    strict_python_requirements: List[str],
+    module_requirements: List[str],
+) -> None:
+    """
+    Test the different methods to get the requirements of a module.
+    """
+    module_name = "many_dependencies"
+
+    if v1_module:
+        module_dir = os.path.join(modules_dir, module_name)
+        mod = module.ModuleV1(module.DummyProject(autostd=False), module_dir)
+    else:
+        module_dir = os.path.join(modules_v2_dir, module_name)
+        mod = module.ModuleV2(module.DummyProject(autostd=False), module_dir)
+
+    assert set(mod.get_all_python_requirements_as_list()) == set(all_python_requirements)
+    assert set(mod.get_strict_python_requirements_as_list()) == set(strict_python_requirements)
+    assert set(mod.get_module_requirements()) == set(module_requirements)
+    assert set(mod.requires()) == set(module.InmantaModuleRequirement.parse(req) for req in module_requirements)
+
+
+@pytest.mark.parametrize("editable", [True, False])
+def test_module_v2_source_get_installed_module_editable(
+    snippetcompiler,
+    modules_v2_dir: str,
+    editable: bool,
+) -> None:
+    """
+    Make sure ModuleV2Source.get_installed_module identifies editable installations correctly.
+    """
+    module_name: str = "minimalv2module"
+    module_dir: str = os.path.join(modules_v2_dir, module_name)
+    snippetcompiler.setup_for_snippet(
+        f"import {module_name}",
+        autostd=False,
+        install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
+    )
+
+    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
+    assert mod is not None
+    # os.path.realpath because snippetcompiler uses symlinks
+    assert os.path.realpath(mod.path) == (
+        module_dir if editable else os.path.join(env.process_env.site_packages_dir, "inmanta_plugins", module_name)
+    )
+    assert mod._is_editable_install == editable
+
+
+def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
+    """
+    Make sure ModuleV2Source.path_for does not include modules loaded by the v1 module loader.
+    """
+    # install and load std as v1
+    snippetcompiler.setup_for_snippet("import std")
+    module.Project.get().load_plugins()
+
+    # make sure the v1 module finder is configured and discovered by env.process_env
+    assert PluginModuleFinder.MODULE_FINDER is not None
+    module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
+    assert module_info is not None
+    path, loader = module_info
+    assert path is not None
+    assert isinstance(loader, PluginModuleLoader)
+
+    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    assert source.path_for("std") is None

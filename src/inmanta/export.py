@@ -419,7 +419,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: int = None) -> None:
+    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: Optional[int] = None) -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())

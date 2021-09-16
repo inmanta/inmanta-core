@@ -104,7 +104,11 @@ class PythonEnvironment:
         return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 
     def install_from_index(
-        self, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
+        self,
+        requirements: List[Requirement],
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
     ) -> None:
         index_args: List[str] = (
             []
@@ -121,6 +125,7 @@ class PythonEnvironment:
                     "pip",
                     "install",
                     *(["--upgrade"] if upgrade else []),
+                    *(["--pre"] if allow_pre_releases else []),
                     *(str(requirement) for requirement in requirements),
                     *index_args,
                 ],
@@ -185,9 +190,13 @@ class ActiveEnv(PythonEnvironment):
     """
 
     def install_from_index(
-        self, requirements: List[Requirement], index_urls: Optional[List[str]] = None, upgrade: bool = False
+        self,
+        requirements: List[Requirement],
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
     ) -> None:
-        super().install_from_index(requirements, index_urls, upgrade)
+        super().install_from_index(requirements, index_urls, upgrade, allow_pre_releases)
         self.notify_change()
 
     def install_from_source(self, paths: List[LocalPackagePath]) -> None:
@@ -282,7 +291,7 @@ Singleton representing the Python environment this process is running in.
 
 class VirtualEnv(ActiveEnv):
     """
-    Creates and uses a virtual environment for this process
+    Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
