@@ -388,7 +388,7 @@ class BaseQueryBuilder(ABC):
 
     @property
     def offset(self):
-        """ The current offset to be used for filter statements"""
+        """ The current offset of the values to be used for filter statements"""
         return len(self.values) + 1
 
     def filter(self, filter_statements: List[str], values: List[object]) -> "BaseQueryBuilder":
@@ -2560,9 +2560,8 @@ class Compile(BaseDocument):
         query_builder.filter(
             *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
         )
-        query_builder.filter(*database_order.as_start_filter(query_builder.offset, start, first_id)).filter(
-            *database_order.as_end_filter(query_builder.offset, end, last_id)
-        )
+        query_builder.filter(*database_order.as_start_filter(query_builder.offset, start, first_id))
+        query_builder.filter(*database_order.as_end_filter(query_builder.offset, end, last_id))
         order = database_order.get_order()
         backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         query_builder.order_and_limit(database_order, limit, backward_paging)

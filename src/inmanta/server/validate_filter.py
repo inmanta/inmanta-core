@@ -219,7 +219,7 @@ class FilterValidator(ABC):
     @property
     @abstractmethod
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        """ A dictionary that determines the mapping between the allowed filters and how they should be parsed """
+        """ A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         pass
 
     def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
