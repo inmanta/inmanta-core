@@ -1344,12 +1344,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return ""
 
     @classmethod
-    def _continue_filter_statements(cls, filter_statements: List[str]) -> str:
-        if filter_statements:
-            return " AND " + " AND ".join(filter_statements)
-        return ""
-
-    @classmethod
     def _get_list_query_pagination_parameters(
         cls,
         database_order: DatabaseOrder,
