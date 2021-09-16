@@ -2544,9 +2544,9 @@ class Compile(BaseDocument):
         database_order: DatabaseOrder,
         first_id: Optional[uuid.UUID] = None,
         last_id: Optional[uuid.UUID] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         base_query = PageCountQueryBuilder(
             from_clause=f"FROM {cls.table_name()}",
@@ -2591,7 +2591,7 @@ class Compile(BaseDocument):
             *database_order.as_end_filter(filtered_query.offset, end, last_id)
         )
         order = database_order.get_order()
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
+        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
         ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
         sql_query, values = ordered_query.build()
 

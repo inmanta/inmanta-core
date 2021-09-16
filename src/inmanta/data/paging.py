@@ -27,6 +27,7 @@ from inmanta.data import (
     DatabaseOrder,
     InvalidFieldNameException,
     PagingCounts,
+    QueryType,
     Resource,
     ResourceAction,
 )
@@ -60,9 +61,9 @@ class PagingCountsProvider(ABC):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         """
         Count the records in the ranges required for the paging links
@@ -80,9 +81,9 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_item_count_query(
             environment, database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
@@ -102,9 +103,9 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_history_item_count_query(
             environment,
@@ -132,9 +133,9 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
             environment, self.resource_id, database_order, ColumnNameStr("timestamp"), first_id, last_id, start, end, **query
@@ -150,9 +151,9 @@ class CompileReportPagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await Compile.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
 
@@ -165,7 +166,7 @@ class PagingHandler(ABC, Generic[T]):
         self,
         environment: uuid.UUID,
         dtos: List[T],
-        db_query: Mapping[str, Tuple[str, Any]],
+        db_query: Mapping[str, Tuple[QueryType, object]],
         limit: int,
         database_order: DatabaseOrder,
     ) -> PagingMetadata:
