@@ -1155,6 +1155,46 @@ class ModuleLike(ABC, Generic[T]):
                     result.append(line)
         return result
 
+    def _get_requirements_txt_as_list(self) -> List[str]:
+        """
+        Returns the contents of the requirements.txt file as a list of requirements, if it exists.
+        """
+        file = os.path.join(self._path, "requirements.txt")
+        if os.path.exists(file):
+            with open(file, "r", encoding="utf-8") as fd:
+                requirements_txt_content = fd.read()
+                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
+                req_lines = self._remove_comments(req_lines)
+                req_lines = self._remove_line_continuations(req_lines)
+                return list(set(req_lines))
+        else:
+            return []
+
+    @abstractmethod
+    def get_all_python_requirements_as_list(self) -> List[str]:
+        """
+        Returns all Python requirements specified by this module like, including requirements on V2 modules.
+        """
+        raise NotImplementedError()
+
+    def get_strict_python_requirements_as_list(self) -> List[str]:
+        """
+        Returns the strict python requirements specified by this module like, meaning all Python requirements excluding those on
+        inmanta modules.
+        """
+        return [req for req in self.get_all_python_requirements_as_list() if not req.startswith(ModuleV2.PKG_NAME_PREFIX)]
+
+    # TODO: add tests
+    def get_module_v2_requirements(self) -> List[InmantaModuleRequirement]:
+        """
+        Returns all requirements this module like has on v2 modules.
+        """
+        return [
+            InmantaModuleRequirement.parse(ModuleV2Source.get_inmanta_module_name(req))
+            for req in self.get_all_python_requirements_as_list()
+            if req.startswith(ModuleV2.PKG_NAME_PREFIX)
+        ]
+
 
 @stable_api
 class Project(ModuleLike[ProjectMetadata]):
@@ -1365,7 +1405,7 @@ class Project(ModuleLike[ProjectMetadata]):
         self, install: bool = False, bypass_module_cache: bool = False
     ) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
-        Loads this projects' modules and submodules by recursively following import statements starting from the project's main file.
+        Loads this project's modules and submodules by recursively following import statements starting from the project's main file.
 
         For each imported submodule, return a triple of name, statements, basicblock
 
@@ -1410,17 +1450,16 @@ class Project(ModuleLike[ProjectMetadata]):
             Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
             any of these requirements have already been loaded as v1, queues them for reload.
             """
-            for requirement in module_like.get_module_requirements():
-                req_name: str = InmantaModuleRequirement.parse(requirement).key
+            for requirement in module_like.get_module_v2_requirements():
                 # load module
                 self.get_module(
-                    req_name,
+                    requirement.key,
                     install=install,
                     allow_v1=False,
                     bypass_module_cache=bypass_module_cache,
                 )
                 # queue AST reload
-                require_v2(req_name)
+                require_v2(requirement.key)
 
         def setup_module(module: Module) -> None:
             """
@@ -1738,6 +1777,9 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
+    def get_all_python_requirements_as_list(self) -> List[str]:
+        return self._get_requirements_txt_as_list()
+
 
 class DummyProject(Project):
     """ Placeholder project that does nothing """
@@ -1790,14 +1832,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
-
-    @abstractmethod
-    def get_module_requirements(self) -> List[str]:
-        """
-        Return all requirements this module has to other modules. Requirements should be on inmanta module names, not Python
-        package names.
-        """
-        raise NotImplementedError()
 
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
@@ -2047,25 +2081,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             print("done")
         print()
 
-    @abstractmethod
-    def get_all_python_requirements_as_list(self) -> List[str]:
-        """
-        Returns all Python requirements specified by the module, including requirements on V2 modules.
-        """
-        raise NotImplementedError()
-
-    def get_strict_python_requirements_as_list(self) -> List[str]:
-        """
-        Returns the strict python requirements specified by the module, meaning all Python requirements excluding those on
-        inmanta modules.
-        """
-        return [req for req in self.get_all_python_requirements_as_list() if not req.startswith(ModuleV2.PKG_NAME_PREFIX)]
-
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
+
+    @abstractmethod
+    def get_module_requirements(self) -> List[str]:
+        """
+        Returns all requirements this module has on other modules, regardless of module generation. Requirements should be on
+        inmanta module names, not Python package names.
+        """
+        raise NotImplementedError()
 
 
 @stable_api
@@ -2214,25 +2242,11 @@ class ModuleV1(Module[ModuleV1Metadata]):
             return None
         return plugins_dir
 
-    def get_module_requirements(self) -> List[str]:
-        module_requirements_in_requirements_txt = [
-            ModuleV2Source.get_inmanta_module_name(req)
-            for req in self.get_all_python_requirements_as_list()
-            if req.startswith(ModuleV2.PKG_NAME_PREFIX)
-        ]
-        return list(self.metadata.requires) + module_requirements_in_requirements_txt
-
     def get_all_python_requirements_as_list(self) -> List[str]:
-        file = os.path.join(self._path, "requirements.txt")
-        if os.path.exists(file):
-            with open(file, "r", encoding="utf-8") as fd:
-                requirements_txt_content = fd.read()
-                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
-                req_lines = self._remove_comments(req_lines)
-                req_lines = self._remove_line_continuations(req_lines)
-                return list(set(req_lines))
-        else:
-            return []
+        return self._get_requirements_txt_as_list()
+
+    def get_module_requirements(self) -> List[str]:
+        return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
 
 @stable_api
@@ -2288,12 +2302,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
         else:
             return self.path
 
-    def get_module_requirements(self) -> List[str]:
-        return [
-            ModuleV2Source.get_inmanta_module_name(req)
-            for req in self.get_all_python_requirements_as_list()
-            if req.startswith(self.PKG_NAME_PREFIX)
-        ]
-
     def get_all_python_requirements_as_list(self) -> List[str]:
         return list(self.metadata.install_requires)
+
+    def get_module_requirements(self) -> List[str]:
+        return [str(req) for req in self.get_module_v2_requirements()]
