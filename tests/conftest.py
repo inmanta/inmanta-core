@@ -90,7 +90,7 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 def pytest_addoption(parser):
     parser.addoption(
         "--fast",
-        action='store_true',
+        action="store_true",
         help="Don't run all test, but a representative set",
     )
 
@@ -106,7 +106,7 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
     is_fast = metafunc.config.getoption("fast")
     for marker in metafunc.definition.iter_markers(name="parametrize_any"):
         variations = len(marker.args[1])
-        if not is_fast or variations<=2:
+        if not is_fast or variations <= 2:
             metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
         else:
             # select one random item
@@ -124,7 +124,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
     if not is_fast:
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
-         pytest.skip("Skipping slow tests")
+        pytest.skip("Skipping slow tests")
 
 
 # Database
