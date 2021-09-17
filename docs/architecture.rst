@@ -33,27 +33,6 @@ Inmanta can be used in three modes:
 The last two modes support agents on same machine as the server and automatically started, or deployed as an external
 process.
 
-All in one
-**********
-
-.. image:: _static/embedded.*
-   :width: 90%
-   :alt: Embedded deployment
-
-
-In a all in one deployment, all components (server, agent and postgres) are started embedded in the compiler and terminated after
-the deploy is complete. No specific setup is required. To deploy the current model, use::
-
-   inmanta deploy
-
-
-The `--dashboard` option disable CLI reporting and sets up the dashboard. The embedded server is setup in such a way that
-the current project is also availble for server compilation. After the first deploy finshes, the command keeps running for
-additional deploys until ctrl+c is used to terminate the command.
-
-The all in one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
-locally in data/deploy.
-
 .. _push-to-server:
 
 Push to server

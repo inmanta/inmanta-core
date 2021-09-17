@@ -39,7 +39,7 @@ import uuid
 import venv
 from configparser import ConfigParser
 from types import ModuleType
-from typing import AsyncIterator, Dict, Generator, Iterator, List, Optional, Tuple, Union
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
