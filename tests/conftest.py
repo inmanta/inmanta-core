@@ -49,6 +49,7 @@ import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
+from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
@@ -795,6 +796,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
@@ -808,10 +810,13 @@ class SnippetCompilationTest(KeepOnFail):
             to discover V2 modules.
         :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
                                  file
+        :param python_requires: The dependencies on Python packages providing v2 modules.
         :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
                              no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
+        self.setup_for_snippet_external(
+            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+        )
         loader.PluginModuleFinder.reset()
         project = Project(self.project_dir, autostd=autostd)
         Project.set(project)
@@ -853,11 +858,13 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
         project_requires = project_requires if project_requires is not None else []
+        python_requires = python_requires if python_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -883,6 +890,9 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+        with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
+            fd.write("\n".join(str(req) for req in python_requires))
+            print("WRITING", "\n".join(str(req) for req in python_requires), "to", self.project_dir)
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)

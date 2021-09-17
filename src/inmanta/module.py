@@ -195,7 +195,7 @@ class ModuleLoadingException(WrappingRuntimeException):
         :param msg: A description of the error.
         """
         if msg is None:
-            msg = "could not find module %s" % name
+            msg = "Failed to load module %s, caused by: %s" % (name, str(cause))
         WrappingRuntimeException.__init__(self, stmt, msg, cause)
         self.name = name
 
@@ -1415,7 +1415,8 @@ class Project(ModuleLike[ProjectMetadata]):
         self, install: bool = False, bypass_module_cache: bool = False
     ) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
-        Loads this project's modules and submodules by recursively following import statements starting from the project's main file.
+        Loads this project's modules and submodules by recursively following import statements starting from the project's main
+        file.
 
         For each imported submodule, return a triple of name, statements, basicblock
 
@@ -1526,7 +1527,6 @@ class Project(ModuleLike[ProjectMetadata]):
 
             try:
                 # get module
-                # TODO: make sure this doesn't install v2
                 module: Module = self.get_module(
                     module_name,
                     allow_v1=module_name not in v2_modules,
@@ -1579,8 +1579,8 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if module is None:
             raise ModuleNotFoundException(
-                # TODO: update error message to say something about adding the module dependency?
-                f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install`."
+                f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
+                " `inmanta module add` and to install all the project's dependencies with `inmanta project install`."
             )
 
         self.modules[module_name] = module
