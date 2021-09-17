@@ -458,10 +458,10 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def build(self) -> Tuple[str, List[object]]:
-        if not self.select_clause:
-            raise InvalidQueryParameter("A valid query must have a SELECT clause")
+        if not self.select_clause or not self._from_clause:
+            raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
         full_query = f"""{self.select_clause}
-                         {self._from_clause if self._from_clause else ""}
+                         {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
                          """
         if self.db_order:
@@ -546,10 +546,10 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         )
 
     def build(self) -> Tuple[str, List[object]]:
-        if not self.select_clause:
-            raise InvalidQueryParameter("A valid query must have a SELECT clause")
+        if not self.select_clause or not self._from_clause:
+            raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
         full_query = f"""{self.select_clause}
-                         {self._from_clause if self._from_clause else ""}
+                         {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
                         """
         return full_query, self.values
