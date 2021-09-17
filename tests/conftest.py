@@ -87,6 +87,46 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--fast",
+        action='store_true',
+        help="Don't run all test, but a representative set",
+    )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
+    """
+    For each test marked as parametrize_any run it either as
+    1. if not in fast mode: as if annotated with @parametrize
+    2. if in fast mode: with only one parameter combination, chosen randomly
+    """
+
+    is_fast = metafunc.config.getoption("fast")
+    for marker in metafunc.definition.iter_markers(name="parametrize_any"):
+        variations = len(marker.args[1])
+        if not is_fast or variations<=2:
+            metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
+        else:
+            # select one random item
+            args = list(marker.args)
+            selected = args[1][random.randrange(0, variations)]
+            args[1] = [selected]
+            metafunc.definition.add_marker(pytest.mark.parametrize(*args))
+
+
+def pytest_runtest_setup(item: "pytest.Item"):
+    """
+    When in fast mode, skip test marked as slow
+    """
+    is_fast = item.config.getoption("fast")
+    if not is_fast:
+        return
+    if any(True for mark in item.iter_markers(name="slowtest")):
+         pytest.skip("Skipping slow tests")
+
+
 # Database
 @pytest.fixture
 def postgres_proc(unused_tcp_port_factory):
