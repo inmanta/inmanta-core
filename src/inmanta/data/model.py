@@ -135,7 +135,7 @@ class CompileData(BaseModel):
     """
 
 
-class CompileRun(BaseModel):
+class CompileRunBase(BaseModel):
     id: uuid.UUID
     remote_id: Optional[uuid.UUID]
     environment: uuid.UUID
@@ -147,7 +147,15 @@ class CompileRun(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
+
+class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]
+
+
+class CompileReport(CompileRunBase):
+    completed: Optional[datetime.datetime]
+    success: Optional[bool]
+    version: Optional[int]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API

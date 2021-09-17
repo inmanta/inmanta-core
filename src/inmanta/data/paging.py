@@ -21,8 +21,25 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 from urllib import parse
 
-from inmanta.data import ColumnNameStr, DatabaseOrder, InvalidFieldNameException, PagingCounts, Resource, ResourceAction
-from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceHistory, ResourceIdStr
+from inmanta.data import (
+    ColumnNameStr,
+    Compile,
+    DatabaseOrder,
+    InvalidFieldNameException,
+    InvalidQueryParameter,
+    PagingCounts,
+    QueryType,
+    Resource,
+    ResourceAction,
+)
+from inmanta.data.model import (
+    BaseModel,
+    CompileReport,
+    LatestReleasedResource,
+    PagingBoundaries,
+    ResourceHistory,
+    ResourceIdStr,
+)
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -45,9 +62,9 @@ class PagingCountsProvider(ABC):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         """
         Count the records in the ranges required for the paging links
@@ -65,9 +82,9 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_item_count_query(
             environment, database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
@@ -87,9 +104,9 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_history_item_count_query(
             environment,
@@ -117,15 +134,29 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Any,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
             environment, self.resource_id, database_order, ColumnNameStr("timestamp"), first_id, last_id, start, end, **query
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+
+class CompileReportPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Compile.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
 
 
 class PagingHandler(ABC, Generic[T]):
@@ -136,7 +167,7 @@ class PagingHandler(ABC, Generic[T]):
         self,
         environment: uuid.UUID,
         dtos: List[T],
-        db_query: Mapping[str, Tuple[str, Any]],
+        db_query: Mapping[str, Tuple[QueryType, object]],
         limit: int,
         database_order: DatabaseOrder,
     ) -> PagingMetadata:
@@ -159,7 +190,7 @@ class PagingHandler(ABC, Generic[T]):
                     last_id=last_id,
                     **db_query,
                 )
-            except InvalidFieldNameException as e:
+            except (InvalidFieldNameException, InvalidQueryParameter) as e:
                 raise exceptions.BadRequest(f"Invalid query specified: {e.message}")
             total = paging_counts.total
             items_on_prev_pages = paging_counts.before
@@ -327,16 +358,16 @@ class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
     def _get_paging_boundaries(self, dtos: List[LatestReleasedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[0].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[-1].resource_version_id,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[-1].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[0].resource_version_id,
             )
 
@@ -362,16 +393,16 @@ class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[0].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[-1].attribute_hash,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=dtos[-1].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[0].attribute_hash,
             )
 
@@ -397,15 +428,48 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
             )
         else:
             return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_attribute()]),
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
                 first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_attribute()]),
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
+            )
+
+
+class CompileReportPagingHandler(PagingHandler[CompileReport]):
+    def __init__(
+        self,
+        counts_provider: PagingCountsProvider,
+    ) -> None:
+        super().__init__(counts_provider)
+
+    def get_base_url(self) -> str:
+        return "/api/v2/compilereport"
+
+    def get_first_id_name(self) -> str:
+        return "first_id"
+
+    def get_last_id_name(self) -> str:
+        return "last_id"
+
+    def _get_paging_boundaries(self, dtos: List[CompileReport], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=dtos[0].requested,
+                first_id=dtos[0].id,
+                end=dtos[-1].requested,
+                last_id=dtos[-1].id,
+            )
+        else:
+            return PagingBoundaries(
+                start=dtos[-1].requested,
+                first_id=dtos[-1].id,
+                end=dtos[0].requested,
+                last_id=dtos[0].id,
             )
