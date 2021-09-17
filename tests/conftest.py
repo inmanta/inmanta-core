@@ -106,7 +106,7 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
     is_fast = metafunc.config.getoption("fast")
     for marker in metafunc.definition.iter_markers(name="parametrize_any"):
         variations = len(marker.args[1])
-        if not is_fast or variations <= 2:
+        if not is_fast or variations < 2:
             metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
         else:
             # select one random item
