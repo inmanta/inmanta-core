@@ -38,12 +38,16 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, QueryType
+from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
 from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 
@@ -719,3 +723,63 @@ class CompilerService(ServerSlice):
         """
         compiles = await data.Compile.get_next_compiles_for_environment(env.id)
         return [x.to_dto() for x in compiles]
+
+    @protocol.handle(methods_v2.get_compile_reports, env="tid")
+    async def get_compile_reports(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "requested.desc",
+    ) -> ReturnValue[List[model.CompileReport]]:
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(CompileReportFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            compile_report_order = data.CompileReportOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Compile.get_compile_reports(
+                environment=env.id,
+                database_order=compile_report_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                limit=limit,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            env.id, dtos, limit=limit, database_order=compile_report_order, db_query=query
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            database_order=compile_report_order,
+            limit=limit,
+            filter=filter,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
