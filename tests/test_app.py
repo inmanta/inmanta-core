@@ -157,7 +157,7 @@ def test_verify_that_colorama_package_is_not_present():
     assert not is_colorama_package_available()
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
@@ -240,7 +240,7 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "log_level, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
@@ -382,7 +382,7 @@ caused by:
 
 
 @pytest.mark.timeout(15)
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
 def test_minus_x_option(snippetcompiler, cmd):
@@ -439,7 +439,7 @@ end
     assert f"Config file {non_existing_config_file} doesn't exist" in all_output
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
         (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),
