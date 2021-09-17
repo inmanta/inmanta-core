@@ -261,10 +261,11 @@ def test_process_env_install_from_source(
 
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
-@pytest.mark.parametrize_any("v1_plugin_loader", [True, False])
-@pytest.mark.parametrize_any("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
+@pytest.mark.parametrize("v1_plugin_loader", [True, False])
+@pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
+@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.slowtest
 def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,

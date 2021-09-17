@@ -391,7 +391,8 @@ def test_project_install_preinstalled(
     assert_module_install()
 
 
-@pytest.mark.parametrize_any("preinstall_v2", [True, False])
+@pytest.mark.parametrize("preinstall_v2", [True, False])
+@pytest.mark.slowtest
 def test_project_install_modules_cache_invalid(
     caplog,
     local_module_package_index: str,

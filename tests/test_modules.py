@@ -94,6 +94,7 @@ def test_to_v2():
     assert [_convert_module_to_package_name(req) for req in v1_metadata.requires] == v2_metadata.install_requires
 
 
+@pytest.mark.slowtest
 def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
     """
     Test whether the warning regarding non-versioned modules is given correctly.

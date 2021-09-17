@@ -298,6 +298,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"

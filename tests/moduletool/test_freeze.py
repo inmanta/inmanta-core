@@ -27,6 +27,7 @@ from moduletool.common import install_project
 from test_app_cli import app
 
 
+@pytest.mark.slowtest
 def test_freeze_basic(git_modules_dir, modules_repo):
     install_project(git_modules_dir, "projectA")
     modtool = ModuleTool()
@@ -43,6 +44,7 @@ def test_freeze_basic(git_modules_dir, modules_repo):
     assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
 
 
+@pytest.mark.slowtest
 def test_project_freeze_basic(git_modules_dir, modules_repo):
     install_project(git_modules_dir, "projectA")
     modtool = ModuleTool()
@@ -66,6 +68,7 @@ def test_project_freeze_basic(git_modules_dir, modules_repo):
     }
 
 
+@pytest.mark.slowtest
 def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
     coroot = install_project(git_modules_dir, "baddep", config=False)
 
@@ -84,6 +87,7 @@ def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
 
 
+@pytest.mark.slowtest
 def test_project_freeze(git_modules_dir, modules_repo, capsys):
     coroot = install_project(git_modules_dir, "projectA")
 
@@ -111,6 +115,7 @@ requires:
     )
 
 
+@pytest.mark.slowtest
 def test_project_freeze_disk(git_modules_dir, modules_repo, capsys):
     coroot = install_project(git_modules_dir, "projectA")
 
@@ -140,6 +145,7 @@ requires:
         )
 
 
+@pytest.mark.slowtest
 def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
     coroot = install_project(git_modules_dir, "projectA")
 
@@ -159,6 +165,7 @@ def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
     assert "argument --operator: invalid choice: 'xxx'" in err
 
 
+@pytest.mark.slowtest
 def test_project_options_in_config(git_modules_dir, modules_repo, capsys):
     coroot = install_project(
         git_modules_dir,
@@ -212,6 +219,7 @@ requires:
     verify()
 
 
+@pytest.mark.slowtest
 def test_module_freeze(git_modules_dir, modules_repo, capsys):
     coroot = install_project(git_modules_dir, "projectA")
 
@@ -236,6 +244,7 @@ requires:
     verify()
 
 
+@pytest.mark.slowtest
 def test_module_freeze_self_disk(git_modules_dir, modules_repo, capsys):
     coroot = install_project(git_modules_dir, "projectA")
 

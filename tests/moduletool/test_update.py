@@ -79,8 +79,9 @@ def test_module_update_with_install_mode_master(
     assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
 
 
-@pytest.mark.parametrize_any("corrupt_module", [False, True])
-@pytest.mark.parametrize_any("install_mode", [InstallMode.release, InstallMode.prerelease])
+@pytest.mark.parametrize("corrupt_module", [False, True])
+@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
+@pytest.mark.slowtest
 def test_module_update_with_v2_module(
     tmpdir: py.path.local,
     modules_v2_dir: str,
