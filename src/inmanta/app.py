@@ -395,34 +395,6 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
-    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument(
-        "--dashboard",
-        dest="dashboard",
-        help="Start the dashboard and keep the server running. "
-        "The server uses the current project as the source for server recompiles",
-        action="store_true",
-        default=False,
-    )
-
-
-@command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
-def deploy(options: argparse.Namespace) -> None:
-    module.Project.get(options.main_file)
-    from inmanta import deploy as deploy_module
-
-    run = deploy_module.Deploy(options)
-    try:
-        if not run.setup():
-            LOGGER.error("Failed to setup the orchestrator.")
-            return
-        run.run()
-    finally:
-        run.stop()
-
-
 def export_parser_config(parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function

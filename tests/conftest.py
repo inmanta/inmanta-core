@@ -67,7 +67,6 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project
 from inmanta.moduletool import ModuleTool
-from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -87,17 +86,17 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
-# Database
-@pytest.fixture
-def postgres_proc(unused_tcp_port_factory):
-    proc = PostgresProc(unused_tcp_port_factory())
-    yield proc
-    proc.stop()
-
-
 @pytest.fixture(scope="session")
-def postgres_db(postgresql_proc):
-    yield postgresql_proc
+def postgres_db(request):
+    option_name = "postgresql_host"
+    conf = request.config.getoption(option_name)
+    if conf:
+        fixture = "postgresql_noproc"
+    else:
+        fixture = "postgresql_proc"
+
+    logger.info("Using database fixture %s", fixture)
+    yield request.getfixturevalue(fixture)
 
 
 @pytest.fixture
@@ -112,7 +111,9 @@ async def create_db(postgres_db, database_name_internal):
     """
     see :py:database_name_internal:
     """
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    connection = await asyncpg.connect(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
+    )
     try:
         await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
@@ -149,7 +150,13 @@ def database_name(create_db):
 
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
-    client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    client = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield client
     await client.close()
 
@@ -157,7 +164,11 @@ async def postgresql_client(postgres_db, database_name):
 @pytest.fixture(scope="function")
 async def postgresql_pool(postgres_db, database_name):
     client = await asyncpg.create_pool(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield client
     await client.close()
@@ -165,7 +176,13 @@ async def postgresql_pool(postgres_db, database_name):
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
+    await data.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield
     await data.disconnect()
 
@@ -496,6 +513,8 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -593,6 +612,8 @@ async def server_multi(
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))

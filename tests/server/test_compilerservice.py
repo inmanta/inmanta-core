@@ -33,8 +33,8 @@ import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
+from inmanta.export import cfg_env
 from inmanta.data import APILIMIT, Compile, Report
-from inmanta.deploy import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
