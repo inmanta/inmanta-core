@@ -368,7 +368,7 @@ class BaseQueryBuilder(ABC):
     @abstractmethod
     def from_clause(self, from_clause: str) -> "BaseQueryBuilder":
         """ Set the from clause of the query"""
-        pass
+        raise NotImplementedError()
 
     @property
     def offset(self) -> int:
@@ -378,12 +378,12 @@ class BaseQueryBuilder(ABC):
     @abstractmethod
     def filter(self, filter_statements: List[str], values: List[object]) -> "BaseQueryBuilder":
         """ Add filters to the query """
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def build(self) -> Tuple[str, List[object]]:
         """ Builds up the full query string, and the parametrized value list, ready to be executed """
-        pass
+        raise NotImplementedError()
 
 
 class SimpleQueryBuilder(BaseQueryBuilder):
@@ -461,7 +461,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         if not self.select_clause:
             raise InvalidQueryParameter("A valid query must have a SELECT clause")
         full_query = f"""{self.select_clause}
-                         {self._from_clause}
+                         {self._from_clause if self._from_clause else ""}
                          {self._join_filter_statements(self.filter_statements)}
                          """
         if self.db_order:
@@ -549,7 +549,7 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         if not self.select_clause:
             raise InvalidQueryParameter("A valid query must have a SELECT clause")
         full_query = f"""{self.select_clause}
-                         {self._from_clause}
+                         {self._from_clause if self._from_clause else ""}
                          {self._join_filter_statements(self.filter_statements)}
                         """
         return full_query, self.values
@@ -2566,6 +2566,8 @@ class Compile(BaseDocument):
         )
         sql_query, values = filtered_query.build()
         result = await cls.select_query(sql_query, values, no_obj=True)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
     @classmethod

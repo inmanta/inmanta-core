@@ -690,7 +690,7 @@ def get_compile_reports(
                 For example: `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30.568353`
                 returns compile reports that were requested between the specified dates.
                 Multiple different filters narrow the results however (they are treated as an 'AND' operator).
-                For example `filter.success=True&filter.completed=True` returns compile reports
+                For example `?filter.success=True&filter.completed=True` returns compile reports
                 that are completed and successful.
                 The following options are available:
                 success: whether the compile was successful or not
@@ -703,9 +703,9 @@ def get_compile_reports(
                     Multiple constraints can be specified, in which case only compile reports that match all constraints will be
                     returned.
     :param sort: Return the results sorted according to the parameter value.
-                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `timestamp.desc`
+                It should follow the pattern `?sort=<attribute_to_sort_by>.<order>`, for example `?sort=requested.desc`
                 (case insensitive).
-                Only sorting by `requested` is supported.
+                Only sorting by the `requested` timestamp is supported.
                 The following orders are supported: 'asc', 'desc'
     :return: A list of all matching compile reports
     :raise NotFound: This exception is raised when the referenced environment is not found

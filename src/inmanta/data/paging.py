@@ -26,6 +26,7 @@ from inmanta.data import (
     Compile,
     DatabaseOrder,
     InvalidFieldNameException,
+    InvalidQueryParameter,
     PagingCounts,
     QueryType,
     Resource,
@@ -189,7 +190,7 @@ class PagingHandler(ABC, Generic[T]):
                     last_id=last_id,
                     **db_query,
                 )
-            except InvalidFieldNameException as e:
+            except (InvalidFieldNameException, InvalidQueryParameter) as e:
                 raise exceptions.BadRequest(f"Invalid query specified: {e.message}")
             total = paging_counts.total
             items_on_prev_pages = paging_counts.before
