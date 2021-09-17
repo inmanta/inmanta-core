@@ -39,7 +39,7 @@ import uuid
 import venv
 from configparser import ConfigParser
 from types import ModuleType
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Dict, Generator, Iterator, List, Optional, Tuple, Union
 
 import asyncpg
 import pkg_resources
@@ -87,7 +87,10 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
 @pytest.fixture(scope="session")
-def postgres_db(request):
+def postgres_db(request: pytest.FixtureRequest):
+    """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
+    fixture to use an external database. Without this option, an "embedded" postgres is started.
+    """
     option_name = "postgresql_host"
     conf = request.config.getoption(option_name)
     if conf:

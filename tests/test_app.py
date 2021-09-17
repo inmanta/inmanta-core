@@ -38,6 +38,9 @@ def get_command(
     timed=False,
     dbport=None,
     dbname="inmanta",
+    dbhost=None,
+    dbuser=None,
+    dbpass=None,
     config_dir=None,
     server_extensions=[],
     version=False,
@@ -61,6 +64,12 @@ def get_command(
         f.write("[database]\n")
         f.write("port=" + str(port) + "\n")
         f.write("name=" + dbname + "\n")
+        if dbhost:
+            f.write(f"host={dbhost}\n")
+        if dbuser:
+            f.write(f"username={dbuser}\n")
+        if dbpass:
+            f.write(f"password={dbpass}\n")
         f.write("[server]\n")
         f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
 
@@ -337,7 +346,15 @@ def test_check_bad_shutdown():
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
-    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name, server_extensions=["badplugin"])
+    (args, log_dir) = get_command(
+        tmpdir,
+        dbport=postgres_db.port,
+        dbname=database_name,
+        dbhost=postgres_db.host,
+        dbuser=postgres_db.user,
+        dbpass=postgres_db.password,
+        server_extensions=["badplugin"],
+    )
     pp = ":".join(sys.path)
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
