@@ -228,14 +228,12 @@ class Field(Generic[T]):
         field_type: Type[T],
         required: bool = False,
         unique: bool = False,
-        reference: bool = False,
         part_of_primary_key: bool = False,
         **kwargs: object,
     ) -> None:
 
         self._field_type = field_type
         self._required = required
-        self._reference = reference
         self._part_of_primary_key = part_of_primary_key
 
         if "default" in kwargs:
@@ -271,11 +269,6 @@ class Field(Generic[T]):
         return self._unique
 
     unique = property(is_unique)
-
-    def is_reference(self) -> bool:
-        return self._reference
-
-    reference = property(is_reference)
 
     def is_part_of_primary_key(self) -> bool:
         return self._part_of_primary_key
@@ -361,8 +354,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 raise TypeError("%s field is required" % name)
 
             if (
-                not fields[name].reference
-                and value is not None
+                value is not None
                 and not (value.__class__ is fields[name].field_type or isinstance(value, fields[name].field_type))
             ):
                 # pgasync does not convert a jsonb field to a dict
@@ -479,8 +471,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         column_names: List[str] = []
         values: List[str] = []
         for name, typing in self._fields.items():
-            if self._fields[name].reference:
-                continue
             value = None
             if name in self.__fields:
                 value = self.__fields[name]
