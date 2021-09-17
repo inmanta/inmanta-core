@@ -23,7 +23,7 @@ setuptools==58.0.4
 texttable==1.6.4
 tornado==6.1
 typing_inspect==0.7.1
-build==0.6.0.post1
+build==0.7.0
 
 # Optional import in code
 graphviz==0.17
