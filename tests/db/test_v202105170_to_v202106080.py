@@ -26,6 +26,7 @@ from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
+@pytest.mark.slowtest
 async def migrate_v202105170_to_v202106080(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
