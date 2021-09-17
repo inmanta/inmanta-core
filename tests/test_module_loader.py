@@ -29,7 +29,7 @@ from inmanta.module import DummyProject, ModuleLoadingException, ModuleNotFoundE
 from inmanta.moduletool import ModuleConverter
 
 
-@pytest.mark.parametrize("editable_install", [True, False])
+@pytest.mark.parametrize_any("editable_install", [True, False])
 def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
     # Work around caching problem in venv
     feature_compiler_cache.set("False")
