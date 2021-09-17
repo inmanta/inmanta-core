@@ -195,7 +195,7 @@ class ModuleLoadingException(WrappingRuntimeException):
         :param msg: A description of the error.
         """
         if msg is None:
-            msg = "Failed to load module %s, caused by: %s" % (name, str(cause))
+            msg = "Failed to load module %s" % name
         WrappingRuntimeException.__init__(self, stmt, msg, cause)
         self.name = name
 
@@ -1937,7 +1937,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         for impor in todo:
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
-                mainmod = self._project.get_module(impor, install=v1_mode, allow_v1=v1_mode)
+                mainmod = self._project.get_module(impor, install_v1=v1_mode, allow_v1=v1_mode)
                 vers: version.Version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + str(vers)

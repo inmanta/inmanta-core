@@ -892,7 +892,6 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write(f"\n            install_mode: {install_mode.value}")
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-            print("WRITING", "\n".join(str(req) for req in python_requires), "to", self.project_dir)
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
