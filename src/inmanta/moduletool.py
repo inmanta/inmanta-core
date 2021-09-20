@@ -51,18 +51,19 @@ from inmanta.module import (
     InvalidModuleException,
     Module,
     ModuleGeneration,
+    ModuleLike,
     ModuleMetadataFileNotFound,
     ModuleV1,
     ModuleV2,
     ModuleV2Source,
     Project,
     gitprovider,
-    ModuleLike,
 )
 
 if TYPE_CHECKING:
-    from packaging.requirements import InvalidRequirement
     from pkg_resources import Requirement  # noqa: F401
+
+    from packaging.requirements import InvalidRequirement
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
@@ -441,7 +442,7 @@ with the dependencies specified by the installed module.
             raise CLIException(f"The given requirement '{module_req}' is invalid", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
-                f"A dependency on the given module was already defined, use --override to override the version constraint",
+                "A dependency on the given module was already defined, use --override to override the version constraint",
                 exitcode=1,
             )
         module_like.add_module_requirement(requirement=module_requirement, add_as_v1_module=v1)

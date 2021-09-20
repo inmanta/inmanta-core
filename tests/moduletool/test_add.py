@@ -17,16 +17,16 @@
 """
 import os
 import shutil
+from typing import List
 
 import py
 import pytest
 
-from typing import List
-from inmanta.module import Project, ProjectMetadata, ModuleV1, ModuleV1Metadata, ModuleV2
-from inmanta.moduletool import ModuleTool
 from inmanta.command import CLIException
 from inmanta.env import process_env
-from moduletool.common import module_from_template, PipIndex
+from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, Project, ProjectMetadata
+from inmanta.moduletool import ModuleTool
+from moduletool.common import PipIndex, module_from_template
 from packaging.version import Version
 
 
@@ -66,7 +66,7 @@ def test_module_add_v1_module_to_project(snippetcompiler, monkeypatch) -> None:
 @pytest.mark.slowtest
 def test_module_add_v2_module_to_project(
     tmpdir: py.path.local, snippetcompiler, monkeypatch, local_module_package_index: str, modules_v2_dir: str
- ) -> None:
+) -> None:
     """
     Add a V2 module to an inmanta project using the `inmanta module add` command.
     """
@@ -94,7 +94,7 @@ def test_module_add_v2_module_to_project(
         assert installed_packages[pkg_name] == expected_version
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             project_metadata = ProjectMetadata.parse(fd)
-            assert pkg_name[len("inmanta-module-"):] in project_metadata.requires
+            assert pkg_name[len("inmanta-module-") :] in project_metadata.requires
         with open(requirements_txt_file, "r", encoding="utf-8") as fd:
             assert fd.read().strip() == ModuleV2.get_package_name_for(project_requires_constraint)
 
@@ -104,16 +104,12 @@ def test_module_add_v2_module_to_project(
 
     version_constraint = f"{module_name}==1.2.3"
     ModuleTool().add(module_req=version_constraint, v1=False, override=False)
-    _assert_project_state(
-        pkg_name=pkg_name, expected_version=Version("1.2.3"), project_requires_constraint=version_constraint
-    )
+    _assert_project_state(pkg_name=pkg_name, expected_version=Version("1.2.3"), project_requires_constraint=version_constraint)
 
     new_version_constraint = f"{module_name}==1.2.0"
     with pytest.raises(CLIException, match="A dependency on the given module was already defined"):
         ModuleTool().add(module_req=new_version_constraint, v1=False, override=False)
-    _assert_project_state(
-        pkg_name=pkg_name, expected_version=Version("1.2.3"), project_requires_constraint=version_constraint
-    )
+    _assert_project_state(pkg_name=pkg_name, expected_version=Version("1.2.3"), project_requires_constraint=version_constraint)
 
     ModuleTool().add(module_req=new_version_constraint, v1=False, override=True)
     _assert_project_state(

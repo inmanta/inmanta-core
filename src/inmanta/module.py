@@ -31,6 +31,7 @@ import traceback
 import types
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from configparser import ConfigParser
 from functools import lru_cache
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
@@ -55,9 +56,6 @@ from typing import (
     TypeVar,
     Union,
 )
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
-from configparser import ConfigParser
 
 import more_itertools
 import pkg_resources
@@ -76,6 +74,8 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from packaging import version
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
 try:
     from typing import TYPE_CHECKING
@@ -509,10 +509,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
             env.process_env.install_from_index(
-                requirements,
-                self.urls,
-                allow_pre_releases=allow_pre_releases,
-                upgrade=update_when_already_installed
+                requirements, self.urls, allow_pre_releases=allow_pre_releases, upgrade=update_when_already_installed
             )
         except env.PackageNotFound:
             return None
@@ -580,9 +577,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
             if update_when_already_installed:
-                return ModuleV1.update(
-                    project, module_name, module_spec, path, fetch=False, install_mode=project.install_mode
-                )
+                return ModuleV1.update(project, module_name, module_spec, path, fetch=False, install_mode=project.install_mode)
             else:
                 return self.from_path(project, module_name, path)
         else:
@@ -808,7 +803,7 @@ class PreservativeYamlParser:
             return parser.load(fd)
 
     @classmethod
-    def dump(cls, filename:str, content: CommentedMap) -> None:
+    def dump(cls, filename: str, content: CommentedMap) -> None:
         parser = cls._get_parser()
         with open(filename, "w", encoding="utf-8") as fd:
             parser.dump(content, stream=fd)
@@ -818,6 +813,7 @@ class RequirementsTxtParser:
     """
     Parser for a requirements.txt file
     """
+
     @classmethod
     def parse(cls, filename: str) -> List[Requirement]:
         """
@@ -842,7 +838,6 @@ class RequirementsTxtParser:
 
 
 class RequirementsTxtFile:
-
     def __init__(self, filename: str, create_file_if_not_exists: bool = False) -> None:
         self._filename = filename
         if not os.path.exists(self._filename):
@@ -2493,7 +2488,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
         python_pkg_requirement: Requirement = requirement.to_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
-                r for r in config_parser.get("options", "install_requires").split("\n")
+                r
+                for r in config_parser.get("options", "install_requires").split("\n")
                 if r and Requirement.parse(r).key != python_pkg_requirement.key
             ]
             new_install_requires.append(str(python_pkg_requirement))
@@ -2514,13 +2510,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return False
         pkg_name: str = ModuleV2.get_package_name_for(module_name)
         return any(
-            r for r in config_parser.get("options", "install_requires").split("\n")
+            r
+            for r in config_parser.get("options", "install_requires").split("\n")
             if r and Requirement.parse(r).key == pkg_name
         )
 
 
 class YamlMetadataFileWithRequiresField:
-
     @classmethod
     def add_module_requirement_and_write(
         cls, proj_or_v1_mod: Union[Project, ModuleV1], requirement: InmantaModuleRequirement, ignore_version_constraint: bool
