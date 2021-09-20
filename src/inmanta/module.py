@@ -1430,14 +1430,18 @@ class Project(ModuleLike[ProjectMetadata]):
         # deterministic as possible
         imports: List[DefineImport] = [x for x in self.get_imports()]
 
-        v2_modules: Set[str] = set()  # Set of modules that should be loaded as a V2 module
+        v2_modules: Set[str] = set()
+        """
+        Set of modules that should be loaded as a V2 module.
+        """
+        set_up: Set[str] = set()
+        """
+        Set of top level modules that have been set up (setup_module()).
+        """
         done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
         """
-        Represents modules we've already loaded.
-        Invariants:
-            - `top_level in done` iff the top level module has been set up (setup_module())
-            - `sub_mod in done[top_level]` iff submod's AST has been loaded into `ast_by_top_level_mod` and its imports have
-                been added to the queue (load_sub_module())
+        Submodules, grouped by top level that have been fully loaded: AST has been loaded into ast_by_top_level_mod and its
+        imports have been added to the queue (load_sub_module()).
         """
 
         def require_v2(module_name: str) -> None:
@@ -1448,6 +1452,8 @@ class Project(ModuleLike[ProjectMetadata]):
                 # already v2
                 return
             v2_modules.add(module_name)
+            if module_name in set_up:
+                set_up.remove(module_name)
             if module_name in done:
                 # some submodules already loaded as v1 => reload
                 imports.extend(done[module_name].values())
@@ -1475,13 +1481,13 @@ class Project(ModuleLike[ProjectMetadata]):
             """
             Sets up a top level module, making sure all its v2 requirements are loaded correctly.
             """
-            if module.name in done:
+            if module.name in set_up:
                 # already set up
                 return
             load_module_requirements(module)
-            done[module_name] = {}
+            set_up.add(module.name)
 
-        def load_sub_module(submod: str) -> None:
+        def load_sub_module(module: Module, submod: str) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
@@ -1534,7 +1540,7 @@ class Project(ModuleLike[ProjectMetadata]):
                     bypass_module_cache=bypass_module_cache,
                 )
                 setup_module(module)
-                load_sub_module(ns)
+                load_sub_module(module, ns)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
 

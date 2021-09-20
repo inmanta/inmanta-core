@@ -18,10 +18,11 @@
 import logging
 import os
 import shutil
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import py
 import pytest
+import yaml
 from pkg_resources import Requirement
 
 from inmanta.compiler.config import feature_compiler_cache
@@ -341,15 +342,16 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     module_name: str = "minimalv2module"
 
     def load(requires: Optional[List[Requirement]] = None) -> None:
-        snippetcompiler_clean.setup_for_snippet(
+        project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
-            install_project=True,
+            install_project=False,
             python_package_sources=[local_module_package_index],
             # make sure that even listing the requirement in project.yml does not suffice
             project_requires=[InmantaModuleRequirement.parse(module_name)],
             python_requires=requires,
         )
+        project.load_module_recursive(install=True)
 
     with pytest.raises(ModuleLoadingException, match=f"Failed to load module {module_name}"):
         load()
@@ -380,8 +382,15 @@ def test_load_import_based_v2_module(
 
     if v1:
         shutil.copytree(os.path.join(modules_dir, "minimalv1module"), os.path.join(libs_dir, main_module_name))
+        with open(os.path.join(libs_dir, main_module_name, "module.yml"), "r+") as fd:
+            module_config: Dict[str, object] = yaml.safe_load(fd)
+            module_config["name"] = main_module_name
+            fd.seek(0)
+            yaml.dump(module_config, fd)
+        with open(os.path.join(libs_dir, main_module_name, "model", "_init.cf"), "w") as fd:
+            fd.write(f"import {dependency_module_name}")
         with open(os.path.join(libs_dir, main_module_name, "requirements.txt"), "w") as fd:
-            fd.write(dependency_module_name if explicit_dependency else "")
+            fd.write(ModuleV2Source.get_python_package_name(dependency_module_name) if explicit_dependency else "")
     else:
         module_from_template(
             os.path.join(modules_v2_dir, "minimalv2module"),
@@ -393,21 +402,20 @@ def test_load_import_based_v2_module(
             new_content_init_cf=f"import {dependency_module_name}",
         )
 
-    def load() -> None:
-        snippetcompiler_clean.setup_for_snippet(
-            f"import {main_module_name}",
-            autostd=False,
-            install_project=True,
-            add_to_module_path=[libs_dir],
-            python_package_sources=[local_module_package_index, index.url],
-            # make sure that even listing the requirement in project.yml does not suffice
-            project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
-            python_requires=[] if v1 else [Requirement.parse(main_module_name)],
-        )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        f"import {main_module_name}",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[libs_dir],
+        python_package_sources=[local_module_package_index, index.url],
+        # make sure that even listing the requirement in project.yml does not suffice
+        project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
+        python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_python_package_name(main_module_name))],
+    )
 
     if explicit_dependency:
         # assert that it doesn't raise an error with explicit requirements set
-        load()
+        project.load_module_recursive(install=True)
     else:
         with pytest.raises(ModuleLoadingException, match=f"Failed to load module {dependency_module_name}"):
-            load()
+            project.load_module_recursive(install=True)
