@@ -1486,7 +1486,10 @@ class Project(ModuleLike[ProjectMetadata]):
 
         def setup_module(module: Module) -> None:
             """
-            Sets up a top level module, making sure all its v2 requirements are loaded correctly.
+            Sets up a top level module, making sure all its v2 requirements are loaded correctly. V2 modules do not support
+            import-based installation because of security reasons (it would mean we implicitly trust any `inmanta-module-x`
+            package for the module we're trying to load). As a result we need to make sure all required v2 modules are present
+            in a set up stage.
             """
             if module.name in set_up:
                 # already set up
