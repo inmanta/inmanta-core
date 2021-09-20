@@ -297,7 +297,7 @@ def test_load_module_recursive_v2_module_depends_on_v1(
         project.get_module("mod1", allow_v1=True)
     assert ("mod1" in project.modules) == preload_v1_module
 
-    with pytest.raises(ModuleLoadingException, match="Could not find module mod1"):
+    with pytest.raises(ModuleLoadingException, match="Failed to load module mod1"):
         project.load_module_recursive(install=True)
 
 
