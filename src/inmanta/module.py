@@ -1184,7 +1184,6 @@ class ModuleLike(ABC, Generic[T]):
         """
         return [req for req in self.get_all_python_requirements_as_list() if not req.startswith(ModuleV2.PKG_NAME_PREFIX)]
 
-    # TODO: add tests
     def get_module_v2_requirements(self) -> List[InmantaModuleRequirement]:
         """
         Returns all requirements this module like has on v2 modules.

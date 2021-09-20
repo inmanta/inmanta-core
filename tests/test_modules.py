@@ -28,6 +28,7 @@ import pytest
 from _io import StringIO
 from inmanta import module
 from inmanta.env import LocalPackagePath
+from inmanta.module import InmantaModuleRequirement
 
 
 def test_module():
@@ -154,15 +155,22 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
 
 
 @pytest.mark.parametrize(
-    "v1_module, all_python_requirements,strict_python_requirements,module_requirements",
+    "v1_module, all_python_requirements,strict_python_requirements,module_requirements,module_v2_requirements",
     [
         (
             True,
             ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"],
             ["jinja2~=3.2.1"],
             ["v2_module==1.2.3", "v1_module==1.1.1"],
+            [InmantaModuleRequirement.parse("v2_module==1.2.3")],
         ),
-        (False, ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"], ["jinja2~=3.2.1"], ["v2_module==1.2.3"]),
+        (
+            False,
+            ["jinja2~=3.2.1", "inmanta-module-v2-module==1.2.3"],
+            ["jinja2~=3.2.1"],
+            ["v2_module==1.2.3"],
+            [InmantaModuleRequirement.parse("v2_module==1.2.3")],
+        ),
     ],
 )
 def test_get_requirements(
@@ -172,6 +180,7 @@ def test_get_requirements(
     all_python_requirements: List[str],
     strict_python_requirements: List[str],
     module_requirements: List[str],
+    module_v2_requirements: List[str],
 ) -> None:
     """
     Test the different methods to get the requirements of a module.
@@ -188,4 +197,5 @@ def test_get_requirements(
     assert set(mod.get_all_python_requirements_as_list()) == set(all_python_requirements)
     assert set(mod.get_strict_python_requirements_as_list()) == set(strict_python_requirements)
     assert set(mod.get_module_requirements()) == set(module_requirements)
+    assert set(mod.get_module_v2_requirements()) == set(module_v2_requirements)
     assert set(mod.requires()) == set(module.InmantaModuleRequirement.parse(req) for req in module_requirements)
