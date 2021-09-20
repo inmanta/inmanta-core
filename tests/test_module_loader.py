@@ -18,11 +18,10 @@
 import logging
 import os
 import shutil
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 
 import py
 import pytest
-import yaml
 from pkg_resources import Requirement
 
 from inmanta.compiler.config import feature_compiler_cache
@@ -38,7 +37,7 @@ from inmanta.module import (
     Project,
 )
 from inmanta.moduletool import ModuleConverter
-from utils import PipIndex, module_from_template
+from utils import PipIndex, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
@@ -380,26 +379,28 @@ def test_load_import_based_v2_module(
     libs_dir: str = os.path.join(str(tmpdir), "libs")
     os.makedirs(libs_dir)
 
+    model: str = f"import {dependency_module_name}"
+    requirements: List[InmantaModuleRequirement] = (
+        [InmantaModuleRequirement.parse(dependency_module_name)] if explicit_dependency else []
+    )
+
     if v1:
-        shutil.copytree(os.path.join(modules_dir, "minimalv1module"), os.path.join(libs_dir, main_module_name))
-        with open(os.path.join(libs_dir, main_module_name, "module.yml"), "r+") as fd:
-            module_config: Dict[str, object] = yaml.safe_load(fd)
-            module_config["name"] = main_module_name
-            fd.seek(0)
-            yaml.dump(module_config, fd)
-        with open(os.path.join(libs_dir, main_module_name, "model", "_init.cf"), "w") as fd:
-            fd.write(f"import {dependency_module_name}")
-        with open(os.path.join(libs_dir, main_module_name, "requirements.txt"), "w") as fd:
-            fd.write(ModuleV2Source.get_python_package_name(dependency_module_name) if explicit_dependency else "")
+        v1_module_from_template(
+            os.path.join(modules_dir, "minimalv1module"),
+            os.path.join(libs_dir, main_module_name),
+            new_name=main_module_name,
+            new_content_init_cf=model,
+            new_requirements=requirements,
+        )
     else:
         module_from_template(
             os.path.join(modules_v2_dir, "minimalv2module"),
             os.path.join(str(tmpdir), main_module_name),
             new_name=main_module_name,
-            new_requirements=[InmantaModuleRequirement.parse(dependency_module_name)] if explicit_dependency else [],
+            new_content_init_cf=model,
+            new_requirements=requirements,
             install=False,
             publish_index=index,
-            new_content_init_cf=f"import {dependency_module_name}",
         )
 
     project: Project = snippetcompiler_clean.setup_for_snippet(

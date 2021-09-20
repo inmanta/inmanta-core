@@ -1468,7 +1468,7 @@ class Project(ModuleLike[ProjectMetadata]):
                 if module_name in ast_by_top_level_mod:
                     del ast_by_top_level_mod[module_name]
 
-        def load_module_requirements(module_like: ModuleLike) -> None:
+        def load_module_v2_requirements(module_like: ModuleLike) -> None:
             """
             Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
             any of these requirements have already been loaded as v1, queues them for reload.
@@ -1491,7 +1491,7 @@ class Project(ModuleLike[ProjectMetadata]):
             if module.name in set_up:
                 # already set up
                 return
-            load_module_requirements(module)
+            load_module_v2_requirements(module)
             set_up.add(module.name)
 
         def load_sub_module(module: Module, submod: str) -> None:
@@ -1521,7 +1521,7 @@ class Project(ModuleLike[ProjectMetadata]):
                         require_v2(dep_module_name)
 
         # load this project's v2 requirements
-        load_module_requirements(self)
+        load_module_v2_requirements(self)
 
         # Loop over imports. For each import:
         # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for

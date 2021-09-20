@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Union
 
 import pytest
+import yaml
 from pkg_resources import Requirement, parse_version
 from pydantic.tools import lru_cache
 
@@ -375,7 +376,6 @@ def module_from_template(
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
     """
-    # preinstall older version of module
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
     config: configparser.ConfigParser = configparser.ConfigParser()
@@ -410,3 +410,49 @@ def module_from_template(
         publish_index.publish()
     with open(config_file, "r") as fh:
         return module.ModuleV2Metadata.parse(fh)
+
+
+def v1_module_from_template(
+    source_dir: str,
+    dest_dir: str,
+    *,
+    new_version: Optional[version.Version] = None,
+    new_name: Optional[str] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    new_content_init_cf: Optional[str] = None,
+) -> module.ModuleV2Metadata:
+    """
+    Creates a v1 module from a template.
+
+    :param source_dir: The directory where the original module lives.
+    :param dest_dir: The directory to use to copy the original to and to stage any changes in.
+    :param new_version: The new version for the module, if any.
+    :param new_name: The new name of the inmanta module, if any.
+    :param new_requirements: The new requirements for the module, if any.
+    :param new_content_init_cf: The new content of the _init.cf file.
+    """
+    shutil.copytree(source_dir, dest_dir)
+    config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
+    config: Dict[str, object] = configparser.ConfigParser()
+    with open(config_file, "r") as fd:
+        config = yaml.safe_load(fd)
+    if new_version is not None:
+        config["version"] = str(new_version)
+    if new_name is not None:
+        config["name"] = new_name
+    if new_content_init_cf is not None:
+        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+        with open(init_cf_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_cf)
+    with open(config_file, "w") as fd:
+        yaml.dump(config, fd)
+    if new_requirements:
+        with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
+            fd.write(
+                "\n".join(
+                    str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+                    for req in new_requirements
+                )
+            )
+    with open(config_file, "r") as fd:
+        return module.ModuleV1Metadata.parse(fd)
