@@ -1454,8 +1454,15 @@ class Project(ModuleLike[ProjectMetadata]):
             # installing new dependencies into the virtual environment might introduce new conflicts
             self.verify_python_environment()
 
-    def load(self) -> None:
+    def load(self, install: bool = False) -> None:
+        """
+        Load this project's AST and plugins.
+
+        :param install: Whether to install the project's modules before attempting to load it.
+        """
         if not self.loaded:
+            if install:
+                self.install_modules()
             if not self.is_using_virtual_env():
                 self.use_virtual_env()
             self.get_complete_ast()

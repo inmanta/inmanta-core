@@ -90,9 +90,10 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   * ``version``: The version of the module. Modules must use semantic versioning.
   * ``license``: The license under which the module is distributed.
 
-* Dependencies to other Inmanta modules and dependencies to external Python libraries can be defined using the
-  ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file. These version specs use `PEP440
-  syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+* The ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file defines the dependencies of the
+  module on other Inmanta modules and external Python libraries. These version specs use
+  `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new module dependency to the module
+  should be done using the ``inmanta module add`` command instead of altering the ``setup.cfg`` file by hand.
 
 * All other config is required for ``setuptools`` to correctly build the package. It is documented `here <https://setuptools.readthedocs.io/en/latest/userguide/declarative_config.html>`_.
 
@@ -167,12 +168,12 @@ For example the following module.yml from the :doc:`../quickstart`
     license: Apache 2.0
     version: 0.1
 
-Module dependencies are indicated by importing a module in a model file. However, these imports do not
-have a specific version identifier. The version of a module import can be constrained in the
-module.yml file. The *requires* key expects a list of version specs. These version specs use `PEP440
-syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+The *requires* key can be used to define the dependencies of this module on other Inmanta modules. Each entry in the list
+should contain the name of an Inmanta module, optionally associated with a version constraint. These version specs use `PEP440
+syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new entry to the requires list should be done
+using the ``inmanta module add <module-name>`` command.
 
-To specify specific version are required, constraints can be added to the requires list:
+An example of a ``module.yml`` file that defines requires:
 
 .. code-block:: yaml
 
@@ -281,9 +282,8 @@ v1 and v2 modules and use them for both their model and their plugins.
 
 Similarly, when you run a module's unit tests, the installed v2 modules will automatically be used
 by the compiler. As for v1 modules, by default, the ``pytest-inmanta`` extension makes sure the
-compile itself runs against an isolated project, downloading any v1 module dependencies at
-compile-time. If you want to compile against local versions of v1 modules, have a look at the
-``--use-module-in-place`` option in the ``pytest-inmanta`` documentation.
+compile itself runs against an isolated project, downloading any v1 module dependencies. If you want to compile against local
+versions of v1 modules, have a look at the ``--use-module-in-place`` option in the ``pytest-inmanta`` documentation.
 
 
 Distributing modules
@@ -294,15 +294,12 @@ to consider it released.
 
 You can package a v2 module with ``inmanta module build`` which will create a Python wheel.
 You can then publish this to the Python package repository of your choice,
-for example the public PyPi repository. For an inmanta project, follow the same procedure but
-substitute ``module`` with ``project``.
+for example the public PyPi repository.
 
 The orchestrator server generally (see
-:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs both project and modules
-from the configured Python package repository, respecting the project's constraints on its modules
-and all inter-module constraints. The
-server is then responsible for supplying the agents with the appropriate ``inmanta_plugins``
-packages.
+:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
+repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
+for supplying the agents with the appropriate ``inmanta_plugins`` packages.
 
 
 .. _modules-distribution-advanced-concepts:

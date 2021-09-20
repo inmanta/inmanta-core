@@ -61,8 +61,11 @@ For example, the ``main.cf`` below calls the print plugin from the std module.
 .. note::
     The std module is the only module that does not have to be imported explicitly.
 
-This example can be executed with ``inmanta compile``
+Before the project can be executed, the std module has to be installed. This is done by executing the following command in the
+project directory:
 
-This prints out "hello world" on stdout. The first execution takes longer because Inmanta needs to
-fetch (clone) the std module from github. Subsequently compiles will use the std module downloaded
-to the libs directory.
+.. code-block:: bash
+
+    inmanta project install
+
+The example can be executed with ``inmanta compile``. This prints out "hello world" on stdout.
