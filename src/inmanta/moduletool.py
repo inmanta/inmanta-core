@@ -29,7 +29,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
 
 import texttable
 import yaml
@@ -433,7 +433,7 @@ with the dependencies specified by the installed module.
         :param override: If set to True, override the version constraint when the module dependency already exists.
                          If set to False, this method raises an exception when the module dependency already exists.
         """
-        module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
+        module_like: Optional[Union[Project, ModuleV1, ModuleV2]] = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:

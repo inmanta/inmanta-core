@@ -1165,7 +1165,7 @@ class ModuleLike(ABC, Generic[T]):
         self.name = self.get_name_from_metadata(self._metadata)
 
     @classmethod
-    def from_path(cls, path: str) -> Optional["ModuleLike[ModuleMetadata]"]:
+    def from_path(cls, path: str) -> Optional["Union[Project, ModuleV1, ModuleV2]"]:
         """
         Get the Project, ModuleV1 or ModuleV2 instance from a path. Returns None when no project or module
         is present at the given path.
@@ -1365,7 +1365,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module[ModuleMetadata]] = {}
+        self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
@@ -1627,7 +1627,7 @@ class Project(ModuleLike[ProjectMetadata]):
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
 
-        module: Optional[Module]
+        module: Optional[Union[ModuleV1, ModuleV2]]
         try:
             module = self.module_source.get_module(self, module_reqs, install=install)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:

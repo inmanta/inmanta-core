@@ -1172,7 +1172,7 @@ def tmpvenv_active(
     cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
     environment context because its setup and teardown will then wrap the dependent setup and teardown. This works because
     pytest fixture setup and teardown use LIFO semantics
-    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixturein particular should
+    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixture in particular should
     always come after this one.
 
     This fixture has a huge side effect that affects the running Python process. For a venv fixture that does not affect the
