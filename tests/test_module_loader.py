@@ -18,7 +18,7 @@
 import logging
 import os
 import shutil
-from typing import List, Set
+from typing import List, Optional, Set
 
 import py
 import pytest
@@ -26,8 +26,18 @@ from pkg_resources import Requirement
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import DummyProject, ModuleLoadingException, ModuleNotFoundException, ModuleV1, ModuleV2, Project
+from inmanta.module import (
+    DummyProject,
+    InmantaModuleRequirement,
+    ModuleLoadingException,
+    ModuleNotFoundException,
+    ModuleV1,
+    ModuleV2,
+    ModuleV2Source,
+    Project,
+)
 from inmanta.moduletool import ModuleConverter
+from utils import PipIndex, module_from_template
 
 
 @pytest.mark.parametrize("editable_install", [True, False])
@@ -323,4 +333,81 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     assert loaded_namespaces == expected_namespaces
 
 
-# TODO: add test case for requiring explicit v2 requirements
+def test_load_import_based_v2_project(local_module_package_index: str, snippetcompiler_clean) -> None:
+    """
+    A project needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
+    allowed.
+    """
+    module_name: str = "minimalv2module"
+
+    def load(requires: Optional[List[Requirement]] = None) -> None:
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}",
+            autostd=False,
+            install_project=True,
+            python_package_sources=[local_module_package_index],
+            # make sure that even listing the requirement in project.yml does not suffice
+            project_requires=[InmantaModuleRequirement.parse(module_name)],
+            python_requires=requires,
+        )
+
+    with pytest.raises(ModuleLoadingException, match=f"Failed to load module {module_name}"):
+        load()
+    # assert that it doesn't raise an error with explicit requirements set
+    load([Requirement.parse(ModuleV2Source.get_python_package_name(module_name))])
+
+
+@pytest.mark.parametrize("v1", [True, False])
+@pytest.mark.parametrize("explicit_dependency", [True, False])
+def test_load_import_based_v2_module(
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    v1: bool,
+    explicit_dependency: bool,
+) -> None:
+    """
+    A module needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
+    allowed.
+    """
+    main_module_name: str = "mymodule"
+    dependency_module_name: str = "minimalv2module"
+    index: PipIndex = PipIndex(os.path.join(str(tmpdir), ".my-index"))
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+    os.makedirs(libs_dir)
+
+    if v1:
+        shutil.copytree(os.path.join(modules_dir, "minimalv1module"), os.path.join(libs_dir, main_module_name))
+        with open(os.path.join(libs_dir, main_module_name, "requirements.txt"), "w") as fd:
+            fd.write(dependency_module_name if explicit_dependency else "")
+    else:
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            os.path.join(str(tmpdir), main_module_name),
+            new_name=main_module_name,
+            new_requirements=[InmantaModuleRequirement.parse(dependency_module_name)] if explicit_dependency else [],
+            install=False,
+            publish_index=index,
+            new_content_init_cf=f"import {dependency_module_name}",
+        )
+
+    def load() -> None:
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {main_module_name}",
+            autostd=False,
+            install_project=True,
+            add_to_module_path=[libs_dir],
+            python_package_sources=[local_module_package_index, index.url],
+            # make sure that even listing the requirement in project.yml does not suffice
+            project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
+            python_requires=[] if v1 else [Requirement.parse(main_module_name)],
+        )
+
+    if explicit_dependency:
+        # assert that it doesn't raise an error with explicit requirements set
+        load()
+    else:
+        with pytest.raises(ModuleLoadingException, match=f"Failed to load module {dependency_module_name}"):
+            load()

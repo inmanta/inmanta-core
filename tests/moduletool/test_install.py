@@ -35,8 +35,9 @@ from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.module import InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
-from moduletool.common import BadModProvider, PipIndex, install_project, module_from_template
+from moduletool.common import BadModProvider, install_project
 from packaging import version
+from utils import PipIndex, module_from_template
 
 
 @pytest.fixture

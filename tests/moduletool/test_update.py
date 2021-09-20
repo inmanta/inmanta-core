@@ -27,8 +27,9 @@ from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
-from moduletool.common import PipIndex, add_file, clone_repo, module_from_template
+from moduletool.common import add_file, clone_repo
 from packaging.version import Version
+from utils import PipIndex, module_from_template
 
 
 @pytest.mark.parametrize(
