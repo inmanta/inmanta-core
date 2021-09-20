@@ -95,7 +95,7 @@ x = 1
     )
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "snippet,exception,category,message,report_exnc",
     [
         (
