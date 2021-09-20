@@ -57,10 +57,15 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
     gitprovider,
+    ModuleLike,
 )
 
 if TYPE_CHECKING:
+    from packaging.requirements import InvalidRequirement
     from pkg_resources import Requirement  # noqa: F401
+else:
+    from pkg_resources.extern.packaging.requirements import InvalidRequirement
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -284,8 +289,24 @@ class ModuleTool(ModuleLikeTool):
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
-        add = subparser.add_parser("add", help="Add a module dependency to an Inmanta module or project.")
-        add.add_argument("module", help="The name of the module. Optionally, a version constraint can be added", required=True)
+        add_help_msg = "Add a module dependency to an Inmanta module or project."
+        add = subparser.add_parser(
+            "add",
+            help=add_help_msg,
+            description=f"{add_help_msg} When executed on a project, the module is installed as well.",
+        )
+        add.add_argument(
+            "module_req",
+            help="The name of the module, optionally with a version constraint.",
+            required=True,
+        )
+        add.add_argument("--v1", dest="v1", help="Add the given module as a V1 module", action="store_true")
+        add.add_argument(
+            "--override",
+            dest="override",
+            help="Override the version constraint when the given module dependency already exists.",
+            action="store_true",
+        )
 
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
         lst.add_argument(
@@ -369,24 +390,30 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
 
-
-    def add(self, module: str) -> None:
+    def add(self, module_req: str, v1: bool = False, override: bool = False) -> None:
         """
         Add a module dependency to an Inmanta module or project.
-        """
-        if os.path.exists("project.yml"):
-            obj = Project(path=os.getcwd())
-        elif os.path.exists("module.yml"):
-            obj = ModuleV1(project=None, path=os.getcwd())
-        else:
-            try:
-                obj = ModuleV2(project=None, path=os.getcwd())
-            except ModuleMetadataFileNotFound:
-                # TODO: Create custom exception???
-                # TODO: Change exit code???
-                raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
-        # TODO: Add constraint!
 
+        :param module_req: The module to add, optionally with a version constraint.
+        :param v1: Whether the given module should be added as a V1 module or not.
+        :param override: If set to True, override the version constraint when the module dependency already exists.
+                         If set to False, this method raises an exception when the module dependency already exists.
+        """
+        module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
+        if module_like is None:
+            raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
+        try:
+            module_requirement = InmantaModuleRequirement.parse(module_req)
+        except InvalidRequirement:
+            raise CLIException(f"The given requirement '{module_req}' is invalid", exitcode=1)
+        if not override and module_like.has_module_requirement(module_requirement.key):
+            raise CLIException(
+                f"A dependency on the given module was already defined, use --override to override the version constraint",
+                exitcode=1,
+            )
+        module_like.add_module_requirement(requirement=module_requirement, add_as_v1_module=v1)
+        if isinstance(module_like, Project):
+            module_like.install_module(module_requirement, install_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:
         """

@@ -27,6 +27,7 @@ requires = [
     "tornado>=6.0",
     "typing_inspect",
     "build",
+    "ruamel.yaml",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty

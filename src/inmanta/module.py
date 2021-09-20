@@ -23,6 +23,7 @@ import importlib
 import logging
 import os
 import re
+import string
 import subprocess
 import sys
 import tempfile
@@ -54,6 +55,9 @@ from typing import (
     TypeVar,
     Union,
 )
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
+from configparser import ConfigParser
 
 import more_itertools
 import pkg_resources
@@ -134,6 +138,15 @@ class InmantaModuleRequirement:
 
     def __hash__(self) -> int:
         return self._requirement.__hash__()
+
+    def to_python_package_requirement(self) -> Requirement:
+        """
+        Return a Requirement with the name of the Python distribution package for this module requirement.
+        """
+        module_name = self.key
+        pkg_name = ModuleV2.get_package_name_for(module_name)
+        pkg_req_str = self.__str__().replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
+        return Requirement.parse(pkg_req_str)
 
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
@@ -402,12 +415,17 @@ class ModuleSource(Generic[TModule]):
             return None
 
     @abstractmethod
-    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
+    def install(
+        self, project: "Project", module_spec: List[InmantaModuleRequirement], update_when_already_installed: bool = False
+    ) -> Optional[TModule]:
         """
         Attempt to install a module given a module spec.
 
         :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version.
+        :param update_when_already_installed: By default, this method doesn't check the given version constraint when
+                                              the module is already installed. Setting this parameter to True, ensure that
+                                              the correct module version is installed after the execution of this method.
         :return: The module object when the module was installed. When the module could not be found, None is returned.
         """
         raise NotImplementedError("Abstract method")
@@ -480,12 +498,22 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
-    def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+    def install(
+        self,
+        project: Optional["Project"],
+        module_spec: List[InmantaModuleRequirement],
+        update_when_already_installed: bool = False,
+    ) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
-            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
+            env.process_env.install_from_index(
+                requirements,
+                self.urls,
+                allow_pre_releases=allow_pre_releases,
+                upgrade=update_when_already_installed
+            )
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -545,11 +573,18 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
-    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
+    def install(
+        self, project: "Project", module_spec: List[InmantaModuleRequirement], update_when_already_installed: bool = False
+    ) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
         path: Optional[str] = self.path_for(module_name)
         if path is not None:
-            return self.from_path(project, module_name, path)
+            if update_when_already_installed:
+                return ModuleV1.update(
+                    project, module_name, module_spec, path, fetch=False, install_mode=project.install_mode
+                )
+            else:
+                return self.from_path(project, module_name, path)
         else:
             if project.downloadpath is None:
                 raise CompilerException(
@@ -751,6 +786,98 @@ class CfgParser(RawParser):
                 raise InvalidMetadata(msg=f"Metadata file {source.name} doesn't have a metadata section.") from e
             else:
                 raise InvalidMetadata(msg="Metadata file doesn't have a metadata section.") from e
+
+
+class PreservativeYamlParser:
+    """
+    A Yaml parser that tries to preserve comments and the order of elements.
+    This parser doesn't preserve indentation.
+    """
+
+    @classmethod
+    def _get_parser(cls) -> YAML:
+        parser = YAML()
+        # Make sure the indentation settings are used consistently
+        parser.indent(mapping=2, sequence=4, offset=2)
+        return parser
+
+    @classmethod
+    def parse(cls, filename: str) -> CommentedMap:
+        parser = cls._get_parser()
+        with open(filename, "r", encoding="utf-8") as fd:
+            return parser.load(fd)
+
+    @classmethod
+    def dump(cls, filename:str, content: CommentedMap) -> None:
+        parser = cls._get_parser()
+        with open(filename, "w", encoding="utf-8") as fd:
+            parser.dump(content, stream=fd)
+
+
+class RequirementsTxtParser:
+    """
+    Parser for a requirements.txt file
+    """
+    @classmethod
+    def parse(cls, filename: str) -> List[Requirement]:
+        """
+        Parse a requirements.txt file into a list of Requirements.
+        """
+        with open(filename, "r", encoding="utf-8") as fd:
+            lines = fd.readlines()
+            result = [Requirement.parse(r) for r in lines if r.strip(string.whitespace)]
+            return result
+
+    @classmethod
+    def parse_raw(cls, filename: str, remove_dep_on_pkg: str) -> str:
+        """
+        Returns the content of the requirements.txt file with the dependency on `remove_dep_on_pkg` removed.
+        """
+        result = ""
+        with open(filename, "r", encoding="utf-8") as fd:
+            for line in fd.readlines():
+                if line.strip(string.whitespace) and Requirement.parse(line).key != remove_dep_on_pkg:
+                    result += line
+        return result
+
+
+class RequirementsTxtFile:
+
+    def __init__(self, filename: str, create_file_if_not_exists: bool = False) -> None:
+        self._filename = filename
+        if not os.path.exists(self._filename):
+            if create_file_if_not_exists:
+                with open(self._filename, "w", encoding="utf-8"):
+                    pass
+            else:
+                raise FileNotFoundError(f"File {filename} does not exist")
+        self._requirements = RequirementsTxtParser.parse(filename)
+
+    def has_requirement_for(self, pkg_name: str) -> bool:
+        """
+        Returns True iff this requirements.txt file contains the given package name.
+        """
+        return any(r.key == pkg_name for r in self._requirements)
+
+    def set_requirement_and_write(self, requirement: Requirement) -> None:
+        """
+        Add the given requirement to the requirements.txt file and update the file on disk.
+        """
+        new_content_file = RequirementsTxtParser.parse_raw(self._filename, remove_dep_on_pkg=requirement.key)
+        new_content_file = f"{new_content_file.rstrip(string.whitespace)}\n{requirement}"
+        with open(self._filename, "w", encoding="utf-8") as fd:
+            fd.write(new_content_file)
+
+    def remove_requirement_and_write(self, pkg_name: str) -> None:
+        """
+        Remove the dependency on the given package and update the file on disk.
+        """
+        if self.has_requirement_for(pkg_name):
+            return
+        new_content_file = RequirementsTxtParser.parse_raw(self._filename, remove_dep_on_pkg=pkg_name)
+        with open(self._filename, "w", encoding="utf-8") as fd:
+            fd.write(new_content_file)
+        self._requirements = RequirementsTxtParser.parse(self._filename)
 
 
 T = TypeVar("T", bound="Metadata")
@@ -1043,6 +1170,21 @@ class ModuleLike(ABC, Generic[T]):
         self.name = self.get_name_from_metadata(self._metadata)
 
     @classmethod
+    def from_path(cls, path: str) -> Optional["ModuleLike"]:
+        """
+        Get the Project, ModuleV1 or ModuleV2 instance from a path. Returns None when no project or module
+        is present at the given path.
+        """
+        if os.path.exists("project.yml"):
+            return Project(path=path)
+        if os.path.exists("module.yml"):
+            return ModuleV1(project=None, path=path)
+        try:
+            return ModuleV2(project=None, path=path)
+        except ModuleMetadataFileNotFound:
+            return None
+
+    @classmethod
     def get_first_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
         """
         Travel up in the directory structure until a file with the given name if found.
@@ -1104,11 +1246,17 @@ class ModuleLike(ABC, Generic[T]):
     def get_name_from_metadata(cls, metadata: T) -> str:
         raise NotImplementedError()
 
-    @classmethod
     @abstractmethod
-    def add_requirement(cls, requirement: InmantaModuleRequirement) -> None:
+    def add_module_requirement(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
         """
         Add a new module requirement to the meta-data.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def has_module_requirement(self, module_name: str) -> bool:
+        """
+        :returns: True iff the module defines a dependency on the given module
         """
         raise NotImplementedError()
 
@@ -1225,6 +1373,20 @@ class Project(ModuleLike[ProjectMetadata]):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+
+    def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
+        """
+        Install the given module.
+        """
+        installed_module: Optional[Module]
+        if install_as_v1_module:
+            installed_module = self.module_source_v1.install(self, module_spec=[module_req], update_when_already_installed=True)
+        else:
+            installed_module = self.module_source.install(self, module_spec=[module_req], update_when_already_installed=True)
+        if not installed_module:
+            raise ModuleNotFoundException(
+                f"Failed to install module {module_req} as {'V1' if install_as_v1_module else 'V2'} module"
+            )
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ProjectMetadata) -> str:
@@ -1630,9 +1792,35 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return mod_list
 
-    def add_requirement(cls, requirement: InmantaModuleRequirement):
-        # TODO: Implement
-        pass
+    def add_module_requirement(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+        # Add requirement to metadata file
+        YamlMetadataFileWithRequiresField.add_module_requirement_and_write(self, requirement, ignore_version_constraint=True)
+        # Refresh in-memory metadata
+        with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+            self._metadata = ProjectMetadata.parse(fd)
+        # Update requirements.txt file
+        requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
+        if not add_as_v1_module:
+            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+            requirements_txt_file.set_requirement_and_write(requirement.to_python_package_requirement())
+        elif os.path.exists(requirements_txt_file_path):
+            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
+            requirements_txt_file.remove_requirement_and_write(requirement.to_python_package_requirement().key)
+
+    def has_module_requirement(self, module_name: str) -> bool:
+        # Check project.yml file
+        if YamlMetadataFileWithRequiresField.has_module_requirement(self, module_name):
+            return True
+        # Check requirements.txt file
+        requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
+        if not os.path.exists(requirements_txt_file_path):
+            return False
+        try:
+            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=False)
+        except FileNotFoundError:
+            return False
+        else:
+            return requirements_txt_file.has_requirement_for(ModuleV2.get_package_name_for(module_name))
 
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
@@ -2192,6 +2380,38 @@ class ModuleV1(Module[ModuleV1Metadata]):
         else:
             return []
 
+    def add_module_requirement(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+        requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
+        if add_as_v1_module:
+            # Add requirement to module.yml file
+            YamlMetadataFileWithRequiresField.add_module_requirement_and_write(self, requirement)
+            # Refresh in-memory metadata
+            with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+                self._metadata = ProjectMetadata.parse(fd)
+            # Remove requirement from requirements.txt file
+            if os.path.exists(requirements_txt_file_path):
+                requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
+                requirements_txt_file.remove_requirement_and_write(requirement.to_python_package_requirement().key)
+        else:
+            # Add requirement to requirements.txt
+            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
+            requirements_txt_file.set_requirement_and_write(requirement.to_python_package_requirement())
+            # Remove requirement from module.yml file
+            YamlMetadataFileWithRequiresField.remove_module_requirement_and_write(self, requirement.key)
+
+    def has_module_requirement(self, module_name: str) -> bool:
+        # Check module.yml file
+        if YamlMetadataFileWithRequiresField.has_module_requirement(self, module_name):
+            return True
+        # Check requirements.txt file
+        requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
+        try:
+            requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=False)
+        except FileNotFoundError:
+            return False
+        else:
+            return requirements_txt_file.has_requirement_for(ModuleV2.get_package_name_for(module_name))
+
 
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
@@ -2227,6 +2447,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def get_package_name_for(cls, module_name: str) -> str:
+        module_name = module_name.replace("_", "-")
         return f"{cls.PKG_NAME_PREFIX}{module_name}"
 
     def get_metadata_file_path(self) -> str:
@@ -2255,3 +2476,88 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def get_all_python_requirements_as_list(self) -> List[str]:
         return list(self.metadata.install_requires)
+
+    def add_module_requirement(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
+        if add_as_v1_module:
+            raise Exception("Cannot add V1 requirement to a V2 module")
+        # Parse config file
+        config_parser = ConfigParser()
+        config_parser.read(self.get_metadata_file_path())
+        python_pkg_requirement: Requirement = requirement.to_python_package_requirement()
+        if config_parser.has_option("options", "install_requires"):
+            new_install_requires = [
+                r for r in config_parser.get("options", "install_requires").split("\n")
+                if r and Requirement.parse(r).key != python_pkg_requirement.key
+            ]
+            new_install_requires.append(str(python_pkg_requirement))
+        else:
+            new_install_requires = [str(python_pkg_requirement)]
+        config_parser.set("options", "install_requires", "\n".join(new_install_requires))
+        # Write config back to disk
+        with open(self.get_metadata_file_path(), "w", encoding="utf-8") as fd:
+            config_parser.write(fd)
+        # Reload in-memory state
+        with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+            self._metadata = ModuleV2Metadata.parse(fd)
+
+    def has_module_requirement(self, module_name: str) -> bool:
+        config_parser = ConfigParser()
+        config_parser.read(self.get_metadata_file_path())
+        if not config_parser.has_option("options", "install_requires"):
+            return False
+        pkg_name: str = ModuleV2.get_package_name_for(module_name)
+        return any(
+            r for r in config_parser.get("options", "install_requires").split("\n")
+            if r and Requirement.parse(r).key == pkg_name
+        )
+
+
+class YamlMetadataFileWithRequiresField:
+
+    @classmethod
+    def add_module_requirement_and_write(
+        cls, proj_or_v1_mod: Union[Project, ModuleV1], requirement: InmantaModuleRequirement, ignore_version_constraint: bool
+    ) -> None:
+        """
+        Updates the metadata file of the given project or module by adding the given requirement the `requires` section.
+
+        :param proj_or_v1_mod: Project or module that should receive the new requirement.
+        :param requirement: The requirement to add.
+        :param ignore_version_constraint: If True, the version constraint in `requirement` will be left out of the .yml file.
+        """
+        # Parse cfg file
+        content: CommentedMap = PreservativeYamlParser.parse(proj_or_v1_mod.get_metadata_file_path())
+        line_to_add = str(requirement) if not ignore_version_constraint else requirement.key
+        # Update requires
+        if "requires" in content:
+            existing_matching_reqs: List[str] = [
+                r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == requirement.key
+            ]
+            for r in existing_matching_reqs:
+                content["requires"].remove(r)
+            content["requires"].append(line_to_add)
+        else:
+            content["requires"] = [line_to_add]
+        # Write file back to disk
+        PreservativeYamlParser.dump(proj_or_v1_mod.get_metadata_file_path(), content)
+
+    @classmethod
+    def has_module_requirement(cls, proj_or_v1_mod: Union[Project, ModuleV1], module_name: str) -> bool:
+        """
+        Returns true iff the given module is present in the `requires` list of the given project or module metadata file.
+        """
+        content: CommentedMap = PreservativeYamlParser.parse(proj_or_v1_mod.get_metadata_file_path())
+        if "requires" not in content:
+            return False
+        return any(r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == module_name)
+
+    @classmethod
+    def remove_module_requirement_and_write(cls, proj_or_v1_mod: Union[Project, ModuleV1], module_name: str) -> None:
+        """
+        Updates the metadata file of the given project or module by removing the given requirement frm the `requires` section.
+        """
+        if not cls.has_module_requirement(proj_or_v1_mod, module_name):
+            return
+        content: CommentedMap = PreservativeYamlParser.parse(proj_or_v1_mod.get_metadata_file_path())
+        content["requires"] = [r for r in content["requires"] if InmantaModuleRequirement.parse(r).key != module_name]
+        PreservativeYamlParser.dump(proj_or_v1_mod.get_metadata_file_path(), content)
