@@ -1,0 +1,7 @@
+---
+description: Added endpoint to list compile reports
+issue-nr: 3131
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+  feature: "{{description}}"

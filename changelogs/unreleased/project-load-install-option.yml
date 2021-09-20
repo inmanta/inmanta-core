@@ -1,0 +1,6 @@
+description: Added install option to `Project.load()`
+change-type: patch
+sections:
+  upgrade-note: "`Project.load()` no longer installs Project dependencies. Pass `install=True` for the old behavior."
+destination-branches:
+  - master
