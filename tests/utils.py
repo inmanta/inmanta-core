@@ -428,7 +428,7 @@ def v1_module_from_template(
     :param dest_dir: The directory to use to copy the original to and to stage any changes in.
     :param new_version: The new version for the module, if any.
     :param new_name: The new name of the inmanta module, if any.
-    :param new_requirements: The new requirements for the module, if any.
+    :param new_requirements: The new Python requirements for the module, if any.
     :param new_content_init_cf: The new content of the _init.cf file.
     """
     shutil.copytree(source_dir, dest_dir)

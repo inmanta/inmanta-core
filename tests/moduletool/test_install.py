@@ -418,77 +418,77 @@ def test_project_install_modules_cache_invalid(
     """
     Verify that introducing invalidities in the modules cache results in the appropriate exception and warnings.
 
+    - preinstall old (v1 or v2) version of {dependency_module}
+    - install project with {main_module} that depends on {dependency_module}>={v2_version}
+
     :param preinstall_v2: Whether the preinstalled module should be a v2.
     """
-    module_name: str = "minimalv1module"
+    main_module: str = "main_module"
+    dependency_module: str = "minimalv1module"
     fq_mod_name: str = "inmanta_plugins.minimalv1module"
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+    os.makedirs(libs_dir)
 
     assert env.process_env.get_module_file(fq_mod_name) is None
 
-    # prepare v2 module
-    v2_template_path: str = os.path.join(str(tmpdir), module_name)
-    v1: module.ModuleV1 = module.ModuleV1(project=DummyProject(autostd=False), path=os.path.join(modules_dir, module_name))
+    # prepare most recent v2 module
+    v2_template_path: str = os.path.join(str(tmpdir), dependency_module)
+    v1: module.ModuleV1 = module.ModuleV1(
+        project=DummyProject(autostd=False), path=os.path.join(modules_dir, dependency_module)
+    )
     v2_version: version.Version = version.Version(str(v1.version.major + 1) + ".0.0")
     ModuleConverter(v1).convert(output_directory=v2_template_path)
     module_from_template(
-        v2_template_path, os.path.join(str(tmpdir), module_name, "stable"), new_version=v2_version, publish_index=index
+        v2_template_path, os.path.join(str(tmpdir), dependency_module, "stable"), new_version=v2_version, publish_index=index
     )
 
-    # prepare second module that depends on stable v2 version of first module
-    new_module_name: str = f"{module_name}2"
+    # prepare main module that depends on stable v2 version of first module
     module_from_template(
         v2_template_path,
-        os.path.join(str(tmpdir), new_module_name),
-        new_name=new_module_name,
+        os.path.join(str(tmpdir), main_module),
+        new_name=main_module,
         # requires stable version, not currently installed dev version
-        new_requirements=[module.InmantaModuleRequirement.parse(f"{module_name}>={v2_version}")],
+        new_requirements=[module.InmantaModuleRequirement.parse(f"{dependency_module}>={v2_version}")],
         install=False,
         publish_index=index,
     )
 
     # preinstall module
     if preinstall_v2:
-        # set up project, including activation of venv
+        # set up project, including activation of venv before installing the module
         snippetcompiler_clean.setup_for_snippet("", install_project=False)
         # install older v2 module
         module_from_template(
             v2_template_path,
-            os.path.join(str(tmpdir), module_name, "dev"),
+            os.path.join(str(tmpdir), dependency_module, "dev"),
             new_version=version.Version(f"{v2_version}.dev0"),
             install=True,
         )
     else:
         # install module as v1
         snippetcompiler_clean.setup_for_snippet(
-            f"import {module_name}",
+            f"import {dependency_module}",
             autostd=False,
             install_project=False,
         )
         ProjectTool().execute("install", [])
 
     # set up project for installation
-    snippetcompiler_clean.setup_for_snippet(
-        f"""
-        import {new_module_name}
-        import {module_name}
-        """,
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "",
         autostd=False,
         install_project=False,
+        add_to_module_path=[libs_dir],
         python_package_sources=[index.url, local_module_package_index],
-        # don't include preinstalled module to make sure to trigger the v1 loading error
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_python_package_name(new_module_name))],
+        # make sure main module gets installed, pulling in newest version of dependency module
+        python_requires=[Requirement.parse(main_module)],
     )
 
-    if not preinstall_v2:
-        # populate project.modules[module_name]
-        module.Project.get().get_module(module_name, allow_v1=True)
+    # populate project.modules[dependency_module] to force the error conditions in this simplified example
+    project.get_module(dependency_module, allow_v1=True)
 
-    os.chdir(module.Project.get().path)
-    # TODO: this fails for the v1 preinstalled test because the v2 modules now get installed before starting the import based
-    # install flow for v1 modules. This means the v1 error is very much an edge case that can only occur when a v2 module is
-    # a transient dependency of a v1 module and this v2 module promotes another v1 to v2. Not sure whether the test should cover
-    # this or whether we should just drop the v1 preinstalled test.
+    os.chdir(project.path)
     with pytest.raises(
         CompilerException,
         match=(
@@ -499,10 +499,10 @@ def test_project_install_modules_cache_invalid(
         ProjectTool().execute("install", [])
 
     message: str = (
-        f"Compiler has loaded module {module_name}=={v2_version}.dev0 but {module_name}=={v2_version} has"
+        f"Compiler has loaded module {dependency_module}=={v2_version}.dev0 but {dependency_module}=={v2_version} has"
         " later been installed as a side effect."
         if preinstall_v2
-        else f"Compiler has loaded module {module_name} as v1 but it has later been installed as v2 as a side effect."
+        else f"Compiler has loaded module {dependency_module} as v1 but it has later been installed as v2 as a side effect."
     )
 
     assert message in (rec.message for rec in caplog.records)
