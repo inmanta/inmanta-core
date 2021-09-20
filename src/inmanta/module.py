@@ -1365,7 +1365,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module] = {}
+        self.modules: Dict[str, Module[ModuleMetadata]] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
