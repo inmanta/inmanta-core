@@ -124,7 +124,7 @@ def test_compile_plugin_typing(setup_project_for):
     assert isinstance(s2[0], str)
 
 
-def test_compile_plugin_typing(setup_project_for):
+def test_compile_plugin_typing_invalid(setup_project_for):
     project = setup_project_for("compile_plugin_typing", "invalid.cf")
     with pytest.raises(RuntimeException) as e:
         compiler.do_compile()
