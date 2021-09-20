@@ -482,7 +482,7 @@ def test_project_install_modules_cache_invalid(
         add_to_module_path=[libs_dir],
         python_package_sources=[index.url, local_module_package_index],
         # make sure main module gets installed, pulling in newest version of dependency module
-        python_requires=[Requirement.parse(main_module)],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_python_package_name(main_module))],
     )
 
     # populate project.modules[dependency_module] to force the error conditions in this simplified example
