@@ -1165,7 +1165,7 @@ class ModuleLike(ABC, Generic[T]):
         self.name = self.get_name_from_metadata(self._metadata)
 
     @classmethod
-    def from_path(cls, path: str) -> Optional["ModuleLike"]:
+    def from_path(cls, path: str) -> Optional["ModuleLike[ModuleMetadata]"]:
         """
         Get the Project, ModuleV1 or ModuleV2 instance from a path. Returns None when no project or module
         is present at the given path.
@@ -1365,7 +1365,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module] = {}
+        self.modules: Dict[str, Module[ModuleMetadata]] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
