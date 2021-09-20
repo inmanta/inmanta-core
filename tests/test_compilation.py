@@ -18,19 +18,12 @@
 
 import os
 import re
-import shutil
-import tempfile
-import unittest
 from itertools import groupby
-from typing import Dict, Tuple
 
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta import config, const, env
-from inmanta.ast import AttributeException, Namespace, RuntimeException
-from inmanta.ast.type import Type as InmantaType
-from inmanta.module import Project
+from inmanta.ast import AttributeException, RuntimeException
 
 
 @pytest.fixture
