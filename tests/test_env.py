@@ -229,7 +229,7 @@ def test_process_env_install_from_index_conflicting_reqs(
     assert package_name not in env.process_env.get_installed_packages()
 
 
-@pytest.mark.parametrize_any("editable", [True, False])
+@pytest.mark.parametrize("editable", [True, False])
 # make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_process_env_install_from_source(
