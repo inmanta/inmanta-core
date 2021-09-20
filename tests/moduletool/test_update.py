@@ -24,7 +24,7 @@ from inmanta.moduletool import ModuleTool
 from moduletool.common import add_file, clone_repo
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
     [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
 )
