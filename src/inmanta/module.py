@@ -1365,7 +1365,7 @@ class Project(ModuleLike[ProjectMetadata]):
             venv_path = os.path.abspath(venv_path)
         self.virtualenv = env.VirtualEnv(venv_path)
         self.loaded = False
-        self.modules: Dict[str, Module[ModuleMetadata]] = {}
+        self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
@@ -1796,7 +1796,9 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def add_module_requirement(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
         # Add requirement to metadata file
-        YamlMetadataFileWithRequiresField.add_module_requirement_and_write(self, requirement, ignore_version_constraint=True)
+        YamlMetadataFileWithRequiresField.add_module_requirement_and_write(
+            self, requirement, ignore_version_constraint=not add_as_v1_module
+        )
         # Refresh in-memory metadata
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             self._metadata = ProjectMetadata.parse(fd)
@@ -2389,7 +2391,7 @@ class ModuleV1(Module[ModuleV1Metadata]):
             YamlMetadataFileWithRequiresField.add_module_requirement_and_write(self, requirement)
             # Refresh in-memory metadata
             with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
-                self._metadata = ProjectMetadata.parse(fd)
+                self._metadata = ModuleV1Metadata.parse(fd)
             # Remove requirement from requirements.txt file
             if os.path.exists(requirements_txt_file_path):
                 requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
@@ -2519,7 +2521,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
 class YamlMetadataFileWithRequiresField:
     @classmethod
     def add_module_requirement_and_write(
-        cls, proj_or_v1_mod: Union[Project, ModuleV1], requirement: InmantaModuleRequirement, ignore_version_constraint: bool
+        cls,
+        proj_or_v1_mod: Union[Project, ModuleV1],
+        requirement: InmantaModuleRequirement,
+        ignore_version_constraint: bool = False,
     ) -> None:
         """
         Updates the metadata file of the given project or module by adding the given requirement the `requires` section.
