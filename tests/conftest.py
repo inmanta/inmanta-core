@@ -15,6 +15,22 @@
 
     Contact: code@inmanta.com
 """
+
+"""
+About the use of @parametrize_any and @slowtest:
+
+For parametrized tests:
+- if the test is fast and tests different things for each parameter, use @parametrize
+- if the parameters only slightly increase the coverage of the test (some different exception path,...), use @parametrize_any.
+- if a test is slow, use @parametrize_any
+
+The @slowtest annotation is usually added on test periodically, when the test suite becomes too slow.
+We analyze performance and place the @slowtest in the best places.
+It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
+This also allows test to run a few hundred times before being marked as slow.
+"""
+
+
 import asyncio
 import concurrent
 import csv
