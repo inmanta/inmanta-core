@@ -856,7 +856,7 @@ class RequirementsTxtFile:
 
     def set_requirement_and_write(self, requirement: Requirement) -> None:
         """
-        Add the given requirement to the requirements.txt file and update the file on disk.
+        Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints on this package.
         """
         new_content_file = RequirementsTxtParser.parse_raw(self._filename, remove_dep_on_pkg=requirement.key)
         new_content_file = f"{new_content_file.rstrip(string.whitespace)}\n{requirement}"
