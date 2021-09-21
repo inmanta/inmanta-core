@@ -30,6 +30,7 @@ from utils import retry_limited
 
 
 @pytest.fixture
+@pytest.mark.slowtest
 async def migrate_v7_to_v17(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[None]:
