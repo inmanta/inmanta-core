@@ -867,7 +867,7 @@ class RequirementsTxtFile:
         """
         Remove the dependency on the given package and update the file on disk.
         """
-        if self.has_requirement_for(pkg_name):
+        if not self.has_requirement_for(pkg_name):
             return
         new_content_file = RequirementsTxtParser.parse_raw(self._filename, remove_dep_on_pkg=pkg_name)
         with open(self._filename, "w", encoding="utf-8") as fd:
