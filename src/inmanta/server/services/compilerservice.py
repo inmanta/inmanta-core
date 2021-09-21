@@ -783,3 +783,10 @@ class CompilerService(ServerSlice):
             has_prev=metadata.before > 0,
         )
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.compile_details, env="tid")
+    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> model.CompileDetails:
+        details = await data.Compile.get_compile_details(env.id, id)
+        if not details:
+            raise NotFound("The compile with the given id does not exist.")
+        return details
