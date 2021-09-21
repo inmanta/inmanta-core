@@ -892,8 +892,17 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         """
         self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
+        return self._load_project(autostd, install_project, install_v2_modules)
+
+    def _load_project(
+        self,
+        autostd: bool,
+        install_project: bool,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        main_file: str = "main.cf",
+    ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
@@ -1041,6 +1050,15 @@ class SnippetCompilationTest(KeepOnFail):
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None
+
+    def setup_for_existing_project(self, folder: str, main_file: str = "main.cf") -> Project:
+        shutil.rmtree(self.project_dir)
+        shutil.copytree(folder, self.project_dir)
+        venv = os.path.join(self.project_dir, ".env")
+        if os.path.exists(venv):
+            shutil.rmtree(venv)
+        os.symlink(self.env, venv)
+        return self._load_project(autostd=False, install_project=True, main_file=main_file)
 
 
 @pytest.fixture(scope="session")

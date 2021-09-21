@@ -1,0 +1,6 @@
+---
+description: The tests folder is no longer included into the sdist package
+change-type: patch
+destination-branches: [master]
+sections:
+    bugfix: "{{description}}"
