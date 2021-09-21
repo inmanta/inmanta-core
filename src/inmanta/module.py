@@ -1627,7 +1627,7 @@ class Project(ModuleLike[ProjectMetadata]):
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
 
-        module: Optional[Module[ModuleMetadata]]
+        module: Optional[Union[ModuleV1, ModuleV2]]
         try:
             module = self.module_source.get_module(self, module_reqs, install=install)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
