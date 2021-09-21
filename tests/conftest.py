@@ -15,6 +15,22 @@
 
     Contact: code@inmanta.com
 """
+
+"""
+About the use of @parametrize_any and @slowtest:
+
+For parametrized tests:
+- if the test is fast and tests different things for each parameter, use @parametrize
+- if the parameters only slightly increase the coverage of the test (some different exception path,...), use @parametrize_any.
+- if a test is slow, use @parametrize_any
+
+The @slowtest annotation is usually added on test periodically, when the test suite becomes too slow.
+We analyze performance and place the @slowtest in the best places.
+It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
+This also allows test to run a few hundred times before being marked as slow.
+"""
+
+
 import asyncio
 import concurrent
 import csv
@@ -68,7 +84,6 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project
 from inmanta.moduletool import ModuleTool
-from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -88,17 +103,60 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
-# Database
-@pytest.fixture
-def postgres_proc(unused_tcp_port_factory):
-    proc = PostgresProc(unused_tcp_port_factory())
-    yield proc
-    proc.stop()
+def pytest_addoption(parser):
+    parser.addoption(
+        "--fast",
+        action="store_true",
+        help="Don't run all test, but a representative set",
+    )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
+    """
+    For each test marked as parametrize_any run it either as
+    1. if not in fast mode: as if annotated with @parametrize
+    2. if in fast mode: with only one parameter combination, chosen randomly
+    """
+
+    is_fast = metafunc.config.getoption("fast")
+    for marker in metafunc.definition.iter_markers(name="parametrize_any"):
+        variations = len(marker.args[1])
+        if not is_fast or variations < 2:
+            metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
+        else:
+            # select one random item
+            args = list(marker.args)
+            selected = args[1][random.randrange(0, variations)]
+            args[1] = [selected]
+            metafunc.definition.add_marker(pytest.mark.parametrize(*args))
+
+
+def pytest_runtest_setup(item: "pytest.Item"):
+    """
+    When in fast mode, skip test marked as slow
+    """
+    is_fast = item.config.getoption("fast")
+    if not is_fast:
+        return
+    if any(True for mark in item.iter_markers(name="slowtest")):
+        pytest.skip("Skipping slow tests")
 
 
 @pytest.fixture(scope="session")
-def postgres_db(postgresql_proc):
-    yield postgresql_proc
+def postgres_db(request: pytest.FixtureRequest):
+    """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
+    fixture to use an external database. Without this option, an "embedded" postgres is started.
+    """
+    option_name = "postgresql_host"
+    conf = request.config.getoption(option_name)
+    if conf:
+        fixture = "postgresql_noproc"
+    else:
+        fixture = "postgresql_proc"
+
+    logger.info("Using database fixture %s", fixture)
+    yield request.getfixturevalue(fixture)
 
 
 @pytest.fixture
@@ -113,7 +171,9 @@ async def create_db(postgres_db, database_name_internal):
     """
     see :py:database_name_internal:
     """
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    connection = await asyncpg.connect(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
+    )
     try:
         await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
@@ -150,7 +210,13 @@ def database_name(create_db):
 
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
-    client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    client = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield client
     await client.close()
 
@@ -158,7 +224,11 @@ async def postgresql_client(postgres_db, database_name):
 @pytest.fixture(scope="function")
 async def postgresql_pool(postgres_db, database_name):
     client = await asyncpg.create_pool(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield client
     await client.close()
@@ -166,7 +236,13 @@ async def postgresql_pool(postgres_db, database_name):
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
+    await data.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield
     await data.disconnect()
 
@@ -497,6 +573,8 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -594,6 +672,8 @@ async def server_multi(
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -817,8 +897,17 @@ class SnippetCompilationTest(KeepOnFail):
         self.setup_for_snippet_external(
             snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
         )
+        return self._load_project(autostd, install_project, install_v2_modules)
+
+    def _load_project(
+        self,
+        autostd: bool,
+        install_project: bool,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        main_file: str = "main.cf",
+    ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
@@ -970,6 +1059,15 @@ class SnippetCompilationTest(KeepOnFail):
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None
+
+    def setup_for_existing_project(self, folder: str, main_file: str = "main.cf") -> Project:
+        shutil.rmtree(self.project_dir)
+        shutil.copytree(folder, self.project_dir)
+        venv = os.path.join(self.project_dir, ".env")
+        if os.path.exists(venv):
+            shutil.rmtree(venv)
+        os.symlink(self.env, venv)
+        return self._load_project(autostd=False, install_project=True, main_file=main_file)
 
 
 @pytest.fixture(scope="session")

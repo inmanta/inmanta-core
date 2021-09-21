@@ -38,6 +38,9 @@ def get_command(
     timed=False,
     dbport=None,
     dbname="inmanta",
+    dbhost=None,
+    dbuser=None,
+    dbpass=None,
     config_dir=None,
     server_extensions=[],
     version=False,
@@ -61,6 +64,12 @@ def get_command(
         f.write("[database]\n")
         f.write("port=" + str(port) + "\n")
         f.write("name=" + dbname + "\n")
+        if dbhost:
+            f.write(f"host={dbhost}\n")
+        if dbuser:
+            f.write(f"username={dbuser}\n")
+        if dbpass:
+            f.write(f"password={dbpass}\n")
         f.write("[server]\n")
         f.write(f"enabled_extensions={', '.join(server_extensions)}\n")
 
@@ -157,7 +166,7 @@ def test_verify_that_colorama_package_is_not_present():
     assert not is_colorama_package_available()
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
@@ -240,7 +249,7 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "log_level, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
@@ -337,7 +346,15 @@ def test_check_bad_shutdown():
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
-    (args, log_dir) = get_command(tmpdir, dbport=postgres_db.port, dbname=database_name, server_extensions=["badplugin"])
+    (args, log_dir) = get_command(
+        tmpdir,
+        dbport=postgres_db.port,
+        dbname=database_name,
+        dbhost=postgres_db.host,
+        dbuser=postgres_db.user,
+        dbpass=postgres_db.password,
+        server_extensions=["badplugin"],
+    )
     pp = ":".join(sys.path)
     # Add a bad module
     extrapath = os.path.join(os.path.dirname(__file__), "data", "bad_module_path")
@@ -382,7 +399,7 @@ caused by:
 
 
 @pytest.mark.timeout(15)
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "cmd", [(["-X", "compile"]), (["compile", "-X"]), (["compile"]), (["export", "-X"]), (["-X", "export"]), (["export"])]
 )
 def test_minus_x_option(snippetcompiler, cmd):
@@ -439,7 +456,7 @@ end
     assert f"Config file {non_existing_config_file} doesn't exist" in all_output
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "with_tty, version_should_be_shown, regexes_required_lines, regexes_forbidden_lines",
     [
         (False, True, [r"Inmanta Service Orchestrator", r"Compiler version: ", r"Extensions:", r"\s*\* core:"], []),

@@ -34,7 +34,7 @@ import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
-from inmanta.deploy import cfg_env
+from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
@@ -298,6 +298,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"

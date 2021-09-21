@@ -137,7 +137,7 @@ def test_module_help(inmanta_config, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("add_types", [True, False])
+@pytest.mark.parametrize_any("add_types", [True, False])
 async def test_export_to_json(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, add_types):
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
@@ -183,9 +183,9 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert add_types == os.path.exists("dump.json.types")
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
-@pytest.mark.parametrize("set_server", [True, False])
-@pytest.mark.parametrize("set_port", [True, False])
+@pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
+@pytest.mark.parametrize_any("set_server", [True, False])
+@pytest.mark.parametrize_any("set_port", [True, False])
 @pytest.mark.asyncio
 async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
@@ -408,7 +408,7 @@ vm1.name = "other"
     shutil.rmtree(workspace)
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
+@pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export_without_environment(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
