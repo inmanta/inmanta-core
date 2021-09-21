@@ -30,24 +30,24 @@ from moduletool.common import PipIndex, module_from_template
 from packaging.version import Version
 
 
-def test_module_add_v1_module_to_project(snippetcompiler, monkeypatch) -> None:
+def test_module_add_v1_module_to_project(snippetcompiler_clean, monkeypatch) -> None:
     """
     Add a V1 module to an inmanta project using the `inmanta module add` command.
     """
-    project: Project = snippetcompiler.setup_for_snippet(snippet="", autostd=False)
+    project: Project = snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
     monkeypatch.chdir(project.path)
 
     def _assert_project_state(constraint: str) -> None:
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             project_metadata = ProjectMetadata.parse(fd)
             assert constraint in project_metadata.requires
-        with open(os.path.join(snippetcompiler.libs, "std", ModuleV1.MODULE_FILE), "r", encoding="utf-8") as fd:
+        with open(os.path.join(snippetcompiler_clean.libs, "std", ModuleV1.MODULE_FILE), "r", encoding="utf-8") as fd:
             module_metadata = ModuleV1Metadata.parse(fd)
             assert module_metadata.version == constraint.split("==")[1]
-        assert os.listdir(snippetcompiler.libs) == ["std"]
+        assert os.listdir(snippetcompiler_clean.libs) == ["std"]
         assert not os.path.exists(os.path.join(project.path, "requirements.txt"))
 
-    assert not os.listdir(snippetcompiler.libs)
+    assert not os.listdir(snippetcompiler_clean.libs)
     assert not os.path.exists("requirements.txt")
 
     version_constraint = "std==3.0.2"
@@ -65,7 +65,7 @@ def test_module_add_v1_module_to_project(snippetcompiler, monkeypatch) -> None:
 
 @pytest.mark.slowtest
 def test_module_add_v2_module_to_project(
-    tmpdir: py.path.local, snippetcompiler, monkeypatch, local_module_package_index: str, modules_v2_dir: str
+    tmpdir: py.path.local, snippetcompiler_clean, monkeypatch, local_module_package_index: str, modules_v2_dir: str
 ) -> None:
     """
     Add a V2 module to an inmanta project using the `inmanta module add` command.
@@ -81,7 +81,7 @@ def test_module_add_v2_module_to_project(
         )
 
     # Create project
-    project: Project = snippetcompiler.setup_for_snippet(
+    project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet="", autostd=False, python_package_sources=[local_module_package_index, pip_index.url]
     )
     monkeypatch.chdir(project.path)
