@@ -60,7 +60,7 @@ def test_module_error(snippetcompiler):
     path_modules_yml_file = os.path.join(modpath, "module.yml")
     snippetcompiler.setup_for_error(
         "import badmodule",
-        f"""could not find module badmodule (reported in import badmodule ({snippetcompiler.project_dir}/main.cf:1))
+        f"""Failed to load module badmodule (reported in import badmodule ({snippetcompiler.project_dir}/main.cf:1))
 caused by:
   Could not load module badmodule
   caused by:

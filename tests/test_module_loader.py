@@ -18,15 +18,26 @@
 import logging
 import os
 import shutil
-from typing import List, Set
+from typing import List, Optional, Set
 
 import py
 import pytest
+from pkg_resources import Requirement
 
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
-from inmanta.module import DummyProject, ModuleLoadingException, ModuleNotFoundException, ModuleV1, ModuleV2, Project
+from inmanta.module import (
+    DummyProject,
+    InmantaModuleRequirement,
+    ModuleLoadingException,
+    ModuleNotFoundException,
+    ModuleV1,
+    ModuleV2,
+    ModuleV2Source,
+    Project,
+)
 from inmanta.moduletool import ModuleConverter
+from utils import PipIndex, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -145,11 +156,11 @@ def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, all
 
     assert module_name not in project.modules
     if allow_v1:
-        project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+        project.load_module(module_name=module_name, install_v1=False, allow_v1=allow_v1)
         assert module_name in project.modules
     else:
         with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
-            project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+            project.load_module(module_name=module_name, install_v1=False, allow_v1=allow_v1)
 
 
 def test_load_module_v1_module_using_install(snippetcompiler) -> None:
@@ -163,7 +174,7 @@ def test_load_module_v1_module_using_install(snippetcompiler) -> None:
     shutil.rmtree(os.path.join(project.downloadpath, module_name), ignore_errors=True)
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
-    project.load_module(module_name=module_name, install=True, allow_v1=True)
+    project.load_module(module_name=module_name, install_v1=True, allow_v1=True)
     assert module_name in project.modules
     assert module_name in os.listdir(project.downloadpath)
 
@@ -189,7 +200,7 @@ def test_load_module_v2_already_installed(
     )
 
     assert module_name not in project.modules
-    project.load_module(module_name=module_name, install=False, allow_v1=allow_v1)
+    project.load_module(module_name=module_name, install_v2=False, allow_v1=allow_v1)
     assert module_name in project.modules
 
 
@@ -210,10 +221,10 @@ def test_load_module_v2_module_using_install(
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
     if install:
-        project.load_module(module_name=module_name, install=install, allow_v1=True)
+        project.load_module(module_name=module_name, install_v1=install, install_v2=install, allow_v1=True)
     else:
         with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
-            project.load_module(module_name=module_name, install=install, allow_v1=True)
+            project.load_module(module_name=module_name, install_v1=install, install_v2=install, allow_v1=True)
     assert (module_name in project.modules) == install
     assert module_name not in os.listdir(project.downloadpath)
 
@@ -227,7 +238,7 @@ def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool):
     snippetcompiler_clean.modules_dir = None
     project: Project = snippetcompiler_clean.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
     with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
-        project.load_module(module_name=module_name, install=True, allow_v1=allow_v1)
+        project.load_module(module_name=module_name, install_v1=allow_v1, install_v2=True, allow_v1=allow_v1)
 
 
 def test_load_module_v1_and_v2_installed(
@@ -259,7 +270,7 @@ def test_load_module_v1_and_v2_installed(
     assert module_name not in project.modules
     caplog.clear()
     with caplog.at_level(logging.WARNING):
-        project.load_module(module_name=module_name, install=False, allow_v1=True)
+        project.load_module(module_name=module_name, install_v1=False, install_v2=False, allow_v1=True)
     assert f"Module {module_name} is installed as a V1 module and a V2 module: V1 will be ignored." in caplog.text
     assert module_name in project.modules
     assert isinstance(project.modules[module_name], ModuleV2)
@@ -278,13 +289,14 @@ def test_load_module_recursive_v2_module_depends_on_v1(
     project = snippetcompiler.setup_for_snippet(
         snippet="import v2_depends_on_v1",
         python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse("inmanta-module-v2-depends-on-v1")],
         install_project=False,
     )
     if preload_v1_module:
         project.get_module("mod1", allow_v1=True)
     assert ("mod1" in project.modules) == preload_v1_module
 
-    with pytest.raises(ModuleLoadingException, match="could not find module mod1"):
+    with pytest.raises(ModuleLoadingException, match="Failed to load module mod1"):
         project.load_module_recursive(install=True)
 
 
@@ -304,6 +316,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
         snippet="import complex_module_dependencies_mod1",
         autostd=False,
         python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse("inmanta-module-complex-module-dependencies-mod1")],
         install_project=False,
     )
     assert "complex_module_dependencies_mod1" not in project.modules
@@ -318,3 +331,92 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
         "complex_module_dependencies_mod2::submod",
     }
     assert loaded_namespaces == expected_namespaces
+
+
+def test_load_import_based_v2_project(local_module_package_index: str, snippetcompiler_clean) -> None:
+    """
+    A project needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
+    allowed.
+    """
+    module_name: str = "minimalv2module"
+
+    def load(requires: Optional[List[Requirement]] = None) -> None:
+        project: Project = snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}",
+            autostd=False,
+            install_project=False,
+            python_package_sources=[local_module_package_index],
+            # make sure that even listing the requirement in project.yml does not suffice
+            project_requires=[InmantaModuleRequirement.parse(module_name)],
+            python_requires=requires,
+        )
+        project.load_module_recursive(install=True)
+
+    with pytest.raises(ModuleLoadingException, match=f"Failed to load module {module_name}"):
+        load()
+    # assert that it doesn't raise an error with explicit requirements set
+    load([Requirement.parse(ModuleV2Source.get_python_package_name(module_name))])
+
+
+@pytest.mark.parametrize("v1", [True, False])
+@pytest.mark.parametrize("explicit_dependency", [True, False])
+def test_load_import_based_v2_module(
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    v1: bool,
+    explicit_dependency: bool,
+) -> None:
+    """
+    A module needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
+    allowed.
+    """
+    main_module_name: str = "mymodule"
+    dependency_module_name: str = "minimalv2module"
+    index: PipIndex = PipIndex(os.path.join(str(tmpdir), ".my-index"))
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+    os.makedirs(libs_dir)
+
+    model: str = f"import {dependency_module_name}"
+    requirements: List[InmantaModuleRequirement] = (
+        [InmantaModuleRequirement.parse(dependency_module_name)] if explicit_dependency else []
+    )
+
+    if v1:
+        v1_module_from_template(
+            os.path.join(modules_dir, "minimalv1module"),
+            os.path.join(libs_dir, main_module_name),
+            new_name=main_module_name,
+            new_content_init_cf=model,
+            new_requirements=requirements,
+        )
+    else:
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            os.path.join(str(tmpdir), main_module_name),
+            new_name=main_module_name,
+            new_content_init_cf=model,
+            new_requirements=requirements,
+            install=False,
+            publish_index=index,
+        )
+
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        f"import {main_module_name}",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[libs_dir],
+        python_package_sources=[local_module_package_index, index.url],
+        # make sure that even listing the requirement in project.yml does not suffice
+        project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
+        python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_python_package_name(main_module_name))],
+    )
+
+    if explicit_dependency:
+        # assert that it doesn't raise an error with explicit requirements set
+        project.load_module_recursive(install=True)
+    else:
+        with pytest.raises(ModuleLoadingException, match=f"Failed to load module {dependency_module_name}"):
+            project.load_module_recursive(install=True)

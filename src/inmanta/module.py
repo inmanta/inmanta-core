@@ -195,7 +195,7 @@ class ModuleLoadingException(WrappingRuntimeException):
         :param msg: A description of the error.
         """
         if msg is None:
-            msg = "could not find module %s" % name
+            msg = "Failed to load module %s" % name
         WrappingRuntimeException.__init__(self, stmt, msg, cause)
         self.name = name
 
@@ -1155,6 +1155,45 @@ class ModuleLike(ABC, Generic[T]):
                     result.append(line)
         return result
 
+    def _get_requirements_txt_as_list(self) -> List[str]:
+        """
+        Returns the contents of the requirements.txt file as a list of requirements, if it exists.
+        """
+        file = os.path.join(self._path, "requirements.txt")
+        if os.path.exists(file):
+            with open(file, "r", encoding="utf-8") as fd:
+                requirements_txt_content = fd.read()
+                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
+                req_lines = self._remove_comments(req_lines)
+                req_lines = self._remove_line_continuations(req_lines)
+                return list(set(req_lines))
+        else:
+            return []
+
+    @abstractmethod
+    def get_all_python_requirements_as_list(self) -> List[str]:
+        """
+        Returns all Python requirements specified by this module like, including requirements on V2 modules.
+        """
+        raise NotImplementedError()
+
+    def get_strict_python_requirements_as_list(self) -> List[str]:
+        """
+        Returns the strict python requirements specified by this module like, meaning all Python requirements excluding those on
+        inmanta modules.
+        """
+        return [req for req in self.get_all_python_requirements_as_list() if not req.startswith(ModuleV2.PKG_NAME_PREFIX)]
+
+    def get_module_v2_requirements(self) -> List[InmantaModuleRequirement]:
+        """
+        Returns all requirements this module like has on v2 modules.
+        """
+        return [
+            InmantaModuleRequirement.parse(ModuleV2Source.get_inmanta_module_name(req))
+            for req in self.get_all_python_requirements_as_list()
+            if req.startswith(ModuleV2.PKG_NAME_PREFIX)
+        ]
+
 
 @stable_api
 class Project(ModuleLike[ProjectMetadata]):
@@ -1339,16 +1378,26 @@ class Project(ModuleLike[ProjectMetadata]):
         return self.modules
 
     def get_module(
-        self, full_module_name: str, install: bool = False, allow_v1: bool = False, bypass_module_cache: bool = False
+        self,
+        full_module_name: str,
+        *,
+        allow_v1: bool = False,
+        install_v1: bool = False,
+        install_v2: bool = False,
+        bypass_module_cache: bool = False,
     ) -> "Module":
         """
-        Get a module instance for a given module name. Caches modules by top level name for later access.
+        Get a module instance for a given module name. Caches modules by top level name for later access. The install parameters
+        allow to install the module if it has not been installed yet. If both install parameters are False, the module is
+        expected to be preinstalled.
 
         :param full_module_name: The full name of the module. If this is a submodule, the corresponding top level module is
             used.
-        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
+            allow_v1=False.
+        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
+            package with the corresponding name.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         parts = full_module_name.split("::")
@@ -1366,18 +1415,20 @@ class Project(ModuleLike[ProjectMetadata]):
 
         if use_module_cache():
             return self.modules[module_name]
-        return self.load_module(module_name, install=install, allow_v1=allow_v1)
+        return self.load_module(module_name, allow_v1=allow_v1, install_v1=install_v1, install_v2=install_v2)
 
     def load_module_recursive(
         self, install: bool = False, bypass_module_cache: bool = False
     ) -> List[Tuple[str, List[Statement], BasicBlock]]:
         """
-        Load a specific module and all submodules into this project.
+        Loads this project's modules and submodules by recursively following import statements starting from the project's main
+        file.
 
-        For each module, return a triple of name, statements, basicblock
+        For each imported submodule, return a triple of name, statements, basicblock
 
         :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled.
+            all modules are expected to be preinstalled. For security reasons installation of v2 modules is based on explicit
+            Python requirements rather than on imports.
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
@@ -1386,8 +1437,19 @@ class Project(ModuleLike[ProjectMetadata]):
         # deterministic as possible
         imports: List[DefineImport] = [x for x in self.get_imports()]
 
-        v2_modules: Set[str] = set()  # Set of modules that should be loaded as a V2 module
+        v2_modules: Set[str] = set()
+        """
+        Set of modules that should be loaded as a V2 module.
+        """
+        set_up: Set[str] = set()
+        """
+        Set of top level modules that have been set up (setup_module()).
+        """
         done: Dict[str, Dict[str, DefineImport]] = defaultdict(dict)
+        """
+        Submodules, grouped by top level that have been fully loaded: AST has been loaded into ast_by_top_level_mod and its
+        imports have been added to the queue (load_sub_module()).
+        """
 
         def require_v2(module_name: str) -> None:
             """
@@ -1397,19 +1459,83 @@ class Project(ModuleLike[ProjectMetadata]):
                 # already v2
                 return
             v2_modules.add(module_name)
-            if module_name in done and len(done[module_name]) > 0:
+            if module_name in set_up:
+                set_up.remove(module_name)
+            if module_name in done:
                 # some submodules already loaded as v1 => reload
                 imports.extend(done[module_name].values())
                 del done[module_name]
-                del ast_by_top_level_mod[module_name]
+                if module_name in ast_by_top_level_mod:
+                    del ast_by_top_level_mod[module_name]
 
+        def load_module_v2_requirements(module_like: ModuleLike) -> None:
+            """
+            Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
+            any of these requirements have already been loaded as v1, queues them for reload.
+            """
+            for requirement in module_like.get_module_v2_requirements():
+                # load module
+                self.get_module(
+                    requirement.key,
+                    allow_v1=False,
+                    install_v2=install,
+                    bypass_module_cache=bypass_module_cache,
+                )
+                # queue AST reload
+                require_v2(requirement.key)
+
+        def setup_module(module: Module) -> None:
+            """
+            Sets up a top level module, making sure all its v2 requirements are loaded correctly. V2 modules do not support
+            import-based installation because of security reasons (it would mean we implicitly trust any `inmanta-module-x`
+            package for the module we're trying to load). As a result we need to make sure all required v2 modules are present
+            in a set up stage.
+            """
+            if module.name in set_up:
+                # already set up
+                return
+            load_module_v2_requirements(module)
+            set_up.add(module.name)
+
+        def load_sub_module(module: Module, submod: str) -> None:
+            """
+            Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
+            v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
+            them for reload.
+            Does not install any v2 modules.
+            """
+            parts: List[str] = submod.split("::")
+            for i in range(1, len(parts) + 1):
+                subs = "::".join(parts[0:i])
+                if subs in done[module_name]:
+                    continue
+                (nstmt, nb) = module.get_ast(subs)
+
+                done[module_name][subs] = imp
+                ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
+
+                # get imports and add to list
+                subs_imports: List[DefineImport] = module.get_imports(subs)
+                imports.extend(subs_imports)
+                if isinstance(module, ModuleV2):
+                    # A V2 module can only depend on V2 modules. Ensure that all dependencies
+                    # of this module will be loaded as a V2 module.
+                    for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
+                        require_v2(dep_module_name)
+
+        # load this project's v2 requirements
+        load_module_v2_requirements(self)
+
+        # Loop over imports. For each import:
+        # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for
+        #   security reasons. v2 modules installation is done in step 2.
+        # 2. Set up top level module if it has not been set up yet, loading v2 requirements and installing them if install=True.
+        # 3. Load AST for imported submodule and its parent modules, queueing any transient imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
             ns: str = imp.name
 
-            parts = ns.split("::")
-            module_name: str = parts[0]
-            v1_mode: bool = module_name not in v2_modules
+            module_name: str = ns.split("::")[0]
 
             if ns in done[module_name]:
                 continue
@@ -1418,42 +1544,36 @@ class Project(ModuleLike[ProjectMetadata]):
                 # get module
                 module: Module = self.get_module(
                     module_name,
-                    install=install,
-                    allow_v1=v1_mode,
+                    allow_v1=module_name not in v2_modules,
+                    install_v1=install,
+                    install_v2=False,
                     bypass_module_cache=bypass_module_cache,
                 )
-                # get NS
-                for i in range(1, len(parts) + 1):
-                    subs = "::".join(parts[0:i])
-                    if subs in done[module_name]:
-                        continue
-                    (nstmt, nb) = module.get_ast(subs)
-
-                    done[module_name][subs] = imp
-                    ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
-
-                    # get imports and add to list
-                    subs_imports: List[DefineImport] = module.get_imports(subs)
-                    imports.extend(subs_imports)
-                    if isinstance(module, ModuleV2):
-                        # A V2 module can only depend on V2 modules. Ensure that all dependencies
-                        # of this module will be loaded as a V2 module.
-                        for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
-                            require_v2(dep_module_name)
+                setup_module(module)
+                load_sub_module(module, ns)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
-    def load_module(self, module_name: str, install: bool = False, allow_v1: bool = False) -> "Module":
+    def load_module(
+        self,
+        module_name: str,
+        *,
+        allow_v1: bool = False,
+        install_v1: bool = False,
+        install_v2: bool = False,
+    ) -> "Module":
         """
-        Get a module instance for a given module name. Should be called prior to configuring the module finder to include v1
-        modules.
+        Get a module instance for a given module name. The install parameters allow to install the module if it has not been
+        installed yet. If both install parameters are False, the module is expected to be preinstalled.
 
         :param module_name: The name of the module.
-        :param install: Run in install mode, installing any modules that have not yet been installed. If install is False,
-            all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
+        :param install_v1: Allow installing this module as v1 if it has not yet been installed. This option is ignored if
+            allow_v1=False.
+        :param install_v2: Allow installing this module as v2 if it has not yet been installed, implicitly trusting any Python
+            package with the corresponding name.
         """
         if not self.is_using_virtual_env():
             self.virtualenv.use_virtual_env()
@@ -1464,17 +1584,18 @@ class Project(ModuleLike[ProjectMetadata]):
 
         module: Optional[Module]
         try:
-            module = self.module_source.get_module(self, module_reqs, install=install)
+            module = self.module_source.get_module(self, module_reqs, install=install_v2)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
-                module = self.module_source_v1.get_module(self, module_reqs, install=install)
+                module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
         if module is None:
             raise ModuleNotFoundException(
-                f"Could not find module {module_name}. Please make sure to install it by running `inmanta project install`."
+                f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
+                " `inmanta module add` and to install all the project's dependencies with `inmanta project install`."
             )
 
         self.modules[module_name] = module
@@ -1691,6 +1812,9 @@ class Project(ModuleLike[ProjectMetadata]):
 
         return out
 
+    def get_all_python_requirements_as_list(self) -> List[str]:
+        return self._get_requirements_txt_as_list()
+
 
 class DummyProject(Project):
     """ Placeholder project that does nothing """
@@ -1743,14 +1867,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
-
-    @abstractmethod
-    def get_module_requirements(self) -> List[str]:
-        """
-        Return all requirements this module has to other modules. Requirements should be on inmanta module names, not Python
-        package names.
-        """
-        raise NotImplementedError()
 
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
@@ -1836,7 +1952,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         for impor in todo:
             if impor not in out:
                 v1_mode: bool = self.GENERATION == ModuleGeneration.V1
-                mainmod = self._project.get_module(impor, install=v1_mode, allow_v1=v1_mode)
+                mainmod = self._project.get_module(impor, install_v1=v1_mode, allow_v1=v1_mode)
                 vers: version.Version = mainmod.version
                 # track submodules for cycle avoidance
                 out[impor] = mode + " " + str(vers)
@@ -2000,25 +2116,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             print("done")
         print()
 
-    @abstractmethod
-    def get_all_python_requirements_as_list(self) -> List[str]:
-        """
-        Returns all Python requirements specified by the module, including requirements on V2 modules.
-        """
-        raise NotImplementedError()
-
-    def get_strict_python_requirements_as_list(self) -> List[str]:
-        """
-        Returns the strict python requirements specified by the module, meaning all Python requirements excluding those on
-        inmanta modules.
-        """
-        return [req for req in self.get_all_python_requirements_as_list() if not req.startswith(ModuleV2.PKG_NAME_PREFIX)]
-
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
+
+    @abstractmethod
+    def get_module_requirements(self) -> List[str]:
+        """
+        Returns all requirements this module has on other modules, regardless of module generation. Requirements should be on
+        inmanta module names, not Python package names.
+        """
+        raise NotImplementedError()
 
 
 @stable_api
@@ -2167,25 +2277,11 @@ class ModuleV1(Module[ModuleV1Metadata]):
             return None
         return plugins_dir
 
-    def get_module_requirements(self) -> List[str]:
-        module_requirements_in_requirements_txt = [
-            ModuleV2Source.get_inmanta_module_name(req)
-            for req in self.get_all_python_requirements_as_list()
-            if req.startswith(ModuleV2.PKG_NAME_PREFIX)
-        ]
-        return list(self.metadata.requires) + module_requirements_in_requirements_txt
-
     def get_all_python_requirements_as_list(self) -> List[str]:
-        file = os.path.join(self._path, "requirements.txt")
-        if os.path.exists(file):
-            with open(file, "r", encoding="utf-8") as fd:
-                requirements_txt_content = fd.read()
-                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
-                req_lines = self._remove_comments(req_lines)
-                req_lines = self._remove_line_continuations(req_lines)
-                return list(set(req_lines))
-        else:
-            return []
+        return self._get_requirements_txt_as_list()
+
+    def get_module_requirements(self) -> List[str]:
+        return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
 
 
 @stable_api
@@ -2241,12 +2337,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
         else:
             return self.path
 
-    def get_module_requirements(self) -> List[str]:
-        return [
-            ModuleV2Source.get_inmanta_module_name(req)
-            for req in self.get_all_python_requirements_as_list()
-            if req.startswith(self.PKG_NAME_PREFIX)
-        ]
-
     def get_all_python_requirements_as_list(self) -> List[str]:
         return list(self.metadata.install_requires)
+
+    def get_module_requirements(self) -> List[str]:
+        return [str(req) for req in self.get_module_v2_requirements()]
