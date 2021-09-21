@@ -26,8 +26,8 @@ from inmanta.command import CLIException
 from inmanta.env import process_env
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
-from utils import PipIndex, module_from_template
 from packaging.version import Version
+from utils import PipIndex, module_from_template
 
 
 def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
