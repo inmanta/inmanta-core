@@ -716,7 +716,7 @@ def get_compile_reports(
 @typedmethod(
     path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.ResourceDetails:
+def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
     :return: The details of a compile
     :raise NotFound: This exception is raised when the referenced environment or compile is not found

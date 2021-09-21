@@ -32,83 +32,34 @@ def compile_ids(compile_objects):
 @pytest.fixture
 async def env_with_compiles(client, environment):
     compile_requested_timestamps = []
-    for i in range(8):
+    compiles = []
+    for i in range(4):
         requested = datetime.datetime.strptime(f"2021-09-09T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
         compile_requested_timestamps.append(requested)
+        compile = data.Compile(
+            id=uuid.uuid4(),
+            remote_id=uuid.uuid4(),
+            environment=uuid.UUID(environment),
+            requested=requested,
+            started=requested.replace(second=20),
+            completed=requested.replace(second=40),
+            do_export=True,
+            force_update=False,
+            metadata={"meta": 42} if i % 2 else None,
+            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            success=True,
+            handled=True,
+            version=1,
+            substitute_compile_id=None,
+            compile_data={"errors": [{"type": "UnexpectedException", "message": "msg"}]} if i % 2 else None,
+        )
+        compiles.append(compile)
+    compiles[1].substitute_compile_id = compiles[0].id
+    compiles[2].substitute_compile_id = compiles[1].id
+    for compile in compiles:
+        await compile.insert()
+    ids = [compile.id for compile in compiles]
 
-    ids = [uuid.uuid4() for _ in range(5)]
-    requested = compile_requested_timestamps[0]
-    await data.Compile(
-        id=ids[0],
-        remote_id=uuid.uuid4(),
-        environment=uuid.UUID(environment),
-        requested=requested,
-        started=requested.replace(second=20),
-        completed=requested.replace(second=40),
-        do_export=True,
-        force_update=False,
-        metadata={"meta": 42},
-        environment_variables={"TEST_ENV_VAR": True},
-        success=True,
-        handled=True,
-        version=1,
-        substitute_compile_id=None,
-        compile_data=None,
-    ).insert()
-    requested = compile_requested_timestamps[1]
-    await data.Compile(
-        id=ids[1],
-        remote_id=uuid.uuid4(),
-        environment=uuid.UUID(environment),
-        requested=requested,
-        started=requested.replace(second=20),
-        completed=requested.replace(second=40),
-        do_export=True,
-        force_update=False,
-        metadata={"meta": 42},
-        environment_variables={"TEST_ENV_VAR": True},
-        success=True,
-        handled=True,
-        version=1,
-        substitute_compile_id=ids[0],
-        compile_data=None,
-    ).insert()
-    requested = compile_requested_timestamps[2]
-    await data.Compile(
-        id=ids[2],
-        remote_id=uuid.uuid4(),
-        environment=uuid.UUID(environment),
-        requested=requested,
-        started=requested.replace(second=20),
-        completed=requested.replace(second=40),
-        do_export=True,
-        force_update=False,
-        metadata={"meta": 42},
-        environment_variables={"TEST_ENV_VAR": True},
-        success=True,
-        handled=True,
-        version=1,
-        substitute_compile_id=ids[1],
-        compile_data=None,
-    ).insert()
-    requested = compile_requested_timestamps[3]
-    await data.Compile(
-        id=ids[3],
-        remote_id=uuid.uuid4(),
-        environment=uuid.UUID(environment),
-        requested=requested,
-        started=requested.replace(second=20),
-        completed=requested.replace(second=40),
-        do_export=True,
-        force_update=False,
-        metadata={"meta": 42},
-        environment_variables={"TEST_ENV_VAR": True},
-        success=True,
-        handled=True,
-        version=1,
-        substitute_compile_id=None,
-        compile_data=None,
-    ).insert()
     await Report(
         id=uuid.uuid4(),
         started=datetime.datetime.now(),
@@ -139,7 +90,7 @@ async def env_with_compiles(client, environment):
 async def test_compile_details(server, client, env_with_compiles):
     environment, ids, compile_requested_timestamps = env_with_compiles
 
-    # A compile that has no substitute_compile_id
+    # A compile that has no substitute_compile_id, and has reports
     result = await client.compile_details(environment, ids[0])
     assert result.code == 200
     reports = result.result["data"]["reports"]
@@ -166,5 +117,5 @@ async def test_compile_details(server, client, env_with_compiles):
     assert not result.result["data"]["reports"]
 
     # An id that doesn't exist as a compile
-    result = await client.compile_details(environment, ids[4])
+    result = await client.compile_details(environment, uuid.uuid4())
     assert result.code == 404

@@ -2619,8 +2619,8 @@ class Compile(BaseDocument):
                 version=compile["version"],
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
-                metadata=json.loads(compile["metadata"]),
-                environment_variables=json.loads(compile["environment_variables"]),
+                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
+                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
             )
             for compile in compile_records
         ]
@@ -2628,6 +2628,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
+        """Find all of the details of a compile, with reports from a substituted compile, if there was one"""
         query = f"""
             WITH RECURSIVE compiledetails AS (
             SELECT
@@ -2682,6 +2683,7 @@ class Compile(BaseDocument):
                     rep.outstream,
                     rep.returncode
                 FROM
+                    /* Lookup the compile with the id that matches the subsitute_compile_id of the current one */
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
@@ -2693,11 +2695,11 @@ class Compile(BaseDocument):
 
         if not result:
             return None
-        # Get the details from the actual compile, and the reports from the substitute
+        # Get the details from the requested compile, and the reports from the substitute
         records = list(filter(lambda r: r["id"] == id, result))
         if not records:
             return None
-        record = records[0]
+        requested_compile = records[0]
         reports = [
             m.Report(
                 id=report["report_id"],
@@ -2714,19 +2716,21 @@ class Compile(BaseDocument):
         ]
 
         return m.CompileDetails(
-            id=record["id"],
-            remote_id=record["remote_id"],
-            environment=record["environment"],
-            requested=record["requested"],
-            started=record["started"],
-            completed=record["completed"],
-            success=record["success"],
-            version=record["version"],
-            do_export=record["do_export"],
-            force_update=record["force_update"],
-            metadata=json.loads(record["metadata"]),
-            environment_variables=json.loads(record["environment_variables"]),
-            compile_data=record["compile_data"],
+            id=requested_compile["id"],
+            remote_id=requested_compile["remote_id"],
+            environment=requested_compile["environment"],
+            requested=requested_compile["requested"],
+            started=requested_compile["started"],
+            completed=requested_compile["completed"],
+            success=requested_compile["success"],
+            version=requested_compile["version"],
+            do_export=requested_compile["do_export"],
+            force_update=requested_compile["force_update"],
+            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
+            environment_variables=json.loads(requested_compile["environment_variables"])
+            if requested_compile["environment_variables"]
+            else {},
+            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports if reports else None,
         )
 
