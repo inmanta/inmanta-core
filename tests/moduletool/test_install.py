@@ -243,8 +243,8 @@ def test_dev_checkout(git_modules_dir, modules_repo):
     assert not os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
-@pytest.mark.parametrize("editable", [True, False])
-@pytest.mark.parametrize("set_path_argument", [True, False])
+@pytest.mark.parametrize_any("editable", [True, False])
+@pytest.mark.parametrize_any("set_path_argument", [True, False])
 def test_module_install(
     build_venv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
 ) -> None:
@@ -265,7 +265,7 @@ def test_module_install(
         assert is_installed(python_module_name, False)
 
 
-@pytest.mark.parametrize("dev", [True, False])
+@pytest.mark.parametrize_any("dev", [True, False])
 def test_module_install_version(
     tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
@@ -295,7 +295,7 @@ def test_module_install_version(
     assert mod.version == module_version
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "install_module_names, module_dependencies",
     [
         (["minimalv2module"], []),
@@ -340,7 +340,7 @@ def test_project_install(
     assert os.listdir(v1_mod_dir) == ["std"]
 
 
-@pytest.mark.parametrize("editable", [True, False])
+@pytest.mark.parametrize_any("editable", [True, False])
 def test_project_install_preinstalled(
     local_module_package_index: str,
     build_venv_active: Tuple[py.path.local, py.path.local],
@@ -392,6 +392,7 @@ def test_project_install_preinstalled(
 
 
 @pytest.mark.parametrize("preinstall_v2", [True, False])
+@pytest.mark.slowtest
 def test_project_install_modules_cache_invalid(
     caplog,
     local_module_package_index: str,
@@ -619,7 +620,7 @@ def test_project_install_incompatible_dependencies(
     )
 
 
-@pytest.mark.parametrize("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
+@pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
 ) -> None:

@@ -17,9 +17,7 @@
 """
 import pytest
 
-from inmanta import protocol
-from inmanta.data import Environment
-from inmanta.server.bootloader import InmantaBootloader
+from inmanta import data
 
 
 @pytest.mark.asyncio
@@ -44,26 +42,7 @@ async def test_server_status(server, client):
 
 @pytest.mark.asyncio
 async def test_server_status_database_unreachable(server, client):
-    await Environment.close_connection_pool()
-    result = await client.get_server_status()
-    assert result.code == 200
-    database_slice = None
-    for slice in result.result["data"]["slices"]:
-        if slice["name"] == "core.database":
-            database_slice = slice
-    assert database_slice
-    assert not database_slice["status"]["connected"]
-
-
-@pytest.mark.asyncio
-async def test_server_status_database_down(
-    server_config, server_pre_start, postgres_db, ensure_running_postgres_db_post, async_finalizer
-):
-    ibl = InmantaBootloader()
-    await ibl.start()
-    async_finalizer.add(ibl.stop)
-    postgres_db.stop()
-    client = protocol.Client("client")
+    await data.Environment.close_connection_pool()
     result = await client.get_server_status()
     assert result.code == 200
     database_slice = None

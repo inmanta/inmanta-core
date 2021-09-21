@@ -1,6 +1,5 @@
 # Inmanta
-[![Build Status](https://travis-ci.org/inmanta/inmanta.svg?branch=master)](https://travis-ci.org/inmanta/inmanta)
-[![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta/)
+[![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta-core/)
 
 
 Inmanta is an automation and orchestration tool to efficiently deploy and manage your software

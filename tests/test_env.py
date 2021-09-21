@@ -177,9 +177,9 @@ def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
             )
 
 
-@pytest.mark.parametrize("version", [None, version.Version("8.6.0")])
+@pytest.mark.parametrize_any("version", [None, version.Version("8.6.0")])
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_process_env_install_from_index(
     tmpdir: str,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
@@ -211,7 +211,7 @@ def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.
 
 
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_process_env_install_from_index_conflicting_reqs(
     tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local], active_compiler_venv: bool
 ) -> None:
@@ -231,7 +231,7 @@ def test_process_env_install_from_index_conflicting_reqs(
 
 @pytest.mark.parametrize("editable", [True, False])
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_process_env_install_from_source(
     tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
@@ -265,6 +265,7 @@ def test_process_env_install_from_source(
 @pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
 # make sure activating the compiler venv does not conflict
 @pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.slowtest
 def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
@@ -318,7 +319,7 @@ def test_active_env_get_module_file(
 
 
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_active_env_get_module_file_editable_namespace_package(
     tmpdir: str,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
@@ -386,7 +387,7 @@ build-backend = "setuptools.build_meta"
 
 
 # make sure activating the compiler venv does not conflict
-@pytest.mark.parametrize("active_compiler_venv", [True, False])
+@pytest.mark.parametrize_any("active_compiler_venv", [True, False])
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,
