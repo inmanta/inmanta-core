@@ -29,6 +29,7 @@ from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
+@pytest.mark.slowtest
 async def migrate_v3_to_v4(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v3.sql"), "r") as fh:

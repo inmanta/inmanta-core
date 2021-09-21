@@ -39,7 +39,7 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
         postgres_db.port,
         database_name,
         postgres_db.user,
-        None,
+        postgres_db.password,
         create_db_schema,
         connection_pool_min_size=1,
         connection_pool_max_size=1,
@@ -57,7 +57,9 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
 
 @pytest.mark.asyncio
 async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema)
+    pool: Pool = await data.connect(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
     assert pool is not None
     try:
         async with pool.acquire() as connection:
@@ -75,7 +77,7 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
             postgres_db.port,
             database_name,
             postgres_db.user,
-            None,
+            postgres_db.password,
             create_db_schema,
             connection_pool_min_size=min_size,
             connection_pool_max_size=max_size,

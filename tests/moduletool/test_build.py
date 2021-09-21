@@ -59,7 +59,7 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
         subprocess.check_output(cmd, cwd=module_path, stderr=subprocess.STDOUT)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "module_name, is_v2_module, set_path_argument",
     [
         ("minimalv2module", True, True),

@@ -31,7 +31,7 @@ from moduletool.common import PipIndex, add_file, clone_repo, module_from_templa
 from packaging.version import Version
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
     [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
 )
@@ -81,6 +81,7 @@ def test_module_update_with_install_mode_master(
 
 @pytest.mark.parametrize("corrupt_module", [False, True])
 @pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
+@pytest.mark.slowtest
 def test_module_update_with_v2_module(
     tmpdir: py.path.local,
     modules_v2_dir: str,

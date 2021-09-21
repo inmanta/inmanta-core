@@ -197,8 +197,20 @@ async def test_dbschema_update_legacy_table_concurrent(
     """
     Verify that no conflicts arise from multiple concurrent processes trying to migrate from the legacy table.
     """
-    client1 = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
-    client2 = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    client1 = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
+    client2 = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     await client1.execute(
         """
 -- Table: public.schemamanager
