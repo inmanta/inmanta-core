@@ -855,7 +855,6 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
-        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
         if not self._keep:
@@ -907,7 +906,7 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
     ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd, main_file=main_file)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
@@ -922,7 +921,6 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        env.process_env.notify_change()
         env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
@@ -937,7 +935,7 @@ class SnippetCompilationTest(KeepOnFail):
                 project.install_in_compiler_venv(path=install_path, editable=mod.editable)
 
     def reset(self):
-        Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
         loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
