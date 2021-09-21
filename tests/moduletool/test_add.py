@@ -26,7 +26,7 @@ from inmanta.command import CLIException
 from inmanta.env import process_env
 from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
-from moduletool.common import PipIndex, module_from_template
+from utils import PipIndex, module_from_template
 from packaging.version import Version
 
 
@@ -35,6 +35,11 @@ def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
     Add a V1 module to an inmanta project using the `inmanta module add` command.
     """
     project: Project = snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
+    requirements_txt_file = os.path.join(project.path, "requirements.txt")
+
+    def _get_content_requirements_txt_file() -> str:
+        with open(requirements_txt_file, "r", encoding="utf-8") as fd:
+            return fd.read()
 
     def _assert_project_state(constraint: str) -> None:
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
@@ -44,10 +49,10 @@ def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
             module_metadata = ModuleV1Metadata.parse(fd)
             assert module_metadata.version == constraint.split("==")[1]
         assert os.listdir(snippetcompiler_clean.libs) == ["std"]
-        assert not os.path.exists(os.path.join(project.path, "requirements.txt"))
+        assert not _get_content_requirements_txt_file()
 
     assert not os.listdir(snippetcompiler_clean.libs)
-    assert not os.path.exists("requirements.txt")
+    assert not _get_content_requirements_txt_file()
 
     version_constraint = "std==3.0.2"
     ModuleTool().add(module_req=version_constraint, v1=True, override=False)
