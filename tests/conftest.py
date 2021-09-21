@@ -65,6 +65,7 @@ import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
+from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
@@ -875,6 +876,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
@@ -888,12 +890,24 @@ class SnippetCompilationTest(KeepOnFail):
             to discover V2 modules.
         :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
                                  file
+        :param python_requires: The dependencies on Python packages providing v2 modules.
         :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
                              no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
+        self.setup_for_snippet_external(
+            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+        )
+        return self._load_project(autostd, install_project, install_v2_modules)
+
+    def _load_project(
+        self,
+        autostd: bool,
+        install_project: bool,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        main_file: str = "main.cf",
+    ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
@@ -933,11 +947,13 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
         project_requires = project_requires if project_requires is not None else []
+        python_requires = python_requires if python_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -963,6 +979,8 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+        with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
+            fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
@@ -1041,6 +1059,15 @@ class SnippetCompilationTest(KeepOnFail):
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None
+
+    def setup_for_existing_project(self, folder: str, main_file: str = "main.cf") -> Project:
+        shutil.rmtree(self.project_dir)
+        shutil.copytree(folder, self.project_dir)
+        venv = os.path.join(self.project_dir, ".env")
+        if os.path.exists(venv):
+            shutil.rmtree(venv)
+        os.symlink(self.env, venv)
+        return self._load_project(autostd=False, install_project=True, main_file=main_file)
 
 
 @pytest.fixture(scope="session")

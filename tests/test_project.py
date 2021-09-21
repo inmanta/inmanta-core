@@ -352,7 +352,7 @@ def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
     if install:
         project.load(install=True)
     else:
-        with pytest.raises(ModuleLoadingException, match="could not find module std"):
+        with pytest.raises(ModuleLoadingException, match="Failed to load module std"):
             project.load()
         # make sure project load works after installing modules
         project.install_modules()

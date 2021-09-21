@@ -9,7 +9,6 @@ include src/inmanta/parser/parser.out
 recursive-include src *.j2
 recursive-include docs *
 recursive-include misc *
-recursive-include tests *
 
 global-exclude *.pyc
 global-exclude */__pycache__/*
