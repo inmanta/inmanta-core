@@ -30,12 +30,11 @@ from moduletool.common import PipIndex, module_from_template
 from packaging.version import Version
 
 
-def test_module_add_v1_module_to_project(snippetcompiler_clean, monkeypatch) -> None:
+def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
     """
     Add a V1 module to an inmanta project using the `inmanta module add` command.
     """
     project: Project = snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
-    monkeypatch.chdir(project.path)
 
     def _assert_project_state(constraint: str) -> None:
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
@@ -65,7 +64,7 @@ def test_module_add_v1_module_to_project(snippetcompiler_clean, monkeypatch) -> 
 
 @pytest.mark.slowtest
 def test_module_add_v2_module_to_project(
-    tmpdir: py.path.local, snippetcompiler_clean, monkeypatch, local_module_package_index: str, modules_v2_dir: str
+    tmpdir: py.path.local, snippetcompiler_clean, local_module_package_index: str, modules_v2_dir: str
 ) -> None:
     """
     Add a V2 module to an inmanta project using the `inmanta module add` command.
@@ -84,7 +83,6 @@ def test_module_add_v2_module_to_project(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         snippet="", autostd=False, python_package_sources=[local_module_package_index, pip_index.url]
     )
-    monkeypatch.chdir(project.path)
 
     requirements_txt_file = os.path.join(project.path, "requirements.txt")
 
