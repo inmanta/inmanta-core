@@ -1410,7 +1410,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
         """
-        Install the given module.
+        Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the corresponding name.
         """
         installed_module: Optional[Module]
         if install_as_v1_module:
