@@ -2695,6 +2695,8 @@ class Compile(BaseDocument):
         result = await cls.select_query(query, values, no_obj=True)
         result = cast(List[Record], result)
         # The result is a list of Compiles joined with Reports
+        # This includes the Compile with the requested id,
+        # as well as Compile(s) that have been used as a substitute for the requested Compile (if there are any)
         if not result:
             return None
 
