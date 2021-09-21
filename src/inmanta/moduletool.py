@@ -312,7 +312,6 @@ class ModuleTool(ModuleLikeTool):
         add.add_argument(
             "module_req",
             help="The name of the module, optionally with a version constraint.",
-            required=True,
         )
         add.add_argument("--v1", dest="v1", help="Add the given module as a V1 module", action="store_true")
         add.add_argument(
