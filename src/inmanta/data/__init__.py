@@ -2629,6 +2629,8 @@ class Compile(BaseDocument):
     @classmethod
     async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
         """Find all of the details of a compile, with reports from a substituted compile, if there was one"""
+
+        # Recursively join the requested compile with the substituted compiles (if there was one), and the corresponding reports
         query = f"""
             WITH RECURSIVE compiledetails AS (
             SELECT
@@ -2692,16 +2694,20 @@ class Compile(BaseDocument):
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
         result = cast(List[Record], result)
-
+        # The result is a list of Compiles joined with Reports
         if not result:
             return None
-        # Get the details from the requested compile, and the reports from the substitute
+
+        # The details, such as the requested timestamp, etc. should be returned from
+        # the compile that matches the originally requested id
         records = list(filter(lambda r: r["id"] == id, result))
         if not records:
             return None
         requested_compile = records[0]
+
+        # Reports should be included from the substituted compile (as well)
         reports = [
-            m.Report(
+            m.CompileRunReport(
                 id=report["report_id"],
                 started=report["report_started"],
                 completed=report["report_completed"],
@@ -2731,7 +2737,7 @@ class Compile(BaseDocument):
             if requested_compile["environment_variables"]
             else {},
             compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
-            reports=reports if reports else None,
+            reports=reports,
         )
 
     def to_dto(self) -> m.CompileRun:

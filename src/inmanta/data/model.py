@@ -157,7 +157,7 @@ class CompileReport(CompileRunBase):
     version: Optional[int]
 
 
-class Report(BaseModel):
+class CompileRunReport(BaseModel):
     id: uuid.UUID
     started: datetime.datetime
     completed: Optional[datetime.datetime]
@@ -170,7 +170,7 @@ class Report(BaseModel):
 
 class CompileDetails(CompileReport):
     compile_data: Optional[CompileData]
-    reports: Optional[List[Report]]
+    reports: Optional[List[CompileRunReport]]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
