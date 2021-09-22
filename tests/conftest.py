@@ -348,13 +348,14 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
+    old_working_set = pkg_resources.working_set
 
     yield
 
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if "PYTHONPATH" in os.environ:
         if old_pythonpath is not None:
