@@ -44,7 +44,7 @@ to a test environment instead of the outer environment.
 The following fixtures manage test environments:
 - snippetcompiler_clean: activates the Project's compiler venv and patches inmanta.env.process_env to use this same venv
     as if it were the outer venv. The activation and patch is applied when compiling the first snippet.
-- snippetcompiler: same as snippetcompiler_clean but the compiler venv is shared among all functions using the
+- snippetcompiler: same as snippetcompiler_clean but the compiler venv is shared among all tests using the
     fixture.
 - tmpvenv: provides a decoupled test environment (does not inherit from the outer environment) but does not activate it and
     does not patch inmanta.env.process_env.
