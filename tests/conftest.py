@@ -48,7 +48,7 @@ The following fixtures manage test environments:
     fixture.
 - tmpvenv: provides a decoupled test environment (does not inherit from the outer environment) but does not activate it and
     does not patch inmanta.env.process_env.
-- tmpvenv: provides a decoupled test environment, activates it and patches inmanta.env.process_env to point to this
+- tmpvenv_active: provides a decoupled test environment, activates it and patches inmanta.env.process_env to point to this
     environment.
 
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
