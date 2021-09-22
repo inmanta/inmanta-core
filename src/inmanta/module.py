@@ -1733,7 +1733,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
     def use_virtual_env(self) -> None:
         """
-        Use the virtual environment
+        Use the virtual environment. This activates the environment for the current process.
         """
         self.virtualenv.use_virtual_env()
 
