@@ -1246,9 +1246,8 @@ async def mocked_compiler_service_block(server, monkeypatch):
 @pytest.fixture
 def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
-    `tmpdir` fixture. The venv is activated within the currently running process. This venv is completely decoupled from the
-    active development venv. As a result, any attempts to load new modules from the development venv will fail until cleanup.
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
+    fixture. This venv is completely decoupled from the active development venv.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """
