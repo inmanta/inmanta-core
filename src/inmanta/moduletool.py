@@ -53,12 +53,12 @@ from inmanta.module import (
     ModuleGeneration,
     ModuleLike,
     ModuleMetadataFileNotFound,
+    ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
     ModuleV2Source,
     Project,
     gitprovider,
-    ModuleNotFoundException,
 )
 
 if TYPE_CHECKING:
@@ -309,7 +309,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-                        f"Either --v1 or --v2 has to be set.",
+            f"Either --v1 or --v2 has to be set.",
         )
         add.add_argument(
             "module_req",

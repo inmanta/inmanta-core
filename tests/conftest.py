@@ -30,6 +30,31 @@ It is often harder to correctly judge what is slow up front, so we do it in bulk
 This also allows test to run a few hundred times before being marked as slow.
 """
 
+"""
+About venvs in tests (see linked objects' docstrings for more details):
+During normal operation the module loader and the compiler work with the following environments:
+- inmanta.env.process_env: inmanta.env.ActiveEnv -> presents an interface to interact with the outer (developer's) venv. Used by
+    inmanta.module.Project to install v2 modules in.
+- inmanta.module.Project.virtualenv: inmanta.env.VirtualEnv -> compiler venv. Used by the compiler to install v1 module
+    requirements in. Inherits from the outer venv.
+
+When running the tests we don't want to make changes to the outer environment. So for tests that install Python packages we need
+to make sure those are installed in a test environment. This means patching the inmanta.env.process_env to be an interface
+to a test environment instead of the outer environment.
+The following fixtures manage test environments:
+- snippetcompiler_clean: activates the Project's compiler venv and patches inmanta.env.process_env to use this same venv
+    as if it were the outer venv. The activation and patch is applied when compiling the first snippet.
+- snippetcompiler: same as snippetcompiler_clean but the compiler venv is shared among all tests using the
+    fixture.
+- tmpvenv: provides a decoupled test environment (does not inherit from the outer environment) but does not activate it and
+    does not patch inmanta.env.process_env.
+- tmpvenv_active: provides a decoupled test environment, activates it and patches inmanta.env.process_env to point to this
+    environment.
+
+The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
+environment.
+"""
+
 
 import asyncio
 import concurrent
@@ -348,13 +373,14 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
+    old_working_set = pkg_resources.working_set
 
     yield
 
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if "PYTHONPATH" in os.environ:
         if old_pythonpath is not None:
@@ -855,7 +881,6 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
-        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
         if not self._keep:
@@ -907,7 +932,7 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
     ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd, main_file=main_file)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
         Project.set(project)
         project.use_virtual_env()
         self._patch_process_env()
@@ -922,7 +947,6 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        env.process_env.notify_change()
         env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
@@ -937,7 +961,7 @@ class SnippetCompilationTest(KeepOnFail):
                 project.install_in_compiler_venv(path=install_path, editable=mod.editable)
 
     def reset(self):
-        Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
         loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
@@ -1082,6 +1106,9 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 def snippetcompiler(
     inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
 ) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
+    """
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
@@ -1091,6 +1118,9 @@ def snippetcompiler(
 
 @pytest.fixture(scope="function")
 def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
+    """
     ast = SnippetCompilationTest()
     ast.setUpClass()
     ast.setup_func(modules_dir)
@@ -1216,9 +1246,8 @@ async def mocked_compiler_service_block(server, monkeypatch):
 @pytest.fixture
 def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
-    `tmpdir` fixture. The venv is activated within the currently running process. This venv is completely decoupled from the
-    active development venv. As a result, any attempts to load new modules from the development venv will fail until cleanup.
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
+    fixture. This venv is completely decoupled from the active development venv.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """

@@ -54,6 +54,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
 )
 
 import more_itertools
@@ -68,13 +69,12 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.file_parser import PreservativeYamlParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
 from packaging import version
-from inmanta.file_parser import PreservativeYamlParser
-from typing import List, Union
 from ruamel.yaml.comments import CommentedMap
 
 try:
@@ -1372,7 +1372,6 @@ class ModuleLike(ABC, Generic[T]):
 
 
 class ModuleLikeWithYmlMetadataFile(ABC):
-
     @abstractmethod
     def get_metadata_file_path(self) -> str:
         raise NotImplementedError()
@@ -1972,7 +1971,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def use_virtual_env(self) -> None:
         """
-        Use the virtual environment
+        Use the virtual environment. This activates the environment for the current process.
         """
         self.virtualenv.use_virtual_env()
 
