@@ -334,7 +334,7 @@ def test_project_install(
         project_path,
         ["std", *install_module_names],
         index_urls=[local_module_package_index],
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_python_package_name(mod)) for mod in install_module_names],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
     )
 
     os.chdir(project_path)
@@ -483,7 +483,7 @@ def test_project_install_modules_cache_invalid(
         add_to_module_path=[libs_dir],
         python_package_sources=[index.url, local_module_package_index],
         # make sure main module gets installed, pulling in newest version of dependency module
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_python_package_name(main_module))],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(main_module))],
     )
 
     # populate project.modules[dependency_module] to force the error conditions in this simplified example
@@ -564,7 +564,7 @@ def test_project_install_incompatible_versions(
         install_project=False,
         add_to_module_path=[v1_modules_path],
         python_package_sources=[index.url],
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_python_package_name("v2mod"))],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("v2mod"))],
     )
 
     # install project
@@ -622,7 +622,7 @@ def test_project_install_incompatible_dependencies(
         install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
         python_requires=[
-            Requirement.parse(module.ModuleV2Source.get_python_package_name(module.ModuleV2.get_name_from_metadata(metadata)))
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod1, v2mod2]
         ],
     )
@@ -656,7 +656,7 @@ def test_project_install_with_install_mode(
 
     module_template_path: str = os.path.join(modules_v2_dir, "elaboratev2module")
     module_name: str = "mod"
-    package_name: str = module.ModuleV2.get_package_name_for(module_name)
+    package_name: str = module.ModuleV2Source.get_package_name_for(module_name)
     for module_version in ["1.0.0", "1.0.1.dev0"]:
         module_from_template(
             module_template_path,

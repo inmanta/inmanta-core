@@ -355,7 +355,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     with pytest.raises(ModuleLoadingException, match=f"Failed to load module {module_name}"):
         load()
     # assert that it doesn't raise an error with explicit requirements set
-    load([Requirement.parse(ModuleV2Source.get_python_package_name(module_name))])
+    load([Requirement.parse(ModuleV2Source.get_package_name_for(module_name))])
 
 
 @pytest.mark.parametrize("v1", [True, False])
@@ -411,7 +411,7 @@ def test_load_import_based_v2_module(
         python_package_sources=[local_module_package_index, index.url],
         # make sure that even listing the requirement in project.yml does not suffice
         project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
-        python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_python_package_name(main_module_name))],
+        python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_package_name_for(main_module_name))],
     )
 
     if explicit_dependency:
