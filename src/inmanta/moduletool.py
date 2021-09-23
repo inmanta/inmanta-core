@@ -445,7 +445,7 @@ with the dependencies specified by the installed module.
         try:
             module_requirement = InmantaModuleRequirement.parse(module_req)
         except InvalidRequirement:
-            raise CLIException(f"The given requirement '{module_req}' is invalid", exitcode=1)
+            raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
                 "A dependency on the given module was already defined, use --override to override the version constraint",

@@ -896,7 +896,7 @@ class RequirementsTxtFile:
 
     def set_requirement_and_write(self, requirement: Requirement) -> None:
         """
-        Add the given requirement to the requirements.txt file and update the file on disk.
+        Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints on this package.
         """
         new_content_file = RequirementsTxtParser.get_content_with_dep_removed(self._filename, remove_dep_on_pkg=requirement.key)
         new_content_file = new_content_file.rstrip()
@@ -910,7 +910,7 @@ class RequirementsTxtFile:
         """
         Remove the dependency on the given package and update the file on disk.
         """
-        if self.has_requirement_for(pkg_name):
+        if not self.has_requirement_for(pkg_name):
             return
         new_content_file = RequirementsTxtParser.get_content_with_dep_removed(self._filename, remove_dep_on_pkg=pkg_name)
         self._write(new_content_file)
@@ -1483,7 +1483,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
         """
-        Install the given module.
+        Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the corresponding name.
         """
         installed_module: Optional[Module]
         if install_as_v1_module:
