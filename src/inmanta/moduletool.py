@@ -58,6 +58,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
     gitprovider,
+    ModuleNotFoundException,
 )
 
 if TYPE_CHECKING:
@@ -307,13 +308,15 @@ class ModuleTool(ModuleLikeTool):
         add = subparser.add_parser(
             "add",
             help=add_help_msg,
-            description=f"{add_help_msg} When executed on a project, the module is installed as well.",
+            description=f"{add_help_msg} When executed on a project, the module is installed as well. "
+                        f"Either --v1 or --v2 has to be set.",
         )
         add.add_argument(
             "module_req",
             help="The name of the module, optionally with a version constraint.",
         )
-        add.add_argument("--v1", dest="v1", help="Add the given module as a V1 module", action="store_true")
+        add.add_argument("--v1", dest="v1", help="Add the given module as a v1 module", action="store_true")
+        add.add_argument("--v2", dest="v2", help="Add the given module as a V2 module", action="store_true")
         add.add_argument(
             "--override",
             dest="override",
@@ -423,7 +426,7 @@ with the dependencies specified by the installed module.
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
 
-    def add(self, module_req: str, v1: bool = False, override: bool = False) -> None:
+    def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
         Add a module dependency to an Inmanta module or project.
 
@@ -432,6 +435,10 @@ with the dependencies specified by the installed module.
         :param override: If set to True, override the version constraint when the module dependency already exists.
                          If set to False, this method raises an exception when the module dependency already exists.
         """
+        if not v1 and not v2:
+            raise CLIException("Either --v1 or --v2 has to be set", exitcode=1)
+        if v1 and v2:
+            raise CLIException("--v1 and --v2 cannot be set together", exitcode=1)
         module_like: Optional[Union[Project, ModuleV1, ModuleV2]] = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
@@ -444,9 +451,15 @@ with the dependencies specified by the installed module.
                 "A dependency on the given module was already defined, use --override to override the version constraint",
                 exitcode=1,
             )
-        module_like.add_module_requirement(requirement=module_requirement, add_as_v1_module=v1)
         if isinstance(module_like, Project):
-            module_like.install_module(module_requirement, install_as_v1_module=v1)
+            try:
+                module_like.install_module(module_requirement, install_as_v1_module=v1)
+            except ModuleNotFoundException:
+                raise CLIException(
+                    f"Failed to install {module_requirement} as a {'v1' if v1 else 'v2'} module.",
+                    exitcode=1,
+                )
+        module_like.add_module_requirement_persistent(requirement=module_requirement, add_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:
         """
