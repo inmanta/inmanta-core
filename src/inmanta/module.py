@@ -23,7 +23,6 @@ import importlib
 import logging
 import os
 import re
-import string
 import subprocess
 import sys
 import tempfile
@@ -69,7 +68,7 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
-from inmanta.file_parser import PreservativeYamlParser
+from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
@@ -774,103 +773,6 @@ class CfgParser(RawParser):
                 raise InvalidMetadata(msg="Metadata file doesn't have a metadata section.") from e
 
 
-class RequirementsTxtParser:
-    """
-    Parser for a requirements.txt file
-    """
-
-    @classmethod
-    def parse(cls, filename: str) -> List[Requirement]:
-        """
-        Get all the requirements in `filename` as a list of `Requirement` instances.
-        """
-        return [Requirement.parse(r) for r in cls.parse_requirements_as_strs(filename)]
-
-    @classmethod
-    def parse_requirements_as_strs(cls, filename: str) -> List[str]:
-        """
-        Get all the requirements in `filename` as a list of strings.
-        """
-        if os.path.exists(filename):
-            with open(filename, "r", encoding="utf-8") as fd:
-                requirements_txt_content = fd.read()
-                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
-                req_lines = cls._remove_comments(req_lines)
-                req_lines = cls._remove_line_continuations(req_lines)
-                return list(req_lines)
-        else:
-            return []
-
-    @classmethod
-    def get_content_with_dep_removed(cls, filename: str, remove_dep_on_pkg: str) -> str:
-        """
-        Returns the content of the requirements.txt file with the dependency on `remove_dep_on_pkg` removed.
-        This method preserves all the comments.
-        """
-        if not os.path.exists(filename):
-            raise Exception(f"File {filename} doesn't exist")
-
-        result = ""
-        line_continuation_buffer = ""
-        with open(filename, "r", encoding="utf-8") as fd:
-            for line in fd.readlines():
-                if line_continuation_buffer:
-                    line_continuation_buffer += line
-                    if not line.endswith("\\"):
-                        if Requirement.parse(line_continuation_buffer).key != remove_dep_on_pkg:
-                            result += line_continuation_buffer
-                        line_continuation_buffer = ""
-                elif not line.strip() or line.strip().startswith("#"):
-                    result += line
-                elif line.endswith("\\"):
-                    line_continuation_buffer = line
-                elif Requirement.parse(line).key != remove_dep_on_pkg:
-                    result += line
-                else:
-                    # Dependency matches `remove_dep_on_pkg` => Remove line from result
-                    pass
-        return result
-
-    @classmethod
-    def _remove_comments(cls, lines: List[str]) -> List[str]:
-        """
-        This method removes elements from the given list that only include comments. If the element
-        combines a comment with a version constraint, the comment part is removed from the element.
-
-        :param lines: The lines from a requirements.txt file with all empty lines removes.
-        """
-        result = []
-        for line in lines:
-            if line.strip().startswith("#"):
-                continue
-            if " #" in line:
-                line_without_comment = line.split(" #", maxsplit=1)[0]
-                result.append(line_without_comment)
-            else:
-                result.append(line)
-        return result
-
-    @classmethod
-    def _remove_line_continuations(cls, lines: List[str]) -> List[str]:
-        """
-        Join two different list elements together if they are separated by a line continuation token.
-
-        :param lines: The lines from a requirements.txt file with all empty lines removes.
-        """
-        result = []
-        line_continuation_buffer = ""
-        for line in lines:
-            if line.endswith("\\"):
-                line_continuation_buffer = f"{line_continuation_buffer}{line[0:-1]}"
-            else:
-                if line_continuation_buffer:
-                    result.append(f"{line_continuation_buffer}{line}")
-                    line_continuation_buffer = ""
-                else:
-                    result.append(line)
-        return result
-
-
 class RequirementsTxtFile:
     """
     This class caches the requirements specified in the requirements.txt file in memory.
@@ -896,7 +798,8 @@ class RequirementsTxtFile:
 
     def set_requirement_and_write(self, requirement: Requirement) -> None:
         """
-        Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints on this package.
+        Add the given requirement to the requirements.txt file and update the file on disk, replacing any existing constraints
+        on this package.
         """
         new_content_file = RequirementsTxtParser.get_content_with_dep_removed(self._filename, remove_dep_on_pkg=requirement.key)
         new_content_file = new_content_file.rstrip()
@@ -1483,7 +1386,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
         """
-        Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the corresponding name.
+        Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the
+        corresponding name.
         """
         installed_module: Optional[Module]
         if install_as_v1_module:

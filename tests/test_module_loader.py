@@ -33,7 +33,6 @@ from inmanta.module import (
     ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
-    ModuleV2Source,
     Project,
 )
 from inmanta.moduletool import ModuleConverter
