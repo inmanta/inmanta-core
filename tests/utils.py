@@ -391,7 +391,7 @@ def module_from_template(
             ),
             os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
         )
-        config["metadata"]["name"] = module.ModuleV2.get_package_name_for(new_name)
+        config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
     if new_requirements:
         config["options"]["install_requires"] = "\n    ".join(
             str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))

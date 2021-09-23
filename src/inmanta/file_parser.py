@@ -70,7 +70,7 @@ class RequirementsTxtParser:
         if os.path.exists(filename):
             with open(filename, "r", encoding="utf-8") as fd:
                 requirements_txt_content = fd.read()
-                req_lines = [x for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
+                req_lines = [x.strip() for x in requirements_txt_content.split("\n") if len(x.strip()) > 0]
                 req_lines = cls._remove_comments(req_lines)
                 req_lines = cls._remove_line_continuations(req_lines)
                 return list(req_lines)
@@ -100,7 +100,7 @@ class RequirementsTxtParser:
                     result += line
                 elif line.endswith("\\"):
                     line_continuation_buffer = line
-                elif Requirement.parse(line).key != remove_dep_on_pkg:
+                elif Requirement.parse(line).key != remove_dep_on_pkg.lower():
                     result += line
                 else:
                     # Dependency matches `remove_dep_on_pkg` => Remove line from result

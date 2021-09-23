@@ -458,7 +458,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if module_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         try:
-            dist: Distribution = pkg_resources.get_distribution(ModuleV2.get_package_name_for(module_name))
+            dist: Distribution = pkg_resources.get_distribution(ModuleV2Source.get_package_name_for(module_name))
             return version.Version(dist.version)
         except DistributionNotFound:
             return None
@@ -475,12 +475,17 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return result
 
     @classmethod
+    def get_package_name_for(cls, module_name: str) -> str:
+        module_name = module_name.replace("_", "-")
+        return f"{ModuleV2.PKG_NAME_PREFIX}{module_name}"
+
+    @classmethod
     def get_python_package_requirement(cls, requirement: InmantaModuleRequirement) -> Requirement:
         """
         Return a Requirement with the name of the Python distribution package for this module requirement.
         """
         module_name = requirement.project_name
-        pkg_name = ModuleV2.get_package_name_for(module_name)
+        pkg_name = ModuleV2Source.get_package_name_for(module_name)
         pkg_req_str = str(requirement).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
         return Requirement.parse(pkg_req_str)
 
@@ -505,7 +510,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         path: Optional[str] = self.path_for(module_name)
         if path is None:
-            python_package: str = ModuleV2.get_package_name_for(module_name)
+            python_package: str = ModuleV2Source.get_package_name_for(module_name)
             namespace_package: str = self.get_namespace_package_name(module_name)
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
         return self.from_path(project, module_name, path)
@@ -963,9 +968,9 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
         del values["compiler_version"]
-        install_requires = [ModuleV2.get_package_name_for(r) for r in values["requires"]]
+        install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
         del values["requires"]
-        values["name"] = ModuleV2.get_package_name_for(values["name"])
+        values["name"] = ModuleV2Source.get_package_name_for(values["name"])
         return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
@@ -1199,7 +1204,8 @@ class ModuleLike(ABC, Generic[T]):
         Add a new module requirement to the files that define requirements on other modules. This could include the
         requirements.txt file next to the metadata file of the project or module. This method updates the files on disk.
 
-        This operation may make this object invalid or outdated.
+        This operation may make this object invalid or outdated if the persisted metadata has been updated since creating this
+        instance.
         """
         raise NotImplementedError()
 
@@ -2489,11 +2495,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
         else:
             # Only editable installs can be checked for versioning
             pass
-
-    @classmethod
-    def get_package_name_for(cls, module_name: str) -> str:
-        module_name = module_name.replace("_", "-")
-        return f"{cls.PKG_NAME_PREFIX}{module_name}"
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, ModuleV2.MODULE_FILE)

@@ -24,7 +24,7 @@ import pytest
 
 from inmanta.command import CLIException
 from inmanta.env import process_env
-from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, Project, ProjectMetadata
+from inmanta.module import ModuleV1, ModuleV1Metadata, ModuleV2, ModuleV2Source, Project, ProjectMetadata
 from inmanta.moduletool import ModuleTool
 from packaging.version import Version
 from utils import PipIndex, module_from_template
@@ -100,7 +100,7 @@ def test_module_add_v2_module_to_project(
             project_metadata = ProjectMetadata.parse(fd)
             assert not project_metadata.requires
         with open(requirements_txt_file, "r", encoding="utf-8") as fd:
-            assert fd.read().strip() == ModuleV2.get_package_name_for(project_requires_constraint)
+            assert fd.read().strip() == ModuleV2Source.get_package_name_for(project_requires_constraint)
 
     module_name = "elaboratev2module"
     pkg_name = "inmanta-module-elaboratev2module"
@@ -140,14 +140,14 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req="a_module", v2=True, override=False)
-    _assert_module_requirements(expected_requirements=[ModuleV2.get_package_name_for(name_dependent_module)])
+    _assert_module_requirements(expected_requirements=[ModuleV2Source.get_package_name_for(name_dependent_module)])
 
     with pytest.raises(CLIException, match="A dependency on the given module was already defined"):
         ModuleTool().add(module_req=f"{name_dependent_module}==1.1.1", v2=True, override=False)
-    _assert_module_requirements(expected_requirements=[ModuleV2.get_package_name_for(name_dependent_module)])
+    _assert_module_requirements(expected_requirements=[ModuleV2Source.get_package_name_for(name_dependent_module)])
 
     ModuleTool().add(module_req=f"{name_dependent_module}==1.1.1", v2=True, override=True)
-    _assert_module_requirements(expected_requirements=[f"{ModuleV2.get_package_name_for(name_dependent_module)}==1.1.1"])
+    _assert_module_requirements(expected_requirements=[f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1"])
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
     assert process_env.get_installed_packages() == installed_packages
@@ -174,14 +174,14 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
 
     name_dependent_module = "a_module"
     ModuleTool().add(module_req=name_dependent_module, v2=True, override=False)
-    _assert_module_requirements(expected_requirement=ModuleV2.get_package_name_for(name_dependent_module))
+    _assert_module_requirements(expected_requirement=ModuleV2Source.get_package_name_for(name_dependent_module))
 
     with pytest.raises(CLIException, match="A dependency on the given module was already defined"):
         ModuleTool().add(module_req=f"{name_dependent_module}==1.1.1", v2=True, override=False)
-    _assert_module_requirements(expected_requirement=ModuleV2.get_package_name_for(name_dependent_module))
+    _assert_module_requirements(expected_requirement=ModuleV2Source.get_package_name_for(name_dependent_module))
 
     ModuleTool().add(module_req=f"{name_dependent_module}==1.1.1", v2=True, override=True)
-    _assert_module_requirements(expected_requirement=f"{ModuleV2.get_package_name_for(name_dependent_module)}==1.1.1")
+    _assert_module_requirements(expected_requirement=f"{ModuleV2Source.get_package_name_for(name_dependent_module)}==1.1.1")
 
     # Ensure no new packages were installed as a side-effect of `inmanta modules add`
     assert process_env.get_installed_packages() == installed_packages
