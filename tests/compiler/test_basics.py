@@ -15,7 +15,12 @@
 
     Contact: code@inmanta.com
 """
-import inmanta.compiler as compiler
+import os
+from functools import partial
+
+from inmanta import compiler, const
+from inmanta.module import ModuleGeneration
+from utils import module_from_template, v1_module_from_template
 
 
 def test_str_on_instance_pos(snippetcompiler):
@@ -212,3 +217,106 @@ test = "b"
 \t\tset at {dir}/main.cf:3
  (reported in test = 'b' ({dir}/main.cf:3))""",
     )
+
+
+def test_modules_v2_compile(tmpdir: str, snippetcompiler_clean, modules_dir: str, modules_v2_dir: str) -> None:
+    # activate compiler venv and install std module (#3297)
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    # main module, used as proxy to load test module's model and plugins
+    main_module: str = "main"
+    # module under test
+    test_module: str = "test_module"
+
+    def test_module_plugin_contents(generation: ModuleGeneration) -> str:
+        """
+        Returns the contents of the plugin file for the test module, in function of the module generation.
+        """
+        return (
+            f"""
+from inmanta.plugins import plugin
+
+
+GENERATION: str = {generation.value}
+
+@plugin
+def get_generation() -> "int":
+    return GENERATION
+            """.strip()
+        )
+
+    # The model for the test module, regardless of generation
+    test_module_model: str = f"generation = {test_module}::get_generation()"
+
+    # install main module (make it v1 so there are no restrictions on what it can depend on)
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{main_module}"),
+        new_name=main_module,
+        new_content_init_cf=f"""
+import {test_module}
+
+# test variable import
+test_module_generation = {test_module}::generation
+# test plugin call
+test_module_generation = {test_module}::get_generation()
+# test intermodule Python imports
+test_module_generation = {main_module}::get_test_module_generation()
+        """.strip(),
+        new_content_init_py=f"""
+from inmanta.plugins import plugin
+from {const.PLUGINS_PACKAGE}.{test_module} import GENERATION
+
+
+@plugin
+def get_test_module_generation() -> "int":
+    return GENERATION
+        """.strip(),
+    )
+
+    def verify_compile(expected_generation: ModuleGeneration) -> None:
+        """
+        Verify compilation by importing main module and checking its variable's value.
+        """
+        project = snippetcompiler_clean.setup_for_snippet(
+            f"""
+import {main_module}
+
+# make sure imported variable has expected value (these statements will produce compiler error if it doesn't)
+generation = {main_module}::test_module_generation
+generation = {expected_generation.value}
+            """.strip(),
+            add_to_module_path=[libs_dir],
+            # set autostd=False because no v2 std exists at the time of writing
+            autostd=False,
+            install_project=False,
+        )
+        compiler.do_compile()
+
+    # install test module as v1 and verify compile
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, test_module),
+        new_name=test_module,
+        new_content_init_cf=test_module_model,
+        new_content_init_py=test_module_plugin_contents(ModuleGeneration.V1),
+    )
+    verify_compile(ModuleGeneration.V1)
+
+    # install module as v2 (on top of v1) and verify compile
+    module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), test_module),
+        new_name=test_module,
+        new_content_init_cf=test_module_model,
+        new_content_init_py=test_module_plugin_contents(ModuleGeneration.V2),
+        install=True,
+        editable=True,
+    )
+    verify_compile(ModuleGeneration.V2)
+
+    # TODO: check both model and plugins are editable (might need to change generation with plain var
