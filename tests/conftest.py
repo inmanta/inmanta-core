@@ -57,7 +57,6 @@ environment.
 
 
 import asyncio
-import build.env
 import concurrent
 import csv
 import datetime
@@ -96,6 +95,7 @@ from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+import build.env
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
