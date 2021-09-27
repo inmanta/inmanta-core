@@ -315,7 +315,7 @@ value = {expected_value}
         new_content_init_cf=test_module_model,
         new_content_init_py=test_module_plugin_contents(2),
         install=True,
-        editable=True,
+        editable=True,  # ! this is editable for the next test step
     )
     verify_compile(2)
 
