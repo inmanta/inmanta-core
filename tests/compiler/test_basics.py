@@ -16,10 +16,11 @@
     Contact: code@inmanta.com
 """
 import os
-from functools import partial
+
+import pytest
 
 from inmanta import compiler, const
-from inmanta.module import ModuleGeneration
+from inmanta.ast import DoubleSetException
 from utils import module_from_template, v1_module_from_template
 
 
@@ -232,25 +233,25 @@ def test_modules_v2_compile(tmpdir: str, snippetcompiler_clean, modules_dir: str
     # module under test
     test_module: str = "test_module"
 
-    def test_module_plugin_contents(generation: ModuleGeneration) -> str:
+    def test_module_plugin_contents(value: int) -> str:
         """
-        Returns the contents of the plugin file for the test module, in function of the module generation.
+        Returns the contents of the plugin file for the test module.
         """
         return (
             f"""
 from inmanta.plugins import plugin
 
 
-GENERATION: str = {generation.value}
+VALUE: str = {value}
 
 @plugin
-def get_generation() -> "int":
-    return GENERATION
+def get_value() -> "int":
+    return VALUE
             """.strip()
         )
 
-    # The model for the test module, regardless of generation
-    test_module_model: str = f"generation = {test_module}::get_generation()"
+    # The model for the test module, regardless of value
+    test_module_model: str = f"value = {test_module}::get_value()"
 
     # install main module (make it v1 so there are no restrictions on what it can depend on)
     v1_module_from_template(
@@ -261,24 +262,24 @@ def get_generation() -> "int":
 import {test_module}
 
 # test variable import
-test_module_generation = {test_module}::generation
+test_module_value = {test_module}::value
 # test plugin call
-test_module_generation = {test_module}::get_generation()
+test_module_value = {test_module}::get_value()
 # test intermodule Python imports
-test_module_generation = {main_module}::get_test_module_generation()
+test_module_value = {main_module}::get_test_module_value()
         """.strip(),
         new_content_init_py=f"""
 from inmanta.plugins import plugin
-from {const.PLUGINS_PACKAGE}.{test_module} import GENERATION
+from {const.PLUGINS_PACKAGE}.{test_module} import VALUE
 
 
 @plugin
-def get_test_module_generation() -> "int":
-    return GENERATION
+def get_test_module_value() -> "int":
+    return VALUE
         """.strip(),
     )
 
-    def verify_compile(expected_generation: ModuleGeneration) -> None:
+    def verify_compile(expected_value: int) -> None:
         """
         Verify compilation by importing main module and checking its variable's value.
         """
@@ -287,8 +288,8 @@ def get_test_module_generation() -> "int":
 import {main_module}
 
 # make sure imported variable has expected value (these statements will produce compiler error if it doesn't)
-generation = {main_module}::test_module_generation
-generation = {expected_generation.value}
+value = {main_module}::test_module_value
+value = {expected_value}
             """.strip(),
             add_to_module_path=[libs_dir],
             # set autostd=False because no v2 std exists at the time of writing
@@ -303,20 +304,32 @@ generation = {expected_generation.value}
         os.path.join(libs_dir, test_module),
         new_name=test_module,
         new_content_init_cf=test_module_model,
-        new_content_init_py=test_module_plugin_contents(ModuleGeneration.V1),
+        new_content_init_py=test_module_plugin_contents(1),
     )
-    verify_compile(ModuleGeneration.V1)
+    verify_compile(1)
 
     # install module as v2 (on top of v1) and verify compile
+    v2_module_path: str = os.path.join(str(tmpdir), test_module)
     module_from_template(
         v2_template_path,
-        os.path.join(str(tmpdir), test_module),
+        v2_module_path,
         new_name=test_module,
         new_content_init_cf=test_module_model,
-        new_content_init_py=test_module_plugin_contents(ModuleGeneration.V2),
+        new_content_init_py=test_module_plugin_contents(2),
         install=True,
         editable=True,
     )
-    verify_compile(ModuleGeneration.V2)
+    verify_compile(2)
 
+    # verify editable mode for plugins
+    with open(os.path.join(v2_module_path, const.PLUGINS_PACKAGE, test_module, "__init__.py"), "w") as fh:
+        fh.write(test_module_plugin_contents(3))
+    verify_compile(3)
+
+    # verify editable mode for model
+    with open(os.path.join(v2_module_path, "model", "_init.cf"), "w") as fh:
+        fh.write("value = 4")
+    with pytest.raises(DoubleSetException) as excinfo:
+        verify_compile(3)
+    assert excinfo.value.newvalue == 4
     # TODO: check both model and plugins are editable (might need to change generation with plain var
