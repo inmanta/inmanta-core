@@ -392,7 +392,7 @@ class PythonEnvironment:
             if pkg in installed_packages:
                 self._constraint_on_inmanta_pkg = f"{pkg}=={installed_packages[pkg]}"
                 return self._constraint_on_inmanta_pkg
-        # No Inmanta product package installed -> Leave constraint empty
+        # No inmanta product or inmanta-core package installed -> Leave constraint empty
         self._constraint_on_inmanta_pkg = ""
         return self._constraint_on_inmanta_pkg
 
@@ -643,7 +643,7 @@ python -m pip $@
         constraint_files: Optional[List[str]] = None,
     ) -> None:
         if not self.__using_venv:
-            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+            raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
             requirements,
             index_urls,
@@ -654,10 +654,10 @@ python -m pip $@
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         if not self.__using_venv:
-            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+            raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
     def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
         if not self.__using_venv:
-            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+            raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, detailed_cache, cache)

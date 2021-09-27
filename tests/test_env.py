@@ -457,7 +457,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
 
 def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
     """
-    Ensure that an ActiveEnv cannot override the main the inmanta packages: inmanta-service-orchestrator, inmanta, inmanta-core.
+    Ensure that an ActiveEnv cannot override the main inmanta packages: inmanta-service-orchestrator, inmanta, inmanta-core.
     """
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"

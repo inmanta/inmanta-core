@@ -282,10 +282,10 @@ class CompileRun(object):
                 Run a compile stage by executing the given command in the venv `venv_dir`.
 
                 :param stage_name: Name of the compile stage.
-                :param last_part_cmd: The command to be executed in the venv. This should command should not include the part
+                :param last_part_cmd: The command to be executed in the venv. This command should not include the part
                                       ["<python-interpreter>", "-m", "inmanta.app"]
                 :param cwd: The current working directory to be used for the command invocation.
-                :param env: The command is invoked using these environment variables.
+                :param env: Execute the command with these environment variables.
                 """
                 LOGGER.info(stage_name)
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
