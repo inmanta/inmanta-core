@@ -237,8 +237,7 @@ def test_modules_v2_compile(tmpdir: str, snippetcompiler_clean, modules_dir: str
         """
         Returns the contents of the plugin file for the test module.
         """
-        return (
-            f"""
+        return f"""
 from inmanta.plugins import plugin
 
 
@@ -247,8 +246,7 @@ VALUE: str = {value}
 @plugin
 def get_value() -> "int":
     return VALUE
-            """.strip()
-        )
+        """.strip()
 
     # The model for the test module, regardless of value
     test_module_model: str = f"value = {test_module}::get_value()"
@@ -283,7 +281,7 @@ def get_test_module_value() -> "int":
         """
         Verify compilation by importing main module and checking its variable's value.
         """
-        project = snippetcompiler_clean.setup_for_snippet(
+        snippetcompiler_clean.setup_for_snippet(
             f"""
 import {main_module}
 

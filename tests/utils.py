@@ -404,7 +404,7 @@ def module_from_template(
         with open(init_cf_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_cf)
     if new_content_init_py is not None:
-        init_py_file: str =  os.path.join(
+        init_py_file: str = os.path.join(
             dest_dir,
             const.PLUGINS_PACKAGE,
             module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
@@ -458,7 +458,7 @@ def v1_module_from_template(
         with open(init_cf_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_cf)
     if new_content_init_py is not None:
-        plugins_dir: str =  os.path.join(dest_dir, "plugins")
+        plugins_dir: str = os.path.join(dest_dir, "plugins")
         os.makedirs(plugins_dir, exist_ok=True)
         init_py_file: str = os.path.join(plugins_dir, "__init__.py")
         with open(init_py_file, "w", encoding="utf-8") as fd:
