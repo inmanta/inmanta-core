@@ -327,7 +327,7 @@ value = {expected_value}
     # verify editable mode for model
     with open(os.path.join(v2_module_path, "model", "_init.cf"), "w") as fh:
         fh.write("value = 4")
+    # can't just verify_compile(4) because the plugin is still at 3 and promoting it to 4 would not test changes in the model
     with pytest.raises(DoubleSetException) as excinfo:
         verify_compile(3)
     assert excinfo.value.newvalue == 4
-    # TODO: check both model and plugins are editable (might need to change generation with plain var
