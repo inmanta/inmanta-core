@@ -42,7 +42,7 @@ class CompilerBaseTest(object):
         self.mainfile = mainfile
 
     def setUp(self):
-        project = Project(self.project_dir, autostd=False)
+        project = Project(self.project_dir, autostd=False, venv_path=os.path.join(self.project_dir, ".env"))
         if self.mainfile is not None:
             project.main_file = self.mainfile
         Project.set(project)
@@ -53,8 +53,6 @@ class CompilerBaseTest(object):
         project: Project = Project.get()
         if env.process_env.python_path == project.virtualenv.python_path:
             return
-        # initialize the venv if it hasn't been initialized yet
-        project.use_virtual_env()
         # patch process_env
         env.process_env.__init__(python_path=project.virtualenv.python_path)
         env.process_env.notify_change()

@@ -49,7 +49,7 @@ dummy-yummy # A comment
     """
     common.add_file(mod2, "requirements.txt", mod2_req_txt, msg="initial commit")
 
-    project = Project(project_dir)
+    project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
     Project.set(project)
     project.load_module("mod1", allow_v1=True)
     project.load_module("mod2", allow_v1=True)
@@ -75,7 +75,7 @@ iplib>=0.0.1
 
         """
     common.add_file(mod1, "requirements.txt", mod1_req_txt, msg="initial commit")
-    project = Project(project_dir)
+    project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
     Project.set(project)
     project.load_module("mod1", allow_v1=True)
     requirements = SourceInfo(mod1, "inmanta_plugins.mod1").requires

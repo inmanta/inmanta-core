@@ -19,7 +19,6 @@ import glob
 import importlib
 import logging
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -27,6 +26,7 @@ from importlib.abc import Loader
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
+import re
 
 import py
 import pydantic
@@ -156,7 +156,7 @@ def test_gen_req_file(tmpdir):
         "lorem;platform_machine == 'x86_64' and platform_system == 'Linux'",
     ]
 
-    req_lines = [x for x in e._gen_requirements_file(req).split("\n") if len(x) > 0]
+    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
     assert len(req_lines) == 3
     assert (
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
@@ -453,3 +453,18 @@ def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
     create_install_package("test-package-one", v, [])
     assert not env.ActiveEnv.check(in_scope, constraints)
     check_log(v)
+
+
+def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that an ActiveEnv cannot override the main the inmanta packages: inmanta-service-orchestrator, inmanta, inmanta-core.
+    """
+    installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
+    assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
+
+    inmanta_requirements = Requirement.parse("inmanta-core==0.0.2")
+    with pytest.raises(CalledProcessError) as excinfo:
+        tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
+
+    match = re.search(r"The conflict is caused by:\n.*The user requested inmanta-core==0\.0\.2", excinfo.value.output.decode())
+    assert match is not None

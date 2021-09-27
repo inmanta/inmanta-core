@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -62,6 +62,71 @@ class LocalPackagePath:
     editable: bool = False
 
 
+class PipCommandBuilder:
+    """
+    Class used to compose pip commands.
+    """
+
+    @classmethod
+    def compose_install_command(
+        cls,
+        python_path: str,
+        requirements: Optional[List[Requirement]] = None,
+        paths: Optional[List[LocalPackagePath]] = None,
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
+        constraints_files: Optional[List[str]] = None,
+        requirements_files: Optional[List[str]] = None,
+    ) -> List[str]:
+        """
+        Generate `pip install` command from the given arguments.
+
+        :param python_path: The python interpreter to use in the command
+        :param requirements: The requirements that should be installed
+        :param paths: Paths to python projects on disk that should be installed in the venv.
+        :param index_urls: The Python package repositories to use. When set to None, the system default will be used.
+        :param upgrade: Upgrade the specified packages to the latest version.
+        :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
+        :param constraints_files: Files that should be passed to pip using the `-c` option.
+        :param requirements_files: Files that should be passed to pip using the `-r` option.
+        """
+        requirements = requirements if requirements is not None else []
+        paths = paths if paths is not None else []
+        paths: Iterator[LocalPackagePath] = (
+            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
+            # we're pointing to a local directory.
+            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
+            for path in paths
+        )
+        index_args: List[str] = (
+            []
+            if index_urls is None
+            else [
+                "--index-url",
+                index_urls[0],
+                *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])
+            ]
+            if index_urls
+            else ["--no-index"]
+        )
+        constraints_files = constraints_files if constraints_files is not None else []
+        requirements_files = requirements_files if requirements_files is not None else []
+        return [
+            python_path,
+            "-m",
+            "pip",
+            "install",
+            *(["--upgrade"] if upgrade else []),
+            *(["--pre"] if allow_pre_releases else []),
+            *chain.from_iterable(["-c", f] for f in constraints_files),
+            *chain.from_iterable(["-r", f] for f in requirements_files),
+            *(str(requirement) for requirement in requirements),
+            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in paths),
+            *index_args,
+        ]
+
+
 class PythonEnvironment:
     """
     A generic Python environment.
@@ -73,13 +138,8 @@ class PythonEnvironment:
         self.env_path: str
         self.python_path: str
         if env_path is not None:
-            python_name: str = os.path.basename(sys.executable)
             self.env_path = env_path
-            self.python_path = (
-                os.path.join(self.env_path, "Scripts", python_name)
-                if sys.platform == "win32"
-                else os.path.join(self.env_path, "bin", python_name)
-            )
+            self.python_path = self.get_python_path_for_env_path(self.env_path)
         else:
             assert python_path is not None
             self.python_path = python_path
@@ -90,6 +150,21 @@ class PythonEnvironment:
             else os.path.join(
                 self.env_path, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
             )
+        )
+        self.__cache_done: Set[str] = set()
+        # Cache the result of the `_get_constraint_on_inmanta_package()` method
+        self._constraint_on_inmanta_pkg: Optional[str] = None
+
+    @classmethod
+    def get_python_path_for_env_path(cls, env_path: str) -> str:
+        """
+        For the given venv directory (`env_path`) return the path to the Python interpreter.
+        """
+        python_name: str = os.path.basename(sys.executable)
+        return (
+            os.path.join(env_path, "Scripts", python_name)
+            if sys.platform == "win32"
+            else os.path.join(env_path, "bin", python_name)
         )
 
     def get_installed_packages(self, only_editable: bool = False) -> Dict[str, version.Version]:
@@ -109,61 +184,45 @@ class PythonEnvironment:
         index_urls: Optional[List[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
+        constraint_files: Optional[List[str]] = None,
     ) -> None:
-        index_args: List[str] = (
-            []
-            if index_urls is None
-            else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
-            if index_urls
-            else ["--no-index"]
-        )
-        try:
-            self._run_command_and_log_output(
-                [
-                    self.python_path,
-                    "-m",
-                    "pip",
-                    "install",
-                    *(["--upgrade"] if upgrade else []),
-                    *(["--pre"] if allow_pre_releases else []),
-                    *(str(requirement) for requirement in requirements),
-                    *index_args,
-                ],
-                stderr=subprocess.PIPE,
-            )
-        except CalledProcessError as e:
-            stderr: str = e.stderr.decode()
-            not_found: List[str] = [
-                requirement.project_name
-                for requirement in requirements
-                if f"No matching distribution found for {requirement.project_name}" in stderr
-            ]
-            if not_found:
-                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-            raise e
+        if len(requirements) == 0:
+            raise Exception("install_from_index requires at least one requirement to install")
+        constraint_files = constraint_files if constraint_files is not None else []
+        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
+            try:
+                cmd: List[str] = PipCommandBuilder.compose_install_command(
+                    python_path=self.python_path,
+                    requirements=requirements,
+                    index_urls=index_urls,
+                    upgrade=upgrade,
+                    allow_pre_releases=allow_pre_releases,
+                    constraints_files=[*constraint_files, filename],
+                )
+                self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+            except CalledProcessError as e:
+                stderr: str = e.stderr.decode()
+                not_found: List[str] = [
+                    requirement.project_name
+                    for requirement in requirements
+                    if f"No matching distribution found for {requirement.project_name}" in stderr
+                ]
+                if not_found:
+                    raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+                raise e
 
-    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory.
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
-        explicit_paths: Iterator[LocalPackagePath] = (
-            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-            # we're pointing to a local directory.
-            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
-            for path in paths
-        )
-        self._run_command_and_log_output(
-            [
-                self.python_path,
-                "-m",
-                "pip",
-                "install",
-                *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
-            ],
-            stderr=subprocess.PIPE,
-        )
+        constraint_files = constraint_files if constraint_files is not None else []
+        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
+            cmd: List[str] = PipCommandBuilder.compose_install_command(
+                python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename]
+            )
+            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
     @classmethod
     def _run_command_and_log_output(
@@ -182,6 +241,173 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
+    def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
+        """
+        Parse the requirement line
+        """
+        at = VirtualEnv._at_fragment_re.search(req_line)
+        if at is not None:
+            d = at.groupdict()
+            return d["name"], d["req"] + "#egg=" + d["name"]
+
+        egg = VirtualEnv._egg_fragment_re.search(req_line)
+        if egg is not None:
+            d = egg.groupdict()
+            return d["name"], req_line
+
+        return None, req_line
+
+    def _gen_content_requirements_file(self, requirements_list: List[str]) -> str:
+        """Generate a new requirements file based on the requirements list that was built from all the different modules.
+        :param requirements_list:  A list of requirements from all the requirements files in all modules.
+        :return: A string that can be written to a requirements file that pip understands.
+        """
+        modules: Dict[str, Any] = {}
+        for req in requirements_list:
+            parsed_name, req_spec = self._parse_line(req)
+
+            if parsed_name is None:
+                name = req
+            else:
+                name = parsed_name
+
+            url = None
+            version = None
+            marker = None
+            try:
+                # this will fail is an url is supplied
+                parsed_req = list(pkg_resources.parse_requirements(req_spec))
+                if len(parsed_req) > 0:
+                    item = parsed_req[0]
+                    if hasattr(item, "name"):
+                        name = item.name
+                    elif hasattr(item, "unsafe_name"):
+                        name = item.unsafe_name
+                    version = item.specs
+                    marker = item.marker
+                    if hasattr(item, "url"):
+                        url = item.url
+            except InvalidRequirement:
+                url = req_spec
+
+            if name not in modules:
+                modules[name] = {"name": name, "version": [], "markers": []}
+
+            if version is not None:
+                modules[name]["version"].extend(version)
+
+            if marker is not None:
+                modules[name]["markers"].append(marker)
+
+            if url is not None:
+                modules[name]["url"] = url
+
+        requirements_file = ""
+        for module, info in modules.items():
+            version_spec = ""
+            markers: str = ""
+            if len(info["version"]) > 0:
+                version_spec = " " + (", ".join(["%s %s" % (a, b) for a, b in info["version"]]))
+
+            if len(info["markers"]) > 0:
+                markers = " ; " + (" and ".join(map(str, info["markers"])))
+
+            if "url" in info:
+                module = info["url"]
+
+            requirements_file += module + version_spec + markers + "\n"
+
+        return requirements_file
+
+    def _install(self, requirements_list: List[str]) -> None:
+        """
+        Install requirements in the given requirements file
+        """
+        content_requirements_file = self._gen_content_requirements_file(requirements_list)
+        with requirements_txt_file(content=content_requirements_file) as requirements_file:
+            with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
+                cmd: List[str] = PipCommandBuilder.compose_install_command(
+                    python_path=self.python_path,
+                    requirements_files=[requirements_file],
+                    constraints_files=[constraint_file],
+                )
+                try:
+                    self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+                except Exception:
+                    LOGGER.error("requirements: %s", content_requirements_file)
+                    raise
+
+    def _read_current_requirements_hash(self) -> str:
+        """
+        Return the hash of the requirements file used to install the current environment
+        """
+        path = os.path.join(self.env_path, "requirements.sha1sum")
+        if not os.path.exists(path):
+            return ""
+
+        with open(path, "r", encoding="utf-8") as fd:
+            return fd.read().strip()
+
+    def _set_current_requirements_hash(self, new_hash: str) -> None:
+        """
+        Set the current requirements hash
+        """
+        path = os.path.join(self.env_path, "requirements.sha1sum")
+        with open(path, "w+", encoding="utf-8") as fd:
+            fd.write(new_hash)
+
+    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
+        """
+        Install requirements from a list of requirement strings. This method uses the Python package repositories
+        configured on the host.
+        """
+        if detailed_cache:
+            requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
+            if len(requirements_list) == 0:
+                return
+
+        requirements_list = sorted(requirements_list)
+
+        # hash it
+        sha1sum = hashlib.sha1()
+        sha1sum.update("\n".join(requirements_list).encode())
+        new_req_hash = sha1sum.hexdigest()
+
+        current_hash = self._read_current_requirements_hash()
+
+        if new_req_hash == current_hash and cache:
+            return
+
+        self._install(requirements_list)
+        self._set_current_requirements_hash(new_req_hash)
+        for x in requirements_list:
+            self.__cache_done.add(x)
+
+    def _get_constraint_on_inmanta_package(self) -> str:
+        """
+        Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        to make sure that no Inmanta packages gets overridden.
+        """
+        if self._constraint_on_inmanta_pkg is not None:
+            return self._constraint_on_inmanta_pkg
+        installed_packages = self.get_installed_packages()
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
+        for pkg in inmanta_packages:
+            if pkg in installed_packages:
+                self._constraint_on_inmanta_pkg = f"{pkg}=={installed_packages[pkg]}"
+                return self._constraint_on_inmanta_pkg
+        # No Inmanta product package installed -> Leave constraint empty
+        self._constraint_on_inmanta_pkg = ""
+        return self._constraint_on_inmanta_pkg
+
+
+@contextlib.contextmanager
+def requirements_txt_file(content: str) -> None:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True) as fd:
+        fd.write(content)
+        fd.flush()
+        yield fd.name
+
 
 class ActiveEnv(PythonEnvironment):
     """
@@ -189,19 +415,33 @@ class ActiveEnv(PythonEnvironment):
     Activating another environment that inherits from this one is allowed.
     """
 
+    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
+        super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
+
     def install_from_index(
         self,
         requirements: List[Requirement],
         index_urls: Optional[List[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
+        constraint_files: Optional[List[str]] = None,
     ) -> None:
-        super().install_from_index(requirements, index_urls, upgrade, allow_pre_releases)
-        self.notify_change()
+        try:
+            super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
+        finally:
+            self.notify_change()
 
-    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
-        super().install_from_source(paths)
-        self.notify_change()
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+        try:
+            super(ActiveEnv, self).install_from_source(paths, constraint_files)
+        finally:
+            self.notify_change()
+
+    def _install(self, requirements_list: List[str]) -> None:
+        try:
+            super(ActiveEnv, self)._install(requirements_list)
+        finally:
+            self.notify_change()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -299,15 +539,13 @@ class VirtualEnv(ActiveEnv):
 
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
-        super().__init__(env_path=env_path)
+        super(VirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
-        self.__cache_done: Set[str] = set()
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
-        self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
-    def _init_env(self) -> bool:
+    def init_env(self) -> bool:
         """
         Init the virtual environment
         """
@@ -349,7 +587,7 @@ class VirtualEnv(ActiveEnv):
         if self.__using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
 
-        if not self._init_env():
+        if not self.init_env():
             raise Exception("Unable to init virtual environment")
 
         self._activate_that()
@@ -400,177 +638,30 @@ python -m pip $@
 
         os.chmod(pip_path, 0o755)
 
-    def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
-        """
-        Parse the requirement line
-        """
-        at = VirtualEnv._at_fragment_re.search(req_line)
-        if at is not None:
-            d = at.groupdict()
-            return d["name"], d["req"] + "#egg=" + d["name"]
+    def install_from_index(
+        self,
+        requirements: List[Requirement],
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
+        constraint_files: Optional[List[str]] = None,
+    ) -> None:
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+        super(VirtualEnv, self).install_from_index(
+            requirements,
+            index_urls,
+            upgrade,
+            allow_pre_releases,
+            constraint_files,
+        )
 
-        egg = VirtualEnv._egg_fragment_re.search(req_line)
-        if egg is not None:
-            d = egg.groupdict()
-            return d["name"], req_line
-
-        return None, req_line
-
-    def _gen_requirements_file(self, requirements_list: List[str]) -> str:
-        """Generate a new requirements file based on the requirements list that was built from all the different modules.
-        :param requirements_list:  A list of requirements from all the requirements files in all modules.
-        :return: A string that can be written to a requirements file that pip understands.
-        """
-        modules: Dict[str, Any] = {}
-        for req in requirements_list:
-            parsed_name, req_spec = self._parse_line(req)
-
-            if parsed_name is None:
-                name = req
-            else:
-                name = parsed_name
-
-            url = None
-            version = None
-            marker = None
-            try:
-                # this will fail is an url is supplied
-                parsed_req = list(pkg_resources.parse_requirements(req_spec))
-                if len(parsed_req) > 0:
-                    item = parsed_req[0]
-                    if hasattr(item, "name"):
-                        name = item.name
-                    elif hasattr(item, "unsafe_name"):
-                        name = item.unsafe_name
-                    version = item.specs
-                    marker = item.marker
-                    if hasattr(item, "url"):
-                        url = item.url
-            except InvalidRequirement:
-                url = req_spec
-
-            if name not in modules:
-                modules[name] = {"name": name, "version": [], "markers": []}
-
-            if version is not None:
-                modules[name]["version"].extend(version)
-
-            if marker is not None:
-                modules[name]["markers"].append(marker)
-
-            if url is not None:
-                modules[name]["url"] = url
-
-        requirements_file = ""
-        for module, info in modules.items():
-            version_spec = ""
-            markers: str = ""
-            if len(info["version"]) > 0:
-                version_spec = " " + (", ".join(["%s %s" % (a, b) for a, b in info["version"]]))
-
-            if len(info["markers"]) > 0:
-                markers = " ; " + (" and ".join(map(str, info["markers"])))
-
-            if "url" in info:
-                module = info["url"]
-
-            requirements_file += module + version_spec + markers + "\n"
-
-        return requirements_file
-
-    def _install(self, requirements_list: List[str]) -> None:
-        """
-        Install requirements in the given requirements file
-        """
-        requirements_file = self._gen_requirements_file(requirements_list)
-
-        path = ""
-        try:
-            fdnum, path = tempfile.mkstemp()
-            fd = os.fdopen(fdnum, "w+", encoding="utf-8")
-            fd.write(requirements_file)
-            fd.close()
-
-            assert self.virtual_python is not None
-            cmd: List["str"] = [self.virtual_python, "-m", "pip", "install", "-r", path]
-            try:
-                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
-            except Exception:
-                LOGGER.error("requirements: %s", requirements_file)
-                raise
-        finally:
-            if os.path.exists(path):
-                os.remove(path)
-
-        self.notify_change()
-
-    def _read_current_requirements_hash(self) -> str:
-        """
-        Return the hash of the requirements file used to install the current environment
-        """
-        path = os.path.join(self.env_path, "requirements.sha1sum")
-        if not os.path.exists(path):
-            return ""
-
-        with open(path, "r", encoding="utf-8") as fd:
-            return fd.read().strip()
-
-    def _set_current_requirements_hash(self, new_hash: str) -> None:
-        """
-        Set the current requirements hash
-        """
-        path = os.path.join(self.env_path, "requirements.sha1sum")
-        with open(path, "w+", encoding="utf-8") as fd:
-            fd.write(new_hash)
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+        if not self.__using_venv:
+            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
+        super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
     def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
-        """
-        Install requirements from a list of requirement strings
-        """
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
-
-        if detailed_cache:
-            requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
-            if len(requirements_list) == 0:
-                return
-
-        requirements_list = sorted(requirements_list)
-
-        # hash it
-        sha1sum = hashlib.sha1()
-        sha1sum.update("\n".join(requirements_list).encode())
-        new_req_hash = sha1sum.hexdigest()
-
-        current_hash = self._read_current_requirements_hash()
-
-        if new_req_hash == current_hash and cache:
-            return
-
-        self._install(requirements_list)
-        self._set_current_requirements_hash(new_req_hash)
-        for x in requirements_list:
-            self.__cache_done.add(x)
-
-    def install(self, path: str, editable: bool) -> None:
-        """
-        Install a package in the virtual environment.
-
-        This call by-passes the cache. It's only used by the tests via the `snippetcompiler*` fixtures.
-        """
-        if not self.__using_venv:
-            raise Exception(f"Not using venv {self.__using_venv}. use_virtual_env() should be called first.")
-        if editable and not os.path.isdir(path):
-            raise Exception(f"An editable install was requested, but {path} is not a source directory")
-
-        # Make mypy happy
-        assert self.virtual_python is not None
-
-        cmd_base: List["str"] = [self.virtual_python, "-m", "pip", "install"]
-        if editable:
-            cmd = cmd_base + ["-e", path]
-        else:
-            cmd = cmd_base + [path]
-
-        self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
-        self.notify_change()
+        super(VirtualEnv, self).install_from_list(requirements_list, detailed_cache, cache)

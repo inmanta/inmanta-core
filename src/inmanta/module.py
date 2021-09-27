@@ -1208,11 +1208,14 @@ class Project(ModuleLike[ProjectMetadata]):
             if not os.path.exists(self._metadata.downloadpath):
                 os.mkdir(self._metadata.downloadpath)
 
+        self.virtualenv: env.PythonEnvironment
         if venv_path is None:
-            venv_path = os.path.abspath(os.path.join(path, ".env"))
+            self.virtualenv = env.process_env
         else:
             venv_path = os.path.abspath(venv_path)
-        self.virtualenv = env.VirtualEnv(venv_path)
+            self.virtualenv = env.VirtualEnv(venv_path)
+            self.virtualenv.use_virtual_env()
+
         self.loaded = False
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
@@ -1293,8 +1296,6 @@ class Project(ModuleLike[ProjectMetadata]):
         if not self.loaded:
             if install:
                 self.install_modules()
-            if not self.is_using_virtual_env():
-                self.use_virtual_env()
             self.get_complete_ast()
             self.loaded = True
             self.verify()
@@ -1455,8 +1456,6 @@ class Project(ModuleLike[ProjectMetadata]):
             all modules are expected to be preinstalled.
         :param allow_v1: Allow this module to be loaded as v1.
         """
-        if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
         reqs: Mapping[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         module_reqs: List[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
@@ -1479,11 +1478,6 @@ class Project(ModuleLike[ProjectMetadata]):
 
         self.modules[module_name] = module
         return module
-
-    def install_in_compiler_venv(self, path: str, editable: bool) -> None:
-        if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
-        self.virtualenv.install(path=path, editable=editable)
 
     def load_plugins(self) -> None:
         """
@@ -1606,15 +1600,6 @@ class Project(ModuleLike[ProjectMetadata]):
                     good = False
 
         return good
-
-    def is_using_virtual_env(self) -> bool:
-        return self.virtualenv.is_using_virtual_env()
-
-    def use_virtual_env(self) -> None:
-        """
-        Use the virtual environment
-        """
-        self.virtualenv.use_virtual_env()
 
     def sorted_modules(self) -> list:
         """
