@@ -120,7 +120,8 @@ from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
-if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
+PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
+if PYTEST_PLUGIN_MODE
     from inmanta_tests import utils  # noqa: F401
     from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
@@ -132,19 +133,32 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
+def pytest_configure_plugin_mode(config: _pytest.config.Config) -> None:
+    # register custom markers
+    config.addinivalue_line(
+        "markers",
+        "slowtest",
+    )
+    config.addinivalue_line(
+        "markers",
+        "parametrize_any: only execute one of the parameterized cases when in fast mode (see documentation in conftest.py)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
+    )
+
+
+def pytest_configure(config: _pytest.config.Config) -> None:
+    if PYTEST_PLUGIN_MODE:
+        pytest_configure_plugin_mode(config)
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--fast",
         action="store_true",
         help="Don't run all test, but a representative set",
-    )
-
-
-def pytest_configure(config: _pytest.config.Config) -> None:
-    # register custom marker
-    config.addinivalue_line(
-        "markers",
-        "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
     )
 
 
