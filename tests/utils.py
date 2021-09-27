@@ -361,6 +361,7 @@ def module_from_template(
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
     new_content_init_cf: Optional[str] = None,
+    new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -375,6 +376,7 @@ def module_from_template(
     :param editable: Whether to install the module in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
+    :param new_content_init_py: The new content of the __init__.py file.
     """
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
@@ -401,6 +403,15 @@ def module_from_template(
         init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
         with open(init_cf_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_cf)
+    if new_content_init_py is not None:
+        init_py_file: str = os.path.join(
+            dest_dir,
+            const.PLUGINS_PACKAGE,
+            module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
+            "__init__.py",
+        )
+        with open(init_py_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_py)
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
@@ -420,6 +431,7 @@ def v1_module_from_template(
     new_name: Optional[str] = None,
     new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
     new_content_init_cf: Optional[str] = None,
+    new_content_init_py: Optional[str] = None,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v1 module from a template.
@@ -430,6 +442,7 @@ def v1_module_from_template(
     :param new_name: The new name of the inmanta module, if any.
     :param new_requirements: The new Python requirements for the module, if any.
     :param new_content_init_cf: The new content of the _init.cf file.
+    :param new_content_init_py: The new content of the __init__.py file.
     """
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
@@ -444,6 +457,12 @@ def v1_module_from_template(
         init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
         with open(init_cf_file, "w", encoding="utf-8") as fd:
             fd.write(new_content_init_cf)
+    if new_content_init_py is not None:
+        plugins_dir: str = os.path.join(dest_dir, "plugins")
+        os.makedirs(plugins_dir, exist_ok=True)
+        init_py_file: str = os.path.join(plugins_dir, "__init__.py")
+        with open(init_py_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_py)
     with open(config_file, "w") as fd:
         yaml.dump(config, fd)
     if new_requirements:
