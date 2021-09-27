@@ -1,0 +1,7 @@
+---
+description: Added the `inmanta module add` command.
+issue-nr: 3089
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

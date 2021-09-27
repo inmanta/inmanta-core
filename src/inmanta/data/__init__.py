@@ -2619,12 +2619,128 @@ class Compile(BaseDocument):
                 version=compile["version"],
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
-                metadata=json.loads(compile["metadata"]),
-                environment_variables=json.loads(compile["environment_variables"]),
+                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
+                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
             )
             for compile in compile_records
         ]
         return dtos
+
+    @classmethod
+    async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
+        """Find all of the details of a compile, with reports from a substituted compile, if there was one"""
+
+        # Recursively join the requested compile with the substituted compiles (if there was one), and the corresponding reports
+        query = f"""
+            WITH RECURSIVE compiledetails AS (
+            SELECT
+                c.id,
+                c.remote_id,
+                c.environment,
+                c.requested,
+                c.started,
+                c.completed,
+                c.success,
+                c.version,
+                c.do_export,
+                c.force_update,
+                c.metadata,
+                c.environment_variables,
+                c.compile_data,
+                c.substitute_compile_id,
+                r.id as report_id,
+                r.started report_started,
+                r.completed report_completed,
+                r.command,
+                r.name,
+                r.errstream,
+                r.outstream,
+                r.returncode
+            FROM
+                {cls.table_name()} c LEFT JOIN public.report r on c.id = r.compile
+            WHERE
+                c.environment = $1 AND c.id = $2
+            UNION
+                SELECT
+                    comp.id,
+                    comp.remote_id,
+                    comp.environment,
+                    comp.requested,
+                    comp.started,
+                    comp.completed,
+                    comp.success,
+                    comp.version,
+                    comp.do_export,
+                    comp.force_update,
+                    comp.metadata,
+                    comp.environment_variables,
+                    comp.compile_data,
+                    comp.substitute_compile_id,
+                    rep.id as report_id,
+                    rep.started as report_started,
+                    rep.completed as report_completed,
+                    rep.command,
+                    rep.name,
+                    rep.errstream,
+                    rep.outstream,
+                    rep.returncode
+                FROM
+                    /* Lookup the compile with the id that matches the subsitute_compile_id of the current one */
+                    {cls.table_name()} comp
+                    INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
+                    LEFT JOIN public.report rep on comp.id = rep.compile
+        ) SELECT * FROM compiledetails;
+        """
+        values = [cls._get_value(environment), cls._get_value(id)]
+        result = await cls.select_query(query, values, no_obj=True)
+        result = cast(List[Record], result)
+        # The result is a list of Compiles joined with Reports
+        # This includes the Compile with the requested id,
+        # as well as Compile(s) that have been used as a substitute for the requested Compile (if there are any)
+        if not result:
+            return None
+
+        # The details, such as the requested timestamp, etc. should be returned from
+        # the compile that matches the originally requested id
+        records = list(filter(lambda r: r["id"] == id, result))
+        if not records:
+            return None
+        requested_compile = records[0]
+
+        # Reports should be included from the substituted compile (as well)
+        reports = [
+            m.CompileRunReport(
+                id=report["report_id"],
+                started=report["report_started"],
+                completed=report["report_completed"],
+                command=report["command"],
+                name=report["name"],
+                errstream=report["errstream"],
+                outstream=report["outstream"],
+                returncode=report["returncode"],
+            )
+            for report in result
+            if report.get("report_id")
+        ]
+
+        return m.CompileDetails(
+            id=requested_compile["id"],
+            remote_id=requested_compile["remote_id"],
+            environment=requested_compile["environment"],
+            requested=requested_compile["requested"],
+            started=requested_compile["started"],
+            completed=requested_compile["completed"],
+            success=requested_compile["success"],
+            version=requested_compile["version"],
+            do_export=requested_compile["do_export"],
+            force_update=requested_compile["force_update"],
+            metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
+            environment_variables=json.loads(requested_compile["environment_variables"])
+            if requested_compile["environment_variables"]
+            else {},
+            compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
+            reports=reports,
+        )
 
     def to_dto(self) -> m.CompileRun:
         return m.CompileRun(

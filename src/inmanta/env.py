@@ -93,7 +93,7 @@ class PipCommandBuilder:
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
-        paths: Iterator[LocalPackagePath] = (
+        local_paths: Iterator[LocalPackagePath] = (
             # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
             # we're pointing to a local directory.
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
@@ -102,11 +102,7 @@ class PipCommandBuilder:
         index_args: List[str] = (
             []
             if index_urls is None
-            else [
-                "--index-url",
-                index_urls[0],
-                *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])
-            ]
+            else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
             if index_urls
             else ["--no-index"]
         )
@@ -122,7 +118,7 @@ class PipCommandBuilder:
             *chain.from_iterable(["-c", f] for f in constraints_files),
             *chain.from_iterable(["-r", f] for f in requirements_files),
             *(str(requirement) for requirement in requirements),
-            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in paths),
+            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
             *index_args,
         ]
 
@@ -402,7 +398,7 @@ class PythonEnvironment:
 
 
 @contextlib.contextmanager
-def requirements_txt_file(content: str) -> None:
+def requirements_txt_file(content: str) -> Iterator[str]:
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True) as fd:
         fd.write(content)
         fd.flush()

@@ -157,6 +157,22 @@ class CompileReport(CompileRunBase):
     version: Optional[int]
 
 
+class CompileRunReport(BaseModel):
+    id: uuid.UUID
+    started: datetime.datetime
+    completed: Optional[datetime.datetime]
+    command: str
+    name: str
+    errstream: str
+    outstream: str
+    returncode: Optional[int]
+
+
+class CompileDetails(CompileReport):
+    compile_data: Optional[CompileData]
+    reports: Optional[List[CompileRunReport]]
+
+
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
 """
     The resource id with the version included.

@@ -27,6 +27,7 @@ import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from asyncio.subprocess import Process
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -38,10 +39,9 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.env import PythonEnvironment
-from asyncio.subprocess import Process
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
+from inmanta.env import PythonEnvironment
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -264,7 +264,8 @@ class CompileRun(object):
                     return await self._run_compile_stage(
                         name="Creating venv", cmd=[sys.executable, "-m", "venv", "--without-pip", venv_dir], cwd=project_dir
                     )
-                assert os.path.isfile(python_path)
+                else:
+                    return None
 
             async def update_modules() -> data.Report:
                 return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
@@ -294,7 +295,7 @@ class CompileRun(object):
                 env["PYTHONPATH"] = ":".join(sys.path)
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
-            async def setup() -> AsyncIterator[Awaitable[data.Report]]:
+            async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
@@ -821,3 +822,10 @@ class CompilerService(ServerSlice):
             has_prev=metadata.before > 0,
         )
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.compile_details, env="tid")
+    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> model.CompileDetails:
+        details = await data.Compile.get_compile_details(env.id, id)
+        if not details:
+            raise NotFound("The compile with the given id does not exist.")
+        return details

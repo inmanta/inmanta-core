@@ -19,7 +19,7 @@ import hashlib
 import inspect
 import os
 import shutil
-from typing import List, Optional, Set
+from typing import List, Set
 
 import py
 import pytest

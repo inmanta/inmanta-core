@@ -19,6 +19,7 @@ import glob
 import importlib
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,6 @@ from importlib.abc import Loader
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
-import re
 
 import py
 import pydantic

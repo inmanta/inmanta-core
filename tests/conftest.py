@@ -30,6 +30,31 @@ It is often harder to correctly judge what is slow up front, so we do it in bulk
 This also allows test to run a few hundred times before being marked as slow.
 """
 
+"""
+About venvs in tests (see linked objects' docstrings for more details):
+During normal operation the module loader and the compiler work with the following environments:
+- inmanta.env.process_env: inmanta.env.ActiveEnv -> presents an interface to interact with the outer (developer's) venv. Used by
+    inmanta.module.Project to install v2 modules in.
+- inmanta.module.Project.virtualenv: inmanta.env.VirtualEnv -> compiler venv. Used by the compiler to install v1 module
+    requirements in. Inherits from the outer venv.
+
+When running the tests we don't want to make changes to the outer environment. So for tests that install Python packages we need
+to make sure those are installed in a test environment. This means patching the inmanta.env.process_env to be an interface
+to a test environment instead of the outer environment.
+The following fixtures manage test environments:
+- snippetcompiler_clean: activates the Project's compiler venv and patches inmanta.env.process_env to use this same venv
+    as if it were the outer venv. The activation and patch is applied when compiling the first snippet.
+- snippetcompiler: same as snippetcompiler_clean but the compiler venv is shared among all tests using the
+    fixture.
+- tmpvenv: provides a decoupled test environment (does not inherit from the outer environment) but does not activate it and
+    does not patch inmanta.env.process_env.
+- tmpvenv_active: provides a decoupled test environment, activates it and patches inmanta.env.process_env to point to this
+    environment.
+
+The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
+environment.
+"""
+
 
 import asyncio
 import concurrent
@@ -65,10 +90,12 @@ import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
+from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+import build.env
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -347,13 +374,14 @@ def deactive_venv():
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
+    old_working_set = pkg_resources.working_set
 
     yield
 
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if "PYTHONPATH" in os.environ:
         if old_pythonpath is not None:
@@ -874,6 +902,7 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> Project:
         """
@@ -887,12 +916,24 @@ class SnippetCompilationTest(KeepOnFail):
             to discover V2 modules.
         :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
                                  file
+        :param python_requires: The dependencies on Python packages providing v2 modules.
         :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
                              no install mode is set explicitly in the project.yml file.
         """
-        self.setup_for_snippet_external(snippet, add_to_module_path, python_package_sources, project_requires, install_mode)
+        self.setup_for_snippet_external(
+            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+        )
+        return self._load_project(autostd, install_project, install_v2_modules)
+
+    def _load_project(
+        self,
+        autostd: bool,
+        install_project: bool,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        main_file: str = "main.cf",
+    ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd, venv_path=self.env)
+        project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
         Project.set(project)
         self._patch_process_env()
         self._install_v2_modules(install_v2_modules)
@@ -906,7 +947,6 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        env.process_env.notify_change()
         env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
@@ -921,7 +961,7 @@ class SnippetCompilationTest(KeepOnFail):
                 env.process_env.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
 
     def reset(self):
-        Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
         loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
@@ -931,11 +971,13 @@ class SnippetCompilationTest(KeepOnFail):
         add_to_module_path: Optional[List[str]] = None,
         python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
         project_requires = project_requires if project_requires is not None else []
+        python_requires = python_requires if python_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -961,6 +1003,8 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+        with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
+            fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
@@ -1040,6 +1084,15 @@ class SnippetCompilationTest(KeepOnFail):
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None
 
+    def setup_for_existing_project(self, folder: str, main_file: str = "main.cf") -> Project:
+        shutil.rmtree(self.project_dir)
+        shutil.copytree(folder, self.project_dir)
+        venv = os.path.join(self.project_dir, ".env")
+        if os.path.exists(venv):
+            shutil.rmtree(venv)
+        os.symlink(self.env, venv)
+        return self._load_project(autostd=False, install_project=True, main_file=main_file)
+
 
 @pytest.fixture(scope="session")
 def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
@@ -1053,6 +1106,9 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 def snippetcompiler(
     inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
 ) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
+    """
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
@@ -1062,6 +1118,9 @@ def snippetcompiler(
 
 @pytest.fixture(scope="function")
 def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
+    """
     ast = SnippetCompilationTest()
     ast.setUpClass()
     ast.setup_func(modules_dir)
@@ -1187,9 +1246,8 @@ async def mocked_compiler_service_block(server, monkeypatch):
 @pytest.fixture
 def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
     """
-    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the
-    `tmpdir` fixture. The venv is activated within the currently running process. This venv is completely decoupled from the
-    active development venv. As a result, any attempts to load new modules from the development venv will fail until cleanup.
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
+    fixture. This venv is completely decoupled from the active development venv.
 
     :return: A tuple of the paths to the venv and the Python executable respectively.
     """
@@ -1210,7 +1268,7 @@ def tmpvenv_active(
     cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
     environment context because its setup and teardown will then wrap the dependent setup and teardown. This works because
     pytest fixture setup and teardown use LIFO semantics
-    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixturein particular should
+    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixture in particular should
     always come after this one.
 
     This fixture has a huge side effect that affects the running Python process. For a venv fixture that does not affect the
@@ -1262,9 +1320,15 @@ def tmpvenv_active(
     env.process_env.init_namespace(const.PLUGINS_PACKAGE)
     env.process_env.notify_change()
 
+    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
+    # environment, which we're changing now.
+    build.env._should_use_virtualenv.cache_clear()
+
     yield tmpvenv
 
     unload_modules_for_path(site_packages)
+    # Force refresh build's cache once more
+    build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
