@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import contextlib
-import hashlib
+import functools
 import importlib.util
 import json
 import logging
@@ -126,6 +126,10 @@ class PipCommandBuilder:
 class PythonEnvironment:
     """
     A generic Python environment.
+
+    The implementation of this class is based on the invariant that the version of the inmanta-core and the
+    Inmanta product packages doesn't change. This call will make sure that the version of these packages is
+    never changed.
     """
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
@@ -147,9 +151,15 @@ class PythonEnvironment:
                 self.env_path, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
             )
         )
-        self.__cache_done: Set[str] = set()
-        # Cache the result of the `_get_constraint_on_inmanta_package()` method
-        self._constraint_on_inmanta_pkg: Optional[str] = None
+
+    def is_using_virtual_env(self) -> bool:
+        return True
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        return
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -237,7 +247,62 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
-    def _parse_line(self, req_line: str) -> Tuple[Optional[str], str]:
+    @functools.lru_cache(maxsize=1)
+    def _get_constraint_on_inmanta_package(self) -> str:
+        """
+        Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        to make sure that no Inmanta packages gets overridden.
+        """
+        installed_packages = self.get_installed_packages()
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
+        for pkg in inmanta_packages:
+            if pkg in installed_packages:
+                return f"{pkg}=={installed_packages[pkg]}"
+        # No inmanta product or inmanta-core package installed -> Leave constraint empty
+        return ""
+
+
+@contextlib.contextmanager
+def requirements_txt_file(content: str) -> Iterator[str]:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True) as fd:
+        fd.write(content)
+        fd.flush()
+        yield fd.name
+
+
+class ActiveEnv(PythonEnvironment):
+    """
+    The active Python environment. Method implementations assume this environment is active when they're called.
+    Activating another environment that inherits from this one is allowed.
+    """
+
+    _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
+    _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
+
+    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
+        super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
+
+    def install_from_index(
+        self,
+        requirements: List[Requirement],
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
+        constraint_files: Optional[List[str]] = None,
+    ) -> None:
+        try:
+            super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
+        finally:
+            self.notify_change()
+
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+        try:
+            super(ActiveEnv, self).install_from_source(paths, constraint_files)
+        finally:
+            self.notify_change()
+
+    @classmethod
+    def _parse_line(cls, req_line: str) -> Tuple[Optional[str], str]:
         """
         Parse the requirement line
         """
@@ -253,14 +318,15 @@ class PythonEnvironment:
 
         return None, req_line
 
-    def _gen_content_requirements_file(self, requirements_list: List[str]) -> str:
-        """Generate a new requirements file based on the requirements list that was built from all the different modules.
-        :param requirements_list:  A list of requirements from all the requirements files in all modules.
+    @classmethod
+    def _gen_content_requirements_file(cls, requirements_list: List[str]) -> str:
+        """Generate a new requirements file based on the requirements list.
+        :param requirements_list:  A list of Python requirements as strings.
         :return: A string that can be written to a requirements file that pip understands.
         """
         modules: Dict[str, Any] = {}
         for req in requirements_list:
-            parsed_name, req_spec = self._parse_line(req)
+            parsed_name, req_spec = cls._parse_line(req)
 
             if parsed_name is None:
                 name = req
@@ -315,10 +381,21 @@ class PythonEnvironment:
 
         return requirements_file
 
-    def _install(self, requirements_list: List[str]) -> None:
+    def install_from_list(self, requirements_list: List[str]) -> None:
         """
-        Install requirements in the given requirements file
+        Install requirements from a list of requirement strings. This method uses the Python package repositories
+        configured on the host.
+
+        This method differs from the `_install_from_index()` method in the sense that it calls
+        `_gen_content_requirements_file()`, which rewrites the requirements from pep440 format to a format that pip understands.
+        This method is maintained for V1 modules only.
         """
+        try:
+            self._install_from_list(requirements_list)
+        finally:
+            self.notify_change()
+
+    def _install_from_list(self, requirements_list: List[str]) -> None:
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
             with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
@@ -332,112 +409,6 @@ class PythonEnvironment:
                 except Exception:
                     LOGGER.error("requirements: %s", content_requirements_file)
                     raise
-
-    def _read_current_requirements_hash(self) -> str:
-        """
-        Return the hash of the requirements file used to install the current environment
-        """
-        path = os.path.join(self.env_path, "requirements.sha1sum")
-        if not os.path.exists(path):
-            return ""
-
-        with open(path, "r", encoding="utf-8") as fd:
-            return fd.read().strip()
-
-    def _set_current_requirements_hash(self, new_hash: str) -> None:
-        """
-        Set the current requirements hash
-        """
-        path = os.path.join(self.env_path, "requirements.sha1sum")
-        with open(path, "w+", encoding="utf-8") as fd:
-            fd.write(new_hash)
-
-    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
-        """
-        Install requirements from a list of requirement strings. This method uses the Python package repositories
-        configured on the host.
-        """
-        if detailed_cache:
-            requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
-            if len(requirements_list) == 0:
-                return
-
-        requirements_list = sorted(requirements_list)
-
-        # hash it
-        sha1sum = hashlib.sha1()
-        sha1sum.update("\n".join(requirements_list).encode())
-        new_req_hash = sha1sum.hexdigest()
-
-        current_hash = self._read_current_requirements_hash()
-
-        if new_req_hash == current_hash and cache:
-            return
-
-        self._install(requirements_list)
-        self._set_current_requirements_hash(new_req_hash)
-        for x in requirements_list:
-            self.__cache_done.add(x)
-
-    def _get_constraint_on_inmanta_package(self) -> str:
-        """
-        Returns the content of the constraint file that should be supplied to each `pip install` invocation
-        to make sure that no Inmanta packages gets overridden.
-        """
-        if self._constraint_on_inmanta_pkg is not None:
-            return self._constraint_on_inmanta_pkg
-        installed_packages = self.get_installed_packages()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in installed_packages:
-                self._constraint_on_inmanta_pkg = f"{pkg}=={installed_packages[pkg]}"
-                return self._constraint_on_inmanta_pkg
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        self._constraint_on_inmanta_pkg = ""
-        return self._constraint_on_inmanta_pkg
-
-
-@contextlib.contextmanager
-def requirements_txt_file(content: str) -> Iterator[str]:
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=True) as fd:
-        fd.write(content)
-        fd.flush()
-        yield fd.name
-
-
-class ActiveEnv(PythonEnvironment):
-    """
-    The active Python environment. Method implementations assume this environment is active when they're called.
-    Activating another environment that inherits from this one is allowed.
-    """
-
-    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
-        super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
-
-    def install_from_index(
-        self,
-        requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
-        upgrade: bool = False,
-        allow_pre_releases: bool = False,
-        constraint_files: Optional[List[str]] = None,
-    ) -> None:
-        try:
-            super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
-        finally:
-            self.notify_change()
-
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
-        try:
-            super(ActiveEnv, self).install_from_source(paths, constraint_files)
-        finally:
-            self.notify_change()
-
-    def _install(self, requirements_list: List[str]) -> None:
-        try:
-            super(ActiveEnv, self)._install(requirements_list)
-        finally:
-            self.notify_change()
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
@@ -529,10 +500,6 @@ class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
-
-    _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
-    _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
-
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
         super(VirtualEnv, self).__init__(env_path=env_path)
@@ -578,7 +545,7 @@ class VirtualEnv(ActiveEnv):
 
     def use_virtual_env(self) -> None:
         """
-        Use the virtual environment
+        Activate the virtual environment.
         """
         if self.__using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
@@ -657,7 +624,7 @@ python -m pip $@
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
-    def install_from_list(self, requirements_list: List[str], detailed_cache: bool = False, cache: bool = True) -> None:
+    def install_from_list(self, requirements_list: List[str]) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_list(requirements_list, detailed_cache, cache)
+        super(VirtualEnv, self).install_from_list(requirements_list)

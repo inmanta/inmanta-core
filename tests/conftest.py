@@ -869,6 +869,7 @@ class SnippetCompilationTest(KeepOnFail):
         config.Config.load_config()
         self.cwd = os.getcwd()
         self.keep_shared = False
+        self.project = None
 
     def tearDownClass(self):
         if not self.keep_shared:
@@ -886,6 +887,7 @@ class SnippetCompilationTest(KeepOnFail):
     def tear_down_func(self):
         if not self._keep:
             shutil.rmtree(self.project_dir)
+        self.project = None
 
     def keep(self):
         self._keep = True
@@ -933,13 +935,14 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
     ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
-        Project.set(project)
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
+        Project.set(self.project)
+        self.project.use_virtual_env()
         self._patch_process_env()
         self._install_v2_modules(install_v2_modules)
         if install_project:
-            project.install_modules()
-        return project
+            self.project.install_modules()
+        return self.project
 
     def _patch_process_env(self) -> None:
         """
@@ -958,7 +961,7 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                env.process_env.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
+                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))

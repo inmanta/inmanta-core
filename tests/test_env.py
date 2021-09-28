@@ -48,7 +48,7 @@ def test_basic_install(tmpdir):
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
-    venv1._install(["lorem"])
+    venv1.install_from_list(["lorem"])
     import lorem  # NOQA
 
     lorem.sentence()

@@ -276,13 +276,13 @@ class CompileRun(object):
                 )
 
             async def run_compile_stage_in_venv(
-                stage_name: str, last_part_cmd: List[str], cwd: str, env: Dict[str, str] = {}
+                stage_name: str, inmanta_args: List[str], cwd: str, env: Dict[str, str] = {}
             ) -> data.Report:
                 """
                 Run a compile stage by executing the given command in the venv `venv_dir`.
 
                 :param stage_name: Name of the compile stage.
-                :param last_part_cmd: The command to be executed in the venv. This command should not include the part
+                :param inmanta_args: The command to be executed in the venv. This command should not include the part
                                       ["<python-interpreter>", "-m", "inmanta.app"]
                 :param cwd: The current working directory to be used for the command invocation.
                 :param env: Execute the command with these environment variables.
@@ -290,7 +290,7 @@ class CompileRun(object):
                 LOGGER.info(stage_name)
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
-                full_cmd = [python_path, "-m", "inmanta.app"] + last_part_cmd
+                full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
                 # Ensure that the venv used to execute the `full_cmd` command inherits from the venv that runs this code.
                 env["PYTHONPATH"] = ":".join(sys.path)
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
