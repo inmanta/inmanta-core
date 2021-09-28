@@ -1417,7 +1417,12 @@ async def migrate_db_from(
 
     bootloader: InmantaBootloader = InmantaBootloader()
 
-    # start boatloader, triggering db migration
-    yield bootloader.start
+    async def migrate() -> None:
+        # start boatloader, triggering db migration
+        await bootloader.start()
+        # inform asyncpg of any type changes so it knows to refresh its caches
+        await postgresql_client.reload_schema_state()
+
+    yield migrate
 
     await bootloader.stop()
