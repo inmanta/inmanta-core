@@ -1407,7 +1407,7 @@ async def migrate_db_from(
 
     :param db_restore_dump: The db version dump file to restore (set via `@pytest.mark.db_restore_dump(<file>)`.
     """
-    marker: pytest.mark.Mark = request.node.get_closest_marker("db_restore_dump")
+    marker: Optional[pytest.mark.Mark] = request.node.get_closest_marker("db_restore_dump")
     if marker is None or len(marker.args) != 1:
         raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
     # restore old version
