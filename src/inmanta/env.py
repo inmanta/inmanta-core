@@ -337,7 +337,7 @@ class ActiveEnv(PythonEnvironment):
             version = None
             marker = None
             try:
-                # this will fail is an url is supplied
+                # this will fail if an url is supplied
                 parsed_req = list(pkg_resources.parse_requirements(req_spec))
                 if len(parsed_req) > 0:
                     item = parsed_req[0]
