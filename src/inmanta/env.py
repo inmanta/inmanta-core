@@ -271,7 +271,7 @@ class PythonEnvironment:
             version = None
             marker = None
             try:
-                # this will fail is an url is supplied
+                # this will fail if an url is supplied
                 parsed_req = list(pkg_resources.parse_requirements(req_spec))
                 if len(parsed_req) > 0:
                     item = parsed_req[0]
@@ -317,7 +317,9 @@ class PythonEnvironment:
 
     def _install(self, requirements_list: List[str]) -> None:
         """
-        Install requirements in the given requirements file
+        Install requirements in the given requirements file.
+        
+        This method uses the Python package repositories configured on the host.
         """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
