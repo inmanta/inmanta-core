@@ -95,7 +95,6 @@ from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
-import _pytest.config
 import build.env
 import inmanta.agent
 import inmanta.app
@@ -133,7 +132,7 @@ logger = logging.getLogger(__name__)
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
 
-def _pytest_configure_plugin_mode(config: _pytest.config.Config) -> None:
+def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     # register custom markers
     config.addinivalue_line(
         "markers",
@@ -149,7 +148,7 @@ def _pytest_configure_plugin_mode(config: _pytest.config.Config) -> None:
     )
 
 
-def pytest_configure(config: _pytest.config.Config) -> None:
+def pytest_configure(config: "pytest.Config") -> None:
     if PYTEST_PLUGIN_MODE:
         _pytest_configure_plugin_mode(config)
 
