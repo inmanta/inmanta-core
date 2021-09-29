@@ -2024,13 +2024,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
-        if self.name != os.path.basename(self._path):
-            LOGGER.warning(
-                "The name in the module file (%s) does not match the directory name (%s)",
-                self.name,
-                os.path.basename(self._path),
-            )
-
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
@@ -2300,6 +2293,22 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             super(ModuleV1, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
+        except ModuleMetadataFileNotFound:
+            if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
+                # TODO: write test
+                raise ModuleMetadataFileNotFound(
+                    f"Module at {path} looks like a v2 module. Please add it as a v2 requirement with"
+                    " `inmanta modules add <module_name>`"
+                )
+            raise
+
+        # TODO: test
+        if self.name != os.path.basename(self._path):
+            LOGGER.warning(
+                "The name in the module file (%s) does not match the directory name (%s)",
+                self.name,
+                os.path.basename(self._path),
+            )
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, self.MODULE_FILE)
@@ -2483,6 +2492,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+        if not os.path.exists(self.model_dir) or not os.listdir(self.model_dir):
+            # TODO: test
+            LOGGER.warning(
+                "The module at %s contains not model (.cf) files. This might happen if you install modules from source"
+                " incorrectly. Please always use `inmanta module install` to install modules from source.",
+                path,
+            )
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()

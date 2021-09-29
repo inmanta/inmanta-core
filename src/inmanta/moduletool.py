@@ -893,6 +893,7 @@ class V2ModuleBuilder:
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
+    # TODO: ignore should work for files as well as directories, should support regexes
     def _get_files_in_directory(self, directory: str, ignore: Optional[Set[str]] = None) -> Set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.

@@ -28,6 +28,7 @@ import pytest
 
 from _io import StringIO
 from inmanta import env, module
+from inmanta.ast import CompilerException
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
@@ -249,3 +250,22 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
 
     source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
     assert source.path_for("std") is None
+
+
+def test_module_v2_from_v1_path(modules_v2_dir: str, snippetcompiler) -> None:
+    """
+    Verify that attempting to load a v2 module from the v1 modules path fails with an appropriate message when a v2 module is
+    found in a v1 module source.
+    """
+    with pytest.raises(module.ModuleLoadingException) as excinfo:
+        snippetcompiler.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
+    cause: CompilerException = excinfo.value.__cause__
+    print(type(cause))
+    assert isinstance(cause, module.InvalidModuleException)
+    root_cause: Optional[BaseException] = cause.__cause__
+    assert root_cause is not None
+    assert isinstance(root_cause, module.InvalidModuleException)
+    assert root_cause.msg == (
+        "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta modules add <module_name>`"
+        % os.path.join(modules_v2_dir, "minimalv2module")
+    )
