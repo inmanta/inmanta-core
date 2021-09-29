@@ -80,7 +80,7 @@ import uuid
 import venv
 from configparser import ConfigParser
 from types import ModuleType
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -118,15 +118,39 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 
-# Import the utils module differently when conftest is put into the inmanta_tests packages
-if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
+# Import test modules differently when conftest is put into the inmanta_tests packages
+PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
+if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
+    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
+    from db.common import PGRestore
 
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
+
+def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
+    # register custom markers
+    config.addinivalue_line(
+        "markers",
+        "slowtest",
+    )
+    config.addinivalue_line(
+        "markers",
+        "parametrize_any: only execute one of the parameterized cases when in fast mode (see documentation in conftest.py)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
+    )
+
+
+def pytest_configure(config: "pytest.Config") -> None:
+    if PYTEST_PLUGIN_MODE:
+        _pytest_configure_plugin_mode(config)
 
 
 def pytest_addoption(parser):
@@ -1374,6 +1398,35 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             ModuleTool().build(path=path, output_dir=artifact_dir)
         dir2pi(argv=["dir2pi", artifact_dir])
         yield os.path.join(artifact_dir, "simple")
+
+
+@pytest.fixture
+async def migrate_db_from(
+    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """
+    Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
+
+    :param db_restore_dump: The db version dump file to restore (set via `@pytest.mark.db_restore_dump(<file>)`.
+    """
+    marker: Optional[pytest.mark.Mark] = request.node.get_closest_marker("db_restore_dump")
+    if marker is None or len(marker.args) != 1:
+        raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
+    # restore old version
+    with open(marker.args[0], "r") as fh:
+        await PGRestore(fh.readlines(), postgresql_client).run()
+
+    bootloader: InmantaBootloader = InmantaBootloader()
+
+    async def migrate() -> None:
+        # start boatloader, triggering db migration
+        await bootloader.start()
+        # inform asyncpg of any type changes so it knows to refresh its caches
+        await postgresql_client.reload_schema_state()
+
+    yield migrate
+
+    await bootloader.stop()
 
 
 @pytest.fixture(scope="session", autouse=True)
