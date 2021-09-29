@@ -2032,13 +2032,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
-        if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
-            raise InvalidModuleException(
-                f"The module at {path} contains no model (.cf) files. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
-                " modules from source."
-            )
-
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
         Return all requirements this module has to other modules as a list of requirements.
@@ -2501,6 +2494,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+
+        if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
+            raise InvalidModuleException(
+                f"The module at {path} contains no model (.cf) files. This occurs when you install or build modules from source"
+                " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
+                " modules from source."
+            )
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()
