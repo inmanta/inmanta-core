@@ -18,8 +18,10 @@
 
 import logging
 import os
+import py
 import shutil
 import tempfile
+import subprocess
 import unittest
 from importlib.abc import Loader
 from typing import List, Optional, Tuple
@@ -28,7 +30,7 @@ from unittest import mock
 import pytest
 
 from _io import StringIO
-from inmanta import env, module
+from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
@@ -274,12 +276,53 @@ def test_module_v2_from_v1_path(modules_v2_dir: str, snippetcompiler) -> None:
     with pytest.raises(module.ModuleLoadingException) as excinfo:
         snippetcompiler.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
     cause: CompilerException = excinfo.value.__cause__
-    print(type(cause))
-    assert isinstance(cause, module.InvalidModuleException)
     root_cause: Optional[BaseException] = cause.__cause__
     assert root_cause is not None
     assert isinstance(root_cause, module.InvalidModuleException)
     assert root_cause.msg == (
         "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta modules add <module_name>`"
         % os.path.join(modules_v2_dir, "minimalv2module")
+    )
+
+
+def test_module_v2_incorrect_install_warning(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
+    """
+    Verify that attempting to load a v2 module that has been installed from source with `pip install` rather than
+    `inmanta module install` results in an appropriate error or warning.
+    """
+    # set up project and activate project venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    # prepare module
+    module_dir: str = str(tmpdir.join("mymodule"))
+    shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
+
+    def verify_exception(expected: str) -> None:
+        """
+        Verify compilation fails with the expected message.
+        """
+        with pytest.raises(module.ModuleLoadingException) as excinfo:
+            snippetcompiler_clean.setup_for_snippet("import minimalv2module", autostd=False)
+        cause: CompilerException = excinfo.value.__cause__
+        root_cause: Optional[BaseException] = cause.__cause__
+        assert root_cause is not None
+        assert isinstance(root_cause, module.InvalidModuleException)
+        assert root_cause.msg == expected
+
+    # install module from source without using `inmanta module install`
+    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    verify_exception(
+        "Invalid module: found module package but it has no setup.cfg. This occurs when you install or build modules from"
+        " source incorrectly. Always use the `inmanta module` `install` and `build` commands to respectively install and build"
+        " modules from source."
+    )
+
+    # include setup.cfg in package to circumvent error
+    shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
+    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    verify_exception(
+        "The module at %s contains no model (.cf) files. This occurs when you install or build modules from source"
+        " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
+        " modules from source."
+        % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )
