@@ -4505,6 +4505,8 @@ async def connect(
         if create_db_schema:
             async with pool.acquire() as con:
                 await schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, con).ensure_db_schema()
+            # expire connections after db schema migration to ensure cache consistency
+            await pool.expire_connections()
         return pool
     except Exception as e:
         await pool.close()
