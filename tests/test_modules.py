@@ -19,6 +19,7 @@
 import logging
 import os
 import shutil
+import tempfile
 import unittest
 from importlib.abc import Loader
 from typing import List, Optional, Tuple
@@ -32,6 +33,7 @@ from inmanta.ast import CompilerException
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
+from utils import module_from_template
 
 
 def test_module():
@@ -69,6 +71,18 @@ class TestModuleName(unittest.TestCase):
 
         self.handler.flush()
         assert "The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip()
+
+    def test_non_matching_name_v2_module(self) -> None:
+        """
+        Make sure the warning regarding directory name does not trigger for v2 modules, as it is not relevant there.
+        """
+        template_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2", "minimalv2module")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mod_dir: str = os.path.join(tmpdir, "not-the-module-name")
+            module_from_template(template_dir, mod_dir)
+            module.ModuleV2(project=mock.Mock(), path=mod_dir)
+            self.handler.flush()
+            assert self.stream.getvalue().strip() == ""
 
     def tearDown(self):
         self.log.removeHandler(self.handler)
