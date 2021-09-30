@@ -278,8 +278,7 @@ def test_module_install(
 @pytest.mark.parametrize_any("dev", [True, False])
 def test_module_install_version(
     tmpdir: py.path.local,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
-    projects_dir: str,
+    snippetcompiler_clean,
     modules_v2_dir: str,
     dev: bool,
 ) -> None:
@@ -291,16 +290,19 @@ def test_module_install_version(
     module_path: str = os.path.join(str(tmpdir), module_name)
     module_version: version.Version = version.Version("1.2.3") if not dev else version.Version("1.2.3.dev0")
 
+    # set up simple project and activate the snippetcompiler venv
+    project: module.Project = snippetcompiler_clean.setup_for_snippet("")
+
+    # install module
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
         new_version=module_version,
     )
-    project_dir: str = os.path.join(str(tmpdir), "project")
-    setup_simple_project(projects_dir, project_dir, [])
-    os.chdir(project_dir)
-
+    os.chdir(project.path)
     ModuleTool().install(editable=True, path=module_path)
+
+    # check version
     mod: module.Module = ModuleTool().get_module(module_name)
     assert mod.version == module_version
 
@@ -315,8 +317,7 @@ def test_module_install_version(
 )
 def test_project_install(
     local_module_package_index: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
-    tmpdir: py.path.local,
+    snippetcompiler_clean,
     projects_dir: str,
     install_module_names: List[str],
     module_dependencies: List[str],
@@ -328,16 +329,15 @@ def test_project_install(
     fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
-    project_path: str = os.path.join(tmpdir, "project")
-    metadata: module.ProjectMetadata = setup_simple_project(
-        projects_dir,
-        project_path,
-        ["std", *install_module_names],
-        index_urls=[local_module_package_index],
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
+        install_project=False,
     )
 
-    os.chdir(project_path)
+    os.chdir(project.path)
     for fq_mod_name in fq_mod_names:
         assert env.process_env.get_module_file(fq_mod_name) is None
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
@@ -349,15 +349,16 @@ def test_project_install(
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
         assert env_module_file == os.path.join(env.process_env.site_packages_dir, *fq_mod_name.split("."), "__init__.py")
-    v1_mod_dir: str = os.path.join(project_path, metadata.downloadpath)
+    v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
+@pytest.mark.slowtest
 def test_project_install_preinstalled(
     local_module_package_index: str,
-    build_venv_active: Tuple[py.path.local, py.path.local],
+    snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_v2_dir: str,
     projects_dir: str,
@@ -370,6 +371,9 @@ def test_project_install_preinstalled(
     fq_mod_name: str = "inmanta_plugins.minimalv2module"
 
     assert env.process_env.get_module_file(fq_mod_name) is None
+
+    # activate snippetcompiler venv
+    snippetcompiler_clean.setup_for_snippet("")
 
     # preinstall older version of module
     module_path: str = os.path.join(str(tmpdir), module_name)
@@ -395,10 +399,11 @@ def test_project_install_preinstalled(
     assert_module_install()
 
     # set up project and modules
-    project_path: str = os.path.join(str(tmpdir), "project")
-    setup_simple_project(projects_dir, project_path, ["std", module_name], index_urls=[local_module_package_index])
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        f"import {module_name}", autostd=False, python_package_sources=[local_module_package_index]
+    )
 
-    os.chdir(project_path)
+    os.chdir(project.path)
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
