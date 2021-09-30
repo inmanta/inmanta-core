@@ -222,7 +222,7 @@ def test_get_requirements(
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_module_v2_source_get_installed_module_editable(
-    snippetcompiler,
+    snippetcompiler_clean,
     modules_v2_dir: str,
     editable: bool,
 ) -> None:
@@ -231,7 +231,7 @@ def test_module_v2_source_get_installed_module_editable(
     """
     module_name: str = "minimalv2module"
     module_dir: str = os.path.join(modules_v2_dir, module_name)
-    snippetcompiler.setup_for_snippet(
+    snippetcompiler_clean.setup_for_snippet(
         f"import {module_name}",
         autostd=False,
         install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
