@@ -16,14 +16,13 @@
     Contact: code@inmanta.com
 """
 import argparse
-import json
 import os
 import re
 import shutil
 import subprocess
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import py
 import pytest
@@ -203,9 +202,7 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 @pytest.mark.parametrize_any("editable", [True, False])
 @pytest.mark.parametrize_any("set_path_argument", [True, False])
-def test_module_install(
-    snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool
-) -> None:
+def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
     """
     Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
     for its options.
