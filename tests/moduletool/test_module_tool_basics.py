@@ -124,6 +124,9 @@ install_requires =
   cryptography>1.0,<3.5
         """.strip()
     )
+    model_dir: py.path.local = tmp_working_dir.join("model")
+    os.makedirs(str(model_dir))
+    open(str(model_dir.join("_init.cf")), "w").close()
 
     mt = ModuleTool()
     mod: module.Module = mt.get_module()
