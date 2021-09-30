@@ -1342,7 +1342,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         path: str,
         autostd: bool = True,
         main_file: str = "main.cf",
-        venv_path: Optional[Union[str, env.PythonEnvironment]] = None,
+        venv_path: Optional[str] = None,
     ) -> None:
         """
         Initialize the project, this includes
@@ -1386,7 +1386,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if not os.path.exists(self._metadata.downloadpath):
                 os.mkdir(self._metadata.downloadpath)
 
-        self.virtualenv: env.PythonEnvironment
+        self.virtualenv: env.ActiveEnv
         if venv_path is None:
             self.virtualenv = env.process_env
         else:

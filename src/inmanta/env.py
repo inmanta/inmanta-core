@@ -500,6 +500,7 @@ class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
+
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
         super(VirtualEnv, self).__init__(env_path=env_path)
@@ -513,7 +514,7 @@ class VirtualEnv(ActiveEnv):
         """
         Returns True iff the venv exists on disk.
         """
-        return os.path.exists(self.python_path)
+        return os.path.exists(self.python_path) and os.path.exists(self._path_sitecustomize_py)
 
     def init_env(self) -> None:
         """
@@ -575,7 +576,7 @@ class VirtualEnv(ActiveEnv):
 
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
-                f"""#!/bin/bash
+                """#!/bin/bash
 cd $(dirname "${{BASH_SOURCE[0]}}")
 source activate
 python -m pip $@
@@ -664,7 +665,6 @@ sys.path = [*new_entries_sys_path, *previous_sys_path]
 
 
 class VenvCreationFailedError(Exception):
-
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg

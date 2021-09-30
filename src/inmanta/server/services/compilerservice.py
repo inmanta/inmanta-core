@@ -40,7 +40,7 @@ import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
-from inmanta.env import PythonEnvironment, VirtualEnv, VenvCreationFailedError
+from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound

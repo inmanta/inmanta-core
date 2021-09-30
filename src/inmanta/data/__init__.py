@@ -3813,7 +3813,7 @@ class Resource(BaseDocument):
                     model,
                     attributes,
                     date,
-                    model - ROW_NUMBER() OVER (
+                    ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
                       PARTITION BY attribute_hash
                       ORDER BY date
                     ) AS seqid
