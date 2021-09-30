@@ -507,8 +507,15 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python: Optional[str] = None
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
+        self._path_sitecustomize_py = os.path.join(self.site_packages_dir, "sitecustomize.py")
 
-    def init_env(self) -> bool:
+    def exists(self) -> bool:
+        """
+        Returns True iff the venv exists on disk.
+        """
+        return os.path.exists(self.python_path)
+
+    def init_env(self) -> None:
         """
         Init the virtual environment
         """
@@ -527,18 +534,20 @@ class VirtualEnv(ActiveEnv):
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
                 venv.create(path, clear=True, with_pip=False)
+                self._write_pip_binary()
+                self._write_sitecustomize_py_file()
             except CalledProcessError as e:
-                LOGGER.exception("Unable to create new virtualenv at %s (%s)", self.env_path, e.stdout.decode())
-                return False
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
             except Exception:
-                LOGGER.exception("Unable to create new virtualenv at %s", self.env_path)
-                return False
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
+        elif not os.path.exists(self._path_sitecustomize_py):
+            # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
+            self._write_pip_binary()
+            self._write_sitecustomize_py_file()
 
         # set the path to the python and the pip executables
         self.virtual_python = self.python_path
-
-        return True
 
     def is_using_virtual_env(self) -> bool:
         return self.__using_venv
@@ -550,15 +559,61 @@ class VirtualEnv(ActiveEnv):
         if self.__using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
 
-        if not self.init_env():
-            raise Exception("Unable to init virtual environment")
-
+        self.init_env()
         self._activate_that()
 
         # patch up pkg
         self.notify_change()
 
         self.__using_venv = True
+
+    def _write_pip_binary(self) -> None:
+        """
+        write out a "stub" pip binary so that pip list works in the virtual env.
+        """
+        pip_path = os.path.join(self.env_path, "bin", "pip")
+
+        with open(pip_path, "w", encoding="utf-8") as fd:
+            fd.write(
+                f"""#!/bin/bash
+cd $(dirname "${{BASH_SOURCE[0]}}")
+source activate
+python -m pip $@
+                """.strip()
+            )
+        os.chmod(pip_path, 0o755)
+
+    def _write_sitecustomize_py_file(self) -> None:
+        """
+        Write a sitecustomize.py file to the venv to ensure that an activation of this venv will also activate
+        the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of this venv.
+        """
+        sys_path_as_python_strings = ['"' + p.replace('"', '\\"') + '"' for p in self._get_sys_path_after_activation()]
+        script = f"""import sys
+import site
+previous_sys_path = list(sys.path)
+site_dirs = [{', '.join(sys_path_as_python_strings)}]
+for s in site_dirs:
+    site.addsitedir(s)
+# Move the added items to the front of the path
+new_entries_sys_path = [e for e in sys.path if e not in previous_sys_path]
+sys.path = [*new_entries_sys_path, *previous_sys_path]
+"""
+        with open(self._path_sitecustomize_py, "w", encoding="utf-8") as fd:
+            fd.write(script)
+
+    def _get_sys_path_after_activation(self) -> List[str]:
+        """
+        Returns the content that sys.path should have after activating this venv.
+        """
+        prev_sys_path = list(sys.path)
+        site.addsitedir(self.site_packages_dir)
+        # Move the added items to the front of the path
+        new_sys_path = [e for e in list(sys.path) if e not in prev_sys_path]
+        new_sys_path.extend(prev_sys_path)
+        # restore sys.path
+        sys.path = prev_sys_path
+        return new_sys_path
 
     def _activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
@@ -571,35 +626,13 @@ class VirtualEnv(ActiveEnv):
         base: str = os.path.dirname(binpath)
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
-        prev_sys_path = list(sys.path)
 
-        site.addsitedir(self.site_packages_dir)
         sys.real_prefix = sys.prefix
         sys.prefix = base
-        # Move the added items to the front of the path:
-        new_sys_path = []
-        for item in list(sys.path):
-            if item not in prev_sys_path:
-                new_sys_path.append(item)
-                sys.path.remove(item)
-        sys.path[:0] = new_sys_path
+        sys.path = self._get_sys_path_after_activation()
 
         # Also set the python path environment variable for any subprocess
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-
-        # write out a "stub" pip so that pip list works in the virtual env
-        pip_path = os.path.join(self.env_path, "bin", "pip")
-
-        with open(pip_path, "w") as fd:
-            fd.write(
-                f"""#!/bin/sh
-source activate
-export PYTHONPATH="{os.pathsep.join(sys.path)}"
-python -m pip $@
-            """
-            )
-
-        os.chmod(pip_path, 0o755)
 
     def install_from_index(
         self,
@@ -628,3 +661,10 @@ python -m pip $@
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list)
+
+
+class VenvCreationFailedError(Exception):
+
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg

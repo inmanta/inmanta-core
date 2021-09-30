@@ -111,14 +111,18 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert len(dirs) == 1
     site_dir = dirs[0]
 
-    assert not os.listdir(site_dir)
+    def _list_dir(path: str, ignore: List[str]) -> List[str]:
+        return [d for d in os.listdir(site_dir) if d not in ignore]
+
+    # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
+    assert not _list_dir(site_dir, ignore=["sitecustomize.py", "__pycache__"])
 
     # test installing a package that is already present in the parent venv
     random_package = parent_installed[0]
     venv.install_from_list([random_package])
 
-    # Assert nothing installed in the virtual env
-    assert not os.listdir(site_dir)
+    # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
+    assert not _list_dir(site_dir, ignore=["sitecustomize.py", "__pycache__"])
 
     # report json
     subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
@@ -331,8 +335,6 @@ def test_active_env_get_module_file_editable_namespace_package(
     """
     if active_compiler_venv:
         env.VirtualEnv(os.path.join(str(tmpdir), ".compilervenv")).use_virtual_env()
-
-    venv_dir, python_path = tmpvenv_active
 
     package_name: str = "inmanta-module-minimalv2module"
     module_name: str = "inmanta_plugins.minimalv2module"

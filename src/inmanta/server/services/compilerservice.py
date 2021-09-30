@@ -23,7 +23,6 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
@@ -41,7 +40,7 @@ import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
-from inmanta.env import PythonEnvironment
+from inmanta.env import PythonEnvironment, VirtualEnv, VenvCreationFailedError
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -255,17 +254,19 @@ class CompileRun(object):
             async def ensure_venv() -> Optional[data.Report]:
                 """
                 Ensure a venv is present at `venv_dir`.
-
-                :returns: `data.Report` reporting about the venv creation or None when the venv already exists.
                 """
-                python_path: str = PythonEnvironment.get_python_path_for_env_path(venv_dir)
-                if not os.path.exists(venv_dir) or not os.path.exists(python_path):
-                    LOGGER.info("Creating venv")
-                    return await self._run_compile_stage(
-                        name="Creating venv", cmd=[sys.executable, "-m", "venv", "--without-pip", venv_dir], cwd=project_dir
-                    )
-                else:
+                virtual_env = VirtualEnv(venv_dir)
+                if virtual_env.exists():
                     return None
+
+                await self._start_stage("Creating venv", command="")
+                try:
+                    virtual_env.init_env()
+                except VenvCreationFailedError as e:
+                    await self._error(message=e.msg)
+                    return await self._end_stage(returncode=1)
+                else:
+                    return await self._end_stage(returncode=0)
 
             async def update_modules() -> data.Report:
                 return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
@@ -291,8 +292,6 @@ class CompileRun(object):
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
-                # Ensure that the venv used to execute the `full_cmd` command inherits from the venv that runs this code.
-                env["PYTHONPATH"] = ":".join(sys.path)
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
             async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
