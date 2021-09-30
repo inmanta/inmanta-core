@@ -40,15 +40,6 @@ from packaging import version
 from utils import PipIndex, module_from_template
 
 
-@pytest.fixture
-def build_venv_active(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> Iterator[Tuple[py.path.local, py.path.local]]:
-    """
-    Yields an active virtual environment that is suitable to build modules with.
-    """
-    env.process_env.install_from_index([Requirement.parse("build")])
-    yield tmpvenv_active
-
-
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
@@ -60,49 +51,6 @@ def run_module_install(module_path: str, editable: bool, set_path_argument: bool
     if not set_path_argument:
         os.chdir(module_path)
     ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
-
-
-def setup_simple_project(
-    projects_dir: str,
-    path: str,
-    imports: List[str],
-    *,
-    python_requires: Optional[List[Requirement]] = None,
-    index_urls: Optional[List[str]] = None,
-    github_source: bool = True,
-) -> module.ProjectMetadata:
-    """
-    Set up a simple project that imports the given modules and declares the given Python indexes as module sources.
-    :param projects_dir: The path to the test projects directory. This is used as a source for the initial project frame.
-    :param path: The path to the directory to create the project in.
-    :param imports: The modules to import in the project.
-    :param python_requires: A list of requirements on Python packages to put in requirements.txt.
-    :param index_urls: The urls to any Python indexes to declare as module source.
-    :param github_source: Whether to add the inmanta github as a module source.
-    """
-    index_urls = index_urls if index_urls is not None else []
-    shutil.copytree(os.path.join(projects_dir, "simple_project"), path)
-    metadata: module.ProjectMetadata
-    with open(os.path.join(path, module.Project.PROJECT_FILE), "r+") as fh:
-        metadata = module.ProjectMetadata.parse(fh.read())
-        metadata.repo = [
-            *(module.ModuleRepoInfo(type=module.ModuleRepoType.package, url=index) for index in index_urls),
-            *(
-                [module.ModuleRepoInfo(type=module.ModuleRepoType.git, url="https://github.com/inmanta/")]
-                if github_source
-                else []
-            ),
-        ]
-        fh.seek(0)
-        # use BaseModel.json instead of BaseModel.dict to correctly serialize attributes
-        fh.write(yaml.dump(json.loads(metadata.json())))
-        fh.truncate()
-    with open(os.path.join(path, "main.cf"), "w") as fh:
-        fh.write("\n".join(f"import {module_name}" for module_name in imports))
-    with open(os.path.join(path, "requirements.txt"), "w") as fh:
-        fh.write("\n".join(str(req) for req in python_requires) if python_requires is not None else "")
-    module.Project.set(module.Project(path, autostd=False))
-    return metadata
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -256,12 +204,15 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 @pytest.mark.parametrize_any("editable", [True, False])
 @pytest.mark.parametrize_any("set_path_argument", [True, False])
 def test_module_install(
-    build_venv_active: Tuple[py.path.local, py.path.local], modules_v2_dir: str, editable: bool, set_path_argument: bool
+    snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool
 ) -> None:
     """
     Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
     for its options.
     """
+    # activate snippetcompiler's venv
+    snippetcompiler_clean.setup_for_snippet("")
+
     module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     python_module_name: str = "inmanta-module-minimalv2module"
 
