@@ -173,8 +173,8 @@ class PythonEnvironment:
         try:
             output = subprocess.check_output(cmd, stderr=stderr, env=env)
         except CalledProcessError as e:
-            stderr: str = e.stderr.decode()
-            msg: str = stderr if stderr else e.output.decode()
+            err: str = e.stderr.decode()
+            msg: str = err if err else e.output.decode()
             LOGGER.error("%s: %s", cmd, msg)
             raise
         except Exception:

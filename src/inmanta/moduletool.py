@@ -837,7 +837,7 @@ class ModuleBuildFailedError(Exception):
         return self.msg
 
 
-BUILD_FILE_IGNORE_PATTERN: Pattern = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
+BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
 
 
 class V2ModuleBuilder:
@@ -895,7 +895,7 @@ class V2ModuleBuilder:
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern] = None) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> Set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
 
