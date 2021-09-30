@@ -18,15 +18,14 @@
 
 import logging
 import os
-import py
 import shutil
 import tempfile
-import subprocess
 import unittest
 from importlib.abc import Loader
 from typing import List, Optional, Tuple
 from unittest import mock
 
+import py
 import pytest
 
 from _io import StringIO
@@ -323,6 +322,5 @@ def test_module_v2_incorrect_install_warning(tmpdir: py.path.local, modules_v2_d
     verify_exception(
         "The module at %s contains no model (.cf) files. This occurs when you install or build modules from source"
         " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
-        " modules from source."
-        % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
+        " modules from source." % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )

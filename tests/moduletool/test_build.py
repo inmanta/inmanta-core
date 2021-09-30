@@ -152,7 +152,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
         config_parser.write(fd)
 
     # load the module to make sure pycache files are ignored in the warning
-    source_dir: str = os.path.join(str(tmpdir), "module", "inmanta_plugins", "minimalv2module")
+    source_dir: str = os.path.join(module_copy_dir, "inmanta_plugins", "minimalv2module")
     spec: ModuleSpec = importlib.util.spec_from_file_location(
         "inmanta_plugins.minimalv2module", os.path.join(source_dir, "__init__.py")
     )
@@ -163,6 +163,12 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
             source_dir, "__pycache__", "__init__.cpython-%s.pyc" % "".join(str(digit) for digit in sys.version_info[:2])
         )
     )
+
+    # write some garbage cfcache and pyc files to verify those are ignored as well
+    open(os.path.join(source_dir, "test.pyc"), "w").close()
+    cfcache_dir: str = os.path.join(module_copy_dir, "model", "__cfcache__")
+    os.makedirs(cfcache_dir, exist_ok=True)
+    open(os.path.join(cfcache_dir, "test.cfc"), "w").close()
 
     with caplog.at_level(logging.WARNING):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
