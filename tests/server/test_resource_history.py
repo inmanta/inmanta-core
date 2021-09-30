@@ -17,6 +17,7 @@
 """
 import datetime
 import json
+import uuid
 from collections import defaultdict
 from operator import itemgetter
 from typing import Dict
@@ -472,3 +473,58 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert attribute_hashes(result.result["data"]) == all_resource_ids_in_expected_order
 
     assert result.result["metadata"] == {"total": 5, "before": 0, "after": 0, "page_size": 5}
+
+
+@pytest.mark.asyncio
+async def test_history_not_continuous_versions(server, client, environment):
+    """Test the scenario when there are gaps in the version numbers,
+    but the attributes remain the same. There should be only one item in the history in this case."""
+    # Setup
+    environment = uuid.UUID(environment)
+    cm_times = []
+    for i in range(1, 10):
+        cm_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
+
+    async def create_resource(
+        path: str,
+        status: ResourceState,
+        version: int,
+        attributes: Dict[str, object],
+        agent: str = "internal",
+        resource_type: str = "std::File",
+    ):
+        key = f"{resource_type}[{agent},path={path}]"
+        res = data.Resource.new(
+            environment=environment,
+            resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
+            attributes={**attributes, **{"path": path}},
+            status=status,
+            last_deploy=datetime.datetime.now(),
+        )
+        await res.insert()
+        return res
+
+    # No version 3 and 5
+    versions = [1, 2, 4, 6]
+    for version in versions:
+        await data.ConfigurationModel(
+            environment=environment,
+            version=version,
+            date=cm_times[version],
+            total=1,
+            released=True,
+            version_info={},
+        ).insert()
+        await create_resource(
+            "/tmp/dir1/file1",
+            ResourceState.deployed,
+            version,
+            {
+                "key1": "val1",
+            },
+        )
+
+    result = await client.resource_history(environment, "std::File[internal,path=/tmp/dir1/file1]")
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["attributes"] == {"key1": "val1", "path": "/tmp/dir1/file1"}
