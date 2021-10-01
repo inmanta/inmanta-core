@@ -41,6 +41,6 @@ def test_1480_1767_invalid_repo(snippetcompiler_clean):
         """,
         "Failed to load module std (reported in import std (__internal__:1:1))"
         "\ncaused by:"
-        "\n  Could not find module std. Please make sure to add any module v2 requirements with `inmanta module add` and to"
-        " install all the project's dependencies with `inmanta project install`.",
+        "\n  Could not find module std. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
+        " to install all the project's dependencies with `inmanta project install`.",
     )
