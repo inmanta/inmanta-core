@@ -1747,7 +1747,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if module is None:
             raise ModuleNotFoundException(
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
-                " `inmanta module add` and to install all the project's dependencies with `inmanta project install`."
+                " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
 
         self.modules[module_name] = module
@@ -2301,7 +2301,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
                 raise ModuleMetadataFileNotFound(
                     f"Module at {path} looks like a v2 module. Please add it as a v2 requirement with"
-                    " `inmanta modules add <module_name>`"
+                    " `inmanta module add --v2 <module_name>`"
                 )
             raise
 
@@ -2497,7 +2497,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
-                f"The module at {path} contains no model (.cf) files. This occurs when you install or build modules from source"
+                f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
                 " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
                 " modules from source."
             )

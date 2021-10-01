@@ -82,7 +82,7 @@ class TestModuleName(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             mod_dir: str = os.path.join(tmpdir, "not-the-module-name")
             module_from_template(template_dir, mod_dir)
-            module.ModuleV2(project=mock.Mock(), path=mod_dir)
+            module.ModuleV2(project=module.DummyProject(), path=mod_dir)
             self.handler.flush()
             assert self.stream.getvalue().strip() == ""
 
@@ -281,7 +281,7 @@ def test_module_v2_from_v1_path(local_module_package_index: str, modules_v2_dir:
     assert root_cause is not None
     assert isinstance(root_cause, module.InvalidModuleException)
     assert root_cause.msg == (
-        "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta modules add <module_name>`"
+        "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta module add --v2 <module_name>`"
         % os.path.join(modules_v2_dir, "minimalv2module")
     )
 
@@ -355,7 +355,7 @@ def test_module_v2_incorrect_install_warning(
     shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
     env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
     verify_exception(
-        "The module at %s contains no model (.cf) files. This occurs when you install or build modules from source"
+        "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
         " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
         " modules from source." % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )
