@@ -222,6 +222,7 @@ def test_get_requirements(
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_module_v2_source_get_installed_module_editable(
+    # Use clean snippetcompiler (separate venv) because this test installs test packages into the snippetcompiler venv.
     snippetcompiler_clean,
     modules_v2_dir: str,
     editable: bool,
