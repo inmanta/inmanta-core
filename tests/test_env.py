@@ -495,6 +495,7 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     """
     Test whether the cache on an active env works correctly.
     """
+
     def _assert_install(requirement: str, installed: bool) -> None:
         parsed_requirement = Requirement.parse(requirement)
         for r in [requirement, parsed_requirement]:

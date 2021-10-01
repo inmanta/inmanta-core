@@ -32,7 +32,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
@@ -270,6 +270,9 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         yield fd.name
 
 
+req_list = TypeVar("req_list", List[str], List[Requirement])
+
+
 class ActiveEnv(PythonEnvironment):
     """
     The active Python environment. Method implementations assume this environment is active when they're called.
@@ -297,7 +300,7 @@ class ActiveEnv(PythonEnvironment):
         installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
         return requirement.key in installed_packages and str(installed_packages[requirement.key]) in requirement
 
-    def _remove_already_installed_packages(self, requirements: List[Union[str, Requirement]]) -> List[Union[str, Requirement]]:
+    def _remove_already_installed_packages(self, requirements: Union[req_list]) -> Union[req_list]:
         if not requirements:
             return requirements
         return [r for r in requirements if not self._is_installed(r)]
@@ -520,7 +523,6 @@ process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
 Singleton representing the Python environment this process is running in.
 """
-
 
 class VirtualEnv(ActiveEnv):
     """
