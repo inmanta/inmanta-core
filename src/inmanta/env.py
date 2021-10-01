@@ -32,7 +32,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union, TypeVar
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, TypeVar, Union
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
@@ -523,6 +523,7 @@ process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
 """
 Singleton representing the Python environment this process is running in.
 """
+
 
 class VirtualEnv(ActiveEnv):
     """
