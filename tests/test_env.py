@@ -499,7 +499,7 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     def _assert_install(requirement: str, installed: bool) -> None:
         parsed_requirement = Requirement.parse(requirement)
         for r in [requirement, parsed_requirement]:
-            assert len(tmpvenv_active_inherit._remove_already_installed_packages(requirements=[r])) == (0 if installed else 1)
+            assert tmpvenv_active_inherit._are_installed(requirements=[r]) == installed
 
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
     tmpvenv_active_inherit.install_from_index(

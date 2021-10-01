@@ -161,6 +161,12 @@ class PythonEnvironment:
         """
         return
 
+    def _get_installed_packages_from_working_set(self) -> Dict[str, version.Version]:
+        """
+        Return all installed packages based on `pkg_resources.working_set`.
+        """
+        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
         """
@@ -253,7 +259,7 @@ class PythonEnvironment:
         Returns the content of the constraint file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
-        installed_packages = self.get_installed_packages()
+        installed_packages = self._get_installed_packages_from_working_set()
         inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
         for pkg in inmanta_packages:
             if pkg in installed_packages:
@@ -285,25 +291,16 @@ class ActiveEnv(PythonEnvironment):
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
 
-    def _get_installed_packages_from_working_set(self) -> Dict[str, version.Version]:
-        """
-        Return all installed packages based on `pkg_resources.working_set`.
-        """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
-
-    def _is_installed(self, requirement: Union[str, Requirement]) -> bool:
+    def _are_installed(self, requirements: Union[req_list]) -> bool:
         """
         Return True iff the given requirements are installed in this venv.
         """
-        if isinstance(requirement, str):
-            requirement = Requirement.parse(requirement)
-        installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
-        return requirement.key in installed_packages and str(installed_packages[requirement.key]) in requirement
-
-    def _remove_already_installed_packages(self, requirements: Union[req_list]) -> Union[req_list]:
         if not requirements:
-            return requirements
-        return [r for r in requirements if not self._is_installed(r)]
+            return True
+        if isinstance(requirements[0], str):
+            requirements = [Requirement.parse(r) for r in requirements]
+        installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
+        return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in requirements)
 
     def install_from_index(
         self,
@@ -313,10 +310,8 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
-        if not upgrade:
-            requirements = self._remove_already_installed_packages(requirements)
-            if not requirements:
-                return
+        if not upgrade and self._are_installed(requirements):
+            return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
         finally:
@@ -417,8 +412,7 @@ class ActiveEnv(PythonEnvironment):
         `_gen_content_requirements_file()`, which rewrites the requirements from pep440 format to a format that pip understands.
         This method is maintained for V1 modules only.
         """
-        requirements_list = self._remove_already_installed_packages(requirements_list)
-        if not requirements_list:
+        if self._are_installed(requirements_list):
             return
         try:
             self._install_from_list(requirements_list)
@@ -607,7 +601,7 @@ class VirtualEnv(ActiveEnv):
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
                 """#!/bin/bash
-cd $(dirname "${{BASH_SOURCE[0]}}")
+cd $(dirname "${BASH_SOURCE[0]}")
 source activate
 python -m pip $@
                 """.strip()
