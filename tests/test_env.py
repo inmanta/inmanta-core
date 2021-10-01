@@ -489,3 +489,23 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
     parsed_output = json.loads(result)
     # Ensure inheritance works correctly
     assert "inmanta-core" in [elem["name"] for elem in parsed_output]
+
+
+def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module_package_index: str) -> None:
+    """
+    Test whether the cache on an active env works correctly.
+    """
+    def _assert_install(requirement: str, installed: bool) -> None:
+        parsed_requirement = Requirement.parse(requirement)
+        for r in [requirement, parsed_requirement]:
+            assert len(tmpvenv_active_inherit._remove_already_installed_packages(requirements=[r])) == (0 if installed else 1)
+
+    _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
+    tmpvenv_active_inherit.install_from_index(
+        requirements=[Requirement.parse("inmanta-module-elaboratev2module==1.2.3")],
+        index_urls=[local_module_package_index],
+    )
+    _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=True)
+    _assert_install("inmanta-module-elaboratev2module~=1.2.0", installed=True)
+    _assert_install("inmanta-module-elaboratev2module>1.2.3", installed=False)
+    _assert_install("inmanta-module-elaboratev2module==1.2.4", installed=False)

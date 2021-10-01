@@ -32,7 +32,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
@@ -282,6 +282,26 @@ class ActiveEnv(PythonEnvironment):
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
 
+    def _get_installed_packages_from_working_set(self) -> Dict[str, version.Version]:
+        """
+        Return all installed packages based on `pkg_resources.working_set`.
+        """
+        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+
+    def _is_installed(self, requirement: Union[str, Requirement]) -> bool:
+        """
+        Return True iff the given requirements are installed in this venv.
+        """
+        if isinstance(requirement, str):
+            requirement = Requirement.parse(requirement)
+        installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
+        return requirement.key in installed_packages and str(installed_packages[requirement.key]) in requirement
+
+    def _remove_already_installed_packages(self, requirements: List[Union[str, Requirement]]) -> List[Union[str, Requirement]]:
+        if not requirements:
+            return requirements
+        return [r for r in requirements if not self._is_installed(r)]
+
     def install_from_index(
         self,
         requirements: List[Requirement],
@@ -290,6 +310,9 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
+        requirements = self._remove_already_installed_packages(requirements)
+        if not requirements:
+            return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
         finally:
@@ -390,6 +413,9 @@ class ActiveEnv(PythonEnvironment):
         `_gen_content_requirements_file()`, which rewrites the requirements from pep440 format to a format that pip understands.
         This method is maintained for V1 modules only.
         """
+        requirements_list = self._remove_already_installed_packages(requirements_list)
+        if not requirements_list:
+            return
         try:
             self._install_from_list(requirements_list)
         finally:
