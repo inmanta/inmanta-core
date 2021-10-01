@@ -323,7 +323,7 @@ async def test_log_without_kwargs(server, client, environment):
             {
                 "level": "INFO",
                 "msg": "Setting deployed due to known good status",
-                "timestamp": datetime.datetime.now().astimezone(),
+                "timestamp": datetime.datetime.now(),
                 "args": [],
             }
         ]
