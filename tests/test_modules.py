@@ -34,6 +34,7 @@ from inmanta.ast import CompilerException
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
+from inmanta.moduletool import ModuleTool
 from utils import module_from_template
 
 
@@ -268,13 +269,13 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert source.path_for("std") is None
 
 
-def test_module_v2_from_v1_path(modules_v2_dir: str, snippetcompiler) -> None:
+def test_module_v2_from_v1_path(local_module_package_index: str, modules_v2_dir: str, snippetcompiler_clean) -> None:
     """
     Verify that attempting to load a v2 module from the v1 modules path fails with an appropriate message when a v2 module is
     found in a v1 module source.
     """
     with pytest.raises(module.ModuleLoadingException) as excinfo:
-        snippetcompiler.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
+        snippetcompiler_clean.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
     cause: CompilerException = excinfo.value.__cause__
     root_cause: Optional[BaseException] = cause.__cause__
     assert root_cause is not None
@@ -284,8 +285,38 @@ def test_module_v2_from_v1_path(modules_v2_dir: str, snippetcompiler) -> None:
         % os.path.join(modules_v2_dir, "minimalv2module")
     )
 
+    # verify that proposed solution works
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "",
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        install_project=False,
+    )
+    os.chdir(project.path)
+    project_init = module.Project.__init__
 
-def test_module_v2_incorrect_install_warning(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
+    # patch Project.__init__ to set autostd=False because v2 std does not exist yet
+    def project_init_nostd(self, *args, **kwargs) -> None:
+        project_init(self, *args, autostd=False, **{key: value for key, value in kwargs.items() if key != "autostd"})
+
+    with mock.patch.object(module.Project, "__init__", project_init_nostd):
+        ModuleTool().add("minimalv2module", v2=True)
+    snippetcompiler_clean.setup_for_snippet(
+        "import minimalv2module",
+        autostd=False,
+        # run with the same module path
+        add_to_module_path=[modules_v2_dir],
+        python_package_sources=[local_module_package_index],
+        install_project=True,
+    )
+
+
+def test_module_v2_incorrect_install_warning(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    caplog,
+) -> None:
     """
     Verify that attempting to load a v2 module that has been installed from source with `pip install` rather than
     `inmanta module install` results in an appropriate error or warning.
@@ -297,10 +328,13 @@ def test_module_v2_incorrect_install_warning(tmpdir: py.path.local, modules_v2_d
     module_dir: str = str(tmpdir.join("mymodule"))
     shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
 
-    def verify_exception(expected: str) -> None:
+    def verify_exception(expected: Optional[str]) -> None:
         """
-        Verify compilation fails with the expected message.
+        Verify AST loading fails with the expected message, or succeeds if expected is None.
         """
+        if expected is None:
+            snippetcompiler_clean.setup_for_snippet("import minimalv2module", autostd=False)
+            return
         with pytest.raises(module.ModuleLoadingException) as excinfo:
             snippetcompiler_clean.setup_for_snippet("import minimalv2module", autostd=False)
         cause: CompilerException = excinfo.value.__cause__
@@ -325,3 +359,8 @@ def test_module_v2_incorrect_install_warning(tmpdir: py.path.local, modules_v2_d
         " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
         " modules from source." % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )
+    os.remove(os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module", "setup.cfg"))
+
+    # verify that proposed solution works
+    ModuleTool().install(editable=False, path=module_dir)
+    verify_exception(None)
