@@ -2965,7 +2965,7 @@ class ResourceAction(BaseDocument):
         end: Optional[Any] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
-    ) -> List["ResourceAction"]:
+    ) -> List["m.ResourceLog"]:
         order_by_column = database_order.get_order_by_column_db_name()
         order = database_order.get_order()
         filter_statements, values = cls._get_list_query_pagination_parameters(
@@ -3014,8 +3014,8 @@ class ResourceAction(BaseDocument):
                     timestamp=record["timestamp"],
                     level=message.get("level"),
                     msg=message.get("msg"),
-                    args=message.get("args"),
-                    kwargs=message.get("kwargs"),
+                    args=message.get("args", []),
+                    kwargs=message.get("kwargs", {}),
                 )
             )
         return logs
