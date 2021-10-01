@@ -508,5 +508,6 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     )
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=True)
     _assert_install("inmanta-module-elaboratev2module~=1.2.0", installed=True)
+    _assert_install("inmanta-module-elaboratev2module<1.2.4", installed=True)
     _assert_install("inmanta-module-elaboratev2module>1.2.3", installed=False)
     _assert_install("inmanta-module-elaboratev2module==1.2.4", installed=False)

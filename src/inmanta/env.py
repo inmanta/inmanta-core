@@ -313,9 +313,10 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
-        requirements = self._remove_already_installed_packages(requirements)
-        if not requirements:
-            return
+        if not upgrade:
+            requirements = self._remove_already_installed_packages(requirements)
+            if not requirements:
+                return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
         finally:
