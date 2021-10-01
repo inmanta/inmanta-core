@@ -142,16 +142,18 @@ class PythonEnvironment:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             raise e
 
-    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], *, reinstall: bool = False) -> None:
         """
-        Install one or more packages from source. Any path arguments should be local paths to a package directory.
+        Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
+
+        :param reinstall: reinstall previously installed packages. If not set, packages are not overridden.
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         explicit_paths: Iterator[LocalPackagePath] = (
-            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-            # we're pointing to a local directory.
-            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
+            # make sure we only try to install from a local source: add leading `./` to explicitly tell pip we're pointing to a
+            # local directory.
+            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
             for path in paths
         )
         self._run_command_and_log_output(
@@ -160,6 +162,7 @@ class PythonEnvironment:
                 "-m",
                 "pip",
                 "install",
+                *(["--ignore-installed"] if reinstall else []),
                 *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
             ],
             stderr=subprocess.PIPE,
@@ -199,8 +202,8 @@ class ActiveEnv(PythonEnvironment):
         super().install_from_index(requirements, index_urls, upgrade, allow_pre_releases)
         self.notify_change()
 
-    def install_from_source(self, paths: List[LocalPackagePath]) -> None:
-        super().install_from_source(paths)
+    def install_from_source(self, paths: List[LocalPackagePath], *, reinstall: bool = False) -> None:
+        super().install_from_source(paths, reinstall=reinstall)
         self.notify_change()
 
     @classmethod
