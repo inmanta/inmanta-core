@@ -274,9 +274,8 @@ class ActiveEnv(PythonEnvironment):
             if mod is not None:
                 # Make mypy happy
                 assert mod.__spec__.submodule_search_locations is not None
-                if (
-                    self.site_packages_dir not in mod.__spec__.submodule_search_locations
-                    and os.path.exists(os.path.join(self.site_packages_dir, const.PLUGINS_PACKAGE))
+                if self.site_packages_dir not in mod.__spec__.submodule_search_locations and os.path.exists(
+                    os.path.join(self.site_packages_dir, const.PLUGINS_PACKAGE)
                 ):
                     # A V2 module was installed in this virtual environment, but the inmanta_plugins package was already
                     # loaded before this venv was activated. As such, the site_packages_dir of this virtual environment
