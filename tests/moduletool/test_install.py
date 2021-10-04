@@ -22,14 +22,14 @@ import shutil
 import subprocess
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import py
 import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import env, loader, module
+from inmanta import const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.module import InstallMode, ModuleLoadingException
@@ -253,6 +253,43 @@ def test_module_install_version(
     # check version
     mod: module.Module = ModuleTool().get_module(module_name)
     assert mod.version == module_version
+
+
+@pytest.mark.slowtest
+def test_module_install_reinstall(
+    tmpdir: py.path.local,
+    snippetcompiler_clean,
+    modules_v2_dir,
+) -> None:
+    """
+    Verify that reinstalling a module from source without bumping the version installs any changes to model and Python files.
+    """
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
+
+    # set up simple project and activate snippetcompiler venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    def new_files_exist() -> Iterator[bool]:
+        return (
+            os.path.exists(os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, module_name, rel_path))
+            for rel_path in [os.path.join("model", "newmod.cf"), "newmod.py"]
+        )
+
+    # install module
+    ModuleTool().install(editable=False, path=module_path)
+
+    assert not any(new_files_exist())
+
+    # make some changes to the source and install again
+    model_dir: str = os.path.join(module_path, "model")
+    os.makedirs(model_dir, exist_ok=True)
+    open(os.path.join(model_dir, "newmod.cf"), "w").close()
+    open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
+    ModuleTool().install(editable=False, path=module_path)
+
+    assert all(new_files_exist())
 
 
 @pytest.mark.parametrize_any(
