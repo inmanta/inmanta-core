@@ -291,3 +291,43 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
     environment, _ = env_with_logs
     result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, filter=filter)
     assert result.code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_log_without_kwargs(server, client, environment):
+
+    await data.ConfigurationModel(
+        environment=uuid.UUID(environment),
+        version=1,
+        date=datetime.datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+    ).insert()
+
+    resource_action = data.ResourceAction(
+        environment=uuid.UUID(environment),
+        version=1,
+        resource_version_ids=[
+            "std::File[agent1,path=/tmp/file1.txt],v=1",
+            "std::Directory[agent1,path=/tmp/dir2],v=1",
+        ],
+        action_id=uuid.uuid4(),
+        action=const.ResourceAction.deploy,
+        started=datetime.datetime.now(),
+    )
+    await resource_action.insert()
+
+    resource_action.add_logs(
+        [
+            {
+                "level": "INFO",
+                "msg": "Setting deployed due to known good status",
+                "timestamp": datetime.datetime.now(),
+                "args": [],
+            }
+        ]
+    )
+    await resource_action.save()
+    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
+    assert result.code == 200

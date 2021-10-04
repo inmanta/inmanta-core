@@ -1,0 +1,5 @@
+description: Fixed inmanta module install behavior for module that had already been installed.
+change-type: patch
+issue-nr: 3321
+destination-branches:
+  - master
