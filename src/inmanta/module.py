@@ -544,8 +544,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 return module_root_dir
         raise InvalidModuleException(
             f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
-            " modules from source incorrectly. Always use the `inmanta module` `install` and `build` commands to respectively"
-            " install and build modules from source."
+            " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
+            " respectively install and build modules from source."
         )
 
     @classmethod
@@ -2302,8 +2302,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         except ModuleMetadataFileNotFound:
             if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
                 raise ModuleMetadataFileNotFound(
-                    f"Module at {path} looks like a v2 module. Please add it as a v2 requirement with"
-                    " `inmanta module add --v2 <module_name>`"
+                    f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
+                    " modules."
                 )
             raise
 
@@ -2500,8 +2500,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
-                " modules from source."
+                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
+                " install and build modules from source."
             )
 
     def get_version(self) -> version.Version:

@@ -283,11 +283,11 @@ def test_module_v2_from_v1_path(
         snippetcompiler_clean.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
     cause: CompilerException = excinfo.value.__cause__
     assert cause.msg == (
-        "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta module add --v2 <module_name>`"
+        "Module at %s looks like a v2 module. Please have a look at the documentation on how to use v2 modules."
         % os.path.join(modules_v2_dir, "minimalv2module")
     )
 
-    # verify that proposed solution works
+    # verify that adding it as a v2 resolves the issue
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "",
         autostd=False,
@@ -346,8 +346,8 @@ def test_module_v2_incorrect_install_warning(
     env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
     verify_exception(
         "Invalid module: found module package but it has no setup.cfg. This occurs when you install or build modules from"
-        " source incorrectly. Always use the `inmanta module` `install` and `build` commands to respectively install and build"
-        " modules from source."
+        " source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
+        " install and build modules from source."
     )
 
     # include setup.cfg in package to circumvent error
@@ -355,8 +355,9 @@ def test_module_v2_incorrect_install_warning(
     env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
-        " incorrectly. Always use the `inmanta module` `install and `build` commands to respectively install and build"
-        " modules from source." % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
+        " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively install and"
+        " build modules from source."
+        % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )
     os.remove(os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module", "setup.cfg"))
 
