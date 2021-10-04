@@ -269,7 +269,12 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert source.path_for("std") is None
 
 
-def test_module_v2_from_v1_path(local_module_package_index: str, modules_v2_dir: str, snippetcompiler_clean) -> None:
+def test_module_v2_from_v1_path(
+    local_module_package_index: str,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Verify that attempting to load a v2 module from the v1 modules path fails with an appropriate message when a v2 module is
     found in a v1 module source.
@@ -296,8 +301,8 @@ def test_module_v2_from_v1_path(local_module_package_index: str, modules_v2_dir:
     def project_init_nostd(self, *args, **kwargs) -> None:
         project_init(self, *args, autostd=False, **{key: value for key, value in kwargs.items() if key != "autostd"})
 
-    with mock.patch.object(module.Project, "__init__", project_init_nostd):
-        ModuleTool().add("minimalv2module", v2=True)
+    monkeypatch.setattr(module.Project, "__init__", project_init_nostd)
+    ModuleTool().add("minimalv2module", v2=True)
     snippetcompiler_clean.setup_for_snippet(
         "import minimalv2module",
         autostd=False,
