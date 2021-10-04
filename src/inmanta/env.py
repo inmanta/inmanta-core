@@ -78,6 +78,7 @@ class PipCommandBuilder:
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
+        reinstall: bool = False,
     ) -> List[str]:
         """
         Generate `pip install` command from the given arguments.
@@ -90,6 +91,7 @@ class PipCommandBuilder:
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
+        :param reinstall: Reinstall previously installed packages. If not set, packages are not overridden.
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
@@ -113,6 +115,7 @@ class PipCommandBuilder:
             "-m",
             "pip",
             "install",
+            *(["--ignore-installed"] if reinstall else []),
             *(["--upgrade"] if upgrade else []),
             *(["--pre"] if allow_pre_releases else []),
             *chain.from_iterable(["-c", f] for f in constraints_files),
@@ -223,7 +226,9 @@ class PythonEnvironment:
                     raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
                 raise e
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(
+        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None, *, reinstall: bool = False
+    ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
 
@@ -234,29 +239,9 @@ class PythonEnvironment:
         constraint_files = constraint_files if constraint_files is not None else []
         with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
             cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename]
+                python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename], reinstall=reinstall
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
-
-
-
-        explicit_paths: Iterator[LocalPackagePath] = (
-            # make sure we only try to install from a local source: add leading `./` to explicitly tell pip we're pointing to a
-            # local directory.
-            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
-            for path in paths
-        )
-        self._run_command_and_log_output(
-            [
-                self.python_path,
-                "-m",
-                "pip",
-                "install",
-                *(["--ignore-installed"] if reinstall else []),
-                *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
-            ],
-            stderr=subprocess.PIPE,
-        )
 
     @classmethod
     def _run_command_and_log_output(
@@ -313,16 +298,25 @@ class ActiveEnv(PythonEnvironment):
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
 
+    @classmethod
+    def _get_as_requirements_type(cls, requirements: Union[req_list]) -> List[Requirement]:
+        """
+        Convert requirements from Union[List[str], List[Requirement]] to List[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
     def _are_installed(self, requirements: Union[req_list]) -> bool:
         """
         Return True iff the given requirements are installed in this venv.
         """
         if not requirements:
             return True
-        if isinstance(requirements[0], str):
-            requirements = [Requirement.parse(r) for r in requirements]
+        reqs_as_requirements: List[Requirement] = self._get_as_requirements_type(requirements)
         installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
-        return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in requirements)
+        return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in reqs_as_requirements)
 
     def install_from_index(
         self,
@@ -336,12 +330,6 @@ class ActiveEnv(PythonEnvironment):
             return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
-        finally:
-            self.notify_change()
-
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None, *, reinstall: bool = False) -> None:
-        try:
-            super(ActiveEnv, self).install_from_source(paths, constraint_files)
         finally:
             self.notify_change()
 
@@ -709,10 +697,12 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
             constraint_files,
         )
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(
+        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None, *, reinstall: bool = False
+    ) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_source(paths, constraint_files)
+        super(VirtualEnv, self).install_from_source(paths, constraint_files, reinstall=reinstall)
 
     def install_from_list(self, requirements_list: List[str]) -> None:
         if not self.__using_venv:
