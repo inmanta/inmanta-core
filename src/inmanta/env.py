@@ -279,7 +279,7 @@ class ActiveEnv(PythonEnvironment):
                 ):
                     # A V2 module was installed in this virtual environment, but the inmanta_plugins package was already
                     # loaded before this venv was activated. As such, the site_packages_dir of this virtual environment
-                    # doesn't appear in the submodule_search_locations of the loaded module. Reload the inmanta_plugins package
+                    # doesn't appear in the submodule_search_locations of the loaded package. Reload the inmanta_plugins package
                     # to ensure that all V2 modules installed in this virtual environment are discovered correctly.
                     importlib.reload(mod)
 
