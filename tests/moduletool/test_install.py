@@ -269,8 +269,7 @@ def test_module_install_reinstall(
     shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
 
     # set up simple project and activate snippetcompiler venv
-    project: module.Project = snippetcompiler_clean.setup_for_snippet("")
-    os.chdir(project.path)
+    snippetcompiler_clean.setup_for_snippet("")
 
     def new_files_exist() -> Iterator[bool]:
         return (
