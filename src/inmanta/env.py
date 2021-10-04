@@ -37,6 +37,7 @@ from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
 
+from inmanta import const
 from packaging import version
 
 try:
@@ -256,23 +257,6 @@ class ActiveEnv(PythonEnvironment):
             spec = None
         return (spec.origin, spec.loader) if spec is not None else None
 
-    def init_namespace(self, namespace: str) -> None:
-        """
-        Make sure importer will be able to find the namespace packages for this namespace that will get installed in the
-        process venv. This method needs to be called before the importer caches the search paths, so make sure to call it
-        before calling get_module_file for this namespace.
-
-        :param namespace: The namespace to initialize.
-        """
-        path: str = os.path.join(self.site_packages_dir, namespace)
-        os.makedirs(path, exist_ok=True)
-        spec: Optional[ModuleSpec] = importlib.util.find_spec(namespace)
-        if spec is None or spec.submodule_search_locations is None or path not in spec.submodule_search_locations:
-            raise Exception(
-                "Invalid state: trying to init namespace after it has been loaded. Make sure to call this method before calling"
-                " get_module_file for this namespace."
-            )
-
     def notify_change(self) -> None:
         """
         This method must be called when a package is installed or removed from the environment in order for Python to detect
@@ -284,6 +268,21 @@ class ActiveEnv(PythonEnvironment):
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
         importlib.invalidate_caches()
+
+        if const.PLUGINS_PACKAGE in sys.modules:
+            mod = sys.modules[const.PLUGINS_PACKAGE]
+            if mod is not None:
+                # Make mypy happy
+                assert mod.__spec__.submodule_search_locations is not None
+                if (
+                    self.site_packages_dir not in mod.__spec__.submodule_search_locations
+                    and os.path.exists(os.path.join(self.site_packages_dir, const.PLUGINS_PACKAGE))
+                ):
+                    # A V2 module was installed in this virtual environment, but the inmanta_plugins package was already
+                    # loaded before this venv was activated. As such, the site_packages_dir of this virtual environment
+                    # doesn't appear in the submodule_search_locations of the loaded module. Reload the inmanta_plugins package
+                    # to ensure that all V2 modules installed in this virtual environment are discovered correctly.
+                    importlib.reload(mod)
 
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
