@@ -225,7 +225,9 @@ class PythonEnvironment:
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         """
-        Install one or more packages from source. Any path arguments should be local paths to a package directory.
+        Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
+
+        :param reinstall: reinstall previously installed packages. If not set, packages are not overridden.
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
@@ -235,6 +237,26 @@ class PythonEnvironment:
                 python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename]
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+
+
+
+        explicit_paths: Iterator[LocalPackagePath] = (
+            # make sure we only try to install from a local source: add leading `./` to explicitly tell pip we're pointing to a
+            # local directory.
+            LocalPackagePath(path=os.path.join(".", path.path), editable=path.editable)
+            for path in paths
+        )
+        self._run_command_and_log_output(
+            [
+                self.python_path,
+                "-m",
+                "pip",
+                "install",
+                *(["--ignore-installed"] if reinstall else []),
+                *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in explicit_paths),
+            ],
+            stderr=subprocess.PIPE,
+        )
 
     @classmethod
     def _run_command_and_log_output(
@@ -317,9 +339,17 @@ class ActiveEnv(PythonEnvironment):
         finally:
             self.notify_change()
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None, *, reinstall: bool = False) -> None:
         try:
             super(ActiveEnv, self).install_from_source(paths, constraint_files)
+        finally:
+            self.notify_change()
+
+    def install_from_source(
+        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None, *, reinstall: bool = False
+    ) -> None:
+        try:
+            super().install_from_source(paths, constraint_files, reinstall=reinstall)
         finally:
             self.notify_change()
 
