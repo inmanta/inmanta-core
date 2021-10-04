@@ -277,10 +277,7 @@ def test_module_v2_from_v1_path(local_module_package_index: str, modules_v2_dir:
     with pytest.raises(module.ModuleLoadingException) as excinfo:
         snippetcompiler_clean.setup_for_snippet("import minimalv2module", add_to_module_path=[modules_v2_dir])
     cause: CompilerException = excinfo.value.__cause__
-    root_cause: Optional[BaseException] = cause.__cause__
-    assert root_cause is not None
-    assert isinstance(root_cause, module.InvalidModuleException)
-    assert root_cause.msg == (
+    assert cause.msg == (
         "Module at %s looks like a v2 module. Please add it as a v2 requirement with `inmanta module add --v2 <module_name>`"
         % os.path.join(modules_v2_dir, "minimalv2module")
     )
@@ -338,10 +335,7 @@ def test_module_v2_incorrect_install_warning(
         with pytest.raises(module.ModuleLoadingException) as excinfo:
             snippetcompiler_clean.setup_for_snippet("import minimalv2module", autostd=False)
         cause: CompilerException = excinfo.value.__cause__
-        root_cause: Optional[BaseException] = cause.__cause__
-        assert root_cause is not None
-        assert isinstance(root_cause, module.InvalidModuleException)
-        assert root_cause.msg == expected
+        assert cause.msg == expected
 
     # install module from source without using `inmanta module install`
     env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
