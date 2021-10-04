@@ -613,21 +613,24 @@ python -m pip $@
         Write a sitecustomize.py file to the venv to ensure that an activation of this venv will also activate
         the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of this venv.
         """
-        sys_path_as_python_strings = ['"' + p.replace('"', '\\"') + '"' for p in self._get_sys_path_after_activation()]
+        sys_path_as_python_strings = ['"' + p.replace('"', '\\"') + '"' for p in list(sys.path)]
+        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', '\\"') + '"'
         script = f"""import sys
+import os
 import site
+sys.path = [{', '.join(sys_path_as_python_strings)}]
 previous_sys_path = list(sys.path)
-site_dirs = [{', '.join(sys_path_as_python_strings)}]
-for s in site_dirs:
-    site.addsitedir(s)
+site.addsitedir({site_package_dir_as_python_string})
 # Move the added items to the front of the path
 new_entries_sys_path = [e for e in sys.path if e not in previous_sys_path]
 sys.path = [*new_entries_sys_path, *previous_sys_path]
+# Also set the PYTHONPATH environment variable for any subprocess
+os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 """
         with open(self._path_sitecustomize_py, "w", encoding="utf-8") as fd:
             fd.write(script)
 
-    def _get_sys_path_after_activation(self) -> List[str]:
+    def _update_sys_path(self) -> None:
         """
         Returns the content that sys.path should have after activating this venv.
         """
@@ -636,9 +639,8 @@ sys.path = [*new_entries_sys_path, *previous_sys_path]
         # Move the added items to the front of the path
         new_sys_path = [e for e in list(sys.path) if e not in prev_sys_path]
         new_sys_path.extend(prev_sys_path)
-        # restore sys.path
-        sys.path = prev_sys_path
-        return new_sys_path
+        # Set sys.path
+        sys.path = new_sys_path
 
     def _activate_that(self) -> None:
         # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
@@ -654,7 +656,7 @@ sys.path = [*new_entries_sys_path, *previous_sys_path]
 
         sys.real_prefix = sys.prefix
         sys.prefix = base
-        sys.path = self._get_sys_path_after_activation()
+        self._update_sys_path()
 
         # Also set the python path environment variable for any subprocess
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
