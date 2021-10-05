@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import contextlib
+import enum
 import functools
 import importlib.util
 import json
@@ -60,6 +61,15 @@ class PackageNotFound(Exception):
 class LocalPackagePath:
     path: str
     editable: bool = False
+
+
+class PipListFormat(enum.Enum):
+    """
+    The different output formats that can be passed to the `pip list` command.
+    """
+    columns = "columns"
+    freeze = "freeze"
+    json = "json"
 
 
 class PipCommandBuilder:
@@ -125,6 +135,26 @@ class PipCommandBuilder:
             *index_args,
         ]
 
+    @classmethod
+    def compose_list_command(
+        cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
+    ) -> List[str]:
+        """
+        Generate a `pip list` command for the given arguments.
+
+        :param python_path: The python interpreter to use in the command.
+        :param format: The output format to use.
+        :param only_editable: Whether the output should only contain project installed in editable mode.
+        """
+        return [
+            python_path,
+            "-m",
+            "pip",
+            "list",
+            *(["--format", format.value] if format else []),
+            *(["--editable"] if only_editable else []),
+        ]
+
 
 class PythonEnvironment:
     """
@@ -155,21 +185,6 @@ class PythonEnvironment:
             )
         )
 
-    def is_using_virtual_env(self) -> bool:
-        return True
-
-    def use_virtual_env(self) -> None:
-        """
-        Activate the virtual environment.
-        """
-        return
-
-    def _get_installed_packages_from_working_set(self) -> Dict[str, version.Version]:
-        """
-        Return all installed packages based on `pkg_resources.working_set`.
-        """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
-
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
         """
@@ -189,7 +204,7 @@ class PythonEnvironment:
         :param only_editable: List only packages installed in editable mode.
         :return: A dict with package names as keys and versions as values
         """
-        cmd = [self.python_path, "-m", "pip", "list", "--format", "json", *(["--editable"] if only_editable else [])]
+        cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
         output = self._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 
@@ -260,20 +275,6 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
-    @functools.lru_cache(maxsize=1)
-    def _get_constraint_on_inmanta_package(self) -> str:
-        """
-        Returns the content of the constraint file that should be supplied to each `pip install` invocation
-        to make sure that no Inmanta packages gets overridden.
-        """
-        installed_packages = self._get_installed_packages_from_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in installed_packages:
-                return f"{pkg}=={installed_packages[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
-
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
@@ -298,8 +299,17 @@ class ActiveEnv(PythonEnvironment):
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         super(ActiveEnv, self).__init__(env_path=env_path, python_path=python_path)
 
+    def is_using_virtual_env(self) -> bool:
+        return True
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        return
+
     @classmethod
-    def _get_as_requirements_type(cls, requirements: Union[req_list]) -> List[Requirement]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> List[Requirement]:
         """
         Convert requirements from Union[List[str], List[Requirement]] to List[Requirement]
         """
@@ -308,7 +318,7 @@ class ActiveEnv(PythonEnvironment):
         else:
             return requirements
 
-    def _are_installed(self, requirements: Union[req_list]) -> bool:
+    def _are_installed(self, requirements: req_list) -> bool:
         """
         Return True iff the given requirements are installed in this venv.
         """
@@ -474,9 +484,7 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires()
         )
 
-        installed_versions: Dict[str, version.Version] = {
-            dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set
-        }
+        installed_versions: Dict[str, version.Version] = cls._get_installed_packages_from_working_set()
         constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
             (constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
@@ -518,6 +526,27 @@ class ActiveEnv(PythonEnvironment):
                 "Invalid state: trying to init namespace after it has been loaded. Make sure to call this method before calling"
                 " get_module_file for this namespace."
             )
+
+    @classmethod
+    def _get_installed_packages_from_working_set(cls) -> Dict[str, version.Version]:
+        """
+        Return all installed packages based on `pkg_resources.working_set`.
+        """
+        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+
+    @functools.lru_cache(maxsize=1)
+    def _get_constraint_on_inmanta_package(self) -> str:
+        """
+        Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        to make sure that no Inmanta packages gets overridden.
+        """
+        installed_packages = self._get_installed_packages_from_working_set()
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
+        for pkg in inmanta_packages:
+            if pkg in installed_packages:
+                return f"{pkg}=={installed_packages[pkg]}"
+        # No inmanta product or inmanta-core package installed -> Leave constraint empty
+        return ""
 
     def notify_change(self) -> None:
         """
@@ -650,7 +679,8 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     def _update_sys_path(self) -> None:
         """
-        Returns the content that sys.path should have after activating this venv.
+        Updates sys.path by adding self.site_packages_dir. This method ensures
+        that .pth files are processed.
         """
         prev_sys_path = list(sys.path)
         site.addsitedir(self.site_packages_dir)

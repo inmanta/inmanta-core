@@ -43,6 +43,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.util import ensure_directory_exist
+from inmanta.env import PipCommandBuilder
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
@@ -420,6 +421,11 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert f"{marker_print3} {no_marker}" in out
     assert len(stages) == 4
     assert compile.version is None
+
+    # Ensure that the pip binary created in the venv of the compiler service works correctly
+    pip_binary_path = os.path.join(project_work_dir, ".env", "bin", "pip")
+    output = subprocess.check_output([pip_binary_path, "list", "--format", "json"], encoding="utf-8")
+    assert "inmanta-core" in output
 
 
 @pytest.mark.asyncio
