@@ -660,8 +660,8 @@ python -m pip $@
         Write a sitecustomize.py file to the venv to ensure that an activation of this venv will also activate
         the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of this venv.
         """
-        sys_path_as_python_strings = ['"' + p.replace('"', '\\"') + '"' for p in list(sys.path)]
-        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', '\\"') + '"'
+        sys_path_as_python_strings = ['"' + p.replace('"', r'\"') + '"' for p in list(sys.path)]
+        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', r'\"') + '"'
         script = f"""import sys
 import os
 import site
