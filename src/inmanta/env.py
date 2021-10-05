@@ -33,7 +33,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, TypeVar, Union
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
@@ -654,9 +654,8 @@ class VirtualEnv(ActiveEnv):
 
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
-                """#!/bin/bash
-cd $(dirname "${BASH_SOURCE[0]}")
-source activate
+                """#!/usr/bin/env sh
+source "$(dirname "$0")/activate"
 python -m pip $@
                 """.strip()
             )
