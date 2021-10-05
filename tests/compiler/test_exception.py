@@ -63,7 +63,7 @@ def test_module_error(snippetcompiler):
         f"""Failed to load module badmodule (reported in import badmodule ({snippetcompiler.project_dir}/main.cf:1))
 caused by:
   Metadata file {path_modules_yml_file} does not exist
-        """.strip()
+        """.strip(),
     )
 
 
