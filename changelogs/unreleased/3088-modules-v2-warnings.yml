@@ -1,4 +1,4 @@
-description: Modules v2: added some warnings and improved exception messages
+description: "Modules v2: added some warnings and improved exception messages"
 change-type: patch
 issue-nr: 3088
 destination-branches:
