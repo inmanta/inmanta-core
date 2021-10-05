@@ -57,6 +57,19 @@ class PackageNotFound(Exception):
     pass
 
 
+class PythonWorkingSet:
+    @classmethod
+    def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
+        """
+        Return all packages present in `pkg_resources.working_set` together with the version of the package.
+        """
+        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+
+    @classmethod
+    def rebuild_working_set(cls) -> None:
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+
 @dataclass
 class LocalPackagePath:
     path: str
@@ -67,6 +80,7 @@ class PipListFormat(enum.Enum):
     """
     The different output formats that can be passed to the `pip list` command.
     """
+
     columns = "columns"
     freeze = "freeze"
     json = "json"
@@ -258,6 +272,20 @@ class PythonEnvironment:
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
+    @functools.lru_cache(maxsize=1)
+    def _get_constraint_on_inmanta_package(self) -> str:
+        """
+        Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        to make sure that no Inmanta packages gets overridden.
+        """
+        workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
+        for pkg in inmanta_packages:
+            if pkg in workingset:
+                return f"{pkg}=={workingset[pkg]}"
+        # No inmanta product or inmanta-core package installed -> Leave constraint empty
+        return ""
+
     @classmethod
     def _run_command_and_log_output(
         cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
@@ -325,7 +353,7 @@ class ActiveEnv(PythonEnvironment):
         if not requirements:
             return True
         reqs_as_requirements: List[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = self._get_installed_packages_from_working_set()
+        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in reqs_as_requirements)
 
     def install_from_index(
@@ -484,7 +512,7 @@ class ActiveEnv(PythonEnvironment):
             for requirement in dist_info.requires()
         )
 
-        installed_versions: Dict[str, version.Version] = cls._get_installed_packages_from_working_set()
+        installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
             (constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
@@ -527,34 +555,13 @@ class ActiveEnv(PythonEnvironment):
                 " get_module_file for this namespace."
             )
 
-    @classmethod
-    def _get_installed_packages_from_working_set(cls) -> Dict[str, version.Version]:
-        """
-        Return all installed packages based on `pkg_resources.working_set`.
-        """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
-
-    @functools.lru_cache(maxsize=1)
-    def _get_constraint_on_inmanta_package(self) -> str:
-        """
-        Returns the content of the constraint file that should be supplied to each `pip install` invocation
-        to make sure that no Inmanta packages gets overridden.
-        """
-        installed_packages = self._get_installed_packages_from_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in installed_packages:
-                return f"{pkg}=={installed_packages[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
-
     def notify_change(self) -> None:
         """
         This method must be called when a package is installed or removed from the environment in order for Python to detect
         the change. Namespace packages installed in editable mode in particular require this method to allow them to be found by
         get_module_file().
         """
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        PythonWorkingSet.rebuild_working_set()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
@@ -660,8 +667,8 @@ python -m pip $@
         Write a sitecustomize.py file to the venv to ensure that an activation of this venv will also activate
         the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of this venv.
         """
-        sys_path_as_python_strings = ['"' + p.replace('"', r'\"') + '"' for p in list(sys.path)]
-        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', r'\"') + '"'
+        sys_path_as_python_strings = ['"' + p.replace('"', r"\"") + '"' for p in list(sys.path)]
+        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', r"\"") + '"'
         script = f"""import sys
 import os
 import site

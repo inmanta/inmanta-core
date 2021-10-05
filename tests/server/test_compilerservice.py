@@ -34,6 +34,7 @@ import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
+from inmanta.env import PipCommandBuilder
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -43,7 +44,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.util import ensure_directory_exist
-from inmanta.env import PipCommandBuilder
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
