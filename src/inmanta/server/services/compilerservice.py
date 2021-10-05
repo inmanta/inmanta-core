@@ -23,10 +23,10 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from asyncio.subprocess import Process
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -40,6 +40,7 @@ import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
+from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -77,7 +78,7 @@ class CompileRun(object):
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
         self.stage: Optional[data.Report] = None
-        self._project_dir = project_dir
+        self._project_dir = os.path.abspath(project_dir)
         # When set, used to collect tail of std out
         self.tail_stdout: Optional[str] = None
         self.version: Optional[int] = None
@@ -191,6 +192,7 @@ class CompileRun(object):
     async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
+        sub_process: Optional[Process] = None
         try:
             env_all = os.environ.copy()
             if env is not None:
@@ -209,7 +211,7 @@ class CompileRun(object):
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
         finally:
-            if sub_process.returncode is None:
+            if sub_process and sub_process.returncode is None:
                 # The process is still running, kill it
                 sub_process.kill()
 
@@ -241,25 +243,58 @@ class CompileRun(object):
                 await self._end_stage(-1)
                 return False, None
 
-            inmanta_path = [sys.executable, "-m", "inmanta.app"]
-
             if not os.path.exists(project_dir):
                 await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
                 os.mkdir(project_dir)
 
+            # Use a separate venv to compile the project to prevent that packages are installed in the
+            # venv of the Inmanta server.
+            venv_dir = os.path.join(project_dir, ".env")
+
+            async def ensure_venv() -> Optional[data.Report]:
+                """
+                Ensure a venv is present at `venv_dir`.
+                """
+                virtual_env = VirtualEnv(venv_dir)
+                if virtual_env.exists():
+                    return None
+
+                await self._start_stage("Creating venv", command="")
+                try:
+                    virtual_env.init_env()
+                except VenvCreationFailedError as e:
+                    await self._error(message=e.msg)
+                    return await self._end_stage(returncode=1)
+                else:
+                    return await self._end_stage(returncode=0)
+
             async def update_modules() -> data.Report:
-                LOGGER.info("Updating modules")
-                return await self._run_compile_stage(
-                    "Updating modules", [*inmanta_path, "-vvv", "-X", "modules", "update"], project_dir
-                )
+                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
 
             async def install_modules() -> data.Report:
-                LOGGER.info("Installing modules")
-                return await self._run_compile_stage(
-                    "Installing modules", [*inmanta_path, "-vvv", "-X", "project", "install"], project_dir
+                return await run_compile_stage_in_venv(
+                    "Installing modules", ["-vvv", "-X", "project", "install"], cwd=project_dir
                 )
 
-            async def setup() -> AsyncIterator[Awaitable[data.Report]]:
+            async def run_compile_stage_in_venv(
+                stage_name: str, inmanta_args: List[str], cwd: str, env: Dict[str, str] = {}
+            ) -> data.Report:
+                """
+                Run a compile stage by executing the given command in the venv `venv_dir`.
+
+                :param stage_name: Name of the compile stage.
+                :param inmanta_args: The command to be executed in the venv. This command should not include the part
+                                      ["<python-interpreter>", "-m", "inmanta.app"]
+                :param cwd: The current working directory to be used for the command invocation.
+                :param env: Execute the command with these environment variables.
+                """
+                LOGGER.info(stage_name)
+                python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
+                assert os.path.exists(python_path)
+                full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
+                return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
+
+            async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
@@ -267,6 +302,8 @@ class CompileRun(object):
                 repo_branch: str = env.repo_branch
                 if os.path.exists(os.path.join(project_dir, "project.yml")):
                     yield self._end_stage(0)
+
+                    yield ensure_venv()
 
                     should_update: bool = force_update or self.request.force_update
 
@@ -309,16 +346,17 @@ class CompileRun(object):
                     if repo_branch:
                         cmd.extend(["-b", repo_branch])
                     yield self._run_compile_stage("Cloning repository", cmd, project_dir)
+                    yield ensure_venv()
                     yield install_modules()
 
             async for stage in setup():
-                stage_result: data.Report = await stage
-                if stage_result.returncode is None or stage_result.returncode > 0:
+                stage_result: Optional[data.Report] = await stage
+                if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
-            cmd = inmanta_path + [
+            cmd = [
                 "-vvv",
                 "export",
                 "-X",
@@ -357,8 +395,8 @@ class CompileRun(object):
             env_vars_compile: Dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
-            result: data.Report = await self._run_compile_stage(
-                "Recompiling configuration model", cmd, project_dir, env=env_vars_compile
+            result: data.Report = await run_compile_stage_in_venv(
+                "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
             )
             success = result.returncode == 0
             if not success:
@@ -377,7 +415,7 @@ class CompileRun(object):
             pass
 
         except Exception:
-            LOGGER.exception("An error occured while recompiling")
+            LOGGER.exception("An error occurred while recompiling")
 
         finally:
 

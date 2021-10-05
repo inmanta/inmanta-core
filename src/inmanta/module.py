@@ -1337,7 +1337,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        path: str,
+        autostd: bool = True,
+        main_file: str = "main.cf",
+        venv_path: Optional[str] = None,
+    ) -> None:
         """
         Initialize the project, this includes
          * Loading the project.yaml (into self._metadata)
@@ -1380,11 +1386,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if not os.path.exists(self._metadata.downloadpath):
                 os.mkdir(self._metadata.downloadpath)
 
+        self.virtualenv: env.ActiveEnv
         if venv_path is None:
-            venv_path = os.path.abspath(os.path.join(path, ".env"))
+            self.virtualenv = env.process_env
         else:
             venv_path = os.path.abspath(venv_path)
-        self.virtualenv = env.VirtualEnv(venv_path)
+            self.virtualenv = env.VirtualEnv(venv_path)
+
         self.loaded = False
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
@@ -1478,10 +1486,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param install: Whether to install the project's modules before attempting to load it.
         """
         if not self.loaded:
-            if install:
-                self.install_modules()
             if not self.is_using_virtual_env():
                 self.use_virtual_env()
+            if install:
+                self.install_modules()
             self.get_complete_ast()
             self.loaded = True
             self.verify()
@@ -1724,7 +1732,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             package with the corresponding name.
         """
         if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
+            self.use_virtual_env()
         reqs: Mapping[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         module_reqs: List[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
@@ -1748,11 +1756,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.modules[module_name] = module
         return module
-
-    def install_in_compiler_venv(self, path: str, editable: bool) -> None:
-        if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
-        self.virtualenv.install(path=path, editable=editable)
 
     def load_plugins(self) -> None:
         """
@@ -1810,7 +1813,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         somehow got installed as another generation or with another version as the one that has been loaded into the AST.
 
         When this situation occurs, the compiler state is invalid and the compile needs to either abort or attempt recovery.
-        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regereneration
+        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regeneration
         would be required to recover.
 
         Scenario's that could trigger this state:

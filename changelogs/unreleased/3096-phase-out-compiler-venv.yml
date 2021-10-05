@@ -1,0 +1,8 @@
+---
+description: Phase out the compiler venv
+issue-nr: 3096
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: |
+    "The compiler venv has been phased out. The compiler will now use the venv used to execute the `inmanta compile` command."

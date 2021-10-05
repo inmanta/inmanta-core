@@ -19,7 +19,7 @@ import hashlib
 import inspect
 import os
 import shutil
-from typing import List, Optional, Set
+from typing import List, Set
 
 import py
 import pytest
@@ -35,7 +35,7 @@ def test_code_manager(tmpdir: py.path.local):
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
-    project: Project = Project(project_dir)
+    project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
     Project.set(project)
     project.install_modules()
     project.load()
@@ -218,29 +218,16 @@ def test_venv_path(tmpdir: py.path.local, projects_dir: str):
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
 
-    def load_project(venv_path: Optional[str]) -> None:
-        if venv_path is None:
-            project: Project = Project(project_dir)
-        else:
-            project: Project = Project(project_dir, venv_path=venv_path)
+    def load_project(venv_path: str) -> None:
+        project: Project = Project(project_dir, venv_path=venv_path)
         Project.set(project)
         # don't load full project, only AST so we don't have to deal with module finder cleanup
         project.load_module_recursive(install=True)
 
-    # Use default venv dir
-    default_venv_dir = os.path.join(project_dir, ".env")
-    shutil.rmtree(default_venv_dir, ignore_errors=True)
-    assert not os.path.exists(default_venv_dir)
-    load_project(venv_path=None)
-    assert os.path.exists(default_venv_dir)
-    shutil.rmtree(default_venv_dir)
-
     # Use non-default venv dir
     non_default_venv_dir = os.path.join(project_dir, "non-default-venv-dir")
-    assert not os.path.exists(default_venv_dir)
     assert not os.path.exists(non_default_venv_dir)
     load_project(venv_path=non_default_venv_dir)
-    assert not os.path.exists(default_venv_dir)
     assert os.path.exists(non_default_venv_dir)
     shutil.rmtree(non_default_venv_dir)
 
@@ -323,7 +310,7 @@ install_mode: master
     mod_dir = tmpdir.join("libs", os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
-    project = Project(tmpdir, autostd=False)
+    project = Project(tmpdir, autostd=False, venv_path=os.path.join(tmpdir, ".env"))
     Project.set(project)
     project.load()
 
