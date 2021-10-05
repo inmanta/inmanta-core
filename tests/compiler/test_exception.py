@@ -62,10 +62,8 @@ def test_module_error(snippetcompiler):
         "import badmodule",
         f"""Failed to load module badmodule (reported in import badmodule ({snippetcompiler.project_dir}/main.cf:1))
 caused by:
-  Could not load module badmodule
-  caused by:
-    inmanta.module.ModuleMetadataFileNotFound: Metadata file {path_modules_yml_file} does not exist
-""",
+  Metadata file {path_modules_yml_file} does not exist
+        """.strip(),
     )
 
 

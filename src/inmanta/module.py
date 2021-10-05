@@ -542,7 +542,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             module_root_dir = os.path.normpath(os.path.join(pkg_installation_dir, os.pardir, os.pardir))
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
-        raise InvalidModuleException(f"Invalid module: found plugins package but the module has no {ModuleV2.MODULE_FILE}.")
+        raise InvalidModuleException(
+            f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
+            " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
+            " respectively install and build modules from source."
+        )
 
     @classmethod
     def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> "ModuleV2":
@@ -1745,13 +1749,15 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
+        except InvalidModuleException:
+            raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
         if module is None:
             raise ModuleNotFoundException(
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
-                " `inmanta module add` and to install all the project's dependencies with `inmanta project install`."
+                " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
 
         self.modules[module_name] = module
@@ -2027,13 +2033,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
-        if self.name != os.path.basename(self._path):
-            LOGGER.warning(
-                "The name in the module file (%s) does not match the directory name (%s)",
-                self.name,
-                os.path.basename(self._path),
-            )
-
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
@@ -2303,6 +2302,20 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             super(ModuleV1, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
+        except ModuleMetadataFileNotFound:
+            if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
+                raise ModuleMetadataFileNotFound(
+                    f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
+                    " modules."
+                )
+            raise
+
+        if self.name != os.path.basename(self._path):
+            LOGGER.warning(
+                "The name in the module file (%s) does not match the directory name (%s)",
+                self.name,
+                os.path.basename(self._path),
+            )
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, self.MODULE_FILE)
@@ -2486,6 +2499,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+
+        if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
+            raise InvalidModuleException(
+                f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
+                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
+                " install and build modules from source."
+            )
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()
