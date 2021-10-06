@@ -561,10 +561,28 @@ class ActiveEnv(PythonEnvironment):
                 if self.site_packages_dir not in mod.__spec__.submodule_search_locations and os.path.exists(
                     os.path.join(self.site_packages_dir, const.PLUGINS_PACKAGE)
                 ):
-                    # A V2 module was installed in this virtual environment, but the inmanta_plugins package was already
-                    # loaded before this venv was activated. As such, the site_packages_dir of this virtual environment
-                    # doesn't appear in the submodule_search_locations of the loaded package. Reload the inmanta_plugins package
-                    # to ensure that all V2 modules installed in this virtual environment are discovered correctly.
+                    """
+                    A V2 module was installed in this virtual environment, but the inmanta_plugins package was already
+                    loaded before this venv was activated. Reload the inmanta_plugins package to ensure that all V2 modules
+                    installed in this virtual environment are discovered correctly.
+
+                    This is required to cover the following scenario:
+
+                        * Two venvs are stacked on top of each other. The parent venv contains the inmanta-core package and
+                          the subvenv is empty.
+                        * The inmanta_plugins package gets loaded before a V2 module is installed in the subvenv. This way,
+                          the module object in sys.modules, doesn't have the site dir of the subvenv in its
+                          submodule_search_locations. This field caches where the loader should look for the namespace packages
+                          that are part of the inmanta_plugins namespace.
+                        * When a V2 module gets installed in the subvenv now, the loader will not find the newly installed V2
+                          module, because it's not considering the site dir of the subvenv.
+
+                    The above-mentioned scenario can only be triggered by test cases, because:
+                        1) The compiler venv was removed. As such, no new venv are activated on the fly by production code
+                           paths.
+                        2) The compiler service creates a new subvenv for each inmanta environment, but the inmanta commands
+                           are executed in a subprocess.
+                    """
                     importlib.reload(mod)
 
 
