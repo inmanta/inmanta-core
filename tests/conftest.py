@@ -446,14 +446,22 @@ def reset_all_objects():
     unknown_parameters.clear()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def init_cwd():
+    """
+    Fixture returning the cwd at the beginning of the session.
+    """
+    yield os.getcwd()
+
+
 @pytest.fixture(scope="function", autouse=True)
-def restore_cwd():
+def restore_cwd(init_cwd: str):
     """
-    Restore the current working directory after search test.
+    Restore the current working directory after search test. The cwd should be restore using the init_cwd fixture
+    to prevent that another function scoped fixture overrides the cwd before the initial cwd has been saved.
     """
-    cwd = os.getcwd()
     yield
-    os.chdir(cwd)
+    os.chdir(init_cwd)
 
 
 @pytest.fixture(scope="function")
@@ -899,8 +907,6 @@ class SnippetCompilationTest(KeepOnFail):
         if not self.keep_shared:
             shutil.rmtree(self.libs)
             shutil.rmtree(self.env)
-        # reset cwd
-        os.chdir(self.cwd)
 
     def setup_func(self, module_dir: Optional[str]):
         # init project
@@ -1449,3 +1455,4 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
