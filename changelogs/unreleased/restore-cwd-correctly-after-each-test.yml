@@ -1,4 +1,4 @@
 ---
 description: Ensure that the cwd is restored correctly after each test.
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso4]
