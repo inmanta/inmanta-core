@@ -1455,4 +1455,3 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
-
