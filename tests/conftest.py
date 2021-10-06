@@ -893,6 +893,7 @@ class SnippetCompilationTest(KeepOnFail):
         config.Config.load_config()
         self.cwd = os.getcwd()
         self.keep_shared = False
+        self.project = None
 
     def tearDownClass(self):
         if not self.keep_shared:
@@ -910,6 +911,7 @@ class SnippetCompilationTest(KeepOnFail):
     def tear_down_func(self):
         if not self._keep:
             shutil.rmtree(self.project_dir)
+        self.project = None
 
     def keep(self):
         self._keep = True
@@ -957,14 +959,14 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
     ):
         loader.PluginModuleFinder.reset()
-        project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
-        Project.set(project)
-        project.use_virtual_env()
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
+        Project.set(self.project)
+        self.project.use_virtual_env()
         self._patch_process_env()
-        self._install_v2_modules(project, install_v2_modules)
+        self._install_v2_modules(install_v2_modules)
         if install_project:
-            project.install_modules()
-        return project
+            self.project.install_modules()
+        return self.project
 
     def _patch_process_env(self) -> None:
         """
@@ -973,7 +975,7 @@ class SnippetCompilationTest(KeepOnFail):
         """
         env.process_env.__init__(env_path=self.env)
 
-    def _install_v2_modules(self, project: Project, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+    def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
@@ -982,7 +984,7 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                project.install_in_compiler_venv(path=install_path, editable=mod.editable)
+                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
@@ -1360,7 +1362,7 @@ def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
     active one.
     """
     venv_dir: py.path.local = tmpdir.join(".venv")
-    venv: env.VirtualEnv = env.VirtualEnv(venv_dir)
+    venv: env.VirtualEnv = env.VirtualEnv(str(venv_dir))
     venv.use_virtual_env()
     yield venv
     unload_modules_for_path(venv.site_packages_dir)
@@ -1422,3 +1424,25 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def guard_testing_venv():
+    """
+    Ensure that the tests don't install packages into the venv that runs the tests.
+    """
+    venv = env.PythonEnvironment(python_path=sys.executable)
+    installed_packages_before = venv.get_installed_packages()
+    yield
+    installed_packages_after = venv.get_installed_packages()
+
+    venv_was_altered = False
+    error_message = "The venv running the tests was altered by the tests:\n"
+    all_pkgs = set(list(installed_packages_before.keys()) + list(installed_packages_after.keys()))
+    for pkg in all_pkgs:
+        version_before_tests = installed_packages_before.get(pkg)
+        version_after_tests = installed_packages_after.get(pkg)
+        if version_before_tests != version_after_tests:
+            venv_was_altered = True
+            error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
+    assert not venv_was_altered, error_message

@@ -1189,7 +1189,7 @@ class Agent(SessionEndpoint):
 
         loop = asyncio.get_event_loop()
         for module, module_requires in modules:
-            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
+            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires)
         await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
 
     @protocol.handle(methods.trigger, env="tid", agent="id")

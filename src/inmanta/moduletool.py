@@ -20,6 +20,7 @@ import configparser
 import inspect
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,7 +30,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Union
 
 import texttable
 import yaml
@@ -836,6 +837,9 @@ class ModuleBuildFailedError(Exception):
         return self.msg
 
 
+BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
+
+
 class V2ModuleBuilder:
     def __init__(self, module_path: str) -> None:
         """
@@ -868,9 +872,7 @@ class V2ModuleBuilder:
         """
         rel_path_namespace_package = os.path.join("inmanta_plugins", self._module.name)
         abs_path_namespace_package = os.path.join(build_path, rel_path_namespace_package)
-        files_in_python_package_dir = self._get_files_in_directory(
-            abs_path_namespace_package, ignore={"__pycache__", "__cfcache__"}
-        )
+        files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore=BUILD_FILE_IGNORE_PATTERN)
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
@@ -893,21 +895,28 @@ class V2ModuleBuilder:
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str, ignore: Optional[Set[str]] = None) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> Set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
 
         :param directory: The directory to list the files of.
-        :param ignore: Names of subdirectories to ignore, regardless of their relative depth.
+        :param ignore: Pattern for files and subdirectories to ignore, regardless of their relative depth. The pattern should
+            match the full file or directory names.
         """
+
+        def should_ignore(name: str) -> bool:
+            return ignore is not None and ignore.fullmatch(name) is not None
+
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result: Set[str] = set()
-        ignore = ignore if ignore is not None else set()
         for (dirpath, dirnames, filenames) in os.walk(directory):
-            if os.path.basename(dirpath) in ignore:
+            if should_ignore(os.path.basename(dirpath)):
+                # ignore whole subdirectory
                 continue
-            relative_paths_to_filenames = set(os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames)
+            relative_paths_to_filenames = set(
+                os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames if not should_ignore(f)
+            )
             result = result | relative_paths_to_filenames
         return result
 

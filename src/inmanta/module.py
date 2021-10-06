@@ -541,7 +541,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             module_root_dir = os.path.normpath(os.path.join(pkg_installation_dir, os.pardir, os.pardir))
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
-        raise InvalidModuleException(f"Invalid module: found plugins package but the module has no {ModuleV2.MODULE_FILE}.")
+        raise InvalidModuleException(
+            f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
+            " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
+            " respectively install and build modules from source."
+        )
 
     @classmethod
     def from_path(cls, project: Optional["Project"], module_name: str, path: str) -> "ModuleV2":
@@ -1336,7 +1340,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path: str, autostd: bool = True, main_file: str = "main.cf", venv_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        path: str,
+        autostd: bool = True,
+        main_file: str = "main.cf",
+        venv_path: Optional[str] = None,
+    ) -> None:
         """
         Initialize the project, this includes
          * Loading the project.yaml (into self._metadata)
@@ -1379,11 +1389,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if not os.path.exists(self._metadata.downloadpath):
                 os.mkdir(self._metadata.downloadpath)
 
+        self.virtualenv: env.ActiveEnv
         if venv_path is None:
-            venv_path = os.path.abspath(os.path.join(path, ".env"))
+            self.virtualenv = env.process_env
         else:
             venv_path = os.path.abspath(venv_path)
-        self.virtualenv = env.VirtualEnv(venv_path)
+            self.virtualenv = env.VirtualEnv(venv_path)
+
         self.loaded = False
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
@@ -1477,10 +1489,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param install: Whether to install the project's modules before attempting to load it.
         """
         if not self.loaded:
-            if install:
-                self.install_modules()
             if not self.is_using_virtual_env():
                 self.use_virtual_env()
+            if install:
+                self.install_modules()
             self.get_complete_ast()
             self.loaded = True
             self.verify()
@@ -1723,7 +1735,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             package with the corresponding name.
         """
         if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
+            self.use_virtual_env()
         reqs: Mapping[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         module_reqs: List[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
@@ -1736,22 +1748,19 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
+        except InvalidModuleException:
+            raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
         if module is None:
             raise ModuleNotFoundException(
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
-                " `inmanta module add` and to install all the project's dependencies with `inmanta project install`."
+                " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
 
         self.modules[module_name] = module
         return module
-
-    def install_in_compiler_venv(self, path: str, editable: bool) -> None:
-        if not self.is_using_virtual_env():
-            self.virtualenv.use_virtual_env()
-        self.virtualenv.install(path=path, editable=editable)
 
     def load_plugins(self) -> None:
         """
@@ -1809,7 +1818,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         somehow got installed as another generation or with another version as the one that has been loaded into the AST.
 
         When this situation occurs, the compiler state is invalid and the compile needs to either abort or attempt recovery.
-        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regereneration
+        The modules cache, from which the AST was loaded, is out of date, therefore at least a partial AST regeneration
         would be required to recover.
 
         Scenario's that could trigger this state:
@@ -2022,13 +2031,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if not os.path.exists(path):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
-
-        if self.name != os.path.basename(self._path):
-            LOGGER.warning(
-                "The name in the module file (%s) does not match the directory name (%s)",
-                self.name,
-                os.path.basename(self._path),
-            )
 
         self._project: Optional[Project] = project
         self.ensure_versioned()
@@ -2299,6 +2301,20 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             super(ModuleV1, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
+        except ModuleMetadataFileNotFound:
+            if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
+                raise ModuleMetadataFileNotFound(
+                    f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
+                    " modules."
+                )
+            raise
+
+        if self.name != os.path.basename(self._path):
+            LOGGER.warning(
+                "The name in the module file (%s) does not match the directory name (%s)",
+                self.name,
+                os.path.basename(self._path),
+            )
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, self.MODULE_FILE)
@@ -2482,6 +2498,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
             super(ModuleV2, self).__init__(project, path)
         except InvalidMetadata as e:
             raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+
+        if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
+            raise InvalidModuleException(
+                f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
+                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
+                " install and build modules from source."
+            )
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()
