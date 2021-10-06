@@ -210,6 +210,10 @@ class ModuleMetadataFileNotFound(InvalidModuleException):
     pass
 
 
+class ModuleV2InV1PathException(InvalidModuleException):
+    pass
+
+
 @stable_api
 class InvalidMetadata(CompilerException):
     """
@@ -2304,7 +2308,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             raise InvalidModuleException(f"The module found at {path} is not a valid V1 module") from e
         except ModuleMetadataFileNotFound:
             if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
-                raise ModuleMetadataFileNotFound(
+                raise ModuleV2InV1PathException(
                     f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
                     " modules."
                 )
