@@ -974,7 +974,6 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
@@ -1343,8 +1342,6 @@ def tmpvenv_active(
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
     env.process_env.__init__(python_path=str(python_path))
-    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
-    env.process_env.init_namespace(const.PLUGINS_PACKAGE)
     env.process_env.notify_change()
 
     # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
