@@ -131,6 +131,10 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
+# Save the cwd as early as possible to prevent that it gets overridden by another fixture
+# before it's saved.
+initial_cwd = os.getcwd()
+
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     # register custom markers
@@ -446,22 +450,13 @@ def reset_all_objects():
     unknown_parameters.clear()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def init_cwd():
-    """
-    Fixture returning the cwd at the beginning of the session.
-    """
-    yield os.getcwd()
-
-
 @pytest.fixture(scope="function", autouse=True)
-def restore_cwd(init_cwd: str):
+def restore_cwd():
     """
-    Restore the current working directory after search test. The cwd should be restore using the init_cwd fixture
-    to prevent that another function scoped fixture overrides the cwd before the initial cwd has been saved.
+    Restore the current working directory after search test.
     """
     yield
-    os.chdir(init_cwd)
+    os.chdir(initial_cwd)
 
 
 @pytest.fixture(scope="function")
@@ -899,7 +894,6 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
-        self.cwd = os.getcwd()
         self.keep_shared = False
         self.project = None
 
