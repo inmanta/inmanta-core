@@ -32,9 +32,11 @@ from inmanta.module import Project
 from inmanta.moduletool import ModuleTool
 
 
-def test_code_manager():
+def test_code_manager(tmpdir: py.path.local):
     """Verify the code manager"""
-    project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    project_dir = os.path.join(tmpdir, "plugins_project")
+    shutil.copytree(original_project_dir, project_dir)
     project: Project = Project(project_dir)
     Project.set(project)
     project.load()

@@ -208,6 +208,8 @@ class DBSchema(object):
                     update_function = version.function
                     await update_function(self.connection)
                     await self.set_installed_version(version.version)
+                    # inform asyncpg of the type change so it knows to refresh its caches
+                    await self.connection.reload_schema_state()
                 except Exception:
                     self.logger.exception(
                         "Database schema update for version %d failed. Rolling back all updates.",

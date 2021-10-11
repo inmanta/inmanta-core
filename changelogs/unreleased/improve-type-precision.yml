@@ -1,0 +1,5 @@
+description: Increase typing precision on core
+change-type: patch
+destination-branches:
+  - iso4
+  - master

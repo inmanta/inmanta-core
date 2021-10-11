@@ -92,7 +92,7 @@ class BashIO(IOBase):
     """
 
     def __init__(self, uri, config, run_as=None):
-        # (str, Dict[str, Optional[str]], Optional[str]) -> None
+        # type: (str, Dict[str, Optional[str]], Optional[str]) -> None
         super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
 
@@ -164,7 +164,7 @@ class BashIO(IOBase):
         return data[0]
 
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
-        # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
+        # type: (str, List[str], Optional[Dict[str,str]], Optional[str], Optional[int]) -> Tuple[str, str, int]
         """
         Execute a command with the given argument and return the result
         """
@@ -423,7 +423,7 @@ class LocalIO(IOBase):
             return fd.read()
 
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
-        # type: (str, List[str], Dict[str,str], str, int) -> Tuple[str, str, int]
+        # type: (str, List[str], Optional[Dict[str,str]], Optional[str], Optional[int]) -> Tuple[str, str, int]
         """
         Execute a command with the given argument and return the result
 

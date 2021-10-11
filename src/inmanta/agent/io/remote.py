@@ -35,7 +35,7 @@ class CannotLoginException(Exception):
 
 
 class RemoteException(Exception):
-    def __init__(self, exception_type, msg, traceback=None):
+    def __init__(self, exception_type: str, msg: str, traceback: Optional[str] = None):
         super().__init__(exception_type, msg, traceback)
 
 
@@ -127,7 +127,7 @@ class SshIO(local.IOBase):
 
         return "ssh=%s %s@%s//python=%s" % (opts, self._user, self._host, python)
 
-    def _execute(self, function_name, *args, **kwargs):
+    def _execute(self, function_name: str, *args: object, **kwargs: object) -> object:
         with self._lock:
             try:
                 ch = self._gw.remote_exec(local)
@@ -162,7 +162,7 @@ class SshIO(local.IOBase):
         Proxy a function call to the local version on the other side of the channel.
         """
 
-        def call(*args, **kwargs):
+        def call(*args: object, **kwargs: object) -> object:
             result = self._execute(name, *args, **kwargs)
             return result
 

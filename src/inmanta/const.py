@@ -152,7 +152,7 @@ class AgentTriggerMethod(str, Enum):
     push_full_deploy = "push_full_deploy"
 
     @classmethod
-    def get_agent_trigger_method(cls, is_full_deploy):
+    def get_agent_trigger_method(cls, is_full_deploy: bool) -> "AgentTriggerMethod":
         if is_full_deploy:
             return cls.push_full_deploy
         else:
@@ -160,26 +160,63 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(Enum):
+class LogLevel(str, Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
 
-    CRITICAL = 50
-    ERROR = 40
-    WARNING = 30
-    INFO = 20
-    DEBUG = 10
-    TRACE = 3
-    NOTSET = 0
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    TRACE = "TRACE"
+
+    @property
+    def to_int(self) -> int:
+        return LOG_LEVEL_AS_INTEGER[self]
+
+    def from_int(level: int) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from an integer
+        """
+        return LogLevel(level)
+
+    def from_str(level: str) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from a string
+        """
+        return LogLevel(level)
+
+
+# Mapping each log level to its integer value
+LOG_LEVEL_AS_INTEGER = {
+    LogLevel.CRITICAL: 50,
+    LogLevel.ERROR: 40,
+    LogLevel.WARNING: 30,
+    LogLevel.INFO: 20,
+    LogLevel.DEBUG: 10,
+    LogLevel.TRACE: 3,
+}
+
+
+# The following code registers the integer log levels as values
+# in the LogLevel enum.  It allows to pass them in the constructor
+# as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
+for level, value in LOG_LEVEL_AS_INTEGER.items():
+    LogLevel._value2member_map_[value] = level
 
 
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(Enum):
-    success = 1
-    failed = 2
+class Compilestate(str, Enum):
+    """
+    Compile state, whether the compile did succeed or not
+    """
+
+    success = "success"
+    failed = "failed"
 
 
 EXPORT_META_DATA = "export_metadata"
@@ -218,7 +255,7 @@ EXIT_START_FAILED = 4
 
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
-TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"
+TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
 
 PLUGINS_PACKAGE = "inmanta_plugins"
 

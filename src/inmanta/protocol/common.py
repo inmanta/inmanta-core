@@ -33,6 +33,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    ClassVar,
     Coroutine,
     Dict,
     Generic,
@@ -60,7 +61,7 @@ from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, util
-from inmanta.data.model import BaseModel
+from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
@@ -335,6 +336,13 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
 
 
+class MethodArgumentsBaseModel(pydantic.BaseModel):
+
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+        validator_timezone_aware_timestamps
+    )
+
+
 class MethodProperties(object):
     """
     This class stores the information from a method definition
@@ -449,7 +457,7 @@ class MethodProperties(object):
         """
         sig = inspect.signature(self.function)
 
-        def to_tuple(param: Parameter):
+        def to_tuple(param: Parameter) -> Tuple[object, Optional[object]]:
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -458,7 +466,9 @@ class MethodProperties(object):
                 return (param.annotation, None)
 
         return create_model(
-            f"{self.function.__name__}_arguments", **{param.name: to_tuple(param) for param in sig.parameters.values()}
+            f"{self.function.__name__}_arguments",
+            **{param.name: to_tuple(param) for param in sig.parameters.values()},
+            __base__=MethodArgumentsBaseModel,
         )
 
     def arguments_in_url(self) -> bool:
@@ -526,6 +536,15 @@ class MethodProperties(object):
         :param allow_none_type: If true, allow `None` as the type for this argument
         :param in_url: This argument is passed in the URL
         """
+
+        if typing_inspect.is_new_type(arg_type):
+            return self._validate_type_arg(
+                arg,
+                arg_type.__supertype__,
+                strict=strict,
+                allow_none_type=allow_none_type,
+                in_url=in_url,
+            )
 
         if arg_type is Any:
             if strict:
@@ -745,7 +764,7 @@ class MethodProperties(object):
         url = "/%s/v%d" % (self._api_prefix, self._api_version)
         return url + self._path.generate_path({k: parse.quote(str(v), safe="") for k, v in msg.items()})
 
-    def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
+    def build_call(self, args: List[object], kwargs: Dict[str, object] = {}) -> Request:
         """
         Build a call from the given arguments. This method returns the url, headers, and body for the call.
         """
@@ -864,7 +883,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
         return const.UNKNOWN_STRING
 
     # handle common python types
-    return util.custom_json_encoder(o)
+    return util.api_boundary_json_encoder(o)
 
 
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
@@ -903,7 +922,9 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
-def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
+def encode_token(
+    client_types: List[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
+) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
@@ -921,14 +942,14 @@ def encode_token(client_types: List[str], environment: str = None, idempotent: b
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment
 
-    return jwt.encode(payload, cfg.key, cfg.algo).decode()
+    return jwt.encode(payload, cfg.key, cfg.algo)
 
 
 def decode_token(token: str) -> Dict[str, str]:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, verify=False)
+        payload = jwt.decode(token, options={"verify_signature": False})
     except Exception:
         raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
 
@@ -988,6 +1009,11 @@ class Result(object):
             return self._result
         raise Exception("The result is not yet available")
 
+    @property
+    def result(self) -> Optional[JsonType]:
+        return self.get_result()
+
+    @result.setter
     def set_result(self, value: Optional[JsonType]) -> None:
         if not self.available():
             self._result = value
@@ -1005,11 +1031,6 @@ class Result(object):
         while count < timeout:
             time.sleep(0.1)
             count += 0.1
-
-    result = property(get_result, set_result)
-    """
-    The result object dict.
-    """
 
     def callback(self, fnc: Callable[["Result"], None]) -> None:
         """

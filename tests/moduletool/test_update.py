@@ -24,7 +24,7 @@ from inmanta.moduletool import ModuleTool
 from moduletool.common import add_file, clone_repo
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
     [({}, True, True), ({"module": "mod2"}, True, False), ({"module": "mod8"}, False, True)],
 )
@@ -39,7 +39,6 @@ def test_module_update_with_install_mode_master(
 
     # Set masterproject_multi_mod as current project
     os.chdir(masterproject_multi_mod)
-    os.curdir = masterproject_multi_mod
     Config.load_config()
 
     # Dependencies masterproject_multi_mod

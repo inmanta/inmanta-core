@@ -18,6 +18,8 @@
 from builtins import str
 from typing import Dict, List, Optional, Tuple
 
+from inmanta.types import JsonType
+
 """
     Objects defining the serialization format for type information.
 
@@ -33,11 +35,11 @@ class Location(object):
     :param int lnr: line in the source file
     """
 
-    def __init__(self, file: str, lnr: int):
+    def __init__(self, file: str, lnr: int) -> None:
         self.file = file
         self.lnr = lnr
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -51,7 +53,7 @@ class Location(object):
         return {"file": self.file, "lnr": self.lnr}
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "Location":
         return Location(**ctx)
 
 
@@ -76,7 +78,7 @@ class Attribute(object):
         if comment is None:
             self.comment = ""
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -99,7 +101,7 @@ class Attribute(object):
         }
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> None:
 
         return Attribute(
             mytype=ctx["type"],
@@ -110,7 +112,7 @@ class Attribute(object):
         )
 
     @staticmethod
-    def from_list(lst):
+    def from_list(lst: List[JsonType]) -> Dict[str, "Attribute"]:
         return {n: Attribute.from_dict(x) for n, x in lst.items()}
 
 
@@ -118,11 +120,11 @@ class Value(object):
     """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
-    def from_list(lst):
+    def from_list(lst: List[JsonType]) -> List["Value"]:
         return [Value.from_dict(x) for x in lst]
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "Value":
         if "value" in ctx:
             return DirectValue.from_dict(ctx)
         else:
@@ -135,10 +137,10 @@ class DirectValue(Value):
     :param value: the value itself, as string or number
     """
 
-    def __init__(self, value):
+    def __init__(self, value: Value):
         self.value = value
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -149,7 +151,7 @@ class DirectValue(Value):
         return {"value": self.value}
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "DirectValue":
         return DirectValue(**ctx)
 
 
@@ -164,7 +166,7 @@ class ReferenceValue(Value):
 
         self.reference = reference
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -175,7 +177,7 @@ class ReferenceValue(Value):
         return {"reference": self.reference}
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "ReferenceValue":
         return ReferenceValue(**ctx)
 
 
@@ -215,7 +217,7 @@ class Relation(object):
         if comment is None:
             self.comment = ""
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -242,7 +244,7 @@ class Relation(object):
         }
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "Relation":
         multi = ctx["multi"]
         return Relation(
             ctx["type"],
@@ -255,7 +257,7 @@ class Relation(object):
         )
 
     @staticmethod
-    def from_list(lst):
+    def from_list(lst: JsonType) -> Dict[str, "Relation"]:
         return {n: Relation.from_dict(x) for n, x in lst.items()}
 
 
@@ -277,7 +279,7 @@ class Entity(object):
         self.relations = relations
         self.location = location
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
         Convert to serialized form:
 
@@ -298,7 +300,7 @@ class Entity(object):
         }
 
     @staticmethod
-    def from_dict(ctx):
+    def from_dict(ctx: JsonType) -> "Entity":
         return Entity(
             ctx["parents"],
             Attribute.from_list(ctx["attributes"]),

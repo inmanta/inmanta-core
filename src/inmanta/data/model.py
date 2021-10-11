@@ -17,9 +17,13 @@
 """
 import datetime
 import uuid
-from typing import Any, Dict, List, NewType, Optional, Union
+from enum import Enum
+from itertools import chain
+from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
+import pydantic.schema
+from pydantic.fields import ModelField
 
 import inmanta.ast.export as ast_export
 from inmanta import const
@@ -27,12 +31,44 @@ from inmanta.const import Change, ResourceState
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
+# This reference to the actual pydantic field_type_schema method is only loaded once
+old_field_type_schema = pydantic.schema.field_type_schema
+
+
+def patch_pydantic_field_type_schema() -> None:
+    """
+    This ugly patch fixes the serialization of models containing Optional in them.
+    https://github.com/samuelcolvin/pydantic/issues/1270
+    """
+
+    def patch_nullable(field: ModelField, **kwargs):
+        f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
+        if field.allow_none:
+            f_schema["nullable"] = True
+        return f_schema, definitions, nested_models
+
+    pydantic.schema.field_type_schema = patch_nullable
+
+
+def validator_timezone_aware_timestamps(value: object) -> object:
+    """
+    A Pydantic validator to ensure that all datetime times are timezone aware.
+    """
+    if isinstance(value, datetime.datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
 
 @stable_api
 class BaseModel(pydantic.BaseModel):
     """
     Base class for all data objects in Inmanta
     """
+
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+        validator_timezone_aware_timestamps
+    )
 
     class Config:
         """
@@ -99,7 +135,7 @@ class CompileData(BaseModel):
     """
 
 
-class CompileRun(BaseModel):
+class CompileRunBase(BaseModel):
     id: uuid.UUID
     remote_id: Optional[uuid.UUID]
     environment: uuid.UUID
@@ -111,7 +147,31 @@ class CompileRun(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
+
+class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]
+
+
+class CompileReport(CompileRunBase):
+    completed: Optional[datetime.datetime]
+    success: Optional[bool]
+    version: Optional[int]
+
+
+class CompileRunReport(BaseModel):
+    id: uuid.UUID
+    started: datetime.datetime
+    completed: Optional[datetime.datetime]
+    command: str
+    name: str
+    errstream: str
+    outstream: str
+    returncode: Optional[int]
+
+
+class CompileDetails(CompileReport):
+    compile_data: Optional[CompileData]
+    reports: Optional[List[CompileRunReport]]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
@@ -119,12 +179,10 @@ ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stabl
     The resource id with the version included.
 """
 
-
 ResourceIdStr = NewType("ResourceIdStr", str)  # Part of the stable API
 """
     The resource id without the version
 """
-
 
 ResourceType = NewType("ResourceType", str)
 """
@@ -206,7 +264,6 @@ class EnvironmentSetting(BaseModel):
 
 
 class EnvironmentSettingsReponse(BaseModel):
-
     settings: Dict[str, EnvSettingType]
     definition: Dict[str, EnvironmentSetting]
 
@@ -240,6 +297,7 @@ class Resource(BaseModel):
     resource_id: ResourceVersionIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
+    resource_id_value: str
     agent: str
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
@@ -259,3 +317,110 @@ class ResourceAction(BaseModel):
     changes: Optional[JsonType]
     change: Optional[const.Change]
     send_event: Optional[bool]
+
+
+class LogLine(BaseModel):
+    class Config:
+        """
+        Pydantic config.
+        """
+
+        # Override the setting from the BaseModel class as such that the level field is
+        # serialises using the name of the enum instead of its value. This is required
+        # to make sure that data sent to the API endpoints are serialized consistently using the name of the enum.
+        use_enum_values = False
+
+    level: const.LogLevel
+    msg: str
+    args: List[Optional[ArgumentTypes]] = []
+    kwargs: Dict[str, Optional[ArgumentTypes]] = {}
+    timestamp: datetime.datetime
+
+
+class ResourceIdDetails(BaseModel):
+    resource_type: ResourceType
+    agent: str
+    attribute: str
+    resource_id_value: str
+
+
+class OrphanedResource(str, Enum):
+    orphaned = "orphaned"
+
+
+class StrEnum(str, Enum):
+    """Enum where members are also (and must be) strs"""
+
+
+ReleasedResourceState = StrEnum(
+    "ReleasedResourceState", [(i.name, i.value) for i in chain(const.ResourceState, OrphanedResource)]
+)
+
+
+class LatestReleasedResource(BaseModel):
+    resource_id: ResourceIdStr
+    resource_version_id: ResourceVersionIdStr
+    id_details: ResourceIdDetails
+    requires: List[ResourceVersionIdStr]
+    status: ReleasedResourceState
+
+    @property
+    def all_fields(self) -> Dict[str, Any]:
+        return {**self.dict(), **self.id_details.dict()}
+
+
+class PagingBoundaries:
+    """Represents the lower and upper bounds that should be used for the next and previous pages
+    when listing domain entities"""
+
+    def __init__(
+        self,
+        start: Union[datetime.datetime, int, str],
+        end: Union[datetime.datetime, int, str],
+        first_id: Optional[Union[uuid.UUID, str]],
+        last_id: Optional[Union[uuid.UUID, str]],
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.first_id = first_id
+        self.last_id = last_id
+
+
+class ResourceDetails(BaseModel):
+    """The details of a released resource
+    :param resource_id: The id of the resource
+    :param resource_type: The type of the resource
+    :param agent: The agent associated with this resource
+    :param id_attribute: The name of the identifying attribute of the resource
+    :param id_attribute_value: The value of the identifying attribute of the resource
+    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param first_generated_time: The first time this resource was generated
+    :param first_generated_version: The first model version this resource was in
+    :param status: The current status of the resource
+    :param requires_status: The id and status of the resources this resource requires
+    """
+
+    resource_id: ResourceIdStr
+    resource_type: ResourceType
+    agent: str
+    id_attribute: str
+    id_attribute_value: str
+    last_deploy: Optional[datetime.datetime]
+    first_generated_time: datetime.datetime
+    first_generated_version: int
+    attributes: JsonType
+    status: ReleasedResourceState
+    requires_status: Dict[ResourceIdStr, ReleasedResourceState]
+
+
+class ResourceHistory(BaseModel):
+    resource_id: ResourceIdStr
+    date: datetime.datetime
+    attributes: JsonType
+    attribute_hash: str
+    requires: List[ResourceIdStr]
+
+
+class ResourceLog(LogLine):
+    action_id: uuid.UUID
+    action: const.ResourceAction

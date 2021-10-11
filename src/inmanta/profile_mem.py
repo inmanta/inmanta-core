@@ -19,5 +19,5 @@ import gc
 import sys
 
 
-def total_size():
+def total_size() -> int:
     return sum(sys.getsizeof(x) for x in gc.get_objects())

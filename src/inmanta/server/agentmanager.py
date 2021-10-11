@@ -24,16 +24,17 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 from uuid import UUID
 
 import asyncpg
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT
-from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.data.model import ResourceIdStr
+from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
 from inmanta.resources import Id
 from inmanta.server import (
@@ -123,7 +124,7 @@ class AgentManager(ServerSlice, SessionListener):
     running an agent instance, which might be the primary for a logical agent.
     """
 
-    def __init__(self, closesessionsonstart: bool = True, fact_back_off: int = None) -> None:
+    def __init__(self, closesessionsonstart: bool = True, fact_back_off: Optional[int] = None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
 
         if fact_back_off is None:
@@ -145,7 +146,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
-        self._session_listener_actions: queues.Queue = queues.Queue()
+        self._session_listener_actions: queues.Queue[SessionAction] = queues.Queue()
 
         self.closesessionsonstart: bool = closesessionsonstart
 
@@ -199,7 +200,7 @@ class AgentManager(ServerSlice, SessionListener):
         to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
-    @protocol.handle(methods_v2.all_agents_action, env="tid")
+    @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
         if env.halted:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
@@ -208,7 +209,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             await self._unpause_agent(env)
 
-    @protocol.handle(methods_v2.agent_action, env="tid")
+    @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
         if env.halted:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
@@ -235,7 +236,9 @@ class AgentManager(ServerSlice, SessionListener):
                     del self.tid_endpoint_to_session[key]
                     await live_session.get_client().set_state(agent_name, enabled=False)
                     endpoints_with_new_primary.append((agent_name, None))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
+            await data.Agent.update_primary(
+                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+            )
 
     async def _unpause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -253,7 +256,9 @@ class AgentManager(ServerSlice, SessionListener):
                         self.tid_endpoint_to_session[key] = session
                         await session.get_client().set_state(agent_name, enabled=True)
                         endpoints_with_new_primary.append((agent_name, session.id))
-            await data.Agent.update_primary(env.id, endpoints_with_new_primary, now=datetime.now(), connection=connection)
+            await data.Agent.update_primary(
+                env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
+            )
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -302,7 +307,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.REGISTER_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -315,7 +320,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.EXPIRE_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -328,7 +333,7 @@ class AgentManager(ServerSlice, SessionListener):
             action_type=SessionActionType.SEEN_SESSION,
             session=session,
             endpoint_names_snapshot=endpoint_names_snapshot,
-            timestamp=datetime.now(),
+            timestamp=datetime.now().astimezone(),
         )
         await self._session_listener_actions.put(session_action)
 
@@ -361,7 +366,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Note: This method call is allowed to fail when the database connection is lost.
         """
-        now = datetime.now()
+        now = datetime.now().astimezone()
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
                 await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
@@ -455,8 +460,8 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.debug("Cleaning server session DB")
             async with data.AgentProcess.get_connection() as connection:
                 async with connection.transaction():
-                    await data.AgentProcess.expire_all(now=datetime.now(), connection=connection)
-                    await data.AgentInstance.expire_all(now=datetime.now(), connection=connection)
+                    await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
+                    await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
@@ -621,20 +626,20 @@ class AgentManager(ServerSlice, SessionListener):
         key = (env.id, nodename)
         session = self.tid_endpoint_to_session.get(key)
         if session:
-            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now())
+            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now().astimezone())
 
         return saved
 
     # External APIS
-    @protocol.handle(methods.get_agent_process, agent_sid="id")
+    @handle(methods.get_agent_process, agent_sid="id")
     async def get_agent_process(self, agent_sid: uuid.UUID) -> Apireturn:
         return await self.get_agent_process_report(agent_sid)
 
-    @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
+    @handle(methods.trigger_agent, agent_id="id", env="tid")
     async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
         raise NotImplementedError()
 
-    @protocol.handle(methods.list_agent_processes)
+    @handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
         environment: Optional[UUID],
@@ -691,7 +696,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return 200, {"processes": processes}
 
-    @protocol.handle(methods.list_agents, env="tid")
+    @handle(methods.list_agents, env="tid")
     async def list_agents(
         self,
         env: Optional[data.Environment],
@@ -729,9 +734,9 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec="microseconds")}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
 
-    @protocol.handle(methods.get_state, env="tid")
+    @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
         tid: UUID = env.id
         if isinstance(tid, str):
@@ -754,7 +759,7 @@ class AgentManager(ServerSlice, SessionListener):
         result = await client.get_status()
         return result.code, result.get_result()
 
-    async def request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+    async def request_parameter(self, env_id: uuid.UUID, resource_id: ResourceIdStr) -> Apireturn:
         """
         Request the value of a parameter from an agent
         """
@@ -807,7 +812,7 @@ class AutostartedAgentManager(ServerSlice):
     are managed by `:py:class:AgentManager`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
         self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
@@ -906,7 +911,7 @@ class AutostartedAgentManager(ServerSlice):
             raise ShutdownInProgress()
 
         agent_map: Dict[str, str]
-        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))  # we know the type of this map
 
         # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
         # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
@@ -947,7 +952,7 @@ class AutostartedAgentManager(ServerSlice):
         Note: Always call under agent_lock
         """
         agent_map: Dict[str, str]
-        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))
         config: str
         config = await self._make_agent_config(env, agents, agent_map)
 
@@ -1006,11 +1011,11 @@ class AutostartedAgentManager(ServerSlice):
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
-        agent_deploy_splay: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
-        agent_deploy_interval: int = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+        agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME))
+        agent_deploy_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL))
 
-        agent_repair_splay: int = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
-        agent_repair_interval: int = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+        agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME))
+        agent_repair_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL))
 
         # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
         if "internal" not in agent_names:

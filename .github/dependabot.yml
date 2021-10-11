@@ -12,6 +12,3 @@ updates:
       # Conflict with tox
     - dependency-name: "importlib-metadata"
       versions: [">=3"]
-      # Breaking change
-    - dependency-name: "pyjwt"
-      versions: [">=2"]

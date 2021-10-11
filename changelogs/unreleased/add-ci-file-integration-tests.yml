@@ -1,0 +1,6 @@
+---
+description: Added .ci file to run integration tests.
+issue-nr: 133
+issue-repo: infra-tickets
+change-type: patch
+destination-branches: [master, iso3, iso4]

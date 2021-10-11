@@ -1,10 +1,9 @@
 .. _moddev-module:
 
-Module Developers Guide
+Understanding Modules
 ========================
 In inmanta all orchestration model code and related files, templates, plugins and resource handlers
 are packaged in a module.
-
 
 Module layout
 -------------
@@ -90,59 +89,6 @@ A module can also indicate a minimal compiler version with the ``compiler_versio
 
 ``source`` indicates the authoritative repository where the module is maintained.
 
-To automatically freeze all versions to the currently checked out versions
-
-.. code-block:: bash
-
-	inmanta module freeze --recursive --operator ==
-
-
-Or for the the current project
-
-.. code-block:: bash
-
-	inmanta project freeze --recursive --operator ==
-
-
-For more information about the ``module.yml`` file see :ref:`module_yml`.
-
-Versioning
-----------
-Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file and in the
-commit is should be tagged in the git repository as well. To ease the use inmanta provides a command (``inmanta modules
-commit``) to modify module versions, commit to git and place the correct tag.
-
-To make changes to a module, first create a new git branch::
-
-    git checkout -b mywork
-
-When done, first use git to add files::
-
-    git add *
-
-To commit, use the module tool. This will create a new dev release.::
-
-    inmanta module commit -m "First commit"
-
-For the dev releases, no tags are created by default. If a tag is required for a dev release, use the --tag option.::
-
-    inmanta module commit -m "First commit" --tag
-
-To make an actual release. It will automatically set the right tags on the module::
-
-    inmanta module commit -r -m "First Release"
-
-If a release shouldn't be tagged, the --no-tag option should be specified::
-
-    inmanta module commit -r -m "First Release" --no-tag
-
-To set a specific version::
-
-    inmanta module commit -r -m "First Release" -v 1.0.1
-
-The module tool also support semantic versioning instead of setting versions directly. Use one
-of ``--major``, ``--minor`` or ``--patch`` to update version numbers: <major>.<minor>.<patch>
-
 
 Extending Inmanta
 -----------------
@@ -175,7 +121,4 @@ The format for requires in requirements.txt is the folllowing:
  * Either, the name of the module and an optional constraint
  * Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
    to use is then: eggname@git+https://../repository#branch with branch being optional.
-
-.. include:: modules/plugins.rst
-.. include:: modules/handler.rst
 

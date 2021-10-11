@@ -36,6 +36,8 @@ from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, S
 from inmanta.server.protocol import Session
 from utils import UNKWN, assert_equal_ish, retry_limited
 
+LOGGER = logging.getLogger(__name__)
+
 
 class Collector(object):
     def __init__(self):
@@ -288,7 +290,7 @@ async def test_api(init_dataclasses_and_load_schema):
     assert len(all_agents_processes["processes"]) == 5
 
     # Making fifth session expire
-    expiration = datetime.datetime.now()
+    expiration = datetime.datetime.now().astimezone()
     await am._expire_session(ts5, set(ts5.endpoint_names), expiration)
 
     await futures.proccess()
@@ -815,21 +817,68 @@ async def test_agent_actions(server, client, async_finalizer):
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
     async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
-        for (env_id, agent_name), paused in expected_statuses.items():
-            # Check in-memory session state
-            live_session_found = (env_id, agent_name) in agent_manager.tid_endpoint_to_session
-            assert live_session_found != paused
-            # Check database state
-            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
-            assert agent_from_db.paused == paused
-            assert (agent_from_db.primary is None) == paused
-            if not paused:
-                live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
-                agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
-                assert agent_instance is not None
-                assert agent_instance.process == live_session.id
-            # Check agent state
-            assert env_to_agent_map[env_id]._instances[agent_name].is_enabled() != paused
+        async def _does_expected_status_match_actual_status() -> bool:
+            for (env_id, agent_name), paused in expected_statuses.items():
+                # Check in-memory session state
+                live_session_found = (env_id, agent_name) in agent_manager.tid_endpoint_to_session
+                if live_session_found == paused:
+                    LOGGER.info(
+                        "live_session_found=%s for agent %s in environment %s, while expected paused state is %s",
+                        live_session_found,
+                        agent_name,
+                        env_id,
+                        paused,
+                    )
+                    return False
+                # Check database state
+                agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+                if agent_from_db.paused != paused:
+                    LOGGER.info(
+                        "Agent paused state in database is %s for agent %s in environment %s while %s was expected",
+                        agent_from_db.paused,
+                        agent_name,
+                        env_id,
+                        paused,
+                    )
+                    return False
+                if (agent_from_db.primary is None) != paused:
+                    LOGGER.info(
+                        "Agent %s in environment %s has primary %s, while paused state is expected to be %s",
+                        agent_name,
+                        env_id,
+                        agent_from_db.primary,
+                        paused,
+                    )
+                    return False
+                if not paused:
+                    live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
+                    agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
+                    if agent_instance is None:
+                        LOGGER.info("Agent %s in environment %s is not paused, but no AgentInstance exists", agent_name, env_id)
+                        return False
+                    if agent_instance.process != live_session.id:
+                        LOGGER.info(
+                            "ID of live session %s doesn't match the ID on the AgentInstance %s for agent %s in environment %s",
+                            live_session.id,
+                            agent_instance.process,
+                            agent_name,
+                            env_id,
+                        )
+                        return False
+                # Check agent state
+                if env_to_agent_map[env_id]._instances[agent_name].is_enabled() == paused:
+                    LOGGER.info(
+                        "Agent %s in environment %s has enabled state %s (expected %s)",
+                        agent_name,
+                        env_id,
+                        env_to_agent_map[env_id]._instances[agent_name].is_enabled(),
+                        not paused,
+                    )
+                    return False
+            return True
+
+        # It may take some time until the in-memory and in-database session state converges.
+        await retry_limited(_does_expected_status_match_actual_status, timeout=10)
 
     await assert_agents_paused(
         expected_statuses={(env1_id, "agent1"): False, (env1_id, "agent2"): False, (env2_id, "agent1"): False}

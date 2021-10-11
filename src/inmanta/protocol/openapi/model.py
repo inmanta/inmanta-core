@@ -21,7 +21,6 @@ https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md
 Inspired by FastAPI:
 https://github.com/tiangolo/fastapi
 """
-
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
 
@@ -51,13 +50,14 @@ class Reference(BaseModel):
     ref: str = Field(..., alias="$ref")
 
 
-class SchemaBase(BaseModel):
+class Schema(BaseModel):
     ref: Optional[str] = Field(None, alias="$ref")
     title: Optional[str] = None
     required: Optional[List[str]] = None
     type: Optional[str] = None
-    items: Optional[Any] = None
-    properties: Optional[Dict[str, Any]] = None
+    items: Optional["Schema"] = None
+    properties: Optional[Dict[str, "Schema"]] = None
+    additionalProperties: Optional[Union["Schema", bool]] = None
     description: Optional[str] = None
     format: Optional[str] = None
     default: Optional[Any] = None
@@ -65,17 +65,77 @@ class SchemaBase(BaseModel):
     readOnly: Optional[bool] = None
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
-    anyOf: Optional[Sequence["SchemaBase"]] = None
+    anyOf: Optional[Sequence["Schema"]] = None
     enum: Optional[List[str]] = None
 
+    def resolve(self, ref_prefix: str, known_schemas: Dict[str, "Schema"]) -> "Schema":
+        """
+        Returns this object or the one this object is refering to.
 
-SchemaBase.update_forward_refs()
+        :param ref_prefix: The prefix this object ref should have if it is only a reference
+        :param known_schemas: A dict of known schemas, the keys are the reference diminished from their prefix
+
+        :raises ValueError: If the schema has a badly formed ref
+        """
+        if not self.ref:
+            return self
+
+        if not self.ref.startswith(ref_prefix):
+            raise ValueError(f"Schema reference (={self.ref}) doesn't start with the expected prefix: '{ref_prefix}'")
+
+        reference = self.ref[len(ref_prefix) :]
+        return known_schemas[reference]
+
+    def recursive_resolve(
+        self, ref_prefix: str, known_schemas: Dict[str, "Schema"], update: Dict[str, Any], deep: bool = True
+    ) -> "Schema":
+        """
+        Returns this object of the one this object is refering to, and resolve all the nested schema it contains.
+
+        :param ref_prefix: The prefix this object ref should have if it is only a reference
+        :param known_schemas: A dict of known schemas, the keys are the reference diminished from their prefix
+        :param update: values to change/add in the new model.
+            Note: the data is not validated before creating the new model: you should trust this data
+            Note: this update is applied to every schema we resolve
+            Note: this is passed directly to BaseModel.copy method
+        :param deep: Whether to perform a deepcopy of the object
+
+        :raises ValueError: If the schema has a badly formed ref
+        """
+
+        # Get this schema if it is not a ref, or a new schema pointed to by the ref
+        schema = self.resolve(ref_prefix, known_schemas)
+
+        # We only do a deepcopy if the parameter says so AND this object has not been newly built
+        deep = deep and schema is not self
+
+        # Duplicate the schema, and update some of its values
+        duplicate = schema.copy(update=update, deep=deep)
+
+        # We copy and resolve the list of schema
+        if duplicate.anyOf is not None:
+            duplicate.anyOf = [s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.anyOf]
+
+        # We copy and resolve the items if we have any
+        if duplicate.items is not None:
+            duplicate.items = duplicate.items.recursive_resolve(ref_prefix, known_schemas, update, deep=False)
+
+        # We copy and resolve the properties if we have any
+        if duplicate.properties is not None:
+            duplicate.properties = {
+                k: s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for k, s in duplicate.properties.items()
+            }
+
+        # We copy and resolve the additionalProperties if we have any
+        if duplicate.additionalProperties is not None and not isinstance(duplicate.additionalProperties, bool):
+            duplicate.additionalProperties = duplicate.additionalProperties.recursive_resolve(
+                ref_prefix, known_schemas, update, deep=False
+            )
+
+        return duplicate
 
 
-class Schema(SchemaBase):
-    items: Optional[SchemaBase] = None
-    properties: Optional[Dict[str, SchemaBase]] = None
-    additionalProperties: Optional[Union[SchemaBase, bool]] = None
+Schema.update_forward_refs()
 
 
 class Example(BaseModel):
@@ -167,7 +227,7 @@ class PathItem(BaseModel):
 
 
 class Components(BaseModel):
-    schemas: Optional[Dict[str, Union[Schema, Reference]]] = None
+    schemas: Optional[Dict[str, Schema]] = None
     responses: Optional[Dict[str, Union[Response, Reference]]] = None
     parameters: Optional[Dict[str, Union[Parameter, Reference]]] = None
     examples: Optional[Dict[str, Union[Example, Reference]]] = None

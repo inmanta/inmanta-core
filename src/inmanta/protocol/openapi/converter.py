@@ -17,19 +17,17 @@
 """
 import inspect
 import json
-import typing
-import uuid
-from datetime import datetime
-from enum import Enum
+import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
-import typing_inspect  # type: ignore
-from pydantic.main import BaseModel
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
+from pydantic.typing import NoneType
+from typing_inspect import get_args, get_origin, is_generic_type
 
-from inmanta import types, util
-from inmanta.protocol.common import ArgOption, MethodProperties, UrlMethod
+from inmanta import util
+from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
+from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
     Header,
@@ -44,7 +42,6 @@ from inmanta.protocol.openapi.model import (
     RequestBody,
     Response,
     Schema,
-    SchemaBase,
     Server,
 )
 from inmanta.server import config
@@ -52,10 +49,10 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o) -> Union[ReturnTypes, util.JSONSerializable]:
+def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
-    return util.custom_json_encoder(o)
+    return util.api_boundary_json_encoder(o)
 
 
 class OpenApiConverter:
@@ -155,83 +152,54 @@ class OpenApiTypeConverter:
     Lookup for OpenAPI types corresponding to python types
     """
 
-    components = Components(schemas={})
+    def __init__(self) -> None:
+        self.components = Components(schemas={})
+        self.ref_prefix = "#/components/schemas/"
+        self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
 
-    python_to_openapi_types = {
-        bool: Schema(type="boolean"),
-        int: Schema(type="integer"),
-        str: Schema(type="string"),
-        tuple: Schema(type="array", items=Schema()),
-        list: Schema(type="array", items=Schema()),
-        dict: Schema(type="object"),
-        float: Schema(type="number", format="float"),
-        bytes: Schema(type="string", format="binary"),
-        datetime: Schema(type="string", format="date-time"),
-        uuid.UUID: Schema(type="string", format="uuid"),
-        typing.Any: Schema(),
-        types.StrictNonIntBool: Schema(type="boolean"),
-    }
+        # Applying some monkey patching to pydantic
+        patch_pydantic_field_type_schema()
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         type_annotation = parameter_type.annotation
         return self.get_openapi_type(type_annotation)
 
-    def _is_none_type(self, type_annotation: Type) -> bool:
-        return inspect.isclass(type_annotation) and issubclass(type_annotation, type(None))
-
-    def _handle_union_type(self, type_annotation: Type) -> Schema:
-        # An Optional is always a Union
-        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        openapi_types = [self.get_openapi_type(type_arg) for type_arg in type_args if not self._is_none_type(type_arg)]
-        none_type_in_type_args = len(openapi_types) < len(type_args)
-        if none_type_in_type_args:
-            if len(openapi_types) == 1:
-                openapi_type = openapi_types[0].copy(deep=True)
-                # An Optional in the OpenAPI Schema is nullable
-                openapi_type.nullable = True
-                return openapi_type
-            return Schema(anyOf=openapi_types, nullable=True)
-        # A Union type can be expressed as a schema that matches any of the type arguments
-        return Schema(anyOf=openapi_types)
-
-    def _handle_dictionary(self, type_annotation: Type) -> Schema:
-        type_args = typing_inspect.get_args(type_annotation, evaluate=True)
-        return Schema(type="object", additionalProperties=self.get_openapi_type(type_args[1]))
-
-    def _handle_pydantic_model(self, type_annotation: Type) -> Schema:
+    def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
         # but OpenAPI requires them to be placed at "#/components/schemas/"
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=True, ref_prefix="#/components/schemas/")
+        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
         if "definitions" in schema.keys():
-            definitions = schema.pop("definitions")
+            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
             if self.components.schemas is not None:
-                self.components.schemas.update(definitions)
+                for key, definition in definitions.items():
+                    self.components.schemas[key] = Schema(**definition)
         return Schema(**schema)
 
-    def _handle_enums(self, type_annotation: Type) -> Schema:
-        enum_keys = [name for name in type_annotation.__members__.keys()]
-        return Schema(type="string", enum=enum_keys)
-
-    def _handle_list(self, type_annotation: Type) -> Schema:
-        # Type argument is always present, see protocol.common.MethodProperties._validate_type_arg()
-        list_member_type = typing_inspect.get_args(type_annotation, evaluate=True)
-        return Schema(type="array", items=self.get_openapi_type(list_member_type[0]))
-
     def get_openapi_type(self, type_annotation: Type) -> Schema:
-        type_origin = typing_inspect.get_origin(type_annotation)
-        if typing_inspect.is_union_type(type_annotation):
-            return self._handle_union_type(type_annotation)
-        elif inspect.isclass(type_annotation) and issubclass(type_annotation, BaseModel):
-            return self._handle_pydantic_model(type_annotation)
-        elif inspect.isclass(type_annotation) and issubclass(type_annotation, Enum):
-            return self._handle_enums(type_annotation)
-        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Mapping):
-            return self._handle_dictionary(type_annotation)
-        elif inspect.isclass(type_origin) and issubclass(type_origin, typing.Sequence):
-            return self._handle_list(type_annotation)
-        # Fallback to primitive types
-        return self.python_to_openapi_types.get(type_annotation, Schema(type="object"))
+        class Sub(BaseModel):
+            the_field: type_annotation
+
+            class Config:
+                arbitrary_types_allowed = True
+
+        pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
+        pydantic_result.title = None
+        return pydantic_result
+
+    def resolve_reference(self, reference: str) -> Optional[Schema]:
+        """
+        Get a schema from its reference, if this schema exists.  If it doesn't exist, None is
+        returned instead.
+
+        :param reference: The reference to the schema
+        """
+        ref_match = self.ref_regex.match(reference)
+        if not ref_match:
+            return None
+
+        ref_key = ref_match.group(1)
+        return self.components.schemas[ref_key]
 
 
 class ArgOptionHandler:
@@ -239,7 +207,7 @@ class ArgOptionHandler:
     Extracts header, response header and path parameter information from ArgOptions
     """
 
-    def __init__(self, type_converter: OpenApiTypeConverter):
+    def __init__(self, type_converter: OpenApiTypeConverter) -> None:
         self.type_converter = type_converter
 
     def extract_parameters_from_arg_options(
@@ -444,10 +412,49 @@ class OperationHandler:
 
     def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[Dict[str, MediaType]]:
         return_type = inspect.signature(url_method_properties.function).return_annotation
-        if return_type is not None and return_type != inspect.Signature.empty:
-            return_properties: Optional[Dict[str, SchemaBase]] = None
+
+        if return_type is None or return_type == inspect.Signature.empty:
+            return None
+
+        return_properties: Optional[Dict[str, Schema]] = None
+
+        if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
+            # Dealing with the special case of ReturnValue[...]
+            links_type = self.type_converter.get_openapi_type(Dict[str, str])
+            links_type.title = "Links"
+            links_type.nullable = True
+
+            warnings_type = self.type_converter.get_openapi_type(List[str])
+            warnings_type.title = "Warnings"
+
+            return_properties = {
+                "links": links_type,
+                "metadata": Schema(
+                    title="Metadata",
+                    nullable=True,
+                    type="object",
+                    properties={
+                        "warnings": warnings_type,
+                    },
+                ),
+            }
+
+            type_args = get_args(return_type, evaluate=True)
+            if not type_args or len(type_args) != 1:
+                raise RuntimeError(
+                    "ReturnValue definition should take one type Argument, e.g. ReturnValue[None].  "
+                    f"Got this instead: {type_args}"
+                )
+
+            if not url_method_properties.envelope:
+                raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
+
+            if type_args[0] != NoneType:
+                return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
+
+        else:
             openapi_return_type = self.type_converter.get_openapi_type(return_type)
             if url_method_properties.envelope:
                 return_properties = {url_method_properties.envelope_key: openapi_return_type}
-            return {"application/json": MediaType(schema=Schema(type="object", properties=return_properties))}
-        return None
+
+        return {"application/json": MediaType(schema=Schema(type="object", properties=return_properties))}

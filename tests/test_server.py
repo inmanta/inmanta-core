@@ -27,7 +27,7 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data, loader, resources
+from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
@@ -600,8 +600,6 @@ async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
-    config.Config.set("compiler_rest_transport", "request_timeout", "1")
-
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test", os=std::linux)
@@ -762,7 +760,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
     # Start the deploy
     action_id = uuid.uuid4()
-    now = datetime.now()
+    now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
         environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
     )

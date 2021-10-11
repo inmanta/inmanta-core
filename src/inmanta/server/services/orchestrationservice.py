@@ -27,7 +27,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.protocol import methods, methods_v2
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import attach_warnings
 from inmanta.protocol.exceptions import BadRequest, ServerError
 from inmanta.resources import Id
@@ -94,7 +94,7 @@ class OrchestrationService(protocol.ServerSlice):
                 for v in delete_list:
                     await version_dict[v].delete_cascade()
 
-    @protocol.handle(methods.list_versions, env="tid")
+    @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
@@ -118,7 +118,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.get_version, version_id="id", env="tid")
+    @handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
         self,
         env: data.Environment,
@@ -165,8 +165,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.delete_version, version_id="id", env="tid")
-    async def delete_version(self, env, version_id):
+    @handle(methods.delete_version, version_id="id", env="tid")
+    async def delete_version(self, env: data.Environment, version_id: int) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
@@ -174,11 +174,11 @@ class OrchestrationService(protocol.ServerSlice):
         await version.delete_cascade()
         return 200
 
-    @protocol.handle(methods_v2.reserve_version, env="tid")
+    @handle(methods_v2.reserve_version, env="tid")
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
-    @protocol.handle(methods.put_version, env="tid")
+    @handle(methods.put_version, env="tid")
     async def put_version(
         self,
         env: data.Environment,
@@ -187,7 +187,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        compiler_version: str = None,
+        compiler_version: Optional[str] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -213,11 +213,11 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
 
         agents = set()
         # lookup for all RV's, lookup by resource id
-        rv_dict = {}
+        rv_dict: Dict[ResourceVersionIdStr, data.Resource] = {}
         # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
         provides_tree: Dict[str, List[str]] = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
@@ -267,16 +267,16 @@ class OrchestrationService(protocol.ServerSlice):
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input, key, default):
+        def safe_get(input: JsonType, key: str, default: object) -> object:
             if not isinstance(input, dict):
                 return default
             if key not in input:
                 return default
             return input[key]
 
-        metadata = safe_get(version_info, const.EXPORT_META_DATA, {})
+        metadata: JsonType = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
-        failed = compile_state == const.Compilestate.failed.name
+        failed = compile_state == const.Compilestate.failed
 
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
@@ -331,7 +331,7 @@ class OrchestrationService(protocol.ServerSlice):
             cm = data.ConfigurationModel(
                 environment=env.id,
                 version=version,
-                date=datetime.datetime.now(),
+                date=datetime.datetime.now().astimezone(),
                 total=len(resources),
                 version_info=version_info,
                 undeployable=undeployable_ids,
@@ -367,7 +367,7 @@ class OrchestrationService(protocol.ServerSlice):
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_version_ids:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
             self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
             ra = data.ResourceAction(
@@ -389,14 +389,14 @@ class OrchestrationService(protocol.ServerSlice):
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy: bool = await env.get(data.PUSH_ON_AUTO_DEPLOY)
-            agent_trigger_method_on_autodeploy = await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
+            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
+            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
 
-    @protocol.handle(methods.release_version, version_id="id", env="tid")
+    @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
         self,
         env: data.Environment,
@@ -416,14 +416,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep = [rid + ",v=%s" % version_id for rid in undep]
+        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
 
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            undep,
+            undep_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,
@@ -436,11 +436,11 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         skippable = await model.get_skipped_for_undeployable()
-        skippable = [rid + ",v=%s" % version_id for rid in skippable]
+        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            skippable,
+            skippable_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,
@@ -471,12 +471,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, {"model": model}
 
-    @protocol.handle(methods.deploy, env="tid")
+    @handle(methods.deploy, env="tid")
     async def deploy(
         self,
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-        agents: List[str] = None,
+        agents: Optional[List[str]] = None,
     ) -> Apireturn:
         warnings = []
 

@@ -1,0 +1,7 @@
+---
+description: Set `purge_on_delete` to false on every environment by default
+issue-nr: 2958
+change-type: patch
+destination-branches: [iso4]
+sections:
+  upgrade-note: "On newly created environments, the environment setting `purge_on_delete` will be set to false by default instead of true. This overrides any purge_on_delete settings on individual resources. You need to explicitly set it to true to enable the old behavior again."
