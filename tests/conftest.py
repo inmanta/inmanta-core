@@ -1426,7 +1426,7 @@ async def migrate_db_from(
     await bootloader.stop()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_testing_venv():
     """
     Ensure that the tests don't install packages into the venv that runs the tests.
