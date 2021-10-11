@@ -1,0 +1,6 @@
+description: Disabled venv installation guard fixture when running in plugin mode
+issue-repo: irt
+issue-nr: 840
+change-type: patch
+destination-branches:
+  - master
