@@ -211,7 +211,10 @@ class ModuleMetadataFileNotFound(InvalidModuleException):
 
 
 class ModuleV2InV1PathException(InvalidModuleException):
-    pass
+    def __init__(self, project: Optional["Project"], module: "ModuleV2", msg: str) -> None:
+        super().__init__(msg)
+        self.project: Optional[Project] = project
+        self.module: str = module
 
 
 @stable_api
@@ -1994,6 +1997,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def get_all_python_requirements_as_list(self) -> List[str]:
         return self._get_requirements_txt_as_list()
 
+    def module_v2_source_configured(self) -> bool:
+        return any(
+            True for repo in self._metadata.repo if repo.type == ModuleRepoType.package
+        )
+
 
 class DummyProject(Project):
     """ Placeholder project that does nothing """
@@ -2308,7 +2316,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         except ModuleMetadataFileNotFound:
             if os.path.exists(os.path.join(path, ModuleV2.MODULE_FILE)):
                 raise ModuleV2InV1PathException(
-                    f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
+                    project=project,
+                    module=ModuleV2(project, path),
+                    msg=f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
                     " modules."
                 )
             raise

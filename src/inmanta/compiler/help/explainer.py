@@ -169,7 +169,15 @@ class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
         super().__init__("module_v2_in_v1_path.j2")
 
     def get_arguments(self, problem: ModifiedAfterFreezeException) -> Mapping[str, object]:
-        return {}
+        v2_source_configured: bool = (
+            problem.project.module_v2_source_configured() if problem.project is not None else False
+        )
+        return {
+            "name": problem.module.name,
+            "path": problem.module.path,
+            "project": problem.project is not None,
+            "v2_source_configured": v2_source_configured,
+        }
 
 
 def escape_ansi(line: str) -> str:
