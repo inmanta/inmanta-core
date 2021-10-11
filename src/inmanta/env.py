@@ -703,13 +703,12 @@ python -m pip $@
         activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
         this venv.
         """
-        # Make mypy happy
-        assert self._parent_python is not None
-        site_dir_parent_venv = self.get_site_dir_for_env_path(self.get_env_path_for_python_path(self._parent_python))
-        site_dir_parent_venv_as_python_string = '"' + site_dir_parent_venv.replace('"', r"\"") + '"'
+        add_site_dir_statements = "\n".join(['site.addsitedir("' + p.replace('"', r"\"") + '")' for p in list(sys.path)])
         script = f"""import os
 import site
-site.addsitedir({site_dir_parent_venv_as_python_string})
+import sys
+# Ensure inheritance from all parent venvs + process their .pth files
+{add_site_dir_statements}
 # Also set the PYTHONPATH environment variable for any subprocess
 os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
@@ -728,7 +727,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         site.addsitedir(self.site_packages_dir)
         # Move the added items to the front of the path
         new_sys_path = [e for e in list(sys.path) if e not in prev_sys_path]
-        new_sys_path.extend(prev_sys_path)
+        new_sys_path += prev_sys_path
         # Set sys.path
         sys.path = new_sys_path
 
