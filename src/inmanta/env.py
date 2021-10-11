@@ -191,14 +191,8 @@ class PythonEnvironment:
         else:
             assert python_path is not None
             self.python_path = python_path
-            self.env_path = os.path.dirname(os.path.dirname(self.python_path))
-        self.site_packages_dir: str = (
-            os.path.join(self.env_path, "Lib", "site-packages")
-            if sys.platform == "win32"
-            else os.path.join(
-                self.env_path, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
-            )
-        )
+            self.env_path = self.get_env_path_for_python_path(self.python_path)
+        self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -211,6 +205,26 @@ class PythonEnvironment:
             if sys.platform == "win32"
             else os.path.join(env_path, "bin", python_name)
         )
+
+    @classmethod
+    def get_site_dir_for_env_path(cls, env_path: str) -> str:
+        """
+        Return the site directory for a given venv directory.
+        """
+        return (
+            os.path.join(env_path, "Lib", "site-packages")
+            if sys.platform == "win32"
+            else os.path.join(
+                env_path, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            )
+        )
+
+    @classmethod
+    def get_env_path_for_python_path(cls, python_path: str) -> str:
+        """
+        For a given path to a python binary, return the path to the venv directory.
+        """
+        return os.path.dirname(os.path.dirname(python_path))
 
     def get_installed_packages(self, only_editable: bool = False) -> Dict[str, version.Version]:
         """
@@ -608,13 +622,13 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python: Optional[str] = None
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
-        self._path_sitecustomize_py = os.path.join(self.site_packages_dir, "sitecustomize.py")
+        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     def exists(self) -> bool:
         """
         Returns True iff the venv exists on disk.
         """
-        return os.path.exists(self.python_path) and os.path.exists(self._path_sitecustomize_py)
+        return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
 
     def init_env(self) -> None:
         """
@@ -636,16 +650,16 @@ class VirtualEnv(ActiveEnv):
             try:
                 venv.create(path, clear=True, with_pip=False)
                 self._write_pip_binary()
-                self._write_sitecustomize_py_file()
+                self._write_pth_file()
             except CalledProcessError as e:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
             except Exception:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
-        elif not os.path.exists(self._path_sitecustomize_py):
+        elif not os.path.exists(self._path_pth_file):
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
-            self._write_sitecustomize_py_file()
+            self._write_pth_file()
 
         # set the path to the python and the pip executables
         self.virtual_python = self.python_path
@@ -676,34 +690,32 @@ class VirtualEnv(ActiveEnv):
 
         with open(pip_path, "w", encoding="utf-8") as fd:
             fd.write(
-                """#!/usr/bin/env sh
+                """#!/usr/bin/env bash
 source "$(dirname "$0")/activate"
 python -m pip $@
                 """.strip()
             )
         os.chmod(pip_path, 0o755)
 
-    def _write_sitecustomize_py_file(self) -> None:
+    def _write_pth_file(self) -> None:
         """
-        Write a sitecustomize.py file to the venv to ensure that an activation of this venv will also activate
-        the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of this venv.
+        Write an inmanta-inherit-from-parent-venv.pth file to the venv to ensure that an activation of this venv will also
+        activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
+        this venv.
         """
-        sys_path_as_python_strings = ['"' + p.replace('"', r"\"") + '"' for p in list(sys.path)]
-        site_package_dir_as_python_string = '"' + self.site_packages_dir.replace('"', r"\"") + '"'
-        script = f"""import sys
-import os
+        site_dir_parent_venv = self.get_site_dir_for_env_path(self.get_env_path_for_python_path(self._parent_python))
+        site_dir_parent_venv_as_python_string = '"' + site_dir_parent_venv.replace('"', r"\"") + '"'
+        script = f"""import os
 import site
-sys.path = [{', '.join(sys_path_as_python_strings)}]
-previous_sys_path = list(sys.path)
-site.addsitedir({site_package_dir_as_python_string})
-# Move the added items to the front of the path
-new_entries_sys_path = [e for e in sys.path if e not in previous_sys_path]
-sys.path = [*new_entries_sys_path, *previous_sys_path]
+site.addsitedir({site_dir_parent_venv_as_python_string})
 # Also set the PYTHONPATH environment variable for any subprocess
 os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-"""
-        with open(self._path_sitecustomize_py, "w", encoding="utf-8") as fd:
-            fd.write(script)
+        """
+        script_as_oneliner = "; ".join([
+            line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")
+        ])
+        with open(self._path_pth_file, "w", encoding="utf-8") as fd:
+            fd.write(script_as_oneliner)
 
     def _update_sys_path(self) -> None:
         """
