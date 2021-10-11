@@ -131,6 +131,10 @@ logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
+# Save the cwd as early as possible to prevent that it gets overridden by another fixture
+# before it's saved.
+initial_cwd = os.getcwd()
+
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     # register custom markers
@@ -451,9 +455,8 @@ def restore_cwd():
     """
     Restore the current working directory after search test.
     """
-    cwd = os.getcwd()
     yield
-    os.chdir(cwd)
+    os.chdir(initial_cwd)
 
 
 @pytest.fixture(scope="function")
@@ -891,7 +894,6 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
-        self.cwd = os.getcwd()
         self.keep_shared = False
         self.project = None
 
@@ -899,8 +901,6 @@ class SnippetCompilationTest(KeepOnFail):
         if not self.keep_shared:
             shutil.rmtree(self.libs)
             shutil.rmtree(self.env)
-        # reset cwd
-        os.chdir(self.cwd)
 
     def setup_func(self, module_dir: Optional[str]):
         # init project
@@ -974,7 +974,6 @@ class SnippetCompilationTest(KeepOnFail):
         running process.
         """
         env.process_env.__init__(env_path=self.env)
-        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
@@ -1343,8 +1342,6 @@ def tmpvenv_active(
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
     env.process_env.__init__(python_path=str(python_path))
-    # patch inmanta_plugins namespace path so importlib.util.find_spec("inmanta_plugins") includes the venv path
-    env.process_env.init_namespace(const.PLUGINS_PACKAGE)
     env.process_env.notify_change()
 
     # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
@@ -1429,7 +1426,7 @@ async def migrate_db_from(
     await bootloader.stop()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_testing_venv():
     """
     Ensure that the tests don't install packages into the venv that runs the tests.

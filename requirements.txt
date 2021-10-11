@@ -1,14 +1,14 @@
 asyncpg==0.24.0
 click-plugins==1.1.1
 click==8.0.1
-colorlog==6.4.1
+colorlog==6.5.0
 cookiecutter==1.7.3
 cryptography==35.0.0
 docstring-parser==0.11
 email-validator==1.1.3
 execnet==1.9.0
 importlib_metadata==4.8.1
-jinja2==3.0.1
+jinja2==3.0.2
 more-itertools==8.10.0
 netifaces==0.11.0
 packaging==21.0
@@ -16,7 +16,7 @@ pip==21.2.4
 ply==3.11
 pydantic==1.8.2
 pyformance==0.4
-PyJWT==2.1.0
+PyJWT==2.2.0
 python-dateutil==2.8.2
 pyyaml==5.4.1
 setuptools==58.2.0

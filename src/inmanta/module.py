@@ -452,7 +452,6 @@ class ModuleSource(Generic[TModule]):
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
-        env.process_env.init_namespace(const.PLUGINS_PACKAGE)
 
     @classmethod
     def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
