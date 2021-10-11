@@ -703,6 +703,8 @@ python -m pip $@
         activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
         this venv.
         """
+        # Make mypy happy
+        assert self._parent_python is not None
         site_dir_parent_venv = self.get_site_dir_for_env_path(self.get_env_path_for_python_path(self._parent_python))
         site_dir_parent_venv_as_python_string = '"' + site_dir_parent_venv.replace('"', r"\"") + '"'
         script = f"""import os
@@ -711,9 +713,9 @@ site.addsitedir({site_dir_parent_venv_as_python_string})
 # Also set the PYTHONPATH environment variable for any subprocess
 os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
-        script_as_oneliner = "; ".join([
-            line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")
-        ])
+        script_as_oneliner = "; ".join(
+            [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
+        )
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
