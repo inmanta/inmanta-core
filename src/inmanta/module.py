@@ -214,7 +214,7 @@ class ModuleV2InV1PathException(InvalidModuleException):
     def __init__(self, project: Optional["Project"], module: "ModuleV2", msg: str) -> None:
         super().__init__(msg)
         self.project: Optional[Project] = project
-        self.module: str = module
+        self.module: ModuleV2 = module
 
 
 @stable_api
@@ -1998,6 +1998,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self._get_requirements_txt_as_list()
 
     def module_v2_source_configured(self) -> bool:
+        """
+        Returns True iff this project has one or more module v2 sources configured.
+        """
         return any(
             True for repo in self._metadata.repo if repo.type == ModuleRepoType.package
         )
