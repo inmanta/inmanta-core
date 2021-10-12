@@ -2001,9 +2001,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Returns True iff this project has one or more module v2 sources configured.
         """
-        return any(
-            True for repo in self._metadata.repo if repo.type == ModuleRepoType.package
-        )
+        return any(True for repo in self._metadata.repo if repo.type == ModuleRepoType.package)
 
 
 class DummyProject(Project):
@@ -2322,7 +2320,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
                     project=project,
                     module=ModuleV2(project, path),
                     msg=f"Module at {path} looks like a v2 module. Please have a look at the documentation on how to use v2"
-                    " modules."
+                    " modules.",
                 )
             raise
 

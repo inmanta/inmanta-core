@@ -178,9 +178,7 @@ class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
         super().__init__("module_v2_in_v1_path.j2")
 
     def get_arguments(self, problem: ModuleV2InV1PathException) -> Mapping[str, object]:
-        v2_source_configured: bool = (
-            problem.project.module_v2_source_configured() if problem.project is not None else False
-        )
+        v2_source_configured: bool = problem.project.module_v2_source_configured() if problem.project is not None else False
         return {
             "name": problem.module.name,
             "path": problem.module.path,
