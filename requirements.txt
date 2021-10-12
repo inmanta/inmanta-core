@@ -1,6 +1,6 @@
 asyncpg==0.24.0
 click-plugins==1.1.1
-click==8.0.1
+click==8.0.3
 colorlog==6.5.0
 cookiecutter==1.7.3
 cryptography==35.0.0

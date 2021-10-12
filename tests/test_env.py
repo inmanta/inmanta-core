@@ -116,14 +116,14 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
         return [d for d in os.listdir(site_dir) if d not in ignore]
 
     # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
-    assert not _list_dir(site_dir, ignore=["sitecustomize.py", "__pycache__"])
+    assert not _list_dir(site_dir, ignore=["inmanta-inherit-from-parent-venv.pth", "__pycache__"])
 
     # test installing a package that is already present in the parent venv
     random_package = parent_installed[0]
     venv.install_from_list([random_package])
 
     # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
-    assert not _list_dir(site_dir, ignore=["sitecustomize.py", "__pycache__"])
+    assert not _list_dir(site_dir, ignore=["inmanta-inherit-from-parent-venv.pth", "__pycache__"])
 
     # report json
     subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
