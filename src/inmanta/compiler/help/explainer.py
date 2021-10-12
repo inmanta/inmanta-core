@@ -18,9 +18,8 @@
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Generic, List, Mapping, Optional, Sequence, Set, TypeVar
+from typing import Generic, List, Mapping, Optional, Sequence, Set, Type, TypeVar
 
-from asyncpg.types import Type
 from jinja2 import Environment, PackageLoader
 
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
