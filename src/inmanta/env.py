@@ -711,7 +711,7 @@ import sys
 
 # Ensure inheritance from all parent venvs + process their .pth files
 # use list comprehension to enable simple oneliner generation
-[site.addsite_dir(dir) for dir in {site_dirs_lst} if dir not in sys.path]
+[site.addsitedir(dir) for dir in {site_dirs_lst} if dir not in sys.path]
 # Also set the PYTHONPATH environment variable for any subprocess
 os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
