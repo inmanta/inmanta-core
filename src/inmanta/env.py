@@ -703,18 +703,22 @@ python -m pip $@
         activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
         this venv.
         """
-        add_site_dir_statements = "\n".join(['site.addsitedir("' + p.replace('"', r"\"") + '")' for p in list(sys.path)])
+        site_dirs_lst: str = "[" + ", ".join('"' + p.replace('"', r"\"") + '"' for p in list(sys.path)) + "]"
         script = f"""import os
 import site
 import sys
+
+
 # Ensure inheritance from all parent venvs + process their .pth files
-{add_site_dir_statements}
+# use list comprehension to enable simple oneliner generation
+[site.addsite_dir(dir) for dir in {site_dirs_lst} if dir not in sys.path]
 # Also set the PYTHONPATH environment variable for any subprocess
 os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
         script_as_oneliner = "; ".join(
             [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
         )
+        # TODO: don't write it if venv is parent venv
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
