@@ -1,4 +1,0 @@
-description: Renamed invalidly suffixed change entries
-change-type: patch
-destination-branch:
-  - master
