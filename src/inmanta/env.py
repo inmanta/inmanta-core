@@ -721,7 +721,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         script_as_oneliner = "; ".join(
             [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
         )
-        # TODO: don't write it if venv is parent venv
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
