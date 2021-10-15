@@ -159,18 +159,34 @@ def resource_container():
     @resource("test::FailFast", agent="agent", id_attribute="key")
     class FailFastR(Resource):
         """
-        A file on a filesystem
+        Raise an exception in the check_resource() method.
         """
 
         fields = ("key", "value", "purged")
+
+    @resource("test::FailFastCRUD", agent="agent", id_attribute="key")
+    class FailFastPR(PurgeableResource):
+        """
+        Raise an exception at the beginning of the read_resource() method
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
 
     @resource("test::BadPost", agent="agent", id_attribute="key")
     class BadPostR(Resource):
         """
-        A file on a filesystem
+        Raise an exception in the post() method of the ResourceHandler.
         """
 
         fields = ("key", "value", "purged")
+
+    @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
+    class BadPostPR(PurgeableResource):
+        """
+        Raise an exception in the post() method of the CRUDHandler.
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
 
     @resource("test::BadLogging", agent="agent", id_attribute="key")
     class BadLoggingR(Resource):
@@ -332,8 +348,13 @@ def resource_container():
 
     @provider("test::FailFast", name="test_failfast")
     class FailFast(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            raise Exception()
+        def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::FailFastCRUD", name="test_failfast_crud")
+    class FailFastCRUD(CRUDHandler):
+        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
     class Fact(ResourceHandler):
@@ -388,8 +409,13 @@ def resource_container():
 
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
-        def post(self, ctx, resource) -> None:
-            raise Exception()
+        def post(self, ctx: HandlerContext, resource: Resource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::BadPostCRUD", name="test_bad_posts_crud")
+    class BadPostCRUD(CRUDHandler):
+        def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
 
     class Empty:
         pass
