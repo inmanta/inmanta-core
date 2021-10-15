@@ -83,12 +83,7 @@ class Explainer(Generic[Explainable], ExplainerABC, ABC):
             allcauses.add(w)
             work.extend(w.get_causes())
 
-        explainable: Sequence[Explainable] = [c for c in allcauses if isinstance(c, self.explainable_type)]
-
-        if not explainable:
-            return []
-        else:
-            return [self.do_explain(x) for x in explainable]
+        return [self.do_explain(c) for c in allcauses if isinstance(c, self.explainable_type)]
 
     @abstractmethod
     def do_explain(self, problem: Explainable) -> str:
@@ -101,6 +96,8 @@ class Explainer(Generic[Explainable], ExplainerABC, ABC):
 class JinjaExplainer(Explainer[Explainable], ABC):
     """
     Abstract explainer for explanations based on a Jinja template.
+
+    :param template: path to the Jinja template to use for the explanation.
     """
 
     def __init__(self, template: str) -> None:
