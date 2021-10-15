@@ -30,8 +30,8 @@ import pytest
 
 from _io import StringIO
 from inmanta import const, env, module
-from inmanta.compiler.help.explainer import ExplainerFactory
 from inmanta.ast import CompilerException
+from inmanta.compiler.help.explainer import ExplainerFactory
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
@@ -287,7 +287,10 @@ def test_module_v2_from_v1_path(
         "Module at %s looks like a v2 module. Please have a look at the documentation on how to use v2 modules."
         % os.path.join(modules_v2_dir, "minimalv2module")
     )
-    assert ExplainerFactory().explain_and_format(excinfo.value, plain=True).strip() == f"""
+    assert (
+        ExplainerFactory().explain_and_format(excinfo.value, plain=True).strip()
+        == (
+            f"""
 Exception explanation
 =====================
 This error occurs when a v2 module was found in v1 modules path. To resolve this you should either convert this module to be v1 or install it as a v2 module and set up your project accordingly.
@@ -298,7 +301,9 @@ If you want to use the module as a v2 module:
 - set up your project with a module source of type "package" (see documentation)
 - if you would like to work in editable mode on a local copy of the module, run `inmanta module install -e {modules_v2_dir}/minimalv2module`
 - run `inmanta module add --v2 minimalv2module` to add the module as a dependency and to install the module if required.
-    """.strip()  # noqa: E501
+        """  # noqa: E501
+        ).strip()
+    )
 
     # verify that adding it as a v2 resolves the issue
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
