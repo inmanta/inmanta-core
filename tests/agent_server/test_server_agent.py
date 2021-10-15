@@ -2559,10 +2559,12 @@ async def test_bad_post_get_facts(
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def has_at_least_three_parameters() -> bool:
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(has_at_least_three_parameters, timeout=10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
