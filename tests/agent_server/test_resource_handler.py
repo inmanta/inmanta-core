@@ -114,11 +114,11 @@ async def test_formatting_exception_messages(
         tid=environment,
         resource_type=resource_type,
         agent="agent1",
-        log_severity=const.LogLevel.ERROR.value,
+        log_severity=const.LogLevel.ERROR.name,
         limit=1,
     )
     assert result.code == 200, result.result
     assert len(result.result["data"]) == 1
-    error_messages = [msg for msg in result.result["data"][0]["messages"] if msg["level"] == const.LogLevel.ERROR.value]
+    error_messages = [msg for msg in result.result["data"][0]["messages"] if msg["level"] == const.LogLevel.ERROR.name]
     assert len(error_messages) == 1, error_messages
     assert "(exception: Exception('An\nError\tMessage')" in error_messages[0]["msg"]
