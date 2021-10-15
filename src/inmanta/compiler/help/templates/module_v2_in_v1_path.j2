@@ -1,0 +1,10 @@
+This error occurs when a v2 module was found in v1 modules path. To resolve this you should either convert this module to be v1 or install it as a v2 module and set up your project accordingly.
+
+If you want to use the module as a v1 module, make sure to use the v1 cookiecutter template to create new modules.
+
+If you want to use the module as a v2 module:
+{% if project and not v2_source_configured -%}
+- set up your project with a module source of type "package" (see documentation)
+{% endif -%}
+- if you would like to work in editable mode on a local copy of the module, run `inmanta module install -e {{ path }}`
+- run `inmanta module add --v2 {{ name }}` to add the module as a dependency and to install the module if required.
