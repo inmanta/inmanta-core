@@ -409,13 +409,11 @@ def resource_container():
 
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
-
         def post(self, ctx: HandlerContext, resource: Resource) -> None:
             raise Exception("An\nError\tMessage")
 
     @provider("test::BadPostCRUD", name="test_bad_posts_crud")
     class BadPostCRUD(CRUDHandler):
-
         def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             raise Exception("An\nError\tMessage")
 
