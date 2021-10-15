@@ -1,0 +1,8 @@
+---
+description: Ensure that special characters in the resource action log are not escaped.
+issue-nr: 699
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [iso3]
+sections:
+  bugfix: "{{description}}"

@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -21,9 +21,12 @@ from typing import TypeVar
 
 import pytest
 
+from inmanta import const
+from inmanta.agent import Agent
 from inmanta.agent.handler import ResourceHandler
 from inmanta.protocol import SessionClient, VersionMatch, common
 from test_protocol import make_random_file
+from utils import _wait_until_deployment_finishes
 
 T = TypeVar("T")
 
@@ -73,3 +76,49 @@ def test_get_file_not_found():
     resource_handler = MockGetFileResourceHandler(client)
     result = resource_handler.get_file("hash")
     assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource_type",
+    ["test::FailFast", "test::FailFastCRUD", "test::BadPost", "test::BadPostCRUD"],
+)
+async def test_formatting_exception_messages(
+    resource_container, environment: str, client, agent: Agent, clienthelper, resource_type: str
+) -> None:
+    """
+    Ensure that exception raised in the Handler are correctly formatted in the resource action log.
+    Special characters should not be escaped (see: inmanta/inmanta-lsm#699).
+    """
+    resource_container.Provider.reset()
+    version = await clienthelper.get_version()
+    res_id_1 = f"{resource_type}[agent1,key=key1],v={version}"
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": res_id_1,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+            **({"purge_on_delete": False} if resource_type.endswith("CRUD") else {}),
+        },
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    result = await client.get_resource_actions(
+        tid=environment,
+        resource_type=resource_type,
+        agent="agent1",
+        log_severity=const.LogLevel.ERROR.name,
+        limit=1,
+    )
+    assert result.code == 200, result.result
+    assert len(result.result["data"]) == 1
+    error_messages = [msg for msg in result.result["data"][0]["messages"] if msg["level"] == const.LogLevel.ERROR.name]
+    assert len(error_messages) == 1, error_messages
+    assert "(exception: Exception('An\nError\tMessage')" in error_messages[0]["msg"]

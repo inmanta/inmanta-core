@@ -664,7 +664,7 @@ class ResourceHandler(object):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
             try:
@@ -673,7 +673,7 @@ class ResourceHandler(object):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
@@ -709,7 +709,7 @@ class ResourceHandler(object):
                 ctx.exception(
                     "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
         return facts
@@ -900,7 +900,7 @@ class CRUDHandler(ResourceHandler):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
         finally:
@@ -910,7 +910,7 @@ class CRUDHandler(ResourceHandler):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
 
