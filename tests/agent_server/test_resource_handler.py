@@ -126,6 +126,7 @@ async def test_formatting_exception_messages(
 ) -> None:
     """
     Ensure that exception raised in the Handler are correctly formatted in the resource action log.
+    Special characters should not be escaped (see: inmanta/inmanta-lsm#699).
     """
     resource_container.Provider.reset()
     version = await clienthelper.get_version()
