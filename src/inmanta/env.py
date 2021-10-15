@@ -140,7 +140,7 @@ class PipCommandBuilder:
             "-m",
             "pip",
             "install",
-            *(["--ignore-installed"] if reinstall else []),
+            *(["--force-reinstall"] if reinstall else []),
             *(["--upgrade"] if upgrade else []),
             *(["--pre"] if allow_pre_releases else []),
             *chain.from_iterable(["-c", f] for f in constraints_files),
