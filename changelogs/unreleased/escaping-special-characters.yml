@@ -3,6 +3,6 @@ description: Ensure that special characters in the resource action log are not e
 issue-nr: 699
 issue-repo: inmanta-lsm
 change-type: patch
-destination-branches: [master, iso3, iso4]
+destination-branches: [iso4]
 sections:
   bugfix: "{{description}}"
