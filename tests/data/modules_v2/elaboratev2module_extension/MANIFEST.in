@@ -1,4 +1,4 @@
-include setup.cfg
+include elaboratev2module_extension/setup.cfg
 recursive-include inmanta_plugins/elaboratev2module_extension/model *.cf
 graft inmanta_plugins/elaboratev2module_extension/files
 graft inmanta_plugins/elaboratev2module_extension/templates
