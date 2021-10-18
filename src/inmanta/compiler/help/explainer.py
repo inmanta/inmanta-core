@@ -20,6 +20,7 @@ import re
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional
 
+from asyncpg.types import Type
 from jinja2 import Environment, PackageLoader
 
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
@@ -28,19 +29,19 @@ from inmanta.ast.statements.generator import Constructor
 from inmanta.execute.runtime import OptionVariable
 
 
-def bold(content: str = None) -> str:
+def bold(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[1m"
     return "\033[1m{0}\033[0m".format(content)
 
 
-def underline(content: str = None) -> str:
+def underline(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[4m"
     return "\033[4m{0}\033[0m".format(content)
 
 
-def noformat(content: str = None) -> str:
+def noformat(content: Optional[str] = None) -> str:
     return "\033[0m"
 
 
@@ -54,7 +55,7 @@ class Explainer(object):
 
 
 class JinjaExplainer(Explainer):
-    def __init__(self, template: str, acceptable_type):
+    def __init__(self, template: str, acceptable_type: Type) -> None:
         self.template = template
         self.acceptable_type = acceptable_type
 
@@ -94,10 +95,10 @@ class JinjaExplainer(Explainer):
 
 
 class ModifiedAfterFreezeExplainer(JinjaExplainer):
-    def __init__(self):
+    def __init__(self) -> None:
         super(ModifiedAfterFreezeExplainer, self).__init__("modified_after_freeze.j2", ModifiedAfterFreezeException)
 
-    def build_reverse_hint(self, problem):
+    def build_reverse_hint(self, problem: CompilerException) -> str:
         if isinstance(problem.stmt, AssignStatement):
             return "%s.%s = %s" % (
                 problem.stmt.rhs.pretty_print(),
@@ -127,7 +128,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
         }
 
 
-def escape_ansi(line):
+def escape_ansi(line: str) -> str:
     ansi_escape = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", line)
 

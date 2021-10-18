@@ -39,7 +39,7 @@ DEFAULT_INFLUX_PROTOCOL = "http"
 
 
 class AsyncReporter(object):
-    def __init__(self, registry: MetricsRegistry = None, reporting_interval: int = 30) -> None:
+    def __init__(self, registry: Optional[MetricsRegistry] = None, reporting_interval: int = 30) -> None:
         self.registry = registry or global_registry()
         self.reporting_interval = reporting_interval
         self._stopped = False
@@ -68,7 +68,7 @@ class AsyncReporter(object):
             wait = max(0, next_loop_time - loop.time())
             await asyncio.sleep(wait)
 
-    async def report_now(self, registry: MetricsRegistry = None, timestamp: float = None) -> None:
+    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
         raise NotImplementedError(self.report_now)
 
 
@@ -126,7 +126,7 @@ class InfluxReporter(AsyncReporter):
         except Exception:
             LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
 
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None):
+    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
         http_client = AsyncHTTPClient()
 
         if self.autocreate_database and not self._did_create_database:

@@ -20,8 +20,8 @@ import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -52,7 +52,9 @@ class Reference(ExpressionStatement):
         out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
-    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+    ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
         out = {self.name: var}  # type : Dict[object, ResultVariable]
@@ -87,14 +89,14 @@ class Reference(ExpressionStatement):
     def __str__(self) -> str:
         return self.name
 
-    def __repr__(self, *args, **kwargs):
+    def __repr__(self) -> str:
         return self.name
 
 
 T = TypeVar("T")
 
 
-class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
+class AbstractAttributeReferenceHelper(RawResumer, Generic[T]):
     """
     Generic helper class for setting a target variable based on a Reference. Reschedules itself
     """
@@ -150,11 +152,12 @@ class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
             # this is a first time we are called, variable is not cached yet
             self.variable = self.fetch_variable(requires, resolver, queue_scheduler)
 
+        if self.resultcollector:
+            self.variable.listener(self.resultcollector, self.location)
+
         if self.is_ready():
             self.target.set_value(self.target_value(), self.location)
         else:
-            if self.resultcollector:
-                self.variable.listener(self.resultcollector, self.location)
             requires[self] = self.variable
             # reschedule on the variable, XU will assign it to the target variable
             RawUnit(queue_scheduler, resolver, requires, self)
@@ -174,15 +177,26 @@ class AbstractAttributeReferenceHelper(Locatable, Generic[T]):
         return self.location
 
 
-class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool]):
+class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool], ResultCollector[object]):
     """
     Helper class for IsDefined, reschedules itself
     """
 
     def __init__(self, target: ResultVariable, instance: Optional[Reference], attribute: str) -> None:
         super().__init__(target, instance, attribute, None)
+        self.resultcollector = self
+
+    def receive_result(self, value: T, location: Location) -> None:
+        self.target.set_value(True, self.location)
 
     def target_value(self) -> bool:
+        """
+        Returns the target value based on self.variable.
+
+        We don't override `resume` so this method is always called when `variable` gets frozen, even if the target variable has
+        been set already. This shouldn't affect performance but the potential double set acts as a guard against inconsistent
+        internal state (if `receive_result` receives a result the eventual result of this method must be True).
+        """
         assert self.is_ready()
         assert self.variable
         try:
@@ -201,7 +215,9 @@ class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
     Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
+    def __init__(
+        self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: Optional[ResultCollector]
+    ) -> None:
         super().__init__(target, instance, attribute, resultcollector)
 
     def target_value(self) -> object:
@@ -229,7 +245,9 @@ class AttributeReference(Reference):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.requires_emit_gradual(resolver, queue, None)
 
-    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+    ) -> Dict[object, ResultVariable]:
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
@@ -260,5 +278,5 @@ class AttributeReference(Reference):
         assert self.instance is not None
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
 
-    def __repr__(self, *args, **kwargs):
+    def __repr__(self) -> str:
         return "%s.%s" % (repr(self.instance), self.attribute)

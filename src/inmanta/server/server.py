@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 from inmanta import data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
-from inmanta.protocol import exceptions, methods, methods_v2
+from inmanta.protocol import exceptions, handle, methods, methods_v2
 from inmanta.protocol.common import HTML_CONTENT_WITH_UTF8_CHARSET, ReturnValue, attach_warnings
 from inmanta.protocol.openapi.converter import OpenApiConverter
 from inmanta.protocol.openapi.model import OpenAPI
@@ -67,7 +67,7 @@ class Server(protocol.ServerSlice):
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
-    def define_features(self) -> List[Feature]:
+    def define_features(self) -> List[Feature[object]]:
         return [dashboard_feature]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -133,12 +133,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
         return dir_map
 
-    @protocol.handle(methods.notify_change_get, env="id")
+    @handle(methods.notify_change_get, env="id")
     async def notify_change_get(self, env: data.Environment, update: bool) -> Apireturn:
         result = await self.notify_change(env, update, {})
         return result
 
-    @protocol.handle(methods.notify_change, env="id")
+    @handle(methods.notify_change, env="id")
     async def notify_change(self, env: data.Environment, update: bool, metadata: JsonType) -> Apireturn:
         LOGGER.info("Received change notification for environment %s", env.id)
         if "type" not in metadata:
@@ -160,7 +160,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         )
         return warnings
 
-    @protocol.handle(methods.get_server_status)
+    @handle(methods.get_server_status)
     async def get_server_status(self) -> StatusResponse:
         product_metadata = self.feature_manager.get_product_metadata()
         if product_metadata.version is None:
@@ -194,7 +194,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return response
 
-    @protocol.handle(methods_v2.get_api_docs)
+    @handle(methods_v2.get_api_docs)
     async def get_api_docs(self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager

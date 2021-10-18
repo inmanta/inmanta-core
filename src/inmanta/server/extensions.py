@@ -105,10 +105,10 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        self._features: Dict[str, Dict[str, Feature]] = defaultdict(lambda: {})
+        self._features: Dict[str, Dict[str, Feature[object]]] = defaultdict(lambda: {})
         self._feature_config: Dict[str, Dict[str, Any]] = self._load_feature_config()
 
-    def get_features(self) -> List[Feature]:
+    def get_features(self) -> List[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
     def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:
@@ -176,7 +176,7 @@ class FeatureManager:
             return True
         return item in value
 
-    def stop(self):
+    def stop(self) -> None:
         """Called when the server is stopped"""
 
 
@@ -192,7 +192,7 @@ class ApplicationContext:
     def get_slices(self) -> List[ServerSlice]:
         return self._slices
 
-    def set_feature_manager(self, feature_manager: FeatureManager):
+    def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         assert self._feature_manager is None
         self._feature_manager = feature_manager
 

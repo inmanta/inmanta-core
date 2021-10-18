@@ -150,7 +150,7 @@ def default_fact_renew() -> int:
     return int(server_fact_expire.get() / 3)
 
 
-def validate_fact_renew(value):
+def validate_fact_renew(value: object) -> int:
     """ time; < :inmanta.config:option:`server.fact-expire` """
     out = int(value)
     if not out < server_fact_expire.get():
@@ -293,7 +293,7 @@ dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycl
 dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
 
 
-def default_hangtime():
+def default_hangtime() -> str:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
     return str(int(agent_timeout.get() * 3 / 4))
 

@@ -25,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DocString:
-    def __init__(self, doc_string: docstring_parser.Docstring):
+    def __init__(self, doc_string: docstring_parser.Docstring) -> None:
         # Ignore attribute definitions with a syntax error
         new_meta = []
         for attr in doc_string.meta:

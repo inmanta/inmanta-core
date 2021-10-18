@@ -1356,8 +1356,8 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     assert result.result["agents"][0]["name"] == "agent1"
 
 
-def ps_diff(original, current_process, diff=0):
-    current = current_process.children(recursive=True)
+def ps_diff_inmanta_agent_processes(original: List[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
+    current = _get_inmanta_agent_child_processes(current_process)
 
     def is_terminated(proc):
         try:
@@ -1552,7 +1552,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
@@ -1594,13 +1594,13 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     # clear environment
     await client.clear_environment(environment)
 
     # Autostarted agent should be terminated after clearing the environment
-    ps_diff(children, current_process, 0)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
@@ -1651,7 +1651,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
 async def setup_environment_with_agent(client, project_name):
@@ -1716,40 +1716,44 @@ async def setup_environment_with_agent(client, project_name):
     return project_id, env_id
 
 
+def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
+    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in p.cmdline() and "agent" in p.cmdline()]
+
+
 @pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     result = await client.delete_environment(id=env_id)
     assert result.code == 200
 
     # The autostarted agent should be terminated when its environment is deleted.
-    ps_diff(children, current_process, 0)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
 
 
 @pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
     await setup_environment_with_agent(client, "proj2")
 
     # Two autostarted agents should be running (one in proj1 and one in proj2).
-    ps_diff(children, current_process, 2)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
 
     result = await client.delete_project(id=project1_id)
     assert result.code == 200
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
 @pytest.mark.asyncio
@@ -2633,10 +2637,12 @@ async def test_bad_post_get_facts(
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def has_at_least_three_parameters() -> bool:
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(has_at_least_three_parameters, timeout=10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200

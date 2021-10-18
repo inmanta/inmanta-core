@@ -43,6 +43,7 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
+    Instance,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -59,7 +60,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
-    from inmanta.execute.runtime import Instance
 
 LOGGER = logging.getLogger(__name__)
 
@@ -88,11 +88,14 @@ class SubConstructor(ExpressionStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: Dict[object, object], instance: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
         """
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
+        # this assertion is because the typing of this method is not correct
+        # it should logically always hold, but we can't express this as types yet
+        assert isinstance(instance, Instance)
         condition = self.implements.constraint.execute(requires, instance, queue)
         try:
             inmanta_type.Bool().validate(condition)
@@ -132,22 +135,25 @@ class SubConstructor(ExpressionStatement):
         return "SubConstructor(%s)" % self.type
 
 
-class GradualFor(ResultCollector):
+class GradualFor(ResultCollector[object]):
     # this class might be unnecessary if receive-result is always called and exactly once
 
-    def __init__(self, stmt: "For", resolver: Resolver, queue: QueueScheduler):
+    def __init__(self, stmt: "For", resolver: Resolver, queue: QueueScheduler) -> None:
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
         self.seen = set()  # type: Set[int]
 
-    def receive_result(self, value, location):
+    def receive_result(self, value: object, location: ResultVariable) -> None:
         if id(value) in self.seen:
             return
         self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
+        # this assertion is because the typing of this method is not correct
+        # it should logically always hold, but we can't express this as types yet
+        assert isinstance(loopvar, ResultVariable)
         loopvar.set_provider(self.stmt)
         loopvar.set_value(value, self.stmt.location)
         xc.emit(self.queue)

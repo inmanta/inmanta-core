@@ -38,12 +38,16 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, QueryType
+from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
 from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 
@@ -95,7 +99,7 @@ class CompileRun(object):
 
     async def _start_stage(self, name: str, command: str) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "starting stage %s for %s in %s", name, self.request.id, self.request.environment)
-        start = datetime.datetime.now()
+        start = datetime.datetime.now().astimezone()
         stage = data.Report(compile=self.request.id, started=start, name=name, command=command)
         await stage.insert()
         self.stage = stage
@@ -106,7 +110,7 @@ class CompileRun(object):
             const.LOG_LEVEL_TRACE, "ending stage %s for %s in %s", self.stage.name, self.request.id, self.request.environment
         )
         stage = self.stage
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         await stage.update_fields(completed=end, returncode=returncode)
         self.stage = None
         return stage
@@ -186,7 +190,7 @@ class CompileRun(object):
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
         success = False
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         await self.request.update_fields(started=now)
 
         compile_data_json_file = NamedTemporaryFile()
@@ -199,6 +203,7 @@ class CompileRun(object):
             env = await data.Environment.get_by_id(environment_id)
 
             env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            assert self.stage
             await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
 
             if env is None:
@@ -381,7 +386,9 @@ class CompilerService(ServerSlice):
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
 
     async def _cleanup(self) -> None:
-        oldest_retained_date = datetime.datetime.now() - datetime.timedelta(seconds=opt.server_compiler_report_retention.get())
+        oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
+            seconds=opt.server_compiler_report_retention.get()
+        )
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
@@ -410,7 +417,7 @@ class CompilerService(ServerSlice):
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
-        requested = datetime.datetime.now()
+        requested = datetime.datetime.now().astimezone()
 
         compile = data.Compile(
             environment=env.id,
@@ -506,7 +513,7 @@ class CompilerService(ServerSlice):
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
-    ):
+    ) -> int:
         if wait_time == 0:
             wait: float = 0
         else:
@@ -523,7 +530,9 @@ class CompilerService(ServerSlice):
             wait: float = 0
         else:
             assert last_run.completed is not None
-            wait = self._calculate_recompile_wait(wait_time, compile.requested, last_run.completed, datetime.datetime.now())
+            wait = self._calculate_recompile_wait(
+                wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
+            )
         if wait > 0:
             LOGGER.info(
                 "server-auto-recompile-wait is enabled and set to %s seconds, "
@@ -556,7 +565,7 @@ class CompilerService(ServerSlice):
 
         version = runner.version
 
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
@@ -638,3 +647,70 @@ class CompilerService(ServerSlice):
         """
         compiles = await data.Compile.get_next_compiles_for_environment(env.id)
         return [x.to_dto() for x in compiles]
+
+    @protocol.handle(methods_v2.get_compile_reports, env="tid")
+    async def get_compile_reports(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "requested.desc",
+    ) -> ReturnValue[List[model.CompileReport]]:
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(CompileReportFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            compile_report_order = data.CompileReportOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Compile.get_compile_reports(
+                environment=env.id,
+                database_order=compile_report_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                limit=limit,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            env.id, dtos, limit=limit, database_order=compile_report_order, db_query=query
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            database_order=compile_report_order,
+            limit=limit,
+            filter=filter,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.compile_details, env="tid")
+    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> model.CompileDetails:
+        details = await data.Compile.get_compile_details(env.id, id)
+        if not details:
+            raise NotFound("The compile with the given id does not exist.")
+        return details

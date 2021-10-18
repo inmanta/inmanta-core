@@ -27,7 +27,7 @@ class InmantaWarning(Warning):
     Base class for Inmanta Warnings.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: object):
         Warning.__init__(self, *args)
 
 
@@ -167,7 +167,7 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
-def warn(warning: InmantaWarning):
+def warn(warning: InmantaWarning) -> None:
     """
     Warn using the supplied InmantaWarning instance.
     """

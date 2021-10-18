@@ -17,11 +17,12 @@
 """
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-from inmanta import data
+from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.protocol import methods
+from inmanta.data.model import ResourceIdStr
+from inmanta.protocol import handle, methods
 from inmanta.protocol.common import attach_warnings
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -66,7 +67,7 @@ class ParameterService(protocol.ServerSlice):
         """
         LOGGER.info("Renewing expired parameters")
 
-        updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
+        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = await data.Parameter.get_updated_before(updated_before)
 
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
@@ -99,7 +100,7 @@ class ParameterService(protocol.ServerSlice):
 
         LOGGER.info("Done renewing expired parameters")
 
-    @protocol.handle(methods.get_param, param_id="id", env="tid")
+    @handle(methods.get_param, param_id="id", env="tid")
     async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
@@ -115,7 +116,7 @@ class ParameterService(protocol.ServerSlice):
         param = params[0]
 
         # check if it was expired
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
@@ -157,14 +158,14 @@ class ParameterService(protocol.ServerSlice):
                 resource_id=resource_id,
                 value=value,
                 source=source,
-                updated=datetime.datetime.now(),
+                updated=datetime.datetime.now().astimezone(),
                 metadata=metadata,
             )
             await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
+            await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(
@@ -181,7 +182,7 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @protocol.handle(methods.set_param, param_id="id", env="tid")
+    @handle(methods.set_param, param_id="id", env="tid")
     async def set_param(
         self,
         env: data.Environment,
@@ -209,25 +210,28 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 
-    @protocol.handle(methods.set_parameters, env="tid")
+    @handle(methods.set_parameters, env="tid")
     async def set_parameters(self, env: data.Environment, parameters: List[Dict[str, Any]]) -> Apireturn:
         recompile = False
-        compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
-            "type": "param",
-            "params": [],
-        }
+
+        params: List[Tuple[str, ResourceIdStr]] = []
         for param in parameters:
-            name = param["id"]
+            name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
-            resource_id = param["resource_id"] if "resource_id" in param else None
+            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
 
             result = await self._update_param(env, name, value, source, resource_id, metadata)
             if result:
                 recompile = True
-                compile_metadata["params"].append((name, resource_id))
+                params.append((name, resource_id))
+
+        compile_metadata = {
+            "message": "Recompile model because one or more parameters were updated",
+            "type": "param",
+            "params": params,
+        }
 
         warnings = None
         if recompile:
@@ -235,7 +239,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
+    @handle(methods.delete_param, env="tid", parameter_name="id")
     async def delete_param(self, env: data.Environment, parameter_name: str, resource_id: str) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=parameter_name)
@@ -256,7 +260,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.list_params, env="tid")
+    @handle(methods.list_params, env="tid")
     async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
         params = await data.Parameter.list_parameters(env.id, **query)
         return (
@@ -264,6 +268,7 @@ class ParameterService(protocol.ServerSlice):
             {
                 "parameters": params,
                 "expire": self._fact_expire,
-                "now": datetime.datetime.now().isoformat(timespec="microseconds"),
+                # Return datetime in UTC without explicit timezone offset
+                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
             },
         )

@@ -306,7 +306,7 @@ class Resource(metaclass=ResourceMeta):
                 # serialize to weed out all unknowns
                 # not very efficient, but the tree has to be traversed anyways
                 # passing along the serialized version would break the resource apis
-                json.dumps(value, default=inmanta.util.custom_json_encoder)
+                json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
                 return value
             except proxy.UnknownException as e:
                 return e.unknown

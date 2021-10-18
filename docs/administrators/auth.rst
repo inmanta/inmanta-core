@@ -291,7 +291,7 @@ able to access this url).
 
 Both the correct url for the issuer and the jwks_uri is also defined in the openid-configuration endpoint of keycloack. For
 the examples above this url is http://localhost:8080/auth/realms/master/.well-known/openid-configuration
-(https://www.keycloak.org/docs/latest/securing_apps/index.html#endpoints-2)
+(https://www.keycloak.org/docs/latest/securing_apps/index.html#endpoints)
 
 .. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``
     to false in the ``auth_jwt_keycloak`` block for keycloak.

@@ -1,5 +1,5 @@
-South Bound Integration
-***********************
+Developing South Bound Integrations
+**********************************************
 
 The inmanta orchestrator comes with a set of integrations with different platforms (see: :ref:`ref-modules`).
 But it is also possible to develop your own south bound integrations.
@@ -10,9 +10,19 @@ To integrate a new platform into the orchestrator, you must take the following s
 2. Model the target platform as set of :term:`entities<entity>`.
 3. Create :term:`resources<resource>` and :term:`handler<handler>`, as described below.
 
-A :term:`resource<resource>` defines how to serialize an :term:`entity` so that it can be sent
-over to the server and the agent. A :term:`handler<handler>` is the python code required by the
-agent to enforce the :term:`desired state` expressed by a resource.
+Overview
+^^^^^^^^
+A South Bound integration always consists of three parts:
+  * one or more :term:`entities<entity>` in the model
+  * a :term:`resource<resource>` that serializes the entities and captures all information required to enforce the :term:`desired state`.
+  * a :term:`handler<handler>`: the python code required to enforce the desired state.
+
+.. image:: images/handler_flow.*
+
+* In the *compiler*, a model is constructed that consists of entities. The entities can be related to each other.
+* The *exporter* will search for all :term:`entities<entity>` that can be directly deployed by a :term:`handler<handler>`. These are the :term:`resources<resource>`. Resources are self-contained and can not refer to any other entity or resource.
+* The :term:`resources<resource>` will be sent to the server in json serialized form.
+* The :term:`agent` will present the :term:`resources<resource>` to a :term:`handler<handler>` in order to have the :term:`desired state` enforced on the managed infrastructure.
 
 
 Resource
@@ -72,24 +82,15 @@ The compiler collects all python modules from Inmanta modules that provide handl
 to the server. When a new orchestration model version is deployed, the handler code is pushed to all
 agents and imported there.
 
-Handlers should inherit the class :class:`~inmanta.agent.handler.ResourceHandler`. The
-:func:`@provider<inmanta.agent.handler.provider>` decorator registers the class with the orchestrator. When the
-agent needs a handler for a resource it will load all handler classes registered for that resource
-and call the :meth:`~inmanta.agent.handler.ResourceHandler.available` method. This method should check
-if all conditions are fulfilled to use this handler. The agent will select a handler, only when a
-single handler is available, so the :meth:`~inmanta.agent.handler.ResourceHandler.available` method of all handlers of a resource need to be
-mutually exclusive. If no handler is available, the resource will be marked unavailable.
+Handlers should inherit the class :class:`~inmanta.agent.handler.CRUDHandler`. The
+:func:`@provider<inmanta.agent.handler.provider>` decorator registers the class with the orchestrator.
 
-:class:`~inmanta.agent.handler.ResourceHandler` is the handler base class.
-:class:`~inmanta.agent.handler.CRUDHandler` provides a more recent base class that is better suited
-for resources that are manipulated with Create, Delete or Update operations. These operations often
-match managed APIs very well. The CRUDHandler is recommended for new handlers unless the resource
-has special resource states that do not match CRUD operations.
+Each Handler should override 4 methods of the CRUDHandler:
 
-Each handler basically needs to support two things: reading the current state and changing the state
-of the resource to the desired state in the orchestration model. Reading the state is used for dry
-runs and reporting. The CRUDHandler handler also uses the result to determine whether create, delete
-or update needs to be invoked.
+1. :meth:`~inmanta.agent.handler.CRUDHandler.read_resource` to read the current state of the system.
+2. :meth:`~inmanta.agent.handler.CRUDHandler.create_resource` to create the resource if it doesn't exist.
+3. :meth:`~inmanta.agent.handler.CRUDHandler.update_resource` to update the resource when required.
+4. :meth:`~inmanta.agent.handler.CRUDHandler.delete_resource` to delete the resource when required.
 
 The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most methods is used to
 report results, changes and logs to the handler and the server.
@@ -104,8 +105,8 @@ Logging
 """""""
 
 The agent has a built-in logging facility, similar to the standard python logger. All logs written
-to this logger will be sent to the server and are available via the dashboard and the API. 
-Additionally, the logs go into the agent's logfile and into the resource-action log on the server. 
+to this logger will be sent to the server and are available via the dashboard and the API.
+Additionally, the logs go into the agent's logfile and into the resource-action log on the server.
 
 To use this logger, use one of the methods: :py:meth:`ctx.debug<inmanta.agent.handler.HandlerContext.debug>`,
 :py:meth:`ctx.info<inmanta.agent.handler.HandlerContext.info>`,

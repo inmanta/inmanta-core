@@ -15,6 +15,22 @@
 
     Contact: code@inmanta.com
 """
+
+"""
+About the use of @parametrize_any and @slowtest:
+
+For parametrized tests:
+- if the test is fast and tests different things for each parameter, use @parametrize
+- if the parameters only slightly increase the coverage of the test (some different exception path,...), use @parametrize_any.
+- if a test is slow, use @parametrize_any
+
+The @slowtest annotation is usually added on test periodically, when the test suite becomes too slow.
+We analyze performance and place the @slowtest in the best places.
+It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
+This also allows test to run a few hundred times before being marked as slow.
+"""
+
+
 import asyncio
 import concurrent
 import csv
@@ -34,7 +50,7 @@ import tempfile
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
@@ -67,15 +83,83 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 
-# Import the utils module differently when conftest is put into the inmanta_tests packages
-if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
+# Import test modules differently when conftest is put into the inmanta_tests packages
+PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
+if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
+    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
+    from db.common import PGRestore
 
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+
+# Save the cwd as early as possible to prevent that it gets overridden by another fixture
+# before it's saved.
+initial_cwd = os.getcwd()
+
+
+def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
+    # register custom markers
+    config.addinivalue_line(
+        "markers",
+        "slowtest",
+    )
+    config.addinivalue_line(
+        "markers",
+        "parametrize_any: only execute one of the parameterized cases when in fast mode (see documentation in conftest.py)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
+    )
+
+
+def pytest_configure(config: "pytest.Config") -> None:
+    if PYTEST_PLUGIN_MODE:
+        _pytest_configure_plugin_mode(config)
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--fast",
+        action="store_true",
+        help="Don't run all test, but a representative set",
+    )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
+    """
+    For each test marked as parametrize_any run it either as
+    1. if not in fast mode: as if annotated with @parametrize
+    2. if in fast mode: with only one parameter combination, chosen randomly
+    """
+
+    is_fast = metafunc.config.getoption("fast")
+    for marker in metafunc.definition.iter_markers(name="parametrize_any"):
+        variations = len(marker.args[1])
+        if not is_fast or variations < 2:
+            metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
+        else:
+            # select one random item
+            args = list(marker.args)
+            selected = args[1][random.randrange(0, variations)]
+            args[1] = [selected]
+            metafunc.definition.add_marker(pytest.mark.parametrize(*args))
+
+
+def pytest_runtest_setup(item: "pytest.Item"):
+    """
+    When in fast mode, skip test marked as slow
+    """
+    is_fast = item.config.getoption("fast")
+    if not is_fast:
+        return
+    if any(True for mark in item.iter_markers(name="slowtest")):
+        pytest.skip("Skipping slow tests")
 
 
 # Database
@@ -86,7 +170,7 @@ def postgres_proc(unused_tcp_port_factory):
     proc.stop()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def postgres_db(postgresql_proc):
     yield postgresql_proc
 
@@ -308,9 +392,8 @@ def restore_cwd():
     """
     Restore the current working directory after search test.
     """
-    cwd = os.getcwd()
     yield
-    os.chdir(cwd)
+    os.chdir(initial_cwd)
 
 
 @pytest.fixture(scope="function")
@@ -744,15 +827,12 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
-        self.cwd = os.getcwd()
         self.keep_shared = False
 
     def tearDownClass(self):
         if not self.keep_shared:
             shutil.rmtree(self.libs)
             shutil.rmtree(self.env)
-        # reset cwd
-        os.chdir(self.cwd)
 
     def setup_func(self, module_dir):
         # init project
@@ -992,3 +1072,32 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
+
+
+@pytest.fixture
+async def migrate_db_from(
+    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """
+    Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
+
+    :param db_restore_dump: The db version dump file to restore (set via `@pytest.mark.db_restore_dump(<file>)`.
+    """
+    marker: Optional[pytest.mark.Mark] = request.node.get_closest_marker("db_restore_dump")
+    if marker is None or len(marker.args) != 1:
+        raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
+    # restore old version
+    with open(marker.args[0], "r") as fh:
+        await PGRestore(fh.readlines(), postgresql_client).run()
+
+    bootloader: InmantaBootloader = InmantaBootloader()
+
+    async def migrate() -> None:
+        # start boatloader, triggering db migration
+        await bootloader.start()
+        # inform asyncpg of any type changes so it knows to refresh its caches
+        await postgresql_client.reload_schema_state()
+
+    yield migrate
+
+    await bootloader.stop()

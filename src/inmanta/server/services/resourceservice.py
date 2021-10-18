@@ -25,18 +25,38 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado.httputil import url_concat
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE
-from inmanta.data import APILIMIT
-from inmanta.data.model import Resource, ResourceAction, ResourceType, ResourceVersionIdStr
-from inmanta.protocol import methods, methods_v2
+from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
+from inmanta.data.model import (
+    LatestReleasedResource,
+    Resource,
+    ResourceAction,
+    ResourceDetails,
+    ResourceHistory,
+    ResourceIdStr,
+    ResourceLog,
+    ResourceType,
+    ResourceVersionIdStr,
+)
+from inmanta.data.paging import (
+    ResourceHistoryPagingCountsProvider,
+    ResourceHistoryPagingHandler,
+    ResourceLogPagingCountsProvider,
+    ResourceLogPagingHandler,
+    ResourcePagingCountsProvider,
+    ResourcePagingHandler,
+)
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
-from inmanta.protocol.exceptions import BadRequest
+from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
+from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator, ResourceLogFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -55,7 +75,7 @@ def error_and_log(message: str, **context: Any) -> None:
 class ResourceActionLogLine(logging.LogRecord):
     """A special log record that is used to report log lines that come from the agent"""
 
-    def __init__(self, logger_name: str, level: str, msg: str, created: datetime.datetime) -> None:
+    def __init__(self, logger_name: str, level: int, msg: str, created: datetime.datetime) -> None:
         super().__init__(
             name=logger_name,
             level=level,
@@ -84,7 +104,7 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = {}
+        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -152,7 +172,7 @@ class ResourceService(protocol.ServerSlice):
         except KeyError:
             pass
 
-    def close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
         """Close the given logger for the given env.
         :param env: The environment to close the logger for
         :param logger: The logger to close, if the logger is none it is retrieved
@@ -182,7 +202,7 @@ class ResourceService(protocol.ServerSlice):
         log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
         logger.handle(log_record)
 
-    @protocol.handle(methods.get_resource, resource_id="id", env="tid")
+    @handle(methods.get_resource, resource_id="id", env="tid")
     async def get_resource(
         self,
         env: data.Environment,
@@ -222,7 +242,7 @@ class ResourceService(protocol.ServerSlice):
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
 
-    @protocol.handle(methods.get_resources_for_agent, env="tid")
+    @handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
@@ -237,7 +257,7 @@ class ResourceService(protocol.ServerSlice):
         return result
 
     async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: int) -> Apireturn:
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
             if version is None:
@@ -260,7 +280,7 @@ class ResourceService(protocol.ServerSlice):
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_ids:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(
                 logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent
             )
@@ -280,7 +300,7 @@ class ResourceService(protocol.ServerSlice):
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
 
         version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version is None:
@@ -298,7 +318,7 @@ class ResourceService(protocol.ServerSlice):
         increment_ids, neg_increment = increment
 
         # set already done to deployed
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
 
         def on_agent(res: ResourceVersionIdStr) -> bool:
             idr = Id.parse_id(res)
@@ -309,7 +329,7 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": now.isoformat(timespec="microseconds"),
+            "timestamp": util.datetime_utc_isoformat(now),
             "args": [],
         }
         self.add_background_task(
@@ -481,14 +501,29 @@ class ResourceService(protocol.ServerSlice):
                         )
 
                 if len(messages) > 0:
-                    resource_action.add_logs(messages)
+
+                    def parse_timestamp(timestamp: str) -> datetime.datetime:
+                        try:
+                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+                        except ValueError:
+                            # interpret naive datetimes as UTC
+                            return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(
+                                tzinfo=datetime.timezone.utc
+                            )
+
+                    resource_action.add_logs(
+                        [
+                            {**msg, "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds")}
+                            for msg in messages
+                        ]
+                    )
                     for msg in messages:
                         # All other data is stored in the database. The msg was already formatted at the client side.
                         self.log_resource_action(
                             env.id,
                             resource_ids,
-                            const.LogLevel[msg["level"]].value,
-                            datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
+                            const.LogLevel(msg["level"]).to_int,
+                            parse_timestamp(msg["timestamp"]),
                             msg["msg"],
                         )
 
@@ -635,3 +670,171 @@ class ResourceService(protocol.ServerSlice):
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
+
+    @protocol.handle(methods_v2.resource_list, env="tid")
+    async def resource_list(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[ResourceVersionIdStr] = None,
+        last_id: Optional[ResourceVersionIdStr] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+    ) -> ReturnValue[List[LatestReleasedResource]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(ResourceFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            resource_order = ResourceOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            dtos = await data.Resource.get_released_resources(
+                database_order=resource_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
+        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.resource_details, env="tid")
+    async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
+
+        details = await data.Resource.get_resource_details(env.id, rid)
+        if not details:
+            raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
+        return details
+
+    @handle(methods_v2.resource_history, env="tid")
+    async def resource_history(
+        self,
+        env: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        sort: str = "date.desc",
+    ) -> ReturnValue[List[ResourceHistory]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        try:
+            resource_order = data.ResourceHistoryOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            history = await data.Resource.get_resource_history(
+                env.id,
+                rid,
+                database_order=resource_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                limit=limit,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = ResourceHistoryPagingHandler(ResourceHistoryPagingCountsProvider(data.Resource, rid), rid)
+        metadata = await paging_handler.prepare_paging_metadata(
+            env.id, history, limit=limit, database_order=resource_order, db_query={}
+        )
+        links = await paging_handler.prepare_paging_links(
+            history,
+            database_order=resource_order,
+            limit=limit,
+            filter=None,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.resource_logs, env="tid")
+    async def resource_logs(
+        self,
+        env: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "timestamp.desc",
+    ) -> ReturnValue[List[ResourceLog]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        try:
+            resource_order = data.ResourceLogOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(ResourceLogFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            dtos = await data.ResourceAction.get_logs_paged(
+                resource_order, limit, env.id, rid, start=start, end=end, connection=None, **query
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction, rid), rid)
+        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))

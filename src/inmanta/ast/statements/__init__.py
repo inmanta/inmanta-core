@@ -20,7 +20,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple  # noqa: F401
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
 
 try:
     from typing import TYPE_CHECKING
@@ -89,7 +89,7 @@ class DynamicStatement(Statement):
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
@@ -126,7 +126,13 @@ class ExpressionStatement(DynamicStatement):
         """
         raise NotImplementedError()
 
-    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+    ) -> Dict[object, ResultVariable]:
+        """
+        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
+        resultcollector as a listener to result variables.
+        """
         return self.requires_emit(resolver, queue)
 
     def as_constant(self) -> object:

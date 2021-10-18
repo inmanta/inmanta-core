@@ -21,8 +21,10 @@ from datetime import datetime
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
+import openapi_spec_validator.decorators
 import pytest
 from openapi_spec_validator import openapi_v3_spec_validator
+from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
 from inmanta.const import ResourceAction
 from inmanta.data import model
@@ -38,6 +40,40 @@ from inmanta.protocol.openapi.converter import (
 )
 from inmanta.protocol.openapi.model import MediaType, Schema
 from inmanta.server import SLICE_SERVER
+from inmanta.server.extensions import FeatureManager
+from inmanta.server.protocol import Server
+
+
+@pytest.fixture
+def patch_openapi_spec_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+    def call_fixed(self: openapi_spec_validator.decorators.DerefValidatorDecorator, func):
+        """
+        This is a monkey fix for the openapi_spec_validator, to allow it to validate the schema of a reference.
+        To differentiate references from schema of a reference, we simply check the type of the reference.  If it
+        is not a str, it can not be a reference.
+        """
+
+        def wrapped(validator, schema_element, instance, schema):
+            if not isinstance(instance, dict) or "$ref" not in instance or not isinstance(instance["$ref"], str):
+                for res in func(validator, schema_element, instance, schema):
+                    yield res
+                return
+
+            ref = instance["$ref"]
+
+            # ref already visited
+            if ref in self.visiting:
+                return
+
+            self._attach_scope(instance)
+            with self.visiting.visit(ref):
+                with self.instance_resolver.resolving(ref) as target:
+                    for res in func(validator, schema_element, target, schema):
+                        yield res
+
+        return wrapped
+
+    monkeypatch.setattr(openapi_spec_validator.decorators.DerefValidatorDecorator, "__call__", call_fixed)
 
 
 class DummyException(BaseHttpException):
@@ -46,14 +82,14 @@ class DummyException(BaseHttpException):
 
 
 @pytest.fixture
-def feature_manager(server):
+def feature_manager(server: Server) -> FeatureManager:
     return server.get_slice(SLICE_SERVER).feature_manager
 
 
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
     @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
-    def post_method() -> object:
+    def post_method() -> str:
         return ""
 
     @method(path="/simpleoperation", client_types=["agent"], operation="GET")
@@ -153,7 +189,7 @@ def api_methods_fixture(clean_reset):
 
 
 @pytest.mark.asyncio
-async def test_generate_openapi_definition(server, feature_manager):
+async def test_generate_openapi_definition(server: Server, feature_manager: FeatureManager, patch_openapi_spec_validator: None):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)
     openapi_json = openapi.generate_openapi_json()
@@ -195,7 +231,7 @@ def test_return_value(api_methods_fixture):
 
     json_response_content = operation_handler._build_return_value_wrapper(MethodProperties.methods["post_method"][0])
     assert json_response_content == {
-        "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="object")}))
+        "application/json": MediaType(schema=Schema(type="object", properties={"data": Schema(type="string")}))
     }
 
 
@@ -218,7 +254,10 @@ def test_openapi_types_base_model():
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
     )
-    assert openapi_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
+    assert openapi_type.ref == type_converter.ref_prefix + "Environment"
+
+    environment_type = type_converter.resolve_reference(openapi_type.ref)
+    assert environment_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
 
 
 def test_openapi_types_union():
@@ -244,9 +283,12 @@ def test_openapi_types_list():
 def test_openapi_types_enum():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[ResourceAction])
-    assert openapi_type == Schema(
-        type="array", items=Schema(type="string", enum=["store", "push", "pull", "deploy", "dryrun", "getfact", "other"])
-    )
+    assert openapi_type.type == "array"
+    assert openapi_type.items.ref == type_converter.ref_prefix + "ResourceAction"
+
+    resource_action_type = type_converter.components.schemas["ResourceAction"]
+    assert resource_action_type.type == "string"
+    assert resource_action_type.enum == ["store", "push", "pull", "deploy", "dryrun", "getfact", "other"]
 
 
 def test_openapi_types_dict():
@@ -259,8 +301,7 @@ def test_openapi_types_list_of_model():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(List[model.Project])
     assert openapi_type.type == "array"
-    assert openapi_type.items.title == "Project"
-    assert openapi_type.items.required == ["id", "name", "environments"]
+    assert openapi_type.items.ref == type_converter.ref_prefix + "Project"
 
 
 def test_openapi_types_list_of_list_of_optional_model():
@@ -268,7 +309,7 @@ def test_openapi_types_list_of_list_of_optional_model():
     openapi_type = type_converter.get_openapi_type(List[List[Optional[model.Project]]])
     assert openapi_type.type == "array"
     assert openapi_type.items.type == "array"
-    assert openapi_type.items.items.required == ["id", "name", "environments"]
+    assert openapi_type.items.items.ref == type_converter.ref_prefix + "Project"
     assert openapi_type.items.items.nullable
 
 
@@ -277,8 +318,8 @@ def test_openapi_types_dict_of_union():
     openapi_type = type_converter.get_openapi_type(Dict[str, Union[model.Project, model.Environment]])
     assert openapi_type.type == "object"
     assert len(openapi_type.additionalProperties.anyOf) == 2
-    assert openapi_type.additionalProperties.anyOf[0].title == "Project"
-    assert openapi_type.additionalProperties.anyOf[1].title == "Environment"
+    assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.ref_prefix + "Project"
+    assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.ref_prefix + "Environment"
 
 
 def test_openapi_types_optional_union():
@@ -328,7 +369,7 @@ def test_openapi_types_string():
 def test_openapi_types_float():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(float)
-    assert openapi_type == Schema(type="number", format="float")
+    assert openapi_type == Schema(type="number")
 
 
 def test_openapi_types_bytes():
@@ -343,12 +384,28 @@ def test_openapi_types_uuid():
     assert openapi_type == Schema(type="string", format="uuid")
 
 
+def test_openapi_types_anyurl():
+    type_converter = OpenApiTypeConverter()
+
+    openapi_type = type_converter.get_openapi_type(AnyUrl)
+    assert openapi_type == Schema(type="string", format="uri")
+
+    openapi_type = type_converter.get_openapi_type(AnyHttpUrl)
+    assert openapi_type == Schema(type="string", format="uri")
+
+    openapi_type = type_converter.get_openapi_type(PostgresDsn)
+    assert openapi_type == Schema(type="string", format="uri")
+
+
 def test_openapi_types_env_setting():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(EnvironmentSetting)
-    assert openapi_type.title == "EnvironmentSetting"
-    assert openapi_type.type == "object"
-    assert openapi_type.required == ["name", "type", "default", "doc", "recompile", "update_model", "agent_restart"]
+    assert openapi_type.ref == type_converter.ref_prefix + "EnvironmentSetting"
+
+    env_settings_type = type_converter.resolve_reference(openapi_type.ref)
+    assert env_settings_type.title == "EnvironmentSetting"
+    assert env_settings_type.type == "object"
+    assert env_settings_type.required == ["name", "type", "default", "doc", "recompile", "update_model", "agent_restart"]
 
 
 def test_post_operation(api_methods_fixture):
@@ -614,7 +671,7 @@ def test_get_operation_partial_documentation(api_methods_fixture):
 
 
 @pytest.mark.asyncio
-async def test_openapi_endpoint(client):
+async def test_openapi_endpoint(client, patch_openapi_spec_validator: None):
     result = await client.get_api_docs("openapi")
     assert result.code == 200
     openapi_spec = result.result["data"]
@@ -637,3 +694,68 @@ async def test_tags(server, feature_manager):
         for operation in path.values():
             assert len(operation["tags"]) > 0
     assert "core.project" in openapi_parsed["paths"]["/api/v1/project"]["get"]["tags"]
+
+
+def test_openapi_schema() -> None:
+    ref_prefix = "#/"
+    schemas = {
+        "person": Schema(
+            **{
+                "title": "Person",
+                "properties": {
+                    "address": {
+                        "$ref": ref_prefix + "address",
+                    },
+                    "age": {
+                        "title": "Age",
+                        "type": "integer",
+                    },
+                },
+            }
+        ),
+        "address": Schema(
+            **{
+                "title": "Address",
+                "properties": {
+                    "street": {
+                        "title": "Street",
+                        "type": "string",
+                    },
+                    "number": {
+                        "title": "Number",
+                        "type": "integer",
+                    },
+                    "city": {
+                        "title": "City",
+                        "type": "string",
+                    },
+                },
+            }
+        ),
+    }
+
+    assert schemas["person"] == Schema(
+        title="Person",
+        properties={
+            "address": Schema(**{"$ref": ref_prefix + "address"}),
+            "age": Schema(title="Age", type="integer"),
+        },
+    )
+
+    assert schemas["address"] == Schema(
+        title="Address",
+        properties={
+            "street": Schema(title="Street", type="string"),
+            "number": Schema(title="Number", type="integer"),
+            "city": Schema(title="City", type="string"),
+        },
+    )
+
+    assert Schema(**{"$ref": ref_prefix + "person"}).resolve(ref_prefix, schemas) == schemas["person"]
+    assert Schema(**{"$ref": ref_prefix + "address"}).resolve(ref_prefix, schemas) == schemas["address"]
+
+    person_schema = schemas["person"].copy(deep=True)
+
+    assert not Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
+    person_schema.properties["address"] = schemas["address"]
+    assert Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema

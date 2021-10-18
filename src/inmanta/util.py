@@ -32,13 +32,13 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Set, Tuple, TypeVar, Union
+from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
 
 from inmanta import COMPILER_VERSION
-from inmanta.data.model import BaseModel
+from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     return directory
 
 
-def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]):
+def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
@@ -128,7 +128,12 @@ class Scheduler(object):
         self._scheduled: Dict[Callable, object] = {}
         self._stopped = False
 
-    def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
+    def add_action(
+        self,
+        action: Union[Callable[[], None], Coroutine[None, None, None]],
+        interval: float,
+        initial_delay: Optional[float] = None,
+    ) -> None:
         """
         Add a new action
 
@@ -147,7 +152,7 @@ class Scheduler(object):
 
         LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
 
-        def action_function():
+        def action_function() -> None:
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
@@ -198,6 +203,21 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
+def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
+    """
+    Returns a timestamp ISO string in implicit UTC.
+
+    :param timestamp: The timestamp to get the ISO string for.
+    :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
+    """
+    naive_utc_timestamp: datetime.datetime = (
+        timestamp
+        if timestamp.tzinfo is None and naive_utc
+        else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    )
+    return naive_utc_timestamp.isoformat(timespec="microseconds")
+
+
 class JSONSerializable(ABC):
     """
     Instances of this class are JSON serializable. Concrete subclasses should implement json_serialization_step.
@@ -211,6 +231,32 @@ class JSONSerializable(ABC):
         calling JSONSerializable.default eventually resolves to a trivially serializable object.
         """
         raise NotImplementedError()
+
+
+@stable_api
+def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+    """
+    A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
+    encoder is meant to be used internally.
+    """
+    if isinstance(o, datetime.datetime):
+        # Internally, all naive datetime instances are assumed local. Returns ISO timestamp with explicit timezone offset.
+        return custom_json_encoder(o if o.tzinfo is not None else o.astimezone())
+
+    return custom_json_encoder(o)
+
+
+@stable_api
+def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+    """
+    A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
+    encoder is meant to be used for API boundaries.
+    """
+    if isinstance(o, datetime.datetime):
+        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
+        return datetime_utc_isoformat(o, naive_utc=True)
+
+    return custom_json_encoder(o)
 
 
 def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
@@ -227,7 +273,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         return o.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
-        return o.to_dict()
+        return o.to_dict()  # type: ignore
 
     if isinstance(o, enum.Enum):
         return o.name
@@ -235,6 +281,8 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    from inmanta.data.model import BaseModel
 
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True)
@@ -283,13 +331,13 @@ class TaskHandler(object):
         self._await_tasks: Set[Task] = set()
         self._stopped = False
 
-    def is_stopped(self):
+    def is_stopped(self) -> bool:
         return self._stopped
 
-    def is_running(self):
+    def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
+    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop: bool = True) -> Task:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
@@ -340,11 +388,11 @@ class TaskHandler(object):
 
 
 class CycleException(Exception):
-    def __init__(self, node):
+    def __init__(self, node: str) -> None:
         self.nodes = [node]
         self.done = False
 
-    def add(self, node):
+    def add(self, node: str) -> None:
         if not self.done:
             if node not in self.nodes:
                 self.nodes.insert(0, node)

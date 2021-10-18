@@ -61,15 +61,15 @@ class PostgresProc(object):
             if os.path.exists(self.db_path) and os.path.isfile(self.db_path):
                 raise AssertionError("DB path should be a directory, but it is a file.")
 
-        self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
-        assert (
-            self.pg_ctl_bin
-        ), f"Could not find '{PG_CTL_BIN}' or pg_config in system PATH. Make sure you have PostgreSQL installed."
+        ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
+        assert ctl_bin, f"Could not find '{PG_CTL_BIN}' or pg_config in system PATH. Make sure you have PostgreSQL installed."
+        self.pg_ctl_bin: str = ctl_bin
 
-        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
+        initdb_bin = initdb_bin or find_executable(INITDB_BIN)
         assert (
-            self.initdb_bin
+            initdb_bin
         ), f"Could not find '{INITDB_BIN}' or pg_config in system PATH. Make sure you have PostgreSQL installed."
+        self.initdb_bin: str = initdb_bin
 
     def start(self) -> bool:
         """
@@ -83,6 +83,7 @@ class PostgresProc(object):
         try:
             old_wc = os.getcwd()
             self._create_db_path()
+            assert self.db_path
             self._init_db()
             self._create_sockets_dir(self.db_path)
 
@@ -116,6 +117,7 @@ class PostgresProc(object):
 
     def _init_db(self) -> None:
         """ Init the database if it is not a valid postgres data directory """
+        assert self.db_path
         if os.path.exists(os.path.join(self.db_path, "PG_VERSION")):
             return
 
@@ -130,14 +132,14 @@ class PostgresProc(object):
             raise Exception("Failed to initialize db path.")
 
     def stop(self) -> None:
-        if not self.running():
+        if not self.running() or not self.db_path:
             return
         args = [self.pg_ctl_bin, "stop", "-D", self.db_path, "-m", "immediate", "-s"]
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         process.communicate()
         if process.returncode != 0:
             raise Exception("Failed to stop embedded db.")
-        if self._db_path_is_temporary:
+        if self._db_path_is_temporary and self.db_path:
             shutil.rmtree(self.db_path)
             self.db_path = None
 

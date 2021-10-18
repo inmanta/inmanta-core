@@ -23,7 +23,7 @@ import sys
 import time
 from argparse import ArgumentParser
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Iterable, List, Mapping
+from typing import TYPE_CHECKING, Iterable, List, Mapping, Optional
 
 import texttable
 import yaml
@@ -220,7 +220,7 @@ class ProjectTool(ModuleLikeTool):
             if close:
                 outfile.close()
 
-    def init(self, output_dir, name, default):
+    def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
         project_path = os.path.join(output_dir, name)
         if os.path.exists(project_path):
@@ -238,11 +238,11 @@ class ModuleTool(ModuleLikeTool):
     A tool to manage configuration modules
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser):
+    def modules_parser_config(cls, parser: ArgumentParser) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
@@ -326,13 +326,13 @@ class ModuleTool(ModuleLikeTool):
             project = self.get_project(load=True)
             return project.get_module(module)
 
-    def get_modules(self, module: str = None):
+    def get_modules(self, module: Optional[str] = None) -> List[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name):
+    def create(self, name: str) -> None:
         project = self.get_project()
         mod_root = project.modulepath[-1]
         LOGGER.info("Creating new module %s in %s", name, mod_root)
@@ -370,14 +370,14 @@ version: 0.0.1dev0"""
 
         LOGGER.info("Module successfully created.")
 
-    def do(self, command, module):
+    def do(self, command: str, module: str) -> None:
         for mod in self.get_modules(module):
             try:
                 mod.execute_command(command)
             except Exception as e:
                 print(e)
 
-    def list(self, requires=False):
+    def list(self, requires: bool = False) -> None:
         """
         List all modules in a table
         """
@@ -497,21 +497,21 @@ version: 0.0.1dev0"""
         else:
             project.load_module(module)
 
-    def status(self, module=None):
+    def status(self, module: Optional[str] = None) -> None:
         """
         Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
             mod.status()
 
-    def push(self, module=None):
+    def push(self, module: Optional[str] = None) -> None:
         """
         Push all modules
         """
         for mod in self.get_modules(module):
             mod.push()
 
-    def verify(self):
+    def verify(self) -> None:
         """
         Verify dependencies and frozen module versions
         """
@@ -524,16 +524,16 @@ version: 0.0.1dev0"""
 
     def commit(
         self,
-        message,
-        module=None,
-        version=None,
-        dev=False,
-        major=False,
-        minor=False,
-        patch=False,
-        commit_all=False,
-        tag=False,
-    ):
+        message: str,
+        module: Optional[str] = None,
+        version: Optional[str] = None,
+        dev: bool = False,
+        major: bool = False,
+        minor: bool = False,
+        patch: bool = False,
+        commit_all: bool = False,
+        tag: bool = False,
+    ) -> None:
         """
         Commit all current changes.
         """
@@ -554,48 +554,49 @@ version: 0.0.1dev0"""
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
 
-    def freeze(self, outfile, recursive, operator, module=None):
+    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
 
         # find module
-        module = self.get_module(module)
+        module_obj = self.get_module(module)
 
         if recursive is None:
-            recursive = module.freeze_recursive
+            recursive = module_obj.freeze_recursive
 
         if operator is None:
-            operator = module.freeze_operator
+            operator = module_obj.freeze_operator
 
         if operator not in ["==", "~=", ">="]:
             LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
 
         freeze = {}
 
-        for submodule in module.get_all_submodules():
-            freeze.update(module.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
+        for submodule in module_obj.get_all_submodules():
+            freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
         set_yaml_order_preserving()
 
-        with open(module.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
 
         close = False
+        out_fd = None
         if outfile is None:
-            outfile = open(module.get_metadata_file_path(), "w", encoding="UTF-8")
+            out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            out_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            out_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            out_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                out_fd.close()

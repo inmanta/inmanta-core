@@ -287,6 +287,39 @@ Rest API
 
 The rest API is also available as a `swagger spec <openapi.html#http://>`_
 
+The (v2) API endpoints that offer paging, sorting and filtering follow a convention.
+They share the following parameters:
+
+limit
+    specifies the page size, so the maximum number of items returned from the query
+start and first_id
+    These parameters define the lower limit for the page,
+end and last_id
+    These parameters define the upper limit for the page
+    (only one of the (`start`, `first_id`), (`end`, `last_id`) pairs should be specified at the same time).
+
+.. note:: The return value of these methods contain a `links` tag, with the urls of the `next` and `prev` pages, so for simply going through the pages a client only needs to follow these links.
+
+filter
+    The `filter` parameter is used for filtering the result set.
+
+    Filters should be specified with the syntax `?filter.<filter_key>=value`.
+
+    It's also possible to provide multiple values for the same filter, in this case results are returned,
+    if they match any of these filter values: `?filter.<filter_key>=value&filter.<filter_key>=value2`
+
+    Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+    For example `?filter.<filter_key>=value&filter.<filter_key2>=value2` returns results that match both filters.
+
+    The documentation of each method describes the supported filters.
+
+sort
+    The sort parameter describes how the result set should be sorted.
+
+    It should follow the pattern `?<attribute_to_sort_by>.<order>`, for example `?value.desc` (case insensitive).
+
+    The documentation of each method describes the supported attributes to sort by.
+
 .. automodule:: inmanta.protocol.methods
     :members:
 

@@ -79,7 +79,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self):
+    def normalize(self) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):
@@ -125,7 +125,7 @@ class FunctionCall(ReferenceStatement):
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(
@@ -137,7 +137,7 @@ class FunctionCall(ReferenceStatement):
             ),
         )
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(
@@ -251,7 +251,7 @@ class FunctionUnit(Waiter):
 
     __slots__ = ("result", "base_requires", "function", "resolver")
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         result.set_provider(self)
@@ -266,7 +266,7 @@ class FunctionUnit(Waiter):
             self.waitfor(r)
         self.ready(self)
 
-    def execute(self):
+    def execute(self) -> None:
         requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue, self.result)

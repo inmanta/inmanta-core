@@ -1,0 +1,6 @@
+description: made code and database timezone-aware and make sure API returns implicit UTC
+change-type: patch
+issue-nr: 2919
+destination-branches:
+  - master
+  - iso4
