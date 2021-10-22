@@ -80,9 +80,6 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
     include_package_data=True
     packages=find_namespace:
 
-    [options.package_data]
-    *=files/*, model/*, templates/*, setup.cfg
-
 
 * The ``metadata`` section defines the following fields:
 
@@ -94,8 +91,6 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   module on other Inmanta modules and external Python libraries. These version specs use
   `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new module dependency to the module
   should be done using the ``inmanta module add`` command instead of altering the ``setup.cfg`` file by hand.
-
-* All other config is required for ``setuptools`` to correctly build the package. It is documented `here <https://setuptools.readthedocs.io/en/latest/userguide/declarative_config.html>`_.
 
 A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
 
@@ -110,6 +105,23 @@ installs. This file should always have the following content:
     [build-system]
     requires = ["setuptools", "wheel"]
     build-backend = "setuptools.build_meta"
+
+
+The MANIFEST.in file
+--------------------
+This file enables ``setuptools`` to correctly build the package. It is documented `here <https://packaging.python.org/guides/using-manifest-in/>`_.
+An example that includes the model, files, templates and metadata file in the package looks like this:
+
+.. code-block::
+
+    include inmanta_plugins/mod1/setup.cfg
+    recursive-include inmanta_plugins/mod1/model *.cf
+    graft inmanta_plugins/mod1/files
+    graft inmanta_plugins/mod1/templates
+
+You might notice that the model, file and templates directories, nor the metadata file reside in the ``inmanta_plugins``
+directory. The inmanta build tool takes care of this to ensure the included files are included in the package
+installation directory.
 
 
 V1 module format
