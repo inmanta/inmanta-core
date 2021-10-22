@@ -1,4 +1,4 @@
-include minimalv2module/setup.cfg
+include inmanta_plugins/minimalv2module/setup.cfg
 recursive-include inmanta_plugins/minimalv2module/model *.cf
 graft inmanta_plugins/minimalv2module/files
 graft inmanta_plugins/minimalv2module/templates

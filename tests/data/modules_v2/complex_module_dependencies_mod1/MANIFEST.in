@@ -1,4 +1,4 @@
-include complex_module_dependencies_mod1/setup.cfg
+include inmanta_plugins/complex_module_dependencies_mod1/setup.cfg
 recursive-include inmanta_plugins/complex_module_dependencies_mod1/model *.cf
 graft inmanta_plugins/complex_module_dependencies_mod1/files
 graft inmanta_plugins/complex_module_dependencies_mod1/templates
