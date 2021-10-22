@@ -982,6 +982,9 @@ class ModuleConverter:
         if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
             raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
 
+        if os.path.exists(os.path.join(output_directory, "MANIFEST.in")):
+            raise CLIException("MANIFEST.in already exists, aborting. Please remove/rename this file", exitcode=1)
+
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
             raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
@@ -1004,13 +1007,23 @@ class ModuleConverter:
             os.makedirs(new_plugins)
             with open(os.path.join(new_plugins, "__init__.py"), "w"):
                 pass
-        # write out pyproject.toml
 
+        # write out pyproject.toml
         with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
             fh.write(self.get_pyproject())
-        # write our setup.cfg
+        # write out setup.cfg
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
             setup_cfg.write(fh)
+        # write out MANIFEST.in
+        with open(os.path.join(output_directory, "MANIFEST.in"), "w") as fh:
+            fh.write(
+                f"""
+include inmanta_plugins/{self._module.name}/setup.cfg
+recursive-include inmanta_plugins/{self._module.name}/model *.cf
+graft inmanta_plugins/{self._module.name}/files
+graft inmanta_plugins/{self._module.name}/templates
+                """.strip()
+            )
 
     def get_pyproject(self) -> str:
         return """[build-system]
