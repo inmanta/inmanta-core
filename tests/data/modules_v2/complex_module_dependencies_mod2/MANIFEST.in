@@ -1,0 +1,4 @@
+include inmanta_plugins/complex_module_dependencies_mod2/setup.cfg
+recursive-include inmanta_plugins/complex_module_dependencies_mod2/model *.cf
+graft inmanta_plugins/complex_module_dependencies_mod2/files
+graft inmanta_plugins/complex_module_dependencies_mod2/templates

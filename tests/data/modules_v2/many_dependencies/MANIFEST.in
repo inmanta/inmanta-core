@@ -1,0 +1,4 @@
+include inmanta_plugins/many_dependencies/setup.cfg
+recursive-include inmanta_plugins/many_dependencies/model *.cf
+graft inmanta_plugins/many_dependencies/files
+graft inmanta_plugins/many_dependencies/templates

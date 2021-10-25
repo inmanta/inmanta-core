@@ -292,6 +292,80 @@ def test_module_install_reinstall(
     assert all(new_files_exist())
 
 
+def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+    """
+    Verify that module installation includes data files regardless of depth in the directory structure.
+    """
+    # set up module directory
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+    )
+    deep_model_file_rel: str = os.path.join(
+        "model",
+        *(str(i) for i in range(10)),
+        "mymod.cf",
+    )
+    os.makedirs(os.path.join(module_path, os.path.dirname(deep_model_file_rel)))
+    open(os.path.join(module_path, deep_model_file_rel), "w").close()
+
+    # set up simple project and activate snippetcompiler venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    # install module: non-editable mode
+    ModuleTool().install(editable=False, path=module_path)
+
+    assert os.path.exists(
+        os.path.join(
+            env.process_env.site_packages_dir,
+            const.PLUGINS_PACKAGE,
+            module_name,
+            deep_model_file_rel,
+        )
+    )
+
+
+def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+    """
+    Verify that installing a module from source cleans up any old installation's data files.
+    """
+    # set up module directory
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+    )
+    model_file_rel: str = os.path.join("model", "mymod.cf")
+    model_file_source_path: str = os.path.join(module_path, model_file_rel)
+    assert not os.path.exists(model_file_source_path)
+    open(model_file_source_path, "w").close()
+
+    def model_file_installed() -> bool:
+        return os.path.exists(
+            os.path.join(
+                env.process_env.site_packages_dir,
+                const.PLUGINS_PACKAGE,
+                module_name,
+                model_file_rel,
+            )
+        )
+
+    # set up simple project and activate snippetcompiler venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    # install module: non-editable mode
+    ModuleTool().install(editable=False, path=module_path)
+    assert model_file_installed()
+
+    # remove model file and reinstall
+    os.remove(model_file_source_path)
+    ModuleTool().install(editable=False, path=module_path)
+    assert not model_file_installed()
+
+
 @pytest.mark.parametrize_any(
     "install_module_names, module_dependencies",
     [
@@ -303,7 +377,6 @@ def test_module_install_reinstall(
 def test_project_install(
     local_module_package_index: str,
     snippetcompiler_clean,
-    projects_dir: str,
     install_module_names: List[str],
     module_dependencies: List[str],
 ) -> None:
@@ -346,7 +419,6 @@ def test_project_install_preinstalled(
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_v2_dir: str,
-    projects_dir: str,
     editable: bool,
 ) -> None:
     """

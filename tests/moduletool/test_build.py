@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import configparser
 import importlib.util
 import logging
 import os
@@ -25,7 +24,7 @@ import sys
 import zipfile
 from importlib.machinery import ModuleSpec
 from types import ModuleType
-from typing import Optional
+from typing import List, Optional
 
 import pytest
 from pytest import MonkeyPatch
@@ -143,13 +142,13 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
     shutil.copytree(module_dir, module_copy_dir)
     assert os.path.isdir(module_copy_dir)
 
-    # Rewrite the setup.cfg file
-    setup_cfg_file = os.path.join(module_copy_dir, "setup.cfg")
-    config_parser = configparser.ConfigParser()
-    config_parser.read(setup_cfg_file)
-    config_parser.set("options.package_data", "*", "setup.cfg")
-    with open(setup_cfg_file, "w") as fd:
-        config_parser.write(fd)
+    # Rewrite the MANIFEST.in file
+    manifest_file: str = os.path.join(module_copy_dir, "MANIFEST.in")
+    lines: List[str]
+    with open(manifest_file, "r") as fd:
+        lines = fd.read().splitlines()
+    with open(manifest_file, "w") as fd:
+        fd.write("\n".join(line for line in lines if "/model" not in line))
 
     # load the module to make sure pycache files are ignored in the warning
     source_dir: str = os.path.join(module_copy_dir, "inmanta_plugins", "minimalv2module")
@@ -174,7 +173,7 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
         assert (
             "The following files are present in the inmanta_plugins/minimalv2module directory on disk, but were not "
-            "packaged: ['model/_init.cf']. Update you setup.cfg file if they need to be packaged."
+            "packaged: ['model/_init.cf']. Update you MANIFEST.in file if they need to be packaged."
         ) in caplog.messages
 
 

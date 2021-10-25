@@ -387,13 +387,18 @@ def module_from_template(
         if new_version.is_devrelease:
             config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
     if new_name is not None:
+        old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
         os.rename(
-            os.path.join(
-                dest_dir, const.PLUGINS_PACKAGE, module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
-            ),
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
             os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
         )
         config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
+        manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
+        manifest_content: str
+        with open(manifest_file, "r") as fd:
+            manifest_content: str = fd.read()
+        with open(manifest_file, "w", encoding="utf-8") as fd:
+            fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
     if new_requirements:
         config["options"]["install_requires"] = "\n    ".join(
             str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
