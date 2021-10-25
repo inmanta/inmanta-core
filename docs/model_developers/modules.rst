@@ -22,6 +22,7 @@ A complete V2 module might contain the following files:
 
     module
     |
+    |__ MANIFEST.in
     |__ setup.cfg
     |__ pyproject.toml
     |
