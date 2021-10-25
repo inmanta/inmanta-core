@@ -119,7 +119,7 @@ An example that includes the model, files, templates and metadata file in the pa
     graft inmanta_plugins/mod1/files
     graft inmanta_plugins/mod1/templates
 
-You might notice that the model, file and templates directories, nor the metadata file reside in the ``inmanta_plugins``
+You might notice that the model, files and templates directories, nor the metadata file reside in the ``inmanta_plugins``
 directory. The inmanta build tool takes care of this to ensure the included files are included in the package
 installation directory.
 
