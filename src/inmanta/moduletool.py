@@ -1015,7 +1015,7 @@ class ModuleConverter:
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
             setup_cfg.write(fh)
         # write out MANIFEST.in
-        with open(os.path.join(output_directory, "MANIFEST.in"), "w") as fh:
+        with open(os.path.join(output_directory, "MANIFEST.in"), "w", encoding="utf-8") as fh:
             fh.write(
                 f"""
 include inmanta_plugins/{self._module.name}/setup.cfg
