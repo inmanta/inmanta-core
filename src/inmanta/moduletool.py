@@ -460,9 +460,6 @@ with the dependencies specified by the installed module.
                     f"Failed to install {module_requirement} as a {'v1' if v1 else 'v2'} module.",
                     exitcode=1,
                 )
-            else:
-                # cached project might have inconsistent state after modifying the environment through another instance
-                self.get_project(load=False).invalidate_state()
         module_like.add_module_requirement_persistent(requirement=module_requirement, add_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:
