@@ -138,6 +138,12 @@ class InmantaModuleRequirement:
     def __hash__(self) -> int:
         return self._requirement.__hash__()
 
+    def version_spec_str(self) -> str:
+        """
+        Returns a string representation of this module requirement's version spec. Includes only the version part.
+        """
+        return ",".join("".join(spec) for spec in self._requirement.specs)
+
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
         if "-" in spec:
@@ -499,6 +505,17 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
+        preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
+        if preinstalled is not None:
+            # log warning if preinstalled version does not match constraints
+            preinstalled_version: str = str(preinstalled.version)
+            if not all(preinstalled_version in constraint for constraint in module_spec):
+                LOGGER.warning(
+                    "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
+                    module_name,
+                    preinstalled_version,
+                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                )
         try:
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
         except env.PackageNotFound:
@@ -572,6 +589,12 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             if all(preinstalled_version in constraint for constraint in module_spec):
                 return preinstalled
             else:
+                LOGGER.warning(
+                    "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
+                    module_name,
+                    preinstalled_version,
+                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                )
                 return ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
 import shutil
 from typing import List
@@ -214,7 +215,7 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     _assert_module_requirements(expected_requirements=["mod3==1.0.1"])
 
 
-def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
+def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
     """
     Verify that `inmanta module add` respects preinstalled modules when they're compatible logs a warning when they're not.
     """
@@ -250,15 +251,21 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
 
     # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=1.0", v2=True, override=True)
-    assert ModuleTool().get_module(module_name).version == Version("1.0.0")
+    with caplog.at_level(logging.WARNING):
+        assert ModuleTool().get_module(module_name).version == Version("1.0.0")
+        assert not caplog.messages
 
-    # TODO: make sure a warning gets logged
     # verify that incompatible constraint does reinstall and logs a warning
-    ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
+    with caplog.at_level(logging.WARNING):
+        ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
+        assert (
+            f"Currently installed {module_name}-1.0.0 does not match constraint ~=2.0: updating to compatible version."
+            in caplog.messages
+        )
     assert ModuleTool().get_module(module_name).version == Version("2.0.0")
 
 
-def test_module_add_preinstalled_v1(snippetcompiler_clean) -> None:
+def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
     """
     Verify that `inmanta module add` respects preinstalled v1 modules when they're compatible logs a warning when they're not.
     """
@@ -271,9 +278,15 @@ def test_module_add_preinstalled_v1(snippetcompiler_clean) -> None:
 
     # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=2.0", v1=True, override=True)
-    assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+    with caplog.at_level(logging.WARNING):
+        assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+        assert not caplog.messages
 
-    # TODO: make sure a warning gets logged
     # verify that incompatible constraint does reinstall and logs a warning
-    ModuleTool().add(module_req=f"{module_name}~=2.1.0", v1=True, override=True)
+    with caplog.at_level(logging.WARNING):
+        ModuleTool().add(module_req=f"{module_name}~=2.1.0", v1=True, override=True)
+        assert (
+            f"Currently installed {module_name}-2.0.0 does not match constraint ~=2.1.0: updating to compatible version."
+            in caplog.messages
+        )
     assert ModuleTool().get_module(module_name).version == Version("2.1.10")
