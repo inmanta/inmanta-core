@@ -212,3 +212,44 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
 
     ModuleTool().add(module_req="mod3==1.0.1", v1=True, override=True)
     _assert_module_requirements(expected_requirements=["mod3==1.0.1"])
+
+
+def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
+    # TODO: docstring
+    # TODO: same test for v1 module add?
+    module_name: str = "mymodule"
+    pip_index = PipIndex(artifact_dir=str(tmpdir.join("pip-index")))
+    snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False, python_package_sources=[pip_index.url])
+
+    # preinstall 1.0.0, don't publish to index
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join(module_name, "1.0.0")),
+        new_name=module_name,
+        new_version=Version("1.0.0"),
+        install=True,
+    )
+    # publish 1.1.0 and 2.0.0 to index
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join(module_name, "1.1.0")),
+        new_name=module_name,
+        new_version=Version("1.1.0"),
+        install=False,
+        publish_index=pip_index,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join(module_name, "2.0.0")),
+        new_name=module_name,
+        new_version=Version("2.0.0"),
+        install=False,
+        publish_index=pip_index,
+    )
+
+    ModuleTool().add(module_req=f"{module_name}~=1.0", v2=True, override=True)
+    assert ModuleTool().get_module(module_name).version == Version("1.0.0")
+
+    # TODO: make sure a warning gets logged
+    ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
+    assert ModuleTool().get_module(module_name).version == Version("2.0.0")

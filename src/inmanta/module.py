@@ -412,17 +412,13 @@ class ModuleSource(Generic[TModule]):
             return None
 
     @abstractmethod
-    def install(
-        self, project: "Project", module_spec: List[InmantaModuleRequirement], update_when_already_installed: bool = False
-    ) -> Optional[TModule]:
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
         """
-        Attempt to install a module given a module spec.
+        Attempt to install a module given a module spec. Updates a module that is already installed only if it does not match
+        the constraints.
 
         :param project: The project associated with the module.
         :param module_spec: The module specification including any constraints on its version.
-        :param update_when_already_installed: By default, this method doesn't check the given version constraint when
-                                              the module is already installed. Setting this parameter to True, ensure that
-                                              the correct module version is installed after the execution of this method.
         :return: The module object when the module was installed. When the module could not be found, None is returned.
         """
         raise NotImplementedError("Abstract method")
@@ -499,19 +495,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
-    def install(
-        self,
-        project: Optional["Project"],
-        module_spec: List[InmantaModuleRequirement],
-        update_when_already_installed: bool = False,
-    ) -> Optional["ModuleV2"]:
+    def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         try:
-            env.process_env.install_from_index(
-                requirements, self.urls, allow_pre_releases=allow_pre_releases, upgrade=update_when_already_installed
-            )
+            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -575,16 +564,17 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
-    def install(
-        self, project: "Project", module_spec: List[InmantaModuleRequirement], update_when_already_installed: bool = False
-    ) -> Optional["ModuleV1"]:
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
-        path: Optional[str] = self.path_for(module_name)
-        if path is not None:
-            if update_when_already_installed:
-                return ModuleV1.update(project, module_name, module_spec, path, fetch=False, install_mode=project.install_mode)
+        preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
+        if preinstalled is not None:
+            preinstalled_version: str = str(preinstalled.version)
+            if all(preinstalled_version in constraint for constraint in module_spec):
+                return preinstalled
             else:
-                return self.from_path(project, module_name, path)
+                return ModuleV1.update(
+                    project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
+                )
         else:
             if project.downloadpath is None:
                 raise CompilerException(
@@ -1412,16 +1402,18 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Install the given module. If attempting to as v2, this method implicitly trusts any Python package with the
         corresponding name.
+        Does not reinstall if the given module requirement is already met.
         """
         installed_module: Optional[Module]
         if install_as_v1_module:
-            installed_module = self.module_source_v1.install(self, module_spec=[module_req], update_when_already_installed=True)
+            installed_module = self.module_source_v1.install(self, module_spec=[module_req])
         else:
-            installed_module = self.module_source.install(self, module_spec=[module_req], update_when_already_installed=True)
+            installed_module = self.module_source.install(self, module_spec=[module_req])
         if not installed_module:
             raise ModuleNotFoundException(
                 f"Failed to install module {module_req} as {'V1' if install_as_v1_module else 'V2'} module"
             )
+        self.modules[installed_module.name] = installed_module
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ProjectMetadata) -> str:
@@ -1504,6 +1496,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.loaded = True
             self.verify()
             self.load_plugins()
+
+    def invalidate_state(self) -> None:
+        """
+        Invalidate this project's state, forcing a reload next time load is called.
+        """
+        self.modules = {}
+        self.loaded = False
 
     @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
