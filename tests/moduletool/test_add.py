@@ -251,6 +251,7 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
 
     # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=1.0", v2=True, override=True)
+    caplog.clear()
     with caplog.at_level(logging.WARNING):
         assert ModuleTool().get_module(module_name).version == Version("1.0.0")
         assert not caplog.messages
@@ -278,6 +279,7 @@ def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
 
     # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=2.0", v1=True, override=True)
+    caplog.clear()
     with caplog.at_level(logging.WARNING):
         assert ModuleTool().get_module(module_name).version == Version("2.0.0")
         assert not caplog.messages
