@@ -217,7 +217,7 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
 
 def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
     """
-    Verify that `inmanta module add` respects preinstalled modules when they're compatible logs a warning when they're not.
+    Verify that `inmanta module add` respects preinstalled modules when they're compatible and logs a warning when they're not.
     """
     module_name: str = "mymodule"
     pip_index = PipIndex(artifact_dir=str(tmpdir.join("pip-index")))
