@@ -501,11 +501,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
-    def install(self, project: Optional["Project"], module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
-        preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
+        preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
             preinstalled_version: str = str(preinstalled.version)
