@@ -462,7 +462,7 @@ with the dependencies specified by the installed module.
                 )
             else:
                 # cached project might have inconsistent state after modifying the environment through another instance
-                Project.get().invalidate_state()
+                self.get_project(load=False).invalidate_state()
         module_like.add_module_requirement_persistent(requirement=module_requirement, add_as_v1_module=v1)
 
     def v1tov2(self, module: str) -> None:

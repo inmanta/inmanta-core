@@ -215,8 +215,9 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
 
 
 def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
-    # TODO: docstring
-    # TODO: same test for v1 module add?
+    """
+    Verify that `inmanta module add` respects preinstalled modules when they're compatible logs a warning when they're not.
+    """
     module_name: str = "mymodule"
     pip_index = PipIndex(artifact_dir=str(tmpdir.join("pip-index")))
     snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False, python_package_sources=[pip_index.url])
@@ -247,9 +248,32 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
         publish_index=pip_index,
     )
 
+    # verify that compatible constraint does not reinstall or update
     ModuleTool().add(module_req=f"{module_name}~=1.0", v2=True, override=True)
     assert ModuleTool().get_module(module_name).version == Version("1.0.0")
 
     # TODO: make sure a warning gets logged
+    # verify that incompatible constraint does reinstall and logs a warning
     ModuleTool().add(module_req=f"{module_name}~=2.0", v2=True, override=True)
     assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+
+
+def test_module_add_preinstalled_v1(snippetcompiler_clean) -> None:
+    """
+    Verify that `inmanta module add` respects preinstalled v1 modules when they're compatible logs a warning when they're not.
+    """
+    module_name: str = "std"
+    snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False)
+
+    # preinstall 2.0.0
+    ModuleTool().add(module_req=f"{module_name}==2.0.0", v1=True)
+    assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+
+    # verify that compatible constraint does not reinstall or update
+    ModuleTool().add(module_req=f"{module_name}~=2.0", v1=True, override=True)
+    assert ModuleTool().get_module(module_name).version == Version("2.0.0")
+
+    # TODO: make sure a warning gets logged
+    # verify that incompatible constraint does reinstall and logs a warning
+    ModuleTool().add(module_req=f"{module_name}~=2.1.0", v1=True, override=True)
+    assert ModuleTool().get_module(module_name).version == Version("2.1.10")
