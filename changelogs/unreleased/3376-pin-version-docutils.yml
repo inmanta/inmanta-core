@@ -1,0 +1,8 @@
+---
+description: Pin version docutils to 0.17.1 to resolve incompatibility.
+issue-nr: 3376
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso3]
+sections:
+  bugfix: "{{description}}"
