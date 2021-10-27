@@ -387,6 +387,9 @@ class ModuleSource(Generic[TModule]):
     def get_installed_module(self, project: "Project", module_name: str) -> Optional[TModule]:
         """
         Returns a module object for a module if it is installed.
+
+        :param project: The project associated with the module.
+        :param module_name: The name of the module.
         """
         path: Optional[str] = self.path_for(module_name)
         return self.from_path(project, module_name, path) if path is not None else None
@@ -404,12 +407,9 @@ class ModuleSource(Generic[TModule]):
         """
         module_name: str = self._get_module_name(module_spec)
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
-        if installed is not None:
-            return installed
-        elif install:
+        if installed is None and install:
             return self.install(project, module_spec)
-        else:
-            return None
+        return installed
 
     @abstractmethod
     def install(
@@ -1131,12 +1131,16 @@ class ModuleLike(ABC, Generic[T]):
         self._metadata = self._get_metadata_from_disk()
         self.name = self.get_name_from_metadata(self._metadata)
 
+    # TODO: have a look at inmanta.compiler.help.explainer to improve typing: this is part of the stable API so Module or ModuleLike
+    #   would be better than Union[ModuleV1, ModuleV2] with possible ModuleV3 in mind. Also update usage in pytest-inmanta
+    #   possibly also move implementation down to concrete classes, calling those from abstract parents. Update usage
     @classmethod
     def from_path(cls, path: str) -> Optional["Union[Project, ModuleV1, ModuleV2]"]:
         """
         Get the Project, ModuleV1 or ModuleV2 instance from a path. Returns None when no project or module
         is present at the given path.
         """
+        # TODO: looks like this should use os.path.join(path, "project.yml"), same for v1: add test and fix
         if os.path.exists("project.yml"):
             return Project(path=path)
         if os.path.exists("module.yml"):
@@ -1378,6 +1382,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.main_file = main_file
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
+        # TODO: verify that this var is documented correctly
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
         )
@@ -2525,6 +2530,12 @@ class ModuleV2(Module[ModuleV2Metadata]):
         return self._version if self._version is not None else super().get_version()
 
     version = property(get_version)
+
+    def is_editable(self) -> bool:
+        """
+        Returns True iff this module has been installed in editable mode.
+        """
+        return self._is_editable_install
 
     def ensure_versioned(self) -> None:
         if self._is_editable_install:

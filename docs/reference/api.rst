@@ -127,10 +127,26 @@ Modules
 .. autoclass:: inmanta.module.InvalidMetadata
 
 .. autoclass:: inmanta.module.ModuleLike
-    :members: metadata, name
+    :members: metadata, name, from_path
     :undoc-members:
 
 .. autoclass:: inmanta.module.Module
+    :show-inheritance:
+
+.. autoclass:: inmanta.module.ModuleV1
+    :show-inheritance:
+
+.. autoclass:: inmanta.module.ModuleV2
+    :show-inheritance:
+    :members: is_editable
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleSource
+    :show-inheritance:
+    :members: get_installed_module
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV2Source
     :show-inheritance:
 
 
@@ -138,7 +154,7 @@ Project
 -------
 
 .. autoclass:: inmanta.module.Project
-    :members: get, load, set
+    :members: get, load, set, install_modules, module_source
     :undoc-members:
     :show-inheritance:
 
