@@ -1413,8 +1413,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     @classmethod
     def from_path(cls: Type[TProject], path: str) -> Optional[TProject]:
-        # TODO: this does not seem correct: add tests and fix. Same for ModuleV{1,2}
-        return cls(path=path) if os.path.exists(cls.PROJECT_FILE) else None
+        return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
         """
@@ -2351,7 +2350,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
     @classmethod
     def from_path(cls: Type[TModule], path: str) -> Optional[TModule]:
-        return cls(project=None, path=path) if os.path.exists(cls.MODULE_FILE) else None
+        return cls(project=None, path=path) if os.path.exists(os.path.join(path, cls.MODULE_FILE)) else None
 
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, self.MODULE_FILE)
@@ -2545,7 +2544,11 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def from_path(cls: Type[TModule], path: str) -> Optional[TModule]:
-        return cls(project=None, path=path) if os.path.exists(cls.MODULE_FILE) else None
+        try:
+            return cls(project=None, path=path) if os.path.exists(os.path.join(path, cls.MODULE_FILE)) else None
+        except InvalidModuleException:
+            # setup.cfg is a generic Python config file: if the metadata does not match an inmanta module's, return None
+            return None
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()

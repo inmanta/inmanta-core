@@ -22,7 +22,7 @@ import shutil
 import tempfile
 import unittest
 from importlib.abc import Loader
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple, Type
 from unittest import mock
 
 import py
@@ -382,3 +382,79 @@ def test_module_v2_incorrect_install_warning(
     # verify that proposed solution works
     ModuleTool().install(editable=False, path=module_dir)
     verify_exception(None)
+
+
+def test_from_path(tmpdir: py.path.local, projects_dir: str, modules_dir: str, modules_v2_dir: str) -> None:
+    """
+    Verify that ModuleLike.from_path() and subclass overrides work as expected.
+    """
+    def check(
+        path: str,
+        *,
+        subdir: Optional[str] = None,
+        expected: Mapping[Type[module.ModuleLike], Optional[Type[module.ModuleLike]]],
+    ) -> None:
+        """
+        Check the functionality for the given path and expected outcomes.
+
+        :param path: The path to the root of the module like directory.
+        :param subdir: The subpath to pass to `from_path`, relative to `path`.
+        :param expected: Key-value pairs where keys represent the classes to call the method on and values the expected type
+            for the return value.
+        """
+        full_path: str = os.path.join(path, *([subdir] if subdir is not None else []))
+        for cls, tp in expected.items():
+            result: Optional[module.ModuleLike] = cls.from_path(full_path)
+            assert (result is None) is (tp is None)
+            if tp is not None:
+                assert isinstance(result, tp)
+                assert result.path == path
+
+    # project checks
+    check(
+        os.path.join(projects_dir, "simple_project"),
+        expected={
+            module.ModuleLike: module.Project,
+            module.Project: module.Project,
+            module.Module: None,
+            module.ModuleV1: None,
+            module.ModuleV2: None,
+        },
+    )
+
+    # module v1 checks
+    check(
+        os.path.join(modules_dir, "minimalv1module"),
+        expected={
+            module.ModuleLike: module.ModuleV1,
+            module.Project: None,
+            module.Module: module.ModuleV1,
+            module.ModuleV1: module.ModuleV1,
+            module.ModuleV2: None,
+        },
+    )
+
+    # module v2 checks
+    check(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        expected={
+            module.ModuleLike: module.ModuleV2,
+            module.Project: None,
+            module.Module: module.ModuleV2,
+            module.ModuleV1: None,
+            module.ModuleV2: module.ModuleV2,
+        },
+    )
+
+    check(str(tmpdir), expected={module.ModuleLike: None})
+
+    # advanced setup: project with modules in libs dir
+    project_dir: str = str(tmpdir.join("project"))
+    shutil.copytree(os.path.join(projects_dir, "simple_project"), project_dir)
+    libs_dir: str = os.path.join(project_dir, "libs")
+    os.makedirs(libs_dir, exist_ok=True)
+    module_dir: str = os.path.join(libs_dir, "minimalv1module")
+    shutil.copytree(os.path.join(modules_dir, "minimalv1module"), module_dir)
+    check(module_dir, expected={module.ModuleLike: module.ModuleV1})
+    check(libs_dir, expected={module.ModuleLike: None})
+    check(project_dir, expected={module.ModuleLike: module.Project})
