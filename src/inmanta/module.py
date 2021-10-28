@@ -92,7 +92,9 @@ Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
 
 
+T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
+TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
@@ -688,7 +690,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
 
 
 def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "List[InmantaModuleRequirement]") -> None:
-    """Merge two maps str->[T] by concatting their lists."""
+    """Merge two maps str->[TMetadata] by concatting their lists."""
     for req in new:
         key = req.project_name
         if key not in mainspec:
@@ -842,7 +844,7 @@ class RequirementsTxtFile:
         self._requirements = RequirementsTxtParser.parse(self._filename)
 
 
-T = TypeVar("T", bound="Metadata")
+TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 
 @stable_api
@@ -855,7 +857,7 @@ class Metadata(BaseModel):
     _raw_parser: Type[RawParser]
 
     @classmethod
-    def parse(cls: Type[T], source: Union[str, TextIO]) -> T:
+    def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser.parse(source)
         try:
             return cls(**raw)
@@ -1118,7 +1120,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
 
 @stable_api
-class ModuleLike(ABC, Generic[T]):
+class ModuleLike(ABC, Generic[TMetadata]):
     """
     Commons superclass for projects and modules, which are both versioned by git
     """
@@ -1131,29 +1133,25 @@ class ModuleLike(ABC, Generic[T]):
         self._metadata = self._get_metadata_from_disk()
         self.name = self.get_name_from_metadata(self._metadata)
 
-    # TODO: have a look at inmanta.compiler.help.explainer to improve typing: this is part of the stable API so Module or ModuleLike
-    #   would be better than Union[ModuleV1, ModuleV2] with possible ModuleV3 in mind. Also update usage in pytest-inmanta
-    #   possibly also move implementation down to concrete classes, calling those from abstract parents. Update usage
     @classmethod
-    def from_path(cls, path: str) -> Optional["Union[Project, ModuleV1, ModuleV2]"]:
+    @abstractmethod
+    # Union[Project, ModuleV1, ModuleV2] would be more strict than ModuleLike[Any] but very restrictive with potential stable
+    # API extension in mind.
+    def from_path(cls, path: str) -> Optional["ModuleLike"]:
         """
-        Get the Project, ModuleV1 or ModuleV2 instance from a path. Returns None when no project or module
-        is present at the given path.
+        Get a concrete module like instance from a path. Returns None when no project or module is present at the given path.
         """
-        # TODO: looks like this should use os.path.join(path, "project.yml"), same for v1: add test and fix
-        if os.path.exists("project.yml"):
-            return Project(path=path)
-        if os.path.exists("module.yml"):
-            return ModuleV1(project=None, path=path)
-        try:
-            return ModuleV2(project=None, path=path)
-        except ModuleMetadataFileNotFound:
-            return None
+        subs: Tuple[Type[ModuleLike], ...] = (Project, Module)
+        for sub in subs:
+            instance: Optional[ModuleLike] = sub.from_path(path)
+            if instance is not None:
+                return instance
+        return None
 
     @classmethod
     def get_first_directory_containing_file(cls, cur_dir: str, filename: str) -> str:
         """
-        Travel up in the directory structure until a file with the given name if found.
+        Travel up in the directory structure until a file with the given name is found.
         """
         fq_path_to_filename = os.path.join(cur_dir, filename)
 
@@ -1166,7 +1164,7 @@ class ModuleLike(ABC, Generic[T]):
 
         return cls.get_first_directory_containing_file(parent_dir, filename)
 
-    def _get_metadata_from_disk(self) -> T:
+    def _get_metadata_from_disk(self) -> TMetadata:
         metadata_file_path = self.get_metadata_file_path()
 
         if not os.path.exists(metadata_file_path):
@@ -1175,11 +1173,11 @@ class ModuleLike(ABC, Generic[T]):
         with open(metadata_file_path, "r", encoding="utf-8") as fd:
             return self.get_metadata_from_source(source=fd)
 
-    def get_metadata_from_source(self, source: Union[str, TextIO]) -> T:
+    def get_metadata_from_source(self, source: Union[str, TextIO]) -> TMetadata:
         """
         :param source: Either the yaml content as a string or an input stream from the yaml file
         """
-        metadata_type: Type[T] = self.get_metadata_file_schema_type()
+        metadata_type: Type[TMetadata] = self.get_metadata_file_schema_type()
         return metadata_type.parse(source)
 
     @property
@@ -1187,7 +1185,7 @@ class ModuleLike(ABC, Generic[T]):
         return self._path
 
     @property
-    def metadata(self) -> T:
+    def metadata(self) -> TMetadata:
         return self._metadata
 
     @property
@@ -1204,12 +1202,12 @@ class ModuleLike(ABC, Generic[T]):
 
     @classmethod
     @abstractmethod
-    def get_metadata_file_schema_type(cls) -> Type[T]:
+    def get_metadata_file_schema_type(cls) -> Type[TMetadata]:
         raise NotImplementedError()
 
     @classmethod
     @abstractmethod
-    def get_name_from_metadata(cls, metadata: T) -> str:
+    def get_name_from_metadata(cls, metadata: TMetadata) -> str:
         raise NotImplementedError()
 
     @abstractmethod
@@ -1412,6 +1410,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+
+    @classmethod
+    def from_path(cls: Type[TProject], path: str) -> Optional[TProject]:
+        # TODO: this does not seem correct: add tests and fix. Same for ModuleV{1,2}
+        return cls(path=path) if os.path.exists(cls.PROJECT_FILE) else None
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
         """
@@ -2054,6 +2057,16 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
+    @classmethod
+    @abstractmethod
+    def from_path(cls, path: str) -> Optional["Module"]:
+        subs: Tuple[Type[Module], ...] = (ModuleV1, ModuleV2)
+        for sub in subs:
+            instance: Optional[Module] = sub.from_path(path)
+            if instance is not None:
+                return instance
+        return None
+
     def requires(self) -> "List[InmantaModuleRequirement]":
         """
         Return all requirements this module has to other modules as a list of requirements.
@@ -2336,6 +2349,10 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
                 os.path.basename(self._path),
             )
 
+    @classmethod
+    def from_path(cls: Type[TModule], path: str) -> Optional[TModule]:
+        return cls(project=None, path=path) if os.path.exists(cls.MODULE_FILE) else None
+
     def get_metadata_file_path(self) -> str:
         return os.path.join(self.path, self.MODULE_FILE)
 
@@ -2525,6 +2542,10 @@ class ModuleV2(Module[ModuleV2Metadata]):
                 " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
                 " install and build modules from source."
             )
+
+    @classmethod
+    def from_path(cls: Type[TModule], path: str) -> Optional[TModule]:
+        return cls(project=None, path=path) if os.path.exists(cls.MODULE_FILE) else None
 
     def get_version(self) -> version.Version:
         return self._version if self._version is not None else super().get_version()
