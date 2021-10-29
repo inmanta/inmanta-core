@@ -388,6 +388,7 @@ def test_from_path(tmpdir: py.path.local, projects_dir: str, modules_dir: str, m
     """
     Verify that ModuleLike.from_path() and subclass overrides work as expected.
     """
+
     def check(
         path: str,
         *,
