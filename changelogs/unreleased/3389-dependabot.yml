@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump setuptools from 58.4.0 to 58.5.2
+destination-branches:
+- master
+sections: {}
