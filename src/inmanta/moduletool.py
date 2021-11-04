@@ -1022,7 +1022,7 @@ include inmanta_plugins/{self._module.name}/setup.cfg
 recursive-include inmanta_plugins/{self._module.name}/model *.cf
 graft inmanta_plugins/{self._module.name}/files
 graft inmanta_plugins/{self._module.name}/templates
-                """.strip()
+                """.strip() + "\n"
             )
 
     def get_pyproject(self) -> str:
