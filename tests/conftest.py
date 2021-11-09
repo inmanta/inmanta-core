@@ -418,7 +418,7 @@ def deactive_venv():
             del os.environ["PYTHONPATH"]
     if old_os_venv is not None:
         os.environ["VIRTUAL_ENV"] = old_os_venv
-    env.process_env.__init__(python_path=old_process_env)
+    env.mock_process_env(python_path=old_process_env)
     loader.PluginModuleFinder.reset()
 
 
@@ -973,7 +973,7 @@ class SnippetCompilationTest(KeepOnFail):
         Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
         running process.
         """
-        env.process_env.__init__(env_path=self.env)
+        env.mock_process_env(env_path=self.env)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
@@ -1341,7 +1341,7 @@ def tmpvenv_active(
     sys.prefix = base
 
     # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
-    env.process_env.__init__(python_path=str(python_path))
+    env.mock_process_env(python_path=str(python_path))
     env.process_env.notify_change()
 
     # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active

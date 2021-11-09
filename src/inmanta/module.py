@@ -386,7 +386,7 @@ gitprovider = CLIGitProvider()
 
 
 class ModuleSource(Generic[TModule]):
-    def get_installed_module(self, project: "Project", module_name: str) -> Optional[TModule]:
+    def get_installed_module(self, project: Optional["Project"], module_name: str) -> Optional[TModule]:
         """
         Returns a module object for a module if it is installed.
 
