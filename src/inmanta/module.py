@@ -2173,8 +2173,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.name != "std" and self._project.autostd:
-            std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
-            imports.insert(0, DefineImport(std_locatable, std_locatable))
+            std_locatable = LocatableString("std", Range("internal", 1, 1, 1, 1), -1, block.namespace)
+            imp = DefineImport(std_locatable, std_locatable)
+            imp.location = std_locatable.location
+            imports.insert(0, imp)
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:
