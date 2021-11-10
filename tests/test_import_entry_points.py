@@ -106,3 +106,7 @@ def test_import_util(import_entry_point: Callable[[str], Optional[int]]) -> None
 
 def test_import_ast(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.ast.constraint.expression") == 0
+
+
+def test_import_env(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.env") == 0
