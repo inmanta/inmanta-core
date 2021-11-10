@@ -133,13 +133,17 @@ Modules
 
 .. autoclass:: inmanta.module.Module
     :show-inheritance:
+    :members: from_path
+    :undoc-members:
 
 .. autoclass:: inmanta.module.ModuleV1
     :show-inheritance:
+    :members: from_path
+    :undoc-members:
 
 .. autoclass:: inmanta.module.ModuleV2
     :show-inheritance:
-    :members: is_editable
+    :members: is_editable, from_path
     :undoc-members:
 
 .. autoclass:: inmanta.module.ModuleSource
