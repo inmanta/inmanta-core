@@ -895,6 +895,7 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
+        deploy_summary: bool = False,
     ) -> ReturnValue[List[LatestReleasedResource]]:
         if limit is None:
             limit = APILIMIT
@@ -927,7 +928,7 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message)
 
         paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
-        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        paging_metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
         links = await paging_handler.prepare_paging_links(
             dtos,
             filter,
@@ -937,11 +938,14 @@ class ResourceService(protocol.ServerSlice):
             last_id=last_id,
             start=start,
             end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
+            has_next=paging_metadata.after > 0,
+            has_prev=paging_metadata.before > 0,
         )
+        metadata = vars(paging_metadata)
+        if deploy_summary:
+            metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
 
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata)
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
