@@ -1384,7 +1384,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.main_file = main_file
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        # TODO: verify that this var is documented correctly
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
         )
