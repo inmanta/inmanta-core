@@ -1123,6 +1123,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 class ModuleLike(ABC, Generic[TMetadata]):
     """
     Commons superclass for projects and modules, which are both versioned by git
+
+    :ivar name: The name for this module like instance, in the context of the Inmanta DSL.
     """
 
     def __init__(self, path: str) -> None:
@@ -1344,6 +1346,8 @@ class ModuleLikeWithYmlMetadataFile(ABC):
 class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     """
     An inmanta project
+
+    :ivar module_source: The v2 module source for this project.
     """
 
     PROJECT_FILE = "project.yml"

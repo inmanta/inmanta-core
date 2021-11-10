@@ -127,7 +127,8 @@ Modules
 .. autoclass:: inmanta.module.InvalidMetadata
 
 .. autoclass:: inmanta.module.ModuleLike
-    :members: metadata, name, from_path
+    :show-inheritance:
+    :members: metadata, from_path
     :undoc-members:
 
 .. autoclass:: inmanta.module.Module
@@ -154,7 +155,7 @@ Project
 -------
 
 .. autoclass:: inmanta.module.Project
-    :members: get, load, set, install_modules, module_source
+    :members: get, load, set, install_modules
     :undoc-members:
     :show-inheritance:
 
