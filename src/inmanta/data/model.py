@@ -308,6 +308,29 @@ class ResourceAction(BaseModel):
     send_event: Optional[bool] = None  # Deprecated field
 
 
+class ResourceDeploySummary(BaseModel):
+    total: int
+    by_state: Dict[str, int]
+
+    @classmethod
+    def create_from_db_result(cls, summary_by_state: Dict[str, int]) -> "ResourceDeploySummary":
+        full_summary_by_state = cls._ensure_summary_has_all_states(summary_by_state)
+        total = cls._count_all_resources(full_summary_by_state)
+        return ResourceDeploySummary(by_state=full_summary_by_state, total=total)
+
+    @classmethod
+    def _ensure_summary_has_all_states(cls, summary_by_state: Dict[str, int]) -> Dict[str, int]:
+        full_summary = summary_by_state.copy()
+        for state in const.ResourceState:
+            if state not in summary_by_state.keys():
+                full_summary[state] = 0
+        return full_summary
+
+    @classmethod
+    def _count_all_resources(cls, summary_by_state: Dict[str, int]) -> int:
+        return sum([resource_count for resource_count in summary_by_state.values()])
+
+
 class LogLine(BaseModel):
     class Config:
         """

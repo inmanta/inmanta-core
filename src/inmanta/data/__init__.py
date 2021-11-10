@@ -3938,6 +3938,24 @@ class Resource(BaseDocument):
 
         return sql_query, values
 
+    @classmethod
+    async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> Dict[str, int]:
+        query = f"""
+            SELECT COUNT(res.resource_id) as count, status
+            FROM
+            (SELECT DISTINCT ON (r.resource_id) r.resource_id, r.status
+                FROM {cls.table_name()} as r
+                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
+                    WHERE cm.released=TRUE AND r.environment=$1
+                    ORDER BY r.resource_id, r.model DESC) as res
+            GROUP BY res.status
+        """
+        raw_results = await cls._fetch_query(query, cls._get_value(environment))
+        results = {}
+        for row in raw_results:
+            results[row["status"]] = row["count"]
+        return results
+
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
