@@ -625,13 +625,11 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
     process_env.__init__(python_path=python_path, env_path=env_path)
 
 
+@stable_api
 class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
-
-    # TODO: add to docs and add stable_api annotation and add import test
-    #   methods: use_virtual_env, init_env
 
     def __init__(self, env_path: str) -> None:
         LOGGER.info("Creating new virtual environment in %s", env_path)
@@ -650,7 +648,7 @@ class VirtualEnv(ActiveEnv):
 
     def init_env(self) -> None:
         """
-        Init the virtual environment
+        Initialize the virtual environment.
         """
         self._parent_python = sys.executable
 

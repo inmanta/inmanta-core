@@ -166,6 +166,11 @@ Python Environment
 .. autofunction:: inmanta.env.mock_process_env
 
 
+.. autoclass:: inmanta.env.VirtualEnv
+    :members: init_env, use_virtual_env
+    :undoc-members:
+
+
 Typing
 ------
 
