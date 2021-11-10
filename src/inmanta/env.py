@@ -629,6 +629,7 @@ class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
+
     # TODO: add to docs and add stable_api annotation and add import test
     #   methods: use_virtual_env, init_env
 
