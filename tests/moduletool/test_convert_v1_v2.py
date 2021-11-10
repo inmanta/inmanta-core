@@ -138,7 +138,7 @@ jinja2"""
 
     with open(os.path.join(tmpdir, "MANIFEST.in"), "r") as fh:
         assert (
-            fh.read()
+            fh.read().strip()
             == f"""
 include inmanta_plugins/{module_name}/setup.cfg
 recursive-include inmanta_plugins/{module_name}/model *.cf
