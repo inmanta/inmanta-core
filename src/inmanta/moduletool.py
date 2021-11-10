@@ -30,7 +30,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set
 
 import texttable
 import yaml
@@ -440,7 +440,7 @@ with the dependencies specified by the installed module.
             raise CLIException("Either --v1 or --v2 has to be set", exitcode=1)
         if v1 and v2:
             raise CLIException("--v1 and --v2 cannot be set together", exitcode=1)
-        module_like: Optional[Union[Project, ModuleV1, ModuleV2]] = ModuleLike.from_path(path=os.getcwd())
+        module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
@@ -1026,6 +1026,7 @@ recursive-include inmanta_plugins/{self._module.name}/model *.cf
 graft inmanta_plugins/{self._module.name}/files
 graft inmanta_plugins/{self._module.name}/templates
                 """.strip()
+                + "\n"
             )
 
     def get_pyproject(self) -> str:
@@ -1052,7 +1053,5 @@ build-backend = "setuptools.build_meta"
         config["options"]["zip_safe"] = "False"
         config["options"]["include_package_data"] = "True"
         config["options"]["packages"] = "find_namespace:"
-        config.add_section("options.package_data")
-        config["options.package_data"]["*"] = "files/*, model/*, templates/*, setup.cfg"
 
         return config

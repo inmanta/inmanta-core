@@ -39,6 +39,7 @@ import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
 
 from inmanta import const
+from inmanta.stable_api import stable_api
 from packaging import version
 
 try:
@@ -610,6 +611,20 @@ Singleton representing the Python environment this process is running in.
 """
 
 
+@stable_api
+def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[str] = None) -> None:
+    """
+    Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
+    environment. This function should only be called when a Python environment has been set up dynamically and this environment
+    should be treated as if this process was spawned from it, and even then with great care.
+
+    :param python_path: The path to the python binary. Only one of `python_path` and `env_path` should be set.
+    :param env_path: The path to the python environment directory. Only one of `python_path` and `env_path` should be set.
+    """
+    process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
+
+
+@stable_api
 class VirtualEnv(ActiveEnv):
     """
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
@@ -632,7 +647,7 @@ class VirtualEnv(ActiveEnv):
 
     def init_env(self) -> None:
         """
-        Init the virtual environment
+        Initialize the virtual environment.
         """
         self._parent_python = sys.executable
 

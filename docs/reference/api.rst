@@ -127,10 +127,31 @@ Modules
 .. autoclass:: inmanta.module.InvalidMetadata
 
 .. autoclass:: inmanta.module.ModuleLike
-    :members: metadata, name
+    :show-inheritance:
+    :members: metadata, from_path
     :undoc-members:
 
 .. autoclass:: inmanta.module.Module
+    :show-inheritance:
+    :members: from_path
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV1
+    :show-inheritance:
+    :members: from_path
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV2
+    :show-inheritance:
+    :members: is_editable, from_path
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleSource
+    :show-inheritance:
+    :members: get_installed_module
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV2Source
     :show-inheritance:
 
 
@@ -138,9 +159,21 @@ Project
 -------
 
 .. autoclass:: inmanta.module.Project
-    :members: get, load, set
+    :members: get, load, set, install_modules
     :undoc-members:
     :show-inheritance:
+
+
+Python Environment
+------------------
+
+
+.. autofunction:: inmanta.env.mock_process_env
+
+
+.. autoclass:: inmanta.env.VirtualEnv
+    :members: init_env, use_virtual_env
+    :undoc-members:
 
 
 Typing
