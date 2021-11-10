@@ -406,3 +406,58 @@ async def test_paging_param_validation(server, client, env_with_resources):
 
     result = await client.resource_list(env_with_resources.id, limit=2, first_id="1234", last_id="5678")
     assert result.code == 400
+
+
+@pytest.mark.asyncio
+async def test_deploy_summary(server, client, env_with_resources):
+    """ Test querying the deployment summary of resources."""
+    env = env_with_resources
+    expected_summary = {
+        "total": 4,
+        "by_state": {
+            "unavailable": 1,
+            "skipped": 1,
+            "deployed": 1,
+            "deploying": 0,
+            "available": 1,
+            "failed": 0,
+            "cancelled": 0,
+            "undefined": 0,
+            "skipped_for_undefined": 0,
+        },
+    }
+    result = await client.resource_list(env.id, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == expected_summary
+
+    # The summary should not depend on filters or paging
+    result = await client.resource_list(env.id, deploy_summary=True, limit=2, filter={"agent": "1"})
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == expected_summary
+
+    # The summary is returned only when the parameter is set
+    result = await client.resource_list(env.id)
+    assert result.code == 200
+    assert not result.result["metadata"].get("deploy_summary")
+
+    env2 = data.Environment(name="test", project=env.project, repo_url="", repo_branch="")
+    await env2.insert()
+
+    # Each state is present in the summary, even if there are no resources
+    empty_summary = {
+        "total": 0,
+        "by_state": {
+            "unavailable": 0,
+            "skipped": 0,
+            "deployed": 0,
+            "deploying": 0,
+            "available": 0,
+            "failed": 0,
+            "cancelled": 0,
+            "undefined": 0,
+            "skipped_for_undefined": 0,
+        },
+    }
+    result = await client.resource_list(env2.id, deploy_summary=True)
+    assert result.code == 200
+    assert result.result["metadata"]["deploy_summary"] == empty_summary
