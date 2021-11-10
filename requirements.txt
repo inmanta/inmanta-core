@@ -1,13 +1,13 @@
 asyncpg==0.24.0
 click-plugins==1.1.1
 click==8.0.3
-colorlog==6.5.0
+colorlog==6.6.0
 cookiecutter==1.7.3
 cryptography==35.0.0
 docstring-parser==0.12
 email-validator==1.1.3
 execnet==1.9.0
-importlib_metadata==4.8.1
+importlib_metadata==4.8.2
 jinja2==3.0.2
 more-itertools==8.10.0
 netifaces==0.11.0
