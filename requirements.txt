@@ -11,7 +11,7 @@ importlib_metadata==4.8.1
 jinja2==3.0.2
 more-itertools==8.10.0
 netifaces==0.11.0
-packaging==21.0
+packaging==21.2
 pip==21.3.1
 ply==3.11
 pydantic==1.8.2
@@ -19,13 +19,13 @@ pyformance==0.4
 PyJWT==2.3.0
 python-dateutil==2.8.2
 pyyaml==6.0
-setuptools==58.3.0
+setuptools==58.5.3
 texttable==1.6.4
 tornado==6.1
 typing_inspect==0.7.1
 build==0.7.0
-ruamel.yaml==0.17.16
+ruamel.yaml==0.17.17
 
 # Optional import in code
-graphviz==0.17
+graphviz==0.18
 rpdb==0.1.6
