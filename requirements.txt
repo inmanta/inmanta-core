@@ -1,13 +1,13 @@
 asyncpg==0.24.0
 click-plugins==1.1.1
 click==8.0.3
-colorlog==6.5.0
+colorlog==6.6.0
 cookiecutter==1.7.3
 cryptography==35.0.0
 docstring-parser==0.12
 email-validator==1.1.3
 execnet==1.9.0
-importlib_metadata==4.8.1
+importlib_metadata==4.8.2
 jinja2==3.0.2
 more-itertools==8.10.0
 netifaces==0.11.0
@@ -19,7 +19,7 @@ pyformance==0.4
 PyJWT==2.3.0
 python-dateutil==2.8.2
 pyyaml==6.0
-setuptools==58.4.0
+setuptools==58.5.3
 texttable==1.6.4
 tornado==6.1
 typing_inspect==0.7.1
@@ -27,5 +27,5 @@ build==0.7.0
 ruamel.yaml==0.17.17
 
 # Optional import in code
-graphviz==0.17
+graphviz==0.18
 rpdb==0.1.6
