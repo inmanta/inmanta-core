@@ -24,5 +24,8 @@ dashboard = '3.5.2'
 [tool.irt.build.python]
 hooks = { 'pre' = 'pre-build.sh' }
 
+[tool.irt.build.python.subprojects.pytest-inmanta-extensions]
+directory = "tests_common"
+
 [tool.irt.publish.python]
 public = true
