@@ -3,5 +3,5 @@ description: Recycle test certificates
 destination-branches:
 - master
 - iso4
-- iso 3
+- iso3
 sections: {}
