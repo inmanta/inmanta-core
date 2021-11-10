@@ -1,0 +1,6 @@
+description: Extended modules v2 stable API for pytest-inmanta
+issue-repo: pytest-inmanta
+issue-nr: 235
+change-type: major
+destination-branches:
+  - master
