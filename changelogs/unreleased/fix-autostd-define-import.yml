@@ -1,0 +1,5 @@
+description: "Fixed DefineImport location inserted when autostd=True"
+change-type: patch
+destination-branches:
+  - iso4
+  - master
