@@ -1053,7 +1053,5 @@ build-backend = "setuptools.build_meta"
         config["options"]["zip_safe"] = "False"
         config["options"]["include_package_data"] = "True"
         config["options"]["packages"] = "find_namespace:"
-        config.add_section("options.package_data")
-        config["options.package_data"]["*"] = "files/*, model/*, templates/*, setup.cfg"
 
         return config
