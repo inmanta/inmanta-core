@@ -309,6 +309,11 @@ class ResourceAction(BaseModel):
 
 
 class ResourceDeploySummary(BaseModel):
+    """
+    :param total: The total number of resources
+    :param by_state: The number of resources by state in the latest released version
+    """
+
     total: int
     by_state: Dict[str, int]
 
@@ -328,7 +333,7 @@ class ResourceDeploySummary(BaseModel):
 
     @classmethod
     def _count_all_resources(cls, summary_by_state: Dict[str, int]) -> int:
-        return sum([resource_count for resource_count in summary_by_state.values()])
+        return sum(resource_count for resource_count in summary_by_state.values())
 
 
 class LogLine(BaseModel):

@@ -3939,7 +3939,7 @@ class Resource(BaseDocument):
         return sql_query, values
 
     @classmethod
-    async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> Dict[str, int]:
+    async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         query = f"""
             SELECT COUNT(r.resource_id) as count, status
             FROM {cls.table_name()} as r
@@ -3952,7 +3952,7 @@ class Resource(BaseDocument):
         results = {}
         for row in raw_results:
             results[row["status"]] = row["count"]
-        return results
+        return m.ResourceDeploySummary.create_from_db_result(results)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()

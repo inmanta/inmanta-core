@@ -520,7 +520,7 @@ def resource_list(
     end: Optional[str] = None,
     filter: Optional[Dict[str, List[str]]] = None,
     sort: str = "resource_type.desc",
-    deploy_summary: Optional[bool] = False,
+    deploy_summary: bool = False,
 ) -> List[model.LatestReleasedResource]:
     """
     :param tid: The id of the environment this resource belongs to
@@ -553,8 +553,9 @@ def resource_list(
                 (case insensitive).
                 The following sorting attributes are supported: 'resource_type', 'agent', 'resource_id_value', 'status'.
                 The following orders are supported: 'asc', 'desc'
-    :param deploy_summary: If set to true, returns a summary of the deployment status of each resource in the environment
-                           in the metadata. The summary does not take into account the current filters or paging parameters.
+    :param deploy_summary: If set to true, returns a summary of the deployment status of the resources in the environment
+                           in the metadata, describing how many resources are in each state as well as the total number
+                           of resources. The summary does not take into account the current filters or paging parameters.
                            Orphaned resources are not included in the summary
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

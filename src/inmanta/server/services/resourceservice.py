@@ -35,7 +35,6 @@ from inmanta.data.model import (
     LogLine,
     Resource,
     ResourceAction,
-    ResourceDeploySummary,
     ResourceDetails,
     ResourceHistory,
     ResourceIdStr,
@@ -896,7 +895,7 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
-        deploy_summary: Optional[bool] = False,
+        deploy_summary: bool = False,
     ) -> ReturnValue[List[LatestReleasedResource]]:
         if limit is None:
             limit = APILIMIT
@@ -944,8 +943,7 @@ class ResourceService(protocol.ServerSlice):
         )
         metadata = vars(paging_metadata)
         if deploy_summary:
-            summary = await data.Resource.get_resource_deploy_summary(env.id)
-            metadata["deploy_summary"] = ResourceDeploySummary.create_from_db_result(summary)
+            metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata)
 
