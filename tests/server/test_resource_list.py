@@ -424,6 +424,7 @@ async def test_deploy_summary(server, client, env_with_resources):
             "cancelled": 0,
             "undefined": 0,
             "skipped_for_undefined": 0,
+            "processing_events": 0,
         },
     }
     result = await client.resource_list(env.id, deploy_summary=True)
@@ -456,6 +457,7 @@ async def test_deploy_summary(server, client, env_with_resources):
             "cancelled": 0,
             "undefined": 0,
             "skipped_for_undefined": 0,
+            "processing_events": 0,
         },
     }
     result = await client.resource_list(env2.id, deploy_summary=True)
