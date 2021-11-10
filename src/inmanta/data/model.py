@@ -322,7 +322,7 @@ class ResourceDeploySummary(BaseModel):
     def _ensure_summary_has_all_states(cls, summary_by_state: Dict[str, int]) -> Dict[str, int]:
         full_summary = summary_by_state.copy()
         for state in const.ResourceState:
-            if state not in summary_by_state.keys():
+            if state not in summary_by_state.keys() and state != const.ResourceState.dry:
                 full_summary[state] = 0
         return full_summary
 

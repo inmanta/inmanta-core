@@ -3941,14 +3941,12 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> Dict[str, int]:
         query = f"""
-            SELECT COUNT(res.resource_id) as count, status
-            FROM
-            (SELECT DISTINCT ON (r.resource_id) r.resource_id, r.status
-                FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.environment=$1
-                    ORDER BY r.resource_id, r.model DESC) as res
-            GROUP BY res.status
+            SELECT COUNT(r.resource_id) as count, status
+            FROM {cls.table_name()} as r
+                WHERE r.environment=$1 AND r.model=(SELECT MAX(cm.version)
+                                                  FROM public.configurationmodel AS cm
+                                                  WHERE cm.environment=$1 AND cm.released=TRUE)
+            GROUP BY r.status
         """
         raw_results = await cls._fetch_query(query, cls._get_value(environment))
         results = {}

@@ -413,14 +413,13 @@ async def test_deploy_summary(server, client, env_with_resources):
     """ Test querying the deployment summary of resources."""
     env = env_with_resources
     expected_summary = {
-        "total": 6,
+        "total": 4,
         "by_state": {
             "unavailable": 1,
             "skipped": 1,
-            "deployed": 2,
-            "deploying": 1,
+            "deployed": 1,
+            "deploying": 0,
             "available": 1,
-            "dry": 0,
             "failed": 0,
             "cancelled": 0,
             "undefined": 0,
@@ -453,7 +452,6 @@ async def test_deploy_summary(server, client, env_with_resources):
             "deployed": 0,
             "deploying": 0,
             "available": 0,
-            "dry": 0,
             "failed": 0,
             "cancelled": 0,
             "undefined": 0,

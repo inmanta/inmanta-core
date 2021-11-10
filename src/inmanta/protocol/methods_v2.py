@@ -555,6 +555,7 @@ def resource_list(
                 The following orders are supported: 'asc', 'desc'
     :param deploy_summary: If set to true, returns a summary of the deployment status of each resource in the environment
                            in the metadata. The summary does not take into account the current filters or paging parameters.
+                           Orphaned resources are not included in the summary
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
