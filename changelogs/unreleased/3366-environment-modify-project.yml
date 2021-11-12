@@ -1,0 +1,4 @@
+description: Add support for changing the project of an environment
+issue-nr: 3366
+change-type: minor
+destination-branches: [master, iso4]

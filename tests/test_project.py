@@ -155,7 +155,7 @@ async def test_project_api_v2(client_v2):
 
     # Modify to duplicate environment
     result = await client_v2.environment_modify(id=env1_id, name="dev2")
-    assert result.code == 500
+    assert result.code == 400
 
     # Get an environment
     result = await client_v2.environment_get(id=env1_id)
@@ -171,6 +171,52 @@ async def test_project_api_v2(client_v2):
 
     # Decommission
     result = await client_v2.environment_decommission(id=env1_id)
+    assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_modify_environment_project(client_v2):
+    """Test modifying the project of an environment"""
+
+    # Create two projects and two environments
+    result = await client_v2.project_create("dev-project")
+    assert result.code == 200
+    project_id_a = result.result["data"]["id"]
+
+    result = await client_v2.environment_create(project_id=project_id_a, name="env")
+    assert result.code == 200
+    env1_id = result.result["data"]["id"]
+
+    result = await client_v2.project_create("test-project")
+    assert result.code == 200
+
+    project_id_b = result.result["data"]["id"]
+    result = await client_v2.environment_create(project_id=project_id_b, name="env")
+    assert result.code == 200
+
+    # Try to move environment from project a to b, but the name in that project is not free
+    result = await client_v2.environment_modify(id=env1_id, name="env", project_id=project_id_b)
+    assert result.code == 400
+
+    # Move and rename environment from project a to b
+    result = await client_v2.environment_modify(id=env1_id, name="new-env", project_id=project_id_b)
+    assert result.code == 200
+    assert result.result["data"]["project_id"] == project_id_b
+
+    # Delete project a
+    response = await client_v2.project_delete(project_id_a)
+    assert response.code == 200
+
+    # The environment should still exist
+    result = await client_v2.environment_get(id=env1_id)
+    assert result.code == 200
+
+    # Try to move it back to the not existing project
+    result = await client_v2.environment_modify(id=env1_id, name="new-env", project_id=project_id_a)
+    assert result.code == 400
+
+    # Make sure that specifying the current project id does not cause problems
+    result = await client_v2.environment_modify(id=env1_id, name="new-env", project_id=project_id_b)
     assert result.code == 200
 
 
