@@ -1,0 +1,7 @@
+change-type: patch
+description: Recycle test certificates and extend
+destination-branches:
+- master
+- iso4
+- iso3
+sections: {}
