@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cython from 0.29.22 to 0.29.24
+destination-branches:
+- iso4
+sections: {}
