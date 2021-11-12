@@ -20,7 +20,7 @@ PyJWT==2.1.0
 python-dateutil==2.8.2
 pyyaml==5.4.1
 setuptools==58.5.3
-texttable==1.6.3
+texttable==1.6.4
 tornado==6.1
 typing_inspect==0.7.1
 
