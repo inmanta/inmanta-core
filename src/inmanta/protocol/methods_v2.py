@@ -90,7 +90,9 @@ def environment_create(
 
 
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
-def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch: str = None) -> model.Environment:
+def environment_modify(
+    id: uuid.UUID, name: str, repository: str = None, branch: str = None, project_id: Optional[uuid.UUID] = None
+) -> model.Environment:
     """
     Modify the given environment
 
@@ -98,6 +100,10 @@ def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch:
     :param name: The name of the environment
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
+    :param project_id: The id of the project the environment belongs to
+
+    :raises BadRequest: When the parameters supplied are not valid.
+    :raises NotFound: The given environment doesn't exist.
     """
 
 
