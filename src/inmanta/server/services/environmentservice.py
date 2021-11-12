@@ -316,17 +316,24 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_modify, environment_id="id")
     async def environment_modify(
-        self, environment_id: uuid.UUID, name: str, repository: Optional[str], branch: Optional[str]
+        self,
+        environment_id: uuid.UUID,
+        name: str,
+        repository: Optional[str],
+        branch: Optional[str],
+        project_id: Optional[uuid.UUID] = None,
     ) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
         original_env = env.to_dto()
 
+        project = project_id or env.project
+
         # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=env.project, name=name)
+        envs = await data.Environment.get_list(project=project, name=name)
         if len(envs) > 0 and envs[0].id != environment_id:
-            raise ServerError(f"Project with id={env.project} already has an environment with name {name}")
+            raise BadRequest(f"Project with id={project} already has an environment with name {name}")
 
         fields = {"name": name}
         if repository is not None:
@@ -334,6 +341,13 @@ class EnvironmentService(protocol.ServerSlice):
 
         if branch is not None:
             fields["repo_branch"] = branch
+
+        # Update the project field if requested and the project exists
+        if project_id is not None:
+            project_from_db = await data.Project.get_by_id(project_id)
+            if not project_from_db:
+                raise BadRequest(f"Project with id={project_id} doesn't exist")
+            fields["project"] = project_id
 
         await env.update_fields(connection=None, **fields)
         await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
