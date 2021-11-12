@@ -19,12 +19,12 @@ from os import path
 
 from setuptools import find_packages, setup
 
-version = "4.3.1"
+version = "4.3.1.1"
 
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core~={version}.dev",
+    "inmanta-core~=4.3.1.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
