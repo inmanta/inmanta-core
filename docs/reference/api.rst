@@ -84,6 +84,23 @@ Attributes
     :undoc-members:
 
 
+Modules
+-------
+
+.. autoclass:: inmanta.module.ModuleLike
+    :members: name
+    :undoc-members:
+
+.. autoclass:: inmanta.module.Module
+    :show-inheritance:
+    :members: get_plugin_files
+    :undoc-members:
+
+.. autodata:: inmanta.module.ModuleName
+
+.. autodata:: inmanta.module.Path
+
+
 Typing
 ------
 
