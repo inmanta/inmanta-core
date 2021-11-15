@@ -992,6 +992,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
+        values["description"] = values["description"].replace("\n", " ")
         del values["compiler_version"]
         install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
         del values["requires"]
