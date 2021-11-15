@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 3.4.6 to 35.0.0
+destination-branches:
+- iso4
+sections: {}
