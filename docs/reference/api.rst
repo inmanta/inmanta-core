@@ -133,8 +133,10 @@ Modules
 
 .. autoclass:: inmanta.module.Module
     :show-inheritance:
-    :members: from_path
+    :members: from_path, get_plugin_files
     :undoc-members:
+
+.. autodata:: inmanta.module.ModuleName
 
 .. autoclass:: inmanta.module.ModuleV1
     :show-inheritance:
@@ -153,6 +155,8 @@ Modules
 
 .. autoclass:: inmanta.module.ModuleV2Source
     :show-inheritance:
+
+.. autodata:: inmanta.module.Path
 
 
 Project
