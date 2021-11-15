@@ -125,7 +125,7 @@ def test_module_corruption(modules_dir, modules_repo):
     assert os.path.exists(projectyml)
 
     with open(projectyml, "r", encoding="utf-8") as fh:
-        pyml = yaml.load(fh)
+        pyml = yaml.safe_load(fh)
 
     pyml["requires"] = ["mod10 == 3.5"]
 
