@@ -452,3 +452,14 @@ class ResourceHistory(BaseModel):
 class ResourceLog(LogLine):
     action_id: uuid.UUID
     action: const.ResourceAction
+
+
+class Parameter(BaseModel):
+    id: uuid.UUID
+    name: str
+    value: str
+    environment: uuid.UUID
+    resource_id: ResourceIdStr
+    source: str
+    updated: Optional[datetime.datetime]
+    metadata: Optional[JsonType]
