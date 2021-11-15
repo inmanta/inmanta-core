@@ -679,7 +679,7 @@ def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Parameter]
     :param tid: The id of the environment
     :param rid: Id of the resource
     :return: The facts related to this resource
-    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise NotFound: This status code is returned when the referenced environment is not found
     """
 
 
@@ -697,7 +697,7 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.P
     :param rid: The id of the resource
     :param id: The id of the fact
     :return: A specific fact corresponding to the id
-    :raise NotFound: This exception is raised when the referenced environment or fact is not found
+    :raise NotFound: This status code is returned when the referenced environment or fact is not found
     """
 
 

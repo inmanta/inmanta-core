@@ -1,4 +1,4 @@
 description: Added endpoint to get facts
-issue-nr: 3132
+issue-nr: 3134
 change-type: minor
 destination-branches: [master, iso4]
