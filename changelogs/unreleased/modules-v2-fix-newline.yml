@@ -1,0 +1,4 @@
+description: removed newline from v2 test module description
+change-type: patch
+destination-branches:
+  - master
