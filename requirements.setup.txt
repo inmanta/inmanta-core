@@ -1,4 +1,4 @@
 # required to build cryptography dependency
-setuptools-rust==0.11.6
+setuptools-rust==0.12.1
 # Required to build pyyaml
 cython==0.29.24
