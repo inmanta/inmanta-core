@@ -1949,6 +1949,18 @@ class Parameter(BaseDocument):
         result = await cls.select_query(query, values)
         return result
 
+    def to_dto(self) -> m.Parameter:
+        return m.Parameter(
+            id=self.id,
+            name=self.name,
+            value=self.value,
+            environment=self.environment,
+            resource_id=self.resource_id,
+            source=self.source,
+            updated=self.updated,
+            metadata=self.metadata,
+        )
+
 
 class UnknownParameter(BaseDocument):
     """
