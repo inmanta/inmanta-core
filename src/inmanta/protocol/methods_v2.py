@@ -670,6 +670,37 @@ def resource_logs(
     """
 
 
+@typedmethod(
+    path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Parameter]:
+    """
+    Get the facts related to a specific resource
+    :param tid: The id of the environment
+    :param rid: Id of the resource
+    :return: The facts related to this resource
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>/facts/<id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.Parameter:
+    """
+    Get one specific fact
+    :param tid: The id of the environment
+    :param rid: The id of the resource
+    :param id: The id of the fact
+    :return: A specific fact corresponding to the id
+    :raise NotFound: This exception is raised when the referenced environment or fact is not found
+    """
+
+
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
