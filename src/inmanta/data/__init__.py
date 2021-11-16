@@ -51,6 +51,7 @@ from typing import (
 import asyncpg
 import dateutil
 import pydantic
+import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
@@ -148,6 +149,12 @@ class PagingOrder(str, enum.Enum):
             return PagingOrder.DESC
         return PagingOrder.ASC
 
+    @property
+    def db_form(self) -> OrderStr:
+        if self == PagingOrder.ASC:
+            return OrderStr("ASC NULLS FIRST")
+        return OrderStr("DESC NULLS LAST")
+
 
 class InvalidSort(Exception):
     def __init__(self, message: str, *args: object) -> None:
@@ -192,11 +199,26 @@ class DatabaseOrder:
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
         """The validated column name string as it should be used in the database queries"""
-        return self.order_by_column
+        return self.coalesce_to_min(self.order_by_column)
 
     def get_order(self) -> PagingOrder:
         """ The order string representing the direction the results should be sorted by"""
         return self.order
+
+    def is_nullable_column(self) -> bool:
+        column_type = self.get_order_by_column_type()
+        return typing_inspect.is_optional_type(column_type)
+
+    def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
+        if self.is_nullable_column():
+            column_type = self.get_order_by_column_type()
+            if typing_inspect.get_args(column_type)[0] == datetime.datetime:
+                return ColumnNameStr(f"COALESCE({value_reference}, to_timestamp(0))")
+            elif typing_inspect.get_args(column_type)[0] == bool:
+                return ColumnNameStr(f"COALESCE({value_reference}, FALSE)")
+            else:
+                return ColumnNameStr(f"COALESCE({value_reference}, '')")
+        return ColumnNameStr(value_reference)
 
     def __str__(self) -> str:
         return f"{self.order_by_column}.{self.order}"
@@ -222,17 +244,19 @@ class DatabaseOrder:
             return None
 
     def ensure_boundary_type(
-        self, order_by_column_value: Union[datetime.datetime, int, str]
-    ) -> Union[datetime.datetime, int, str]:
+        self, order_by_column_value: Union[datetime.datetime, int, bool, str]
+    ) -> Union[datetime.datetime, int, bool, str]:
         """Converts a value to the type of the order by column,
         can be used to make sure a boundary (start or end) is the correct type"""
         column_type = self.get_order_by_column_type()
-        if column_type == datetime.datetime and isinstance(order_by_column_value, str):
-            return dateutil.parser.isoparse(order_by_column_value)
-        elif column_type == int and isinstance(order_by_column_value, str):
-            return int(order_by_column_value)
-        else:
-            return order_by_column_value
+        if isinstance(order_by_column_value, str):
+            if column_type == datetime.datetime:
+                return dateutil.parser.isoparse(order_by_column_value)
+            elif column_type == int:
+                return int(order_by_column_value)
+            elif column_type == bool:
+                return order_by_column_value.lower() == "true"
+        return order_by_column_value
 
     @property
     def id_column(self) -> ColumnNameStr:
@@ -250,9 +274,10 @@ class DatabaseOrder:
         filter_statements = []
         values: List[object] = []
         relation = ">" if start else "<"
-        if column_value is not None and id_value:
+        if (column_value is not None or self.is_nullable_column()) and id_value:
             filter_statements.append(
-                f"({self.get_order_by_column_db_name()}, {self.id_column}) {relation} (${str(offset)}, ${str(offset + 1)})"
+                f"""({self.get_order_by_column_db_name()}, {self.id_column}) {relation}
+                    ({self.coalesce_to_min(f"${str(offset)}")}, ${str(offset + 1)})"""
             )
             values.append(BaseDocument._get_value(column_value))
             values.append(BaseDocument._get_value(id_value))
@@ -332,6 +357,29 @@ class CompileReportOrder(DatabaseOrder):
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Compile
+
+
+class AgentOrder(DatabaseOrder):
+    """Represents the ordering by which agents should be sorted"""
+
+    valid_sort_columns = {
+        "name": str,
+        "process_name": Optional[str],
+        "paused": bool,
+        "last_failover": Optional[datetime.datetime],
+        "unpause_on_resume": Optional[bool],
+        "status": str,
+    }
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Agent
+
+    @property
+    def id_column(self) -> ColumnNameStr:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("name")
 
 
 class BaseQueryBuilder(ABC):
@@ -468,10 +516,12 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             order = self.db_order.get_order()
             order_by_column = self.db_order.get_order_by_column_db_name()
             if self.backward_paging:
-                backward_paging_order = order.invert().name
-                full_query += f" ORDER BY {order_by_column} {backward_paging_order}, id {backward_paging_order}"
+                backward_paging_order = order.invert().db_form
+                full_query += (
+                    f" ORDER BY {order_by_column} {backward_paging_order}, {self.db_order.id_column} {backward_paging_order}"
+                )
             else:
-                full_query += f" ORDER BY {order_by_column} {order}, id {order}"
+                full_query += f" ORDER BY {order_by_column} {order.db_form}, {self.db_order.id_column}  {order.db_form}"
         if self.limit is not None:
             if self.limit > DBLIMIT:
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {self.limit}")
@@ -479,8 +529,8 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                 full_query += " LIMIT " + str(self.limit)
         if self.db_order and self.backward_paging:
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records
-                            ORDER BY matching_records.{self.db_order.get_order_by_column_db_name()} {self.db_order.get_order()},
-                                     matching_records.{self.db_order.id_column} {self.db_order.get_order()}"""
+                            ORDER BY {self.db_order.get_order_by_column_db_name()} {self.db_order.get_order().db_form},
+                                     {self.db_order.id_column} {self.db_order.get_order().db_form}"""
 
         return full_query, self.values
 
@@ -685,6 +735,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
         self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
+
+    @classmethod
+    def get_valid_field_names(cls) -> List[str]:
+        return list(cls._fields.keys())
 
     @classmethod
     def _create_dict(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
@@ -998,7 +1052,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if o not in possible:
                 raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
-        if order_by_column not in cls._fields:
+        if order_by_column not in cls.get_valid_field_names():
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
 
         return ColumnNameStr(order_by_column), PagingOrder[order]
@@ -1181,7 +1235,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
         """Check if the name is a valid database column name for the current type"""
-        if name not in cls._fields:
+        if name not in cls.get_valid_field_names():
             raise InvalidFieldNameException(f"{name} is not valid for a query on {cls.table_name()}")
         return ColumnNameStr(name)
 
@@ -2230,6 +2284,11 @@ class Agent(BaseDocument):
     primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
+    def get_valid_field_names(cls) -> List[str]:
+        # Allow the computed fields
+        return super().get_valid_field_names() + ["process_name", "status"]
+
+    @classmethod
     async def get_statuses(cls, env_id: uuid.UUID, agent_names: Set[str]) -> Dict[str, Optional[AgentStatus]]:
         result: Dict[str, Optional[AgentStatus]] = {}
         for agent_name in agent_names:
@@ -2373,6 +2432,99 @@ class Agent(BaseDocument):
                 WHERE id_primary IS NOT NULL
         """
         await cls._execute_query(query, connection=connection)
+
+    @classmethod
+    def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
+                                    ai.name as process_name, ai.process as process_id,
+                                    (CASE WHEN paused THEN 'paused'
+                                        WHEN id_primary IS NOT NULL THEN 'up'
+                                        ELSE 'down'
+                                    END) as status""",
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
+            filter_statements=[" environment = $1 "],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_items_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.agent_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def get_agents(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[Union[datetime.datetime, bool, str]] = None,
+        end: Optional[Union[datetime.datetime, bool, str]] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Agent]:
+        subquery, subquery_values = cls.agent_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
+            order == PagingOrder.DESC and (start is not None or first_id)
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        agent_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        agent_records = cast(Iterable[Record], agent_records)
+
+        dtos = [
+            m.Agent(
+                name=agent["name"],
+                environment=agent["environment"],
+                last_failover=agent["last_failover"],
+                paused=agent["paused"],
+                unpause_on_resume=agent["unpause_on_resume"],
+                process_id=agent["process_id"],
+                process_name=agent["process_name"],
+                status=agent["status"],
+            )
+            for agent in agent_records
+        ]
+        return dtos
 
 
 @stable_api

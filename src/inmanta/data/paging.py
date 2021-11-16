@@ -22,6 +22,7 @@ from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, Typ
 from urllib import parse
 
 from inmanta.data import (
+    Agent,
     ColumnNameStr,
     Compile,
     DatabaseOrder,
@@ -32,6 +33,7 @@ from inmanta.data import (
     Resource,
     ResourceAction,
 )
+from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import (
     BaseModel,
     CompileReport,
@@ -159,6 +161,20 @@ class CompileReportPagingCountsProvider(PagingCountsProvider):
         return await Compile.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
 
 
+class AgentPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Agent.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
+
+
 class PagingHandler(ABC, Generic[T]):
     def __init__(self, counts_provider: PagingCountsProvider) -> None:
         self.counts_provider = counts_provider
@@ -203,9 +219,19 @@ class PagingHandler(ABC, Generic[T]):
         )
         return metadata
 
-    @abstractmethod
     def _get_paging_boundaries(self, dtos: List[T], sort_order: DatabaseOrder) -> PagingBoundaries:
-        pass
+        if sort_order.get_order() == "DESC":
+            start_dto = dtos[0].dict()
+            end_dto = dtos[-1].dict()
+        else:
+            start_dto = dtos[-1].dict()
+            end_dto = dtos[0].dict()
+        return PagingBoundaries(
+            start=sort_order.ensure_boundary_type(start_dto[sort_order.get_order_by_column_api_name()]),
+            first_id=start_dto[sort_order.id_column],
+            end=sort_order.ensure_boundary_type(end_dto[sort_order.get_order_by_column_api_name()]),
+            last_id=end_dto[sort_order.id_column],
+        )
 
     def _encode_filter_dict(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, List[str]]:
         url_query_params = {}
@@ -219,15 +245,13 @@ class PagingHandler(ABC, Generic[T]):
         """ The base url for the method, with the path parameters already specified (if applicable)"""
         pass
 
-    @abstractmethod
     def get_first_id_name(self) -> str:
         """ The name of the first id parameter in the api, used when creating links """
-        pass
+        return "first_id"
 
-    @abstractmethod
     def get_last_id_name(self) -> str:
         """ The name of the last id parameter in the api, used when creating links """
-        pass
+        return "last_id"
 
     async def prepare_paging_links(
         self,
@@ -237,8 +261,8 @@ class PagingHandler(ABC, Generic[T]):
         limit: Optional[int] = None,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Union[datetime.datetime, str]] = None,
-        end: Optional[Union[datetime.datetime, str]] = None,
+        start: Optional[Union[datetime.datetime, int, bool, str]] = None,
+        end: Optional[Union[datetime.datetime, int, bool, str]] = None,
         has_next: Optional[bool] = False,
         has_prev: Optional[bool] = False,
         **additional_url_params: Optional[Union[SimpleTypes, List[str]]],
@@ -349,12 +373,6 @@ class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
     def get_base_url(self) -> str:
         return "/api/v2/resource"
 
-    def get_first_id_name(self) -> str:
-        return "first_id"
-
-    def get_last_id_name(self) -> str:
-        return "last_id"
-
     def _get_paging_boundaries(self, dtos: List[LatestReleasedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
@@ -383,12 +401,6 @@ class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
 
     def get_base_url(self) -> str:
         return f"/api/v2/resource/{parse.quote(self.resource_id, safe='')}/history"
-
-    def get_first_id_name(self) -> str:
-        return "first_id"
-
-    def get_last_id_name(self) -> str:
-        return "last_id"
 
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
@@ -419,12 +431,6 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
     def get_base_url(self) -> str:
         return f"/api/v2/resource/{parse.quote(self.resource_id, safe='')}/logs"
 
-    def get_first_id_name(self) -> str:
-        pass
-
-    def get_last_id_name(self) -> str:
-        pass
-
     def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
@@ -452,12 +458,6 @@ class CompileReportPagingHandler(PagingHandler[CompileReport]):
     def get_base_url(self) -> str:
         return "/api/v2/compilereport"
 
-    def get_first_id_name(self) -> str:
-        return "first_id"
-
-    def get_last_id_name(self) -> str:
-        return "last_id"
-
     def _get_paging_boundaries(self, dtos: List[CompileReport], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
@@ -473,3 +473,14 @@ class CompileReportPagingHandler(PagingHandler[CompileReport]):
                 end=dtos[0].requested,
                 last_id=dtos[0].id,
             )
+
+
+class AgentPagingHandler(PagingHandler[AgentModel]):
+    def __init__(
+        self,
+        counts_provider: PagingCountsProvider,
+    ) -> None:
+        super().__init__(counts_provider)
+
+    def get_base_url(self) -> str:
+        return "/api/v2/agents"
