@@ -164,6 +164,7 @@ class PluginMeta(type):
         name = "::".join(ns_parts[1:])
         cls.__functions[name] = plugin_class
 
+    # TODO: stable API?
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
@@ -171,9 +172,25 @@ class PluginMeta(type):
         """
         return cls.__functions
 
+    # TODO: stable API?
+    # TODO: add test
     @classmethod
-    def clear(cls) -> None:
-        cls.__functions = {}
+    def clear(cls, inmanta_module: Optional[str] = None) -> None:
+        """
+        Clears registered plugin functions.
+
+        :param inmanta_module: Clear plugin functions for a specific inmanta module. If omitted, clears all registered plugin
+            functions.
+        """
+        if inmanta_module is not None:
+            top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}"
+            cls.__functions = {
+                fq_name: plugin_class
+                for fq_name, plugin_class in cls.__functions
+                if plugin_class.__module__ == top_level or plugin_class.__module__.startswith(f"{top_level}.")
+            }
+        else:
+            cls.__functions = {}
 
 
 class Plugin(NamedType, metaclass=PluginMeta):
