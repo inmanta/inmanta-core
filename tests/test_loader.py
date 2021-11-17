@@ -19,6 +19,7 @@ import hashlib
 import inspect
 import os
 import shutil
+import sys
 from typing import List, Set
 
 import py
@@ -284,6 +285,43 @@ def test_module_loader(module_path: str, capsys, modules_dir: str):
 
     with pytest.raises(ImportError):
         from inmanta_plugins.tests import doesnotexist  # NOQA
+
+
+def test_module_unload(module_path: str, modules_dir: str) -> None:
+    """
+    Verify that the unload_inmanta_plugins function correctly unloads modules.
+    """
+    for mod in ["submodule", "elaboratev1module"]:
+        origin_mod_dir = os.path.join(modules_dir, mod)
+        mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
+        shutil.copytree(origin_mod_dir, mod_dir)
+
+    import inmanta_plugins.elaboratev1module  # noqa: F401
+    import inmanta_plugins.submodule.submod  # noqa: F401
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+    assert "inmanta_plugins.submodule" in sys.modules
+    assert "inmanta_plugins.submodule.submod" in sys.modules
+
+    loader.unload_inmanta_plugins("submodule")
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+
+    assert "inmanta_plugins.submodule" not in sys.modules
+    assert "inmanta_plugins.submodule.submod" not in sys.modules
+
+    # make sure that it does not fail on a module with no plugins
+    loader.unload_inmanta_plugins("doesnotexist")
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+
+    loader.unload_inmanta_plugins()
+
+    assert "inmanta_plugins" not in sys.modules
+    assert "inmanta_plugins.elaboratev1module" not in sys.modules
 
 
 def test_plugin_loading_on_project_load(tmpdir, capsys):

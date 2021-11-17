@@ -459,7 +459,6 @@ class PluginModuleFinder(Finder):
         return None
 
 
-# TODO: add test
 @stable_api
 def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     """

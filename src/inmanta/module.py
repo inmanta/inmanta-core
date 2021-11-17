@@ -1539,11 +1539,17 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.verify()
             self.load_plugins()
 
-    def invalidate_state(self) -> None:
+    def invalidate_state(self, module: Optional[str] = None) -> None:
         """
         Invalidate this project's state, forcing a reload next time load is called.
+
+        :param module: Invalidate the state for a single module. If omitted, invalidates the state for all modules.
         """
-        self.modules = {}
+        if module is not None:
+            if module in self.modules:
+                del self.modules[module]
+        else:
+            self.modules = {}
         self.loaded = False
 
     @lru_cache()
@@ -2356,7 +2362,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
 
-    # TODO: add test
     def unload(self) -> None:
         """
         Unloads this module instance from the project, the registered plugins and the loaded Python modules.
@@ -2364,7 +2369,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         loader.unload_inmanta_plugins(self.name)
         plugins.PluginMeta.clear(self.name)
         if self._project is not None:
-            self._project.invalidate_state()
+            self._project.invalidate_state(self.name)
 
 
 @stable_api

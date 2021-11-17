@@ -172,7 +172,6 @@ class PluginMeta(type):
         """
         return dict(cls.__functions)
 
-    # TODO: add test
     @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
         """
@@ -186,7 +185,7 @@ class PluginMeta(type):
             cls.__functions = {
                 fq_name: plugin_class
                 for fq_name, plugin_class in cls.__functions.items()
-                if plugin_class.__module__ == top_level or plugin_class.__module__.startswith(f"{top_level}.")
+                if plugin_class.__module__ != top_level and not plugin_class.__module__.startswith(f"{top_level}.")
             }
         else:
             cls.__functions = {}
