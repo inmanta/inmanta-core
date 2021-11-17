@@ -295,3 +295,13 @@ class CompileReportFilterValidator(FilterValidator):
             "started": BooleanIsNotNullFilter,
             "completed": BooleanIsNotNullFilter,
         }
+
+
+class AgentFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "process_name": ContainsPartialFilter,
+            "status": ContainsFilter,
+        }
