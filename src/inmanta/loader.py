@@ -30,6 +30,7 @@ from itertools import chain, starmap
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import const
+from inmanta.stable_api import stable_api
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -368,7 +369,7 @@ class PluginModuleLoader(FileLoader):
         return self.path == ""
 
 
-# TODO: add to stable API
+@stable_api
 class PluginModuleFinder(Finder):
     """
     Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder. This
@@ -459,6 +460,7 @@ class PluginModuleFinder(Finder):
 
 
 # TODO: add test
+@stable_api
 def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     """
     Unloads Python modules associated with inmanta modules (`inmanta_plugins` submodules).

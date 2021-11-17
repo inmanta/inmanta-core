@@ -140,7 +140,7 @@ class Context(object):
 @stable_api
 class PluginMeta(type):
     """
-    A metaclass that registers subclasses in the parent class.
+    A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
     """
 
     def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
@@ -151,7 +151,6 @@ class PluginMeta(type):
 
     __functions: Dict[str, Type["Plugin"]] = {}
 
-    # TODO: stable API docs
     @classmethod
     def add_function(cls, plugin_class: Type["Plugin"]) -> None:
         """
@@ -166,7 +165,6 @@ class PluginMeta(type):
         name = "::".join(ns_parts[1:])
         cls.__functions[name] = plugin_class
 
-    # TODO: stable API docs
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
@@ -174,7 +172,6 @@ class PluginMeta(type):
         """
         return dict(cls.__functions)
 
-    # TODO: stable API docs
     # TODO: add test
     @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
@@ -188,7 +185,7 @@ class PluginMeta(type):
             top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}"
             cls.__functions = {
                 fq_name: plugin_class
-                for fq_name, plugin_class in cls.__functions
+                for fq_name, plugin_class in cls.__functions.items()
                 if plugin_class.__module__ == top_level or plugin_class.__module__.startswith(f"{top_level}.")
             }
         else:

@@ -249,6 +249,7 @@ class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
     pass
 
 
+@stable_api
 class ProjectNotFoundException(CompilerException):
     """
     This exception is raised when inmanta is unable to find a valid project

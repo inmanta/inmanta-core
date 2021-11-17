@@ -52,6 +52,11 @@ Plugins
 
 .. autoclass:: inmanta.plugins.PluginException
 
+.. autoclass:: inmanta.plugins.PluginMeta
+    :show-inheritance:
+    :members: add_function, clear, get_functions
+    :undoc-members:
+
 Resources
 ---------
 
@@ -158,12 +163,23 @@ Modules
 
 .. autodata:: inmanta.module.Path
 
+.. autoclass:: inmanta.loader.PluginModuleFinder
+    :show-inheritance:
+    :members: configure_module_finder, reset
+    :undoc-members:
+
+.. autofunction:: inmanta.loader.unload_inmanta_plugins
+
 
 Project
 -------
 
 .. autoclass:: inmanta.module.Project
     :members: get, load, set, install_modules
+    :undoc-members:
+    :show-inheritance:
+
+.. autoclass:: inmanta.module.ProjectNotFoundException
     :undoc-members:
     :show-inheritance:
 
