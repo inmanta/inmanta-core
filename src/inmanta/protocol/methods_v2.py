@@ -348,6 +348,40 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
 
 
+@typedmethod(path="/agents", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def get_agents(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    start: Optional[Union[datetime.datetime, bool, str]] = None,
+    end: Optional[Union[datetime.datetime, bool, str]] = None,
+    first_id: Optional[str] = None,
+    last_id: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Agent]:
+    """
+    Get all of the agents in the given environment
+    :param tid: The id of the environment the agents should belong to
+    :param limit: Limit the number of agents that are returned
+    :param start: The lower limit for the order by column (exclusive).
+    :param first_id: The name to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The name to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned agents.
+                Filtering by 'name', 'process_name' and 'status' is supported.
+    :param sort: Return the results sorted according to the parameter value.
+                Sorting by 'name', 'process_name', 'status', 'paused' and 'last_failover' is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching agents
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
 @typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
 def update_agent_map(agent_map: Dict[str, str]) -> None:
     """
