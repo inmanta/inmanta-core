@@ -137,6 +137,7 @@ class Context(object):
             raise ConnectionRefusedError()
 
 
+@stable_api
 class PluginMeta(type):
     """
     A metaclass that registers subclasses in the parent class.
@@ -170,7 +171,7 @@ class PluginMeta(type):
         """
         Get all functions that are registered
         """
-        return cls.__functions
+        return dict(cls.__functions)
 
     # TODO: stable API?
     # TODO: add test

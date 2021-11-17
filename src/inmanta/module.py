@@ -1362,6 +1362,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     """
     An inmanta project
 
+    :ivar modules: The collection of loaded modules for this project.
     :ivar module_source: The v2 module source for this project.
     """
 
@@ -2354,7 +2355,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
 
-    # TODO: add to stable API
     # TODO: add test
     def unload(self) -> None:
         """

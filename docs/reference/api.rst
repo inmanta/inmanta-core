@@ -133,7 +133,7 @@ Modules
 
 .. autoclass:: inmanta.module.Module
     :show-inheritance:
-    :members: from_path, get_plugin_files
+    :members: from_path, get_plugin_files, unload
     :undoc-members:
 
 .. autodata:: inmanta.module.ModuleName
