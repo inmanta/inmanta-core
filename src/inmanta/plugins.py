@@ -151,6 +151,7 @@ class PluginMeta(type):
 
     __functions: Dict[str, Type["Plugin"]] = {}
 
+    # TODO: stable API docs
     @classmethod
     def add_function(cls, plugin_class: Type["Plugin"]) -> None:
         """
@@ -165,7 +166,7 @@ class PluginMeta(type):
         name = "::".join(ns_parts[1:])
         cls.__functions[name] = plugin_class
 
-    # TODO: stable API?
+    # TODO: stable API docs
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
@@ -173,7 +174,7 @@ class PluginMeta(type):
         """
         return dict(cls.__functions)
 
-    # TODO: stable API?
+    # TODO: stable API docs
     # TODO: add test
     @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
