@@ -29,6 +29,7 @@ from inmanta.data import (
     InvalidFieldNameException,
     InvalidQueryParameter,
     PagingCounts,
+    PagingOrder,
     QueryType,
     Resource,
     ResourceAction,
@@ -220,7 +221,7 @@ class PagingHandler(ABC, Generic[T]):
         return metadata
 
     def _get_paging_boundaries(self, dtos: List[T], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
+        if sort_order.get_order() == PagingOrder.DESC:
             start_dto = dtos[0].dict()
             end_dto = dtos[-1].dict()
         else:
@@ -476,11 +477,5 @@ class CompileReportPagingHandler(PagingHandler[CompileReport]):
 
 
 class AgentPagingHandler(PagingHandler[AgentModel]):
-    def __init__(
-        self,
-        counts_provider: PagingCountsProvider,
-    ) -> None:
-        super().__init__(counts_provider)
-
     def get_base_url(self) -> str:
         return "/api/v2/agents"

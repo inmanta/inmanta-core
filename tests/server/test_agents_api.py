@@ -19,7 +19,7 @@ import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Optional
+from typing import Dict, List, Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -29,7 +29,7 @@ from inmanta.server.config import get_bind_port
 
 
 @pytest.fixture
-async def env_with_agents(client, environment):
+async def env_with_agents(client, environment: str) -> None:
     env_uuid = uuid.UUID(environment)
 
     async def create_agent(
@@ -68,7 +68,7 @@ async def env_with_agents(client, environment):
 
 
 @pytest.mark.asyncio
-async def test_agent_list_filters(client, environment, env_with_agents):
+async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
     result = await client.get_agents(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 9
@@ -109,29 +109,14 @@ async def test_agent_list_filters(client, environment, env_with_agents):
     assert len(result.result["data"]) == 1
 
 
-def agent_names(agents):
+def agent_names(agents: List[Dict[str, str]]) -> List[str]:
     return [agent["name"] for agent in agents]
 
 
-@pytest.mark.parametrize(
-    "order_by_column, order",
-    [
-        ("name", "DESC"),
-        ("name", "ASC"),
-        ("status", "DESC"),
-        ("status", "ASC"),
-        ("process_name", "DESC"),
-        ("process_name", "ASC"),
-        ("last_failover", "DESC"),
-        ("last_failover", "ASC"),
-        ("paused", "DESC"),
-        ("paused", "ASC"),
-        ("unpause_on_resume", "DESC"),
-        ("unpause_on_resume", "ASC"),
-    ],
-)
+@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused", "unpause_on_resume"])
+@pytest.mark.parametrize("order", ["DESC", "ASC"])
 @pytest.mark.asyncio
-async def test_agents_paging(server, client, env_with_agents, environment, order_by_column, order):
+async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
         environment,
         filter={"status": ["paused", "up"]},

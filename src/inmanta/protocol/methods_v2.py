@@ -358,10 +358,10 @@ def get_agents(
     last_id: Optional[str] = None,
     filter: Optional[Dict[str, List[str]]] = None,
     sort: str = "name.asc",
-) -> List[model.ResourceLog]:
+) -> List[model.Agent]:
     """
-    Get the all of the agents in the given environment
-    :param tid: The id of the environment this resource belongs to
+    Get all of the agents in the given environment
+    :param tid: The id of the environment the agents should belong to
     :param limit: Limit the number of agents that are returned
     :param start: The lower limit for the order by column (exclusive).
     :param first_id: The name to use as a continuation token for paging, in combination with the 'start' value,
