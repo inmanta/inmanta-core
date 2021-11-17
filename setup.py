@@ -9,7 +9,7 @@ requires = [
     "cookiecutter",
     "cryptography",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.13",
+    "docstring-parser>=0.10,<0.14",
     "email-validator",
     "execnet",
     "importlib_metadata",
