@@ -27,7 +27,7 @@ from collections.abc import KeysView
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import const
 
