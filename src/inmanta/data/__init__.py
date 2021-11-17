@@ -199,17 +199,19 @@ class DatabaseOrder:
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
         """The validated column name string as it should be used in the database queries"""
-        return self.coalesce_to_min(self.order_by_column)
+        return self.order_by_column
 
     def get_order(self) -> PagingOrder:
         """ The order string representing the direction the results should be sorted by"""
         return self.order
 
     def is_nullable_column(self) -> bool:
+        """Is the current order by column type nullable (optional) or not"""
         column_type = self.get_order_by_column_type()
         return typing_inspect.is_optional_type(column_type)
 
     def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type"""
         if self.is_nullable_column():
             column_type = self.get_order_by_column_type()
             if typing_inspect.get_args(column_type)[0] == datetime.datetime:
@@ -380,6 +382,10 @@ class AgentOrder(DatabaseOrder):
     def id_column(self) -> ColumnNameStr:
         """Name of the id column of this database order"""
         return ColumnNameStr("name")
+
+    def get_order_by_column_db_name(self) -> ColumnNameStr:
+        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
+        return self.coalesce_to_min(self.order_by_column)
 
 
 class BaseQueryBuilder(ABC):
