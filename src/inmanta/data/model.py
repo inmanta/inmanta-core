@@ -463,3 +463,25 @@ class Parameter(BaseModel):
     source: str
     updated: Optional[datetime.datetime]
     metadata: Optional[JsonType]
+
+
+class Agent(BaseModel):
+    """
+    :param environment: Id of the agent's environment
+    :param name: The name of the agent
+    :param last_failover: The time of the last failover
+    :param paused: Whether the agent is paused or not
+    :param unpause_on_resume: Whether the agent should be unpaused when the environment is resumed
+    :param status: The current status of the agent
+    :param process_id: The id of the agent process that belongs to this agent, if there is one
+    :param process_name: The name of the agent process that belongs to this agent, if there is one
+    """
+
+    environment: uuid.UUID
+    name: str
+    last_failover: Optional[datetime.datetime]
+    paused: bool
+    process_id: Optional[uuid.UUID]
+    process_name: Optional[str]
+    unpause_on_resume: Optional[bool]
+    status: const.AgentStatus

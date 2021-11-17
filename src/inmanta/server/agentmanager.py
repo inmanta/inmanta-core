@@ -24,7 +24,7 @@ import uuid
 from asyncio import queues, subprocess
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 from uuid import UUID
 
 import asyncpg
@@ -32,10 +32,12 @@ import asyncpg
 from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, QueryType, model, paging
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -53,6 +55,7 @@ from inmanta.types import Apireturn, ArgumentTypes
 from inmanta.util import retry_limited
 
 from . import config as server_config
+from .validate_filter import AgentFilterValidator, InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -804,6 +807,71 @@ class AgentManager(ServerSlice, SessionListener):
             return 503, {"message": "Agents queried for resource parameter."}
         else:
             return 404, {"message": "resource_id parameter is required."}
+
+    @protocol.handle(methods_v2.get_agents, env="tid")
+    async def get_agents(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[Union[datetime, bool, str]] = None,
+        end: Optional[Union[datetime, bool, str]] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "name.asc",
+    ) -> ReturnValue[List[model.Agent]]:
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(AgentFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            agent_order = data.AgentOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        typed_start, typed_end = None, None
+        if start is not None and start != "None":
+            typed_start = agent_order.ensure_boundary_type(start)
+        if end is not None and end != "None":
+            typed_end = agent_order.ensure_boundary_type(end)
+
+        try:
+            dtos = await data.Agent.get_agents(
+                environment=env.id,
+                database_order=agent_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=typed_start,
+                end=typed_end,
+                limit=limit,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = paging.AgentPagingHandler(paging.AgentPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            env.id, dtos, limit=limit, database_order=agent_order, db_query=query
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            database_order=agent_order,
+            limit=limit,
+            filter=filter,
+            first_id=first_id,
+            last_id=last_id,
+            start=typed_start,
+            end=typed_end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
 
 class AutostartedAgentManager(ServerSlice):
