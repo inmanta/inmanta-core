@@ -374,7 +374,7 @@ def get_agents(
     :param filter: Filter the list of returned agents.
                 Filtering by 'name', 'process_name' and 'status' is supported.
     :param sort: Return the results sorted according to the parameter value.
-                Sorting by 'name', 'process_name', 'status', 'paused', 'unpause_on_resume' and 'last_failover' is supported.
+                Sorting by 'name', 'process_name', 'status', 'paused' and 'last_failover' is supported.
                 The following orders are supported: 'asc', 'desc'
     :return: A list of all matching agents
     :raise NotFound: This exception is raised when the referenced environment is not found

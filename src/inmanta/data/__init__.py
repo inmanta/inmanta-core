@@ -211,7 +211,10 @@ class DatabaseOrder:
         return typing_inspect.is_optional_type(column_type)
 
     def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type"""
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, for example, because comparing a value to
+        NULL always yields NULL.
+        """
         if self.is_nullable_column():
             column_type = self.get_order_by_column_type()
             if typing_inspect.get_args(column_type)[0] == datetime.datetime:
@@ -369,7 +372,6 @@ class AgentOrder(DatabaseOrder):
         "process_name": Optional[str],
         "paused": bool,
         "last_failover": Optional[datetime.datetime],
-        "unpause_on_resume": Optional[bool],
         "status": str,
     }
     """Describes the names and types of the columns that are valid for this DatabaseOrder """

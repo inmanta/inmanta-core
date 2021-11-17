@@ -113,7 +113,7 @@ def agent_names(agents: List[Dict[str, str]]) -> List[str]:
     return [agent["name"] for agent in agents]
 
 
-@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused", "unpause_on_resume"])
+@pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 @pytest.mark.asyncio
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
@@ -225,6 +225,7 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
         "state.dsc": 400,
         "failover": 400,
         "failover.asc": 400,
+        "unpause_on_resume.asc": 400,
     }
     for sort, expected_status in sort_status_map.items():
         result = await client.get_agents(environment, sort=sort)
