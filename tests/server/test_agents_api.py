@@ -217,7 +217,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
 
 @pytest.mark.asyncio
-async def test_sorting_validation(server, client, environment, env_with_agents):
+async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
     sort_status_map = {
         "date.desc": 400,
         "name.asc": 200,
