@@ -490,4 +490,4 @@ class AgentProcess(BaseModel):
 
 
 class AgentProcessDetails(AgentProcess):
-    state: Optional["ReportReturn"]
+    state: Optional[Dict[str, "ReportReturn"]]
