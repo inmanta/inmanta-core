@@ -1,0 +1,6 @@
+description: Reviewed all moduletool commands for v2 compatibility
+change-type: major
+sections:
+  deprecation-note: "The `inmanta module list -r` command has been deprecated"
+destination-branches:
+  - master

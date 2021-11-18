@@ -30,7 +30,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Sequence
 
 import texttable
 import yaml
@@ -387,6 +387,9 @@ with the dependencies specified by the installed module.
 
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
+        create.add_argument(
+            "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
+        )
 
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
         freeze.add_argument(
@@ -528,16 +531,17 @@ with the dependencies specified by the installed module.
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name: str) -> None:
-        # TODO: add --v1 option
-        # TODO: think about where to put it
-        module_dir: str = name
-        if os.path.exists(module_dir):
-            raise Exception(f"Directory {module_dir} already exists")
-        cookiecutter(
-            "https://github.com/inmanta/inmanta-module-template.git",
-            extra_context={"module_name": name},
-        )
+    def create(self, name: str, v1: bool) -> None:
+        if v1:
+            self._create_v1(name)
+        else:
+            module_dir: str = name
+            if os.path.exists(module_dir):
+                raise Exception(f"Directory {module_dir} already exists")
+            cookiecutter(
+                "https://github.com/inmanta/inmanta-module-template.git",
+                extra_context={"module_name": name},
+            )
 
     def _create_v1(self, name: str) -> None:
         project = self.get_project()
@@ -598,42 +602,54 @@ version: 0.0.1dev0"""
         project = Project.get()
         project.get_complete_ast()
 
-        names = sorted(project.modules.keys())
-        specs = project.collect_imported_requirements()
+        names: Sequence[str] = sorted(project.modules.keys())
+        specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
 
             name_length = max(len(name), name_length)
-            mod = Project.get().modules[name]
+            mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
 
-            try:
-                if project.install_mode == InstallMode.master:
-                    reqv = "master"
-                else:
-                    release_only = project.install_mode == InstallMode.release
-                    versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
-                    if versions is None:
-                        reqv = "None"
+            generation: str = str(mod.GENERATION.name)
+
+            reqv: str
+            matches: bool
+            editable: bool
+            if isinstance(mod, ModuleV1):
+                try:
+                    if project.install_mode == InstallMode.master:
+                        reqv = "master"
                     else:
-                        reqv = str(versions)
-            except Exception:
-                LOGGER.exception("Problem getting version for module %s" % name)
-                reqv = "ERROR"
+                        release_only = project.install_mode == InstallMode.release
+                        versions = ModuleV1.get_suitable_version_for(name, specs[name], mod._path, release_only=release_only)
+                        if versions is None:
+                            reqv = "None"
+                        else:
+                            reqv = str(versions)
+                except Exception:
+                    LOGGER.exception("Problem getting version for module %s" % name)
+                    reqv = "ERROR"
+                matches = version == reqv
+                editable = True
+            else:
+                reqv = ",".join(req.version_spec_str() for req in specs[name] if req.specs) or "*"
+                matches = all(version in req for req in specs[name])
+                editable = mod.is_editable()
 
             version_length = max(len(version), len(reqv), version_length)
 
-            table.append((name, version, reqv, version == reqv))
+            table.append((name, generation, editable, version, reqv, matches))
 
         if requires:
-            print("requires:")
-            for name, version, reqv, _ in table:
+            LOGGER.warning("The `inmanta module list -r` command has been deprecated.")
+            for name, _, _, version, _, _ in table:
                 print("    - %s==%s" % (name, version))
         else:
             t = texttable.Texttable()
             t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Installed version", "Expected in project", "Matches"))
+            t.header(("Name", "Generation", "Editable", "Installed version", "Expected in project", "Matches"))
             for row in table:
                 t.add_row(row)
             print(t.draw())
@@ -751,7 +767,7 @@ version: 0.0.1dev0"""
         """
         for mod in self.get_modules(module):
             if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
                 continue
             mod.status()
 
@@ -761,7 +777,7 @@ version: 0.0.1dev0"""
         """
         for mod in self.get_modules(module):
             if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
                 continue
             mod.push()
 
@@ -788,6 +804,8 @@ version: 0.0.1dev0"""
         """
         # find module
         module = self.get_module(module)
+        if not isinstance(module, ModuleV1):
+            raise CLIException(f"{module.name} is a v2 module and does not support this operation.", exitcode=1)
         # get version
         old_version = parse_version(str(module.version))
 

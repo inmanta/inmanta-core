@@ -49,6 +49,7 @@ from typing import (
     NewType,
     Optional,
     Set,
+    Sequence,
     TextIO,
     Tuple,
     Type,
@@ -140,11 +141,15 @@ class InmantaModuleRequirement:
     def __hash__(self) -> int:
         return self._requirement.__hash__()
 
+    @property
+    def specs(self) -> Sequence[Tuple[str, str]]:
+        return self._requirement.specs
+
     def version_spec_str(self) -> str:
         """
         Returns a string representation of this module requirement's version spec. Includes only the version part.
         """
-        return ",".join("".join(spec) for spec in self._requirement.specs)
+        return ",".join("".join(spec) for spec in self.specs)
 
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
@@ -516,7 +521,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
         try:
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
@@ -595,7 +600,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
                 return ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
