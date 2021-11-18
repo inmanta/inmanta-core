@@ -382,6 +382,21 @@ def get_agents(
     """
 
 
+@typedmethod(
+    path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = False) -> model.AgentProcessDetails:
+    """
+    Get the details of an agent process
+
+    :param tid: Id of the environment
+    :param id: The id of the specific agent process
+    :param report: Whether to include a report from the agent or not
+    :return: The details of an agent process
+    :raise NotFound: This exception is raised when the referenced environment or agent process is not found
+    """
+
+
 @typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
 def update_agent_map(agent_map: Dict[str, str]) -> None:
     """

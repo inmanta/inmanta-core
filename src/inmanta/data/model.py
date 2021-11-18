@@ -475,3 +475,13 @@ class Agent(BaseModel):
     process_name: Optional[str]
     unpause_on_resume: Optional[bool]
     status: const.AgentStatus
+
+
+class AgentProcessDetails(BaseModel):
+    sid: uuid.UUID
+    hostname: str
+    environment: uuid.UUID
+    first_seen: Optional[datetime.datetime]
+    last_seen: Optional[datetime.datetime]
+    expired: Optional[datetime.datetime]
+    state: Optional[Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]

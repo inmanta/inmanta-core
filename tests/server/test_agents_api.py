@@ -25,6 +25,8 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
+from inmanta.agent import reporting
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
 
 
@@ -230,3 +232,51 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
     for sort, expected_status in sort_status_map.items():
         result = await client.get_agents(environment, sort=sort)
         assert result.code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_agent_process_details(client, environment: str) -> None:
+    env_uuid = uuid.UUID(environment)
+    process_sid = uuid.uuid4()
+    await data.AgentProcess(
+        hostname="localhost-dummy", environment=env_uuid, sid=process_sid, last_seen=datetime.datetime.now()
+    ).insert()
+    id_primary = uuid.uuid4()
+    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env_uuid).insert()
+    await data.Agent(
+        environment=env_uuid,
+        name="dummy-agent",
+        id_primary=id_primary,
+        paused=True,
+    ).insert()
+
+    result = await client.get_agent_process_details(environment, process_sid)
+    assert result.code == 200
+
+    # Get with a random id
+    result = await client.get_agent_process_details(environment, uuid.uuid4())
+    assert result.code == 404
+
+    # Get with report, but the process is not live
+    result = await client.get_agent_process_details(environment, process_sid, report=True)
+    assert result.code == 200
+    assert result.result["data"]["state"] is None
+
+
+@pytest.mark.asyncio
+async def test_agent_process_details_with_report(server, client, environment: str, agent) -> None:
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
+    result = await client.get_agents(
+        environment,
+    )
+    assert result.code == 200
+    process_id = result.result["data"][0]["process_id"]
+
+    result = await client.get_agent_process_details(environment, process_id, report=True)
+    assert result.code == 200
+    status = result.result["data"]["state"]
+    assert status is not None
+    for name in reporting.reports.keys():
+        assert name in status and status[name] != "ERROR"
