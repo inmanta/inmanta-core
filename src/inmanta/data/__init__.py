@@ -2160,8 +2160,8 @@ class AgentProcess(BaseDocument):
         result["id"] = result["sid"]
         return result
 
-    def to_dto(self) -> m.AgentProcessDetails:
-        return m.AgentProcessDetails(
+    def to_dto(self) -> m.AgentProcess:
+        return m.AgentProcess(
             sid=self.sid,
             hostname=self.hostname,
             environment=self.environment,

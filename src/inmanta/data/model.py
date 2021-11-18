@@ -477,11 +477,14 @@ class Agent(BaseModel):
     status: const.AgentStatus
 
 
-class AgentProcessDetails(BaseModel):
+class AgentProcess(BaseModel):
     sid: uuid.UUID
     hostname: str
     environment: uuid.UUID
     first_seen: Optional[datetime.datetime]
     last_seen: Optional[datetime.datetime]
     expired: Optional[datetime.datetime]
+
+
+class AgentProcessDetails(AgentProcess):
     state: Optional[Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]
