@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
@@ -30,6 +30,9 @@ from inmanta import const
 from inmanta.const import Change, ResourceState
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+
+if TYPE_CHECKING:
+    from inmanta.agent.reporting import ReportReturn
 
 # This reference to the actual pydantic field_type_schema method is only loaded once
 old_field_type_schema = pydantic.schema.field_type_schema
@@ -485,3 +488,16 @@ class Agent(BaseModel):
     process_name: Optional[str]
     unpause_on_resume: Optional[bool]
     status: const.AgentStatus
+
+
+class AgentProcess(BaseModel):
+    sid: uuid.UUID
+    hostname: str
+    environment: uuid.UUID
+    first_seen: Optional[datetime.datetime]
+    last_seen: Optional[datetime.datetime]
+    expired: Optional[datetime.datetime]
+
+
+class AgentProcessDetails(AgentProcess):
+    state: Optional[Dict[str, "ReportReturn"]]
