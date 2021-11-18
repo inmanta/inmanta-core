@@ -540,6 +540,7 @@ with the dependencies specified by the installed module.
                 raise Exception(f"Directory {module_dir} already exists")
             cookiecutter(
                 "https://github.com/inmanta/inmanta-module-template.git",
+                checkout="v2",
                 extra_context={"module_name": name},
             )
 
