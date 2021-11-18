@@ -529,6 +529,17 @@ with the dependencies specified by the installed module.
             return self.get_project(load=True).sorted_modules()
 
     def create(self, name: str) -> None:
+        # TODO: add --v1 option
+        # TODO: think about where to put it
+        module_dir: str = name
+        if os.path.exists(module_dir):
+            raise Exception(f"Directory {module_dir} already exists")
+        cookiecutter(
+            "https://github.com/inmanta/inmanta-module-template.git",
+            extra_context={"module_name": name},
+        )
+
+    def _create_v1(self, name: str) -> None:
         project = self.get_project()
         mod_root = project.modulepath[-1]
         LOGGER.info("Creating new module %s in %s", name, mod_root)
@@ -568,6 +579,9 @@ version: 0.0.1dev0"""
 
     def do(self, command: str, module: str) -> None:
         for mod in self.get_modules(module):
+            if not isinstance(mod, ModuleV1):
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                continue
             try:
                 mod.execute_command(command)
             except Exception as e:
@@ -736,6 +750,9 @@ version: 0.0.1dev0"""
         Run a git status on all modules and report
         """
         for mod in self.get_modules(module):
+            if not isinstance(mod, ModuleV1):
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                continue
             mod.status()
 
     def push(self, module: Optional[str] = None) -> None:
@@ -743,6 +760,9 @@ version: 0.0.1dev0"""
         Push all modules
         """
         for mod in self.get_modules(module):
+            if not isinstance(mod, ModuleV1):
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                continue
             mod.push()
 
     def verify(self) -> None:

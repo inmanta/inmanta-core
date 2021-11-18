@@ -1934,7 +1934,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         self.virtualenv.use_virtual_env()
 
-    def sorted_modules(self) -> list:
+    def sorted_modules(self) -> List["Module"]:
         """
         Return a list of all modules, sorted on their name
         """
@@ -2291,58 +2291,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
-    def versions(self) -> List["Version"]:
-        """
-        Provide a list of all versions available in the repository
-        """
-        versions = gitprovider.get_all_tags(self._path)
-
-        def try_parse(x: str) -> "Optional[Version]":
-            try:
-                return parse_version(x)
-            except Exception:
-                return None
-
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        return versions
-
-    def status(self) -> None:
-        """
-        Run a git status on this module
-        """
-        try:
-            output = gitprovider.status(self._path)
-
-            files = [x.strip() for x in output.split("\n") if x != ""]
-
-            if len(files) > 0:
-                print(f"Module {self.name} ({self._path})")
-                for f in files:
-                    print("\t%s" % f)
-
-                print()
-            else:
-                print(f"Module {self.name} ({self._path}) has no changes")
-        except Exception:
-            print("Failed to get status of module")
-            LOGGER.exception("Failed to get status of module %s")
-
-    def push(self) -> None:
-        """
-        Run a git status on this module
-        """
-        sys.stdout.write("%s (%s) " % (self.name, self._path))
-        sys.stdout.flush()
-        try:
-            print(gitprovider.push(self._path))
-        except CalledProcessError:
-            print("Cloud not push module %s" % self.name)
-        else:
-            print("done")
-        print()
-
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
@@ -2542,6 +2490,58 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             requirements_txt_file.set_requirement_and_write(ModuleV2Source.get_python_package_requirement(requirement))
             # Remove requirement from module.yml file
             self.remove_module_requirement_from_requires_and_write(requirement.key)
+
+    def versions(self) -> List["Version"]:
+        """
+        Provide a list of all versions available in the repository
+        """
+        versions = gitprovider.get_all_tags(self._path)
+
+        def try_parse(x: str) -> "Optional[Version]":
+            try:
+                return parse_version(x)
+            except Exception:
+                return None
+
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
+
+        return versions
+
+    def status(self) -> None:
+        """
+        Run a git status on this module
+        """
+        try:
+            output = gitprovider.status(self._path)
+
+            files = [x.strip() for x in output.split("\n") if x != ""]
+
+            if len(files) > 0:
+                print(f"Module {self.name} ({self._path})")
+                for f in files:
+                    print("\t%s" % f)
+
+                print()
+            else:
+                print(f"Module {self.name} ({self._path}) has no changes")
+        except Exception:
+            print("Failed to get status of module")
+            LOGGER.exception("Failed to get status of module %s")
+
+    def push(self) -> None:
+        """
+        Run a git status on this module
+        """
+        sys.stdout.write("%s (%s) " % (self.name, self._path))
+        sys.stdout.flush()
+        try:
+            print(gitprovider.push(self._path))
+        except CalledProcessError:
+            print("Cloud not push module %s" % self.name)
+        else:
+            print("done")
+        print()
 
 
 @stable_api
