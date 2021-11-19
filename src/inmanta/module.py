@@ -2536,7 +2536,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
     def push(self) -> None:
         """
-        Run a git status on this module
+        Run a git push on this module
         """
         sys.stdout.write("%s (%s) " % (self.name, self._path))
         sys.stdout.flush()
