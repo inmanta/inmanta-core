@@ -1921,14 +1921,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
         """
         LOGGER.info("verifying project")
-        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
 
         good = True
 
         requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         for name, spec in requirements.items():
-            if name not in imports:
-                continue
             module = self.modules[name]
             version = parse_version(str(module.version))
             for r in spec:
