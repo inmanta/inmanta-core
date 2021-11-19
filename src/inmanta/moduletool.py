@@ -585,7 +585,7 @@ version: 0.0.1dev0"""
     def do(self, command: str, module: str) -> None:
         for mod in self.get_modules(module):
             if not isinstance(mod, ModuleV1):
-                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.")
+                LOGGER.warning("Skipping module %s: v2 modules do not support this operation.", mod.name)
                 continue
             try:
                 mod.execute_command(command)

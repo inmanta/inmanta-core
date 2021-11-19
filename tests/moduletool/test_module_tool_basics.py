@@ -15,14 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import asyncio
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
 import warnings
-from typing import Iterator, Type
+from typing import Iterator, Optional, Type
 
 import py
 import pytest
@@ -30,6 +32,7 @@ import yaml
 from pkg_resources import parse_version
 
 from inmanta import module
+from inmanta.command import CLIException
 from inmanta.module import (
     InmantaModuleRequirement,
     InvalidMetadata,
@@ -480,3 +483,41 @@ packages = find_namespace:
             module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     else:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+
+
+def test_module_v2_incompatible_commands(caplog, local_module_package_index: str, snippetcompiler, modules_v2_dir: str) -> None:
+    """
+    Verify that module v2 incompatible commands are reported as such.
+    """
+    # set up project with a v1 and a v2 module
+    snippetcompiler.setup_for_snippet(
+        """
+import minimalv1module
+import minimalv2module
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("minimalv2module>0.1"))
+        ],
+        autostd=False,
+    )
+
+    def verify_v2_message(command: str, args: Optional[argparse.Namespace] = None) -> None:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            ModuleTool().execute(command, args if args is not None else argparse.Namespace())
+            assert (
+                "Skipping module minimalv2module: v2 modules do not support this operation."
+                in caplog.messages
+            )
+
+    verify_v2_message("status")
+    verify_v2_message("do", argparse.Namespace(module=None, command="echo hello"))
+    cwd = os.getcwd()
+    try:
+        os.chdir(os.path.join(modules_v2_dir, "minimalv2module"))
+        with pytest.raises(CLIException, match="minimalv2module is a v2 module and does not support this operation."):
+            ModuleTool().execute("commit", argparse.Namespace(message="message"))
+    finally:
+        os.chdir(cwd)
+    verify_v2_message("push")
