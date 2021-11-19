@@ -571,20 +571,25 @@ def test_project_install_modules_cache_invalid(
     assert message in (rec.message for rec in caplog.records)
 
 
+@pytest.mark.parametrize_any("autostd", [True, False])
 def test_project_install_incompatible_versions(
     caplog,
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
+    autostd: bool,
 ) -> None:
     """
     Verify that introducing module version incompatibilities results in the appropriate exception and warnings.
+    Make sure this works both for autostd (no explicit import) and for standard modules.
     """
+    v2_mod_name: str = "std" if autostd else "v2mod"
+
     # declare conflicting module parameters
     current_version: version.Version = version.Version("1.0.0")
     req_v1_on_v1: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse("v1mod1>42")
-    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse("v2mod>42")
+    req_v1_on_v2: module.InmantaModuleRequirement = module.InmantaModuleRequirement.parse(f"{v2_mod_name}>10000")
 
     # prepare v1 modules
     v1_modules_path: str = os.path.join(str(tmpdir), "libs")
@@ -609,9 +614,9 @@ def test_project_install_incompatible_versions(
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "v2mod"),
+        os.path.join(str(tmpdir), v2_mod_name),
         new_version=current_version,
-        new_name="v2mod",
+        new_name=v2_mod_name,
         publish_index=index,
     )
 
@@ -620,13 +625,13 @@ def test_project_install_incompatible_versions(
         """
         import v1mod2
         import v1mod1
-        import v2mod
-        """,
-        autostd=False,
+        %s
+        """ % (f"import {v2_mod_name}" if not autostd else ""),
+        autostd=autostd,
         install_project=False,
         add_to_module_path=[v1_modules_path],
         python_package_sources=[index.url],
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("v2mod"))],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_mod_name))],
     )
 
     # install project
@@ -639,7 +644,7 @@ def test_project_install_incompatible_versions(
     log_messages: Set[str] = {rec.message for rec in caplog.records}
     expected: Set[str] = {
         f"requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}",
-        f"requirement {req_v1_on_v2} on module v2mod not fulfilled, now at version {current_version}",
+        f"requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}",
     }
     assert expected.issubset(log_messages)
 
