@@ -8,7 +8,7 @@ requires = [
     "colorlog",
     "cookiecutter",
     "cryptography",
-    "docstring-parser<0.8.0",
+    "docstring-parser<0.14.0",
     "email-validator",
     "execnet",
     "importlib_metadata",
