@@ -597,8 +597,6 @@ version: 0.0.1dev0"""
         List all modules in a table
         """
         table = []
-        name_length = 10
-        version_length = 10
 
         project = Project.get()
         project.get_complete_ast()
@@ -607,7 +605,6 @@ version: 0.0.1dev0"""
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
 
-            name_length = max(len(name), name_length)
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -638,8 +635,6 @@ version: 0.0.1dev0"""
                 reqv = ",".join(req.version_spec_str() for req in specs[name] if req.specs) or "*"
                 matches = all(version in req for req in specs[name])
                 editable = mod.is_editable()
-
-            version_length = max(len(version), len(reqv), version_length)
 
             table.append((name, generation, editable, version, reqv, matches))
 
