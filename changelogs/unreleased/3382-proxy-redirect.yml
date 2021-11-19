@@ -1,0 +1,4 @@
+description: Fix redirect issue when running behind a proxy
+issue-nr: 3382
+change-type: patch
+destination-branches: [master]
