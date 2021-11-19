@@ -626,7 +626,8 @@ def test_project_install_incompatible_versions(
         import v1mod2
         import v1mod1
         %s
-        """ % (f"import {v2_mod_name}" if not autostd else ""),
+        """
+        % (f"import {v2_mod_name}" if not autostd else ""),
         autostd=autostd,
         install_project=False,
         add_to_module_path=[v1_modules_path],
