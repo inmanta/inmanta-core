@@ -30,7 +30,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
 import texttable
 import yaml
