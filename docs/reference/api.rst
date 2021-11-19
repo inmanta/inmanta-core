@@ -165,7 +165,7 @@ Modules
 
 .. autoclass:: inmanta.loader.PluginModuleFinder
     :show-inheritance:
-    :members: configure_module_finder, reset
+    :members: reset
     :undoc-members:
 
 .. autofunction:: inmanta.loader.unload_inmanta_plugins
