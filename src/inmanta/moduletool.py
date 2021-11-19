@@ -749,7 +749,7 @@ version: 0.0.1dev0"""
         """
         Verify dependencies and frozen module versions
         """
-        Project.get().verify()
+        self.get_project(load=True)
 
     def commit(
         self,
