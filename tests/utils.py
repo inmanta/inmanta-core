@@ -352,7 +352,7 @@ class PipIndex:
 
 def module_from_template(
     source_dir: str,
-    dest_dir: str,
+    dest_dir: Optional[str] = None,
     *,
     new_version: Optional[version.Version] = None,
     new_name: Optional[str] = None,
@@ -362,6 +362,7 @@ def module_from_template(
     publish_index: Optional[PipIndex] = None,
     new_content_init_cf: Optional[str] = None,
     new_content_init_py: Optional[str] = None,
+    in_place: bool = False,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v2 module from a template.
@@ -377,8 +378,14 @@ def module_from_template(
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     :param new_content_init_cf: The new content of the _init.cf file.
     :param new_content_init_py: The new content of the __init__.py file.
+    :param in_place: Modify the module in-place instead of copying it.
     """
-    shutil.copytree(source_dir, dest_dir)
+    if (dest_dir is None) != in_place:
+        raise ValueError("Either dest_dir or in_place must be set, never both.")
+    if dest_dir is None:
+        dest_dir = source_dir
+    else:
+        shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)

@@ -262,11 +262,15 @@ def test_module_install_reinstall(
     modules_v2_dir,
 ) -> None:
     """
-    Verify that reinstalling a module from source without bumping the version installs any changes to model and Python files.
+    Verify that reinstalling a module from source installs any changes to model and Python files if the version is bumped.
     """
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
-    shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        dest_dir=module_path,
+        new_version=version.Version("1.0.0"),
+    )
 
     # set up simple project and activate snippetcompiler venv
     snippetcompiler_clean.setup_for_snippet("")
@@ -287,6 +291,7 @@ def test_module_install_reinstall(
     os.makedirs(model_dir, exist_ok=True)
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
+    module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
     ModuleTool().install(editable=False, path=module_path)
 
     assert all(new_files_exist())
@@ -337,6 +342,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
+        new_version=version.Version("1.0.0"),
     )
     model_file_rel: str = os.path.join("model", "mymod.cf")
     model_file_source_path: str = os.path.join(module_path, model_file_rel)
@@ -362,6 +368,11 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
 
     # remove model file and reinstall
     os.remove(model_file_source_path)
+    module_from_template(
+        module_path,
+        new_version=version.Version("2.0.0"),
+        in_place=True,
+    )
     ModuleTool().install(editable=False, path=module_path)
     assert not model_file_installed()
 

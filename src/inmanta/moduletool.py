@@ -357,6 +357,9 @@ of a project.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the installed module.
+
+Like `pip install`, this command does not reinstall a module for which the same version is already installed, except in editable
+mode.
         """.strip(),
         )
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
@@ -750,7 +753,7 @@ version: 0.0.1dev0"""
         """
 
         def install(install_path: str) -> None:
-            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)], reinstall=True)
+            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
