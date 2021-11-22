@@ -747,3 +747,64 @@ def test_project_install_with_install_mode(
     installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed_packages
     assert installed_packages[package_name] == expected_version
+
+
+def test_moduletool_list(
+    capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
+) -> None:
+    """
+    Verify that `inmanta module list` correctly lists all installed modules, both v1 and v2.
+    """
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
+
+    module_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    module_from_template(
+        module_template_path,
+        str(tmpdir.join("custom_mod_one-1")),
+        new_name="custom_mod_one",
+        new_version=version.Version("1.0.0"),
+        install=True,
+        editable=False
+    )
+    module_from_template(
+        module_template_path,
+        str(tmpdir.join("custom_mod_two-1")),
+        new_name="custom_mod_two",
+        new_version=version.Version("1.0.0"),
+        new_content_init_cf="import custom_mod_one",
+        # TODO: this does not work atm because --force-reinstall forcefully reinstalls dependencies as well.
+        #   This behavior should be tested in the reinstallation test cases
+        new_requirements=[module.InmantaModuleRequirement.parse("custom_mod_one~=1.0")],
+        install=True,
+        editable=True,
+    )
+
+    # set up project with a v1 and a v2 module
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        """
+import minimalv1module
+import custom_mod_one
+import custom_mod_two
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<1000")),
+        ],
+        install_mode=InstallMode.release,
+        autostd=False,
+    )
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(project.path)
+    finally:
+        os.chdir(cwd)
+
+    capsys.readouterr()
+    ModuleTool().list()
+    out, err = capsys.readouterr()
+    # TODO: assert correct output
+    assert out == ""
+
+    # TODO: install custom_mod_one-2.0.0 and assert new output
