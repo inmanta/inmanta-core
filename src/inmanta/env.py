@@ -268,9 +268,7 @@ class PythonEnvironment:
                     raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
                 raise e
 
-    def install_from_source(
-        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None
-    ) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
         """
@@ -388,9 +386,7 @@ class ActiveEnv(PythonEnvironment):
         finally:
             self.notify_change()
 
-    def install_from_source(
-        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None
-    ) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         try:
             super().install_from_source(paths, constraint_files)
         finally:
@@ -784,9 +780,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
             constraint_files,
         )
 
-    def install_from_source(
-        self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None
-    ) -> None:
+    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)

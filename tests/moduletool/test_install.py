@@ -823,7 +823,9 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    assert out.strip() == """
+    assert (
+        out.strip()
+        == """
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
@@ -833,6 +835,7 @@ import custom_mod_two
 | std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
+    )
 
     # install incompatible version for custom_mod_one
     module_from_template(
@@ -846,7 +849,9 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    assert out.strip() == """
+    assert (
+        out.strip()
+        == """
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
@@ -856,3 +861,4 @@ import custom_mod_two
 | std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
+    )

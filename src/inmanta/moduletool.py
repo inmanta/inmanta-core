@@ -603,6 +603,7 @@ version: 0.0.1dev0"""
         """
         List all modules in a table
         """
+
         def show_bool(b: bool) -> str:
             return "yes" if b else "no"
 

@@ -506,10 +506,7 @@ import minimalv2module
         caplog.clear()
         with caplog.at_level(logging.WARNING):
             ModuleTool().execute(command, args if args is not None else argparse.Namespace())
-            assert (
-                "Skipping module minimalv2module: v2 modules do not support this operation."
-                in caplog.messages
-            )
+            assert "Skipping module minimalv2module: v2 modules do not support this operation." in caplog.messages
 
     verify_v2_message("status")
     verify_v2_message("do", argparse.Namespace(module=None, command="echo hello"))
