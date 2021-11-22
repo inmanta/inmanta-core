@@ -327,7 +327,10 @@ class ModuleTool(ModuleLikeTool):
 
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
         lst.add_argument(
-            "-r", help="Output a list of requires that can be included in project.yml", dest="requires", action="store_true"
+            "-r",
+            help="(deprecated) Output a list of requires that can be included in project.yml",
+            dest="requires",
+            action="store_true",
         )
 
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
@@ -597,6 +600,9 @@ version: 0.0.1dev0"""
         """
         List all modules in a table
         """
+        def show_bool(b: bool) -> str:
+            return "yes" if b else "no"
+
         table = []
 
         project = Project.get()
@@ -611,7 +617,7 @@ version: 0.0.1dev0"""
             if name not in specs:
                 specs[name] = []
 
-            generation: str = str(mod.GENERATION.name)
+            generation: str = str(mod.GENERATION.name).lower()
 
             reqv: str
             matches: bool
@@ -646,7 +652,8 @@ version: 0.0.1dev0"""
         else:
             t = texttable.Texttable()
             t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Generation", "Editable", "Installed version", "Expected in project", "Matches"))
+            t.header(("Name", "Type", "Editable", "Installed version", "Expected in project", "Matches"))
+            t.set_cols_dtype(("t", "t", show_bool, "t", "t", show_bool))
             for row in table:
                 t.add_row(row)
             print(t.draw())
