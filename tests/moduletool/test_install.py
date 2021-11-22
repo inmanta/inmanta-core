@@ -772,15 +772,15 @@ def test_moduletool_list(
     module_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     module_from_template(
         module_template_path,
-        str(tmpdir.join("custom_mod_one-1")),
+        str(tmpdir.join("custom_mod_one")),
         new_name="custom_mod_one",
         new_version=version.Version("1.0.0"),
         install=True,
-        editable=False
+        editable=False,
     )
     module_from_template(
         module_template_path,
-        str(tmpdir.join("custom_mod_two-1")),
+        str(tmpdir.join("custom_mod_two")),
         new_name="custom_mod_two",
         new_version=version.Version("1.0.0"),
         new_content_init_cf="import custom_mod_one",
@@ -794,11 +794,14 @@ def test_moduletool_list(
     # set up project with a v1 and a v2 module
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         """
-import minimalv1module
+import std
 import custom_mod_one
 import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std~=2.0"),
+        ],
         python_requires=[
             module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<1000")),
         ],
@@ -815,7 +818,38 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    # TODO: assert correct output
-    assert out == ""
+    # TODO: custom_mod_one expected not complete (<1000 missing)
+    assert out.strip() == """
++----------------+------+----------+----------------+----------------+---------+
+|      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
+|                |      |          |    version     |    project     |         |
++================+======+==========+================+================+=========+
+| custom_mod_one | v2   | no       | 1.0.0          | ~=1.0          | yes     |
+| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
+| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
++----------------+------+----------+----------------+----------------+---------+
+    """.strip()
 
-    # TODO: install custom_mod_one-2.0.0 and assert new output
+    # install incompatible version for custom_mod_one
+    module_from_template(
+        str(tmpdir.join("custom_mod_one")),
+        new_version=version.Version("2.0.0"),
+        install=True,
+        editable=False,
+        in_place=True,
+    )
+    # TODO: only invalidate custom_mod_one state
+    project.invalidate_state()
+    capsys.readouterr()
+    ModuleTool().list()
+    out, err = capsys.readouterr()
+    assert out.strip() == """
++----------------+------+----------+----------------+----------------+---------+
+|      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
+|                |      |          |    version     |    project     |         |
++================+======+==========+================+================+=========+
+| custom_mod_one | v2   | no       | 2.0.0          | ~=1.0          | no      |
+| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
+| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
++----------------+------+----------+----------------+----------------+---------+
+    """.strip()
