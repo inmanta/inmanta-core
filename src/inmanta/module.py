@@ -1993,7 +1993,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
             reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
-        return reqs
+        return [*reqs, *self.get_module_v2_requirements()]
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         """

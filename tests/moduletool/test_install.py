@@ -790,8 +790,6 @@ def test_moduletool_list(
         new_name="custom_mod_two",
         new_version=version.Version("1.0.0"),
         new_content_init_cf="import custom_mod_one",
-        # TODO: this does not work atm because --force-reinstall forcefully reinstalls dependencies as well.
-        #   This behavior should be tested in the reinstallation test cases
         new_requirements=[module.InmantaModuleRequirement.parse("custom_mod_one~=1.0")],
         install=True,
         editable=True,
@@ -807,9 +805,10 @@ import custom_mod_two
         python_package_sources=[local_module_package_index],
         project_requires=[
             module.InmantaModuleRequirement.parse("std~=2.0"),
+            module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
-            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<1000")),
+            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<999")),
         ],
         install_mode=InstallMode.release,
         autostd=False,
@@ -824,13 +823,12 @@ import custom_mod_two
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
-    # TODO: custom_mod_one expected not complete (<1000 missing)
     assert out.strip() == """
 +----------------+------+----------+----------------+----------------+---------+
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
-| custom_mod_one | v2   | no       | 1.0.0          | ~=1.0          | yes     |
+| custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
 | std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
@@ -844,8 +842,7 @@ import custom_mod_two
         editable=False,
         in_place=True,
     )
-    # TODO: only invalidate custom_mod_one state
-    project.invalidate_state()
+    project.invalidate_state("custom_mod_one")
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
@@ -854,7 +851,7 @@ import custom_mod_two
 |      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
 |                |      |          |    version     |    project     |         |
 +================+======+==========+================+================+=========+
-| custom_mod_one | v2   | no       | 2.0.0          | ~=1.0          | no      |
+| custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
 | std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
