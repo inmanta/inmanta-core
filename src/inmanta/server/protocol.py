@@ -313,10 +313,12 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             options["default_filename"] = "index.html"
 
         self._handlers.append(routing.Rule(routing.PathMatches(r"%s(.*)" % location), web.StaticFileHandler, options))
-        self._handlers.append(routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location}))
+        self._handlers.append(
+            routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location[1:]})
+        )
 
         if start:
-            self._handlers.append((r"/", web.RedirectHandler, {"url": location}))
+            self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 
     def add_static_content(self, path: str, content: str, content_type: str = "application/javascript") -> None:
         self._handlers.append(

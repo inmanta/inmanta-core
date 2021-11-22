@@ -18,12 +18,14 @@
 import logging
 import os
 import shutil
+import sys
 from typing import List, Optional, Set
 
 import py
 import pytest
 from pkg_resources import Requirement
 
+from inmanta import plugins
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
 from inmanta.module import (
@@ -420,3 +422,43 @@ def test_load_import_based_v2_module(
     else:
         with pytest.raises(ModuleLoadingException, match=f"Failed to load module {dependency_module_name}"):
             project.load_module_recursive(install=True)
+
+
+def test_module_unload(
+    local_module_package_index: str,
+    snippetcompiler,
+) -> None:
+    """
+    Verify that Module.unload removes it from the project, unloads its Python modules and deregisters its plugins.
+    """
+    project: Project = snippetcompiler.setup_for_snippet(
+        """
+import minimalv2module
+import elaboratev2module
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("minimalv2module")),
+            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module")),
+        ],
+        autostd=False,
+    )
+    project.load()
+
+    assert "minimalv2module" in project.modules
+    assert "elaboratev2module" in project.modules
+
+    assert "inmanta_plugins.minimalv2module" in sys.modules
+    assert "inmanta_plugins.elaboratev2module" in sys.modules
+
+    assert "elaboratev2module::print_message" in plugins.PluginMeta.get_functions()
+
+    project.modules["elaboratev2module"].unload()
+
+    assert "minimalv2module" in project.modules
+    assert "elaboratev2module" not in project.modules
+
+    assert "inmanta_plugins.minimalv2module" in sys.modules
+    assert "inmanta_plugins.elaboratev2module" not in sys.modules
+
+    assert "elaboratev2module::print_message" not in plugins.PluginMeta.get_functions()

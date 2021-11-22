@@ -23,12 +23,14 @@ import os
 import pathlib
 import sys
 import types
+from collections.abc import KeysView
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import const
+from inmanta.stable_api import stable_api
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -367,6 +369,7 @@ class PluginModuleLoader(FileLoader):
         return self.path == ""
 
 
+@stable_api
 class PluginModuleFinder(Finder):
     """
     Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder. This
@@ -456,13 +459,19 @@ class PluginModuleFinder(Finder):
         return None
 
 
-def unload_inmanta_plugins() -> None:
+@stable_api
+def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     """
-    Unload the entire inmanta_plugins package.
+    Unloads Python modules associated with inmanta modules (`inmanta_plugins` submodules).
+
+    :param inmanta_module: Unload the Python modules for a specific inmanta module. If omitted, unloads the Python modules for
+        all inmanta modules.
     """
-    pkg_to_unload = const.PLUGINS_PACKAGE
-    loaded_modules = sys.modules.keys()
-    modules_to_unload = [k for k in loaded_modules if k == pkg_to_unload or k.startswith(pkg_to_unload)]
+    top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
+    loaded_modules: KeysView[str] = sys.modules.keys()
+    modules_to_unload: Sequence[str] = [
+        fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
+    ]
     for k in modules_to_unload:
         del sys.modules[k]
     if modules_to_unload:

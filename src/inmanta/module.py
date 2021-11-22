@@ -254,6 +254,7 @@ class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
     pass
 
 
+@stable_api
 class ProjectNotFoundException(CompilerException):
     """
     This exception is raised when inmanta is unable to find a valid project
@@ -1367,6 +1368,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     """
     An inmanta project
 
+    :ivar modules: The collection of loaded modules for this project.
     :ivar module_source: The v2 module source for this project.
     """
 
@@ -1499,14 +1501,19 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return cls._project
 
     @classmethod
-    def set(cls, project: "Project") -> None:
+    def set(cls, project: "Project", *, clean: bool = True) -> None:
         """
-        Set the instance of the project
+        Set the instance of the project.
+
+        :param clean: Clean up all side effects of any previously loaded projects. Clears the registered plugins and loaded
+            Python plugins packages.
         """
         cls._project = project
         os.chdir(project._path)
-        plugins.PluginMeta.clear()
-        loader.unload_inmanta_plugins()
+        if clean:
+            plugins.PluginMeta.clear()
+            loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.reset()
 
     def install_modules(self) -> None:
         """
@@ -1537,11 +1544,17 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.verify()
             self.load_plugins()
 
-    def invalidate_state(self) -> None:
+    def invalidate_state(self, module: Optional[str] = None) -> None:
         """
         Invalidate this project's state, forcing a reload next time load is called.
+
+        :param module: Invalidate the state for a single module. If omitted, invalidates the state for all modules.
         """
-        self.modules = {}
+        if module is not None:
+            if module in self.modules:
+                del self.modules[module]
+        else:
+            self.modules = {}
         self.loaded = False
 
     @lru_cache()
@@ -1913,14 +1926,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
         """
         LOGGER.info("verifying project")
-        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
 
         good = True
 
         requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         for name, spec in requirements.items():
-            if name not in imports:
-                continue
             module = self.modules[name]
             version = parse_version(str(module.version))
             for r in spec:
@@ -2301,6 +2311,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
+
+    def unload(self) -> None:
+        """
+        Unloads this module instance from the project, the registered plugins and the loaded Python modules.
+        """
+        loader.unload_inmanta_plugins(self.name)
+        plugins.PluginMeta.clear(self.name)
+        if self._project is not None:
+            self._project.invalidate_state(self.name)
 
 
 @stable_api

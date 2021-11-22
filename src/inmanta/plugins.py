@@ -137,9 +137,10 @@ class Context(object):
             raise ConnectionRefusedError()
 
 
+@stable_api
 class PluginMeta(type):
     """
-    A metaclass that registers subclasses in the parent class.
+    A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
     """
 
     def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
@@ -169,11 +170,25 @@ class PluginMeta(type):
         """
         Get all functions that are registered
         """
-        return cls.__functions
+        return dict(cls.__functions)
 
     @classmethod
-    def clear(cls) -> None:
-        cls.__functions = {}
+    def clear(cls, inmanta_module: Optional[str] = None) -> None:
+        """
+        Clears registered plugin functions.
+
+        :param inmanta_module: Clear plugin functions for a specific inmanta module. If omitted, clears all registered plugin
+            functions.
+        """
+        if inmanta_module is not None:
+            top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}"
+            cls.__functions = {
+                fq_name: plugin_class
+                for fq_name, plugin_class in cls.__functions.items()
+                if plugin_class.__module__ != top_level and not plugin_class.__module__.startswith(f"{top_level}.")
+            }
+        else:
+            cls.__functions = {}
 
 
 class Plugin(NamedType, metaclass=PluginMeta):

@@ -2160,6 +2160,16 @@ class AgentProcess(BaseDocument):
         result["id"] = result["sid"]
         return result
 
+    def to_dto(self) -> m.AgentProcess:
+        return m.AgentProcess(
+            sid=self.sid,
+            hostname=self.hostname,
+            environment=self.environment,
+            first_seen=self.first_seen,
+            last_seen=self.last_seen,
+            expired=self.expired,
+        )
+
 
 TAgentInstance = TypeVar("TAgentInstance", bound="AgentInstance")
 
