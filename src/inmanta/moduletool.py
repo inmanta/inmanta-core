@@ -531,7 +531,7 @@ with the dependencies specified by the installed module.
         else:
             return self.get_project(load=True).sorted_modules()
 
-    def create(self, name: str, v1: bool) -> None:
+    def create(self, name: str, v1: bool, no_input: bool = False) -> None:
         if v1:
             self._create_v1(name)
         else:
@@ -541,6 +541,7 @@ with the dependencies specified by the installed module.
             cookiecutter(
                 "https://github.com/inmanta/inmanta-module-template.git",
                 checkout="v2",
+                no_input=no_input,
                 extra_context={"module_name": name},
             )
 

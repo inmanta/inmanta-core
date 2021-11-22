@@ -521,3 +521,28 @@ import minimalv2module
     finally:
         os.chdir(cwd)
     verify_v2_message("push")
+
+
+def test_moduletool_create_v1(snippetcompiler_clean) -> None:
+    """
+    Verify that `inmanta module create --v1` creates a valid v1 module with expected parameters.
+    """
+    project: module.Project = snippetcompiler_clean.setup_for_snippet("", add_to_module_path=["libs"])
+    os.mkdir(os.path.join(project.path, "libs"))
+    cwd = os.getcwd()
+    try:
+        os.chdir(project.path)
+        ModuleTool().execute("create", argparse.Namespace(name="my_module", v1=True))
+        mod: module.ModuleV1 = module.ModuleV1(project=None, path=os.path.join(project.path, "libs", "my_module"))
+        assert mod.name == "my_module"
+    finally:
+        os.chdir(cwd)
+
+
+def test_moduletool_create_v2(tmp_working_dir: py.path.local) -> None:
+    """
+    Verify that `inmanta module create` creates a valid v2 module with expected parameters.
+    """
+    ModuleTool().execute("create", argparse.Namespace(name="my_module", v1=False, no_input=True))
+    mod: module.ModuleV2 = module.ModuleV2(project=None, path=str(tmp_working_dir.join("inmanta-module-my-module")))
+    assert mod.name == "my_module"
