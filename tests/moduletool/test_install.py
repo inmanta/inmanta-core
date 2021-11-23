@@ -814,12 +814,6 @@ import custom_mod_two
         autostd=False,
     )
 
-    cwd = os.getcwd()
-    try:
-        os.chdir(project.path)
-    finally:
-        os.chdir(cwd)
-
     capsys.readouterr()
     ModuleTool().list()
     out, err = capsys.readouterr()
