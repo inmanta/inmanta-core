@@ -48,6 +48,7 @@ from typing import (
     Mapping,
     NewType,
     Optional,
+    Sequence,
     Set,
     TextIO,
     Tuple,
@@ -140,11 +141,15 @@ class InmantaModuleRequirement:
     def __hash__(self) -> int:
         return self._requirement.__hash__()
 
+    @property
+    def specs(self) -> Sequence[Tuple[str, str]]:
+        return self._requirement.specs
+
     def version_spec_str(self) -> str:
         """
         Returns a string representation of this module requirement's version spec. Includes only the version part.
         """
-        return ",".join("".join(spec) for spec in self._requirement.specs)
+        return ",".join("".join(spec) for spec in self.specs)
 
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
@@ -517,7 +522,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
         try:
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
@@ -560,7 +565,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(
             f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
             " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
-            " respectively install and build modules from source."
+            " respectively install and build modules from source. Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -596,7 +601,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
                     module_name,
                     preinstalled_version,
-                    ",".join(constraint.version_spec_str() for constraint in module_spec),
+                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
                 return ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
@@ -1944,7 +1949,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         self.virtualenv.use_virtual_env()
 
-    def sorted_modules(self) -> list:
+    def sorted_modules(self) -> List["Module"]:
         """
         Return a list of all modules, sorted on their name
         """
@@ -1988,7 +1993,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
             reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
-        return reqs
+        return [*reqs, *self.get_module_v2_requirements()]
 
     def collect_requirements(self) -> "Dict[str, List[InmantaModuleRequirement]]":
         """
@@ -2301,58 +2306,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
         return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
-    def versions(self) -> List["Version"]:
-        """
-        Provide a list of all versions available in the repository
-        """
-        versions = gitprovider.get_all_tags(self._path)
-
-        def try_parse(x: str) -> "Optional[Version]":
-            try:
-                return parse_version(x)
-            except Exception:
-                return None
-
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        return versions
-
-    def status(self) -> None:
-        """
-        Run a git status on this module
-        """
-        try:
-            output = gitprovider.status(self._path)
-
-            files = [x.strip() for x in output.split("\n") if x != ""]
-
-            if len(files) > 0:
-                print(f"Module {self.name} ({self._path})")
-                for f in files:
-                    print("\t%s" % f)
-
-                print()
-            else:
-                print(f"Module {self.name} ({self._path}) has no changes")
-        except Exception:
-            print("Failed to get status of module")
-            LOGGER.exception("Failed to get status of module %s")
-
-    def push(self) -> None:
-        """
-        Run a git status on this module
-        """
-        sys.stdout.write("%s (%s) " % (self.name, self._path))
-        sys.stdout.flush()
-        try:
-            print(gitprovider.push(self._path))
-        except CalledProcessError:
-            print("Cloud not push module %s" % self.name)
-        else:
-            print("done")
-        print()
-
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
         print("=" * 10)
@@ -2562,6 +2515,58 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from module.yml file
             self.remove_module_requirement_from_requires_and_write(requirement.key)
 
+    def versions(self) -> List["Version"]:
+        """
+        Provide a list of all versions available in the repository
+        """
+        versions = gitprovider.get_all_tags(self._path)
+
+        def try_parse(x: str) -> "Optional[Version]":
+            try:
+                return parse_version(x)
+            except Exception:
+                return None
+
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
+
+        return versions
+
+    def status(self) -> None:
+        """
+        Run a git status on this module
+        """
+        try:
+            output = gitprovider.status(self._path)
+
+            files = [x.strip() for x in output.split("\n") if x != ""]
+
+            if len(files) > 0:
+                print(f"Module {self.name} ({self._path})")
+                for f in files:
+                    print("\t%s" % f)
+
+                print()
+            else:
+                print(f"Module {self.name} ({self._path}) has no changes")
+        except Exception:
+            print("Failed to get status of module")
+            LOGGER.exception("Failed to get status of module %s")
+
+    def push(self) -> None:
+        """
+        Run a git push on this module
+        """
+        sys.stdout.write("%s (%s) " % (self.name, self._path))
+        sys.stdout.flush()
+        try:
+            print(gitprovider.push(self._path))
+        except CalledProcessError:
+            print("Cloud not push module %s" % self.name)
+        else:
+            print("done")
+        print()
+
 
 @stable_api
 class ModuleV2(Module[ModuleV2Metadata]):
@@ -2587,7 +2592,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
                 " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-                " install and build modules from source."
+                " install and build modules from source. Make sure to uninstall the broken package first."
             )
 
     @classmethod

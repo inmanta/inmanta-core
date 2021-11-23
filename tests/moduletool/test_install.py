@@ -262,11 +262,15 @@ def test_module_install_reinstall(
     modules_v2_dir,
 ) -> None:
     """
-    Verify that reinstalling a module from source without bumping the version installs any changes to model and Python files.
+    Verify that reinstalling a module from source installs any changes to model and Python files if the version is bumped.
     """
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
-    shutil.copytree(os.path.join(modules_v2_dir, module_name), module_path)
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        dest_dir=module_path,
+        new_version=version.Version("1.0.0"),
+    )
 
     # set up simple project and activate snippetcompiler venv
     snippetcompiler_clean.setup_for_snippet("")
@@ -287,6 +291,7 @@ def test_module_install_reinstall(
     os.makedirs(model_dir, exist_ok=True)
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
+    module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
     ModuleTool().install(editable=False, path=module_path)
 
     assert all(new_files_exist())
@@ -337,6 +342,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     module_from_template(
         os.path.join(modules_v2_dir, module_name),
         module_path,
+        new_version=version.Version("1.0.0"),
     )
     model_file_rel: str = os.path.join("model", "mymod.cf")
     model_file_source_path: str = os.path.join(module_path, model_file_rel)
@@ -362,6 +368,11 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
 
     # remove model file and reinstall
     os.remove(model_file_source_path)
+    module_from_template(
+        module_path,
+        new_version=version.Version("2.0.0"),
+        in_place=True,
+    )
     ModuleTool().install(editable=False, path=module_path)
     assert not model_file_installed()
 
@@ -753,3 +764,95 @@ def test_project_install_with_install_mode(
     installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed_packages
     assert installed_packages[package_name] == expected_version
+
+
+def test_moduletool_list(
+    capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
+) -> None:
+    """
+    Verify that `inmanta module list` correctly lists all installed modules, both v1 and v2.
+    """
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
+
+    module_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    module_from_template(
+        module_template_path,
+        str(tmpdir.join("custom_mod_one")),
+        new_name="custom_mod_one",
+        new_version=version.Version("1.0.0"),
+        install=True,
+        editable=False,
+    )
+    module_from_template(
+        module_template_path,
+        str(tmpdir.join("custom_mod_two")),
+        new_name="custom_mod_two",
+        new_version=version.Version("1.0.0"),
+        new_content_init_cf="import custom_mod_one",
+        new_requirements=[module.InmantaModuleRequirement.parse("custom_mod_one~=1.0")],
+        install=True,
+        editable=True,
+    )
+
+    # set up project with a v1 and a v2 module
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        """
+import std
+import custom_mod_one
+import custom_mod_two
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std~=2.0"),
+            module.InmantaModuleRequirement.parse("custom_mod_one>0"),
+        ],
+        python_requires=[
+            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<999")),
+        ],
+        install_mode=InstallMode.release,
+        autostd=False,
+    )
+
+    capsys.readouterr()
+    ModuleTool().list()
+    out, err = capsys.readouterr()
+    assert (
+        out.strip()
+        == """
++----------------+------+----------+----------------+----------------+---------+
+|      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
+|                |      |          |    version     |    project     |         |
++================+======+==========+================+================+=========+
+| custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
+| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
+| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
++----------------+------+----------+----------------+----------------+---------+
+    """.strip()
+    )
+
+    # install incompatible version for custom_mod_one
+    module_from_template(
+        str(tmpdir.join("custom_mod_one")),
+        new_version=version.Version("2.0.0"),
+        install=True,
+        editable=False,
+        in_place=True,
+    )
+    project.invalidate_state("custom_mod_one")
+    capsys.readouterr()
+    ModuleTool().list()
+    out, err = capsys.readouterr()
+    assert (
+        out.strip()
+        == """
++----------------+------+----------+----------------+----------------+---------+
+|      Name      | Type | Editable |   Installed    |  Expected in   | Matches |
+|                |      |          |    version     |    project     |         |
++================+======+==========+================+================+=========+
+| custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
+| custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
+| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
++----------------+------+----------+----------------+----------------+---------+
+    """.strip()
+    )
