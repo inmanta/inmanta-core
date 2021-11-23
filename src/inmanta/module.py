@@ -565,7 +565,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(
             f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
             " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
-            " respectively install and build modules from source."
+            " respectively install and build modules from source. Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -2592,7 +2592,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
                 " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-                " install and build modules from source."
+                " install and build modules from source. Make sure to uninstall the broken package first."
             )
 
     @classmethod

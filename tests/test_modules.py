@@ -365,7 +365,7 @@ def test_module_v2_incorrect_install_warning(
     verify_exception(
         "Invalid module: found module package but it has no setup.cfg. This occurs when you install or build modules from"
         " source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-        " install and build modules from source."
+        " install and build modules from source. Make sure to uninstall the broken package first."
     )
 
     # include setup.cfg in package to circumvent error
@@ -374,13 +374,13 @@ def test_module_v2_incorrect_install_warning(
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
         " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively install and"
-        " build modules from source."
+        " build modules from source. Make sure to uninstall the broken package first."
         % os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     )
     os.remove(os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module", "setup.cfg"))
 
-    # verify that proposed solution works
-    ModuleTool().install(editable=False, path=module_dir)
+    # verify that proposed solution works: editable install doesn't require uninstall first
+    ModuleTool().install(editable=True, path=module_dir)
     verify_exception(None)
 
 
