@@ -538,6 +538,13 @@ mode.
             return self.get_project(load=True).sorted_modules()
 
     def create(self, name: str, v1: bool, no_input: bool = False) -> None:
+        """
+        Create a new module with the given name. Defaults to a v2 module.
+
+        :param name: The name for the new module.
+        :param v1: Create a v1 module instead.
+        :param no_input: Create a module with the default settings, without interaction. Only relevant for v2 modules.
+        """
         if v1:
             self._create_v1(name)
         else:
