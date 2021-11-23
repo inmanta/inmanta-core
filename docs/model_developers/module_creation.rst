@@ -17,7 +17,7 @@ For a v1 module
   pip install cookiecutter
   cookiecutter gh:inmanta/inmanta-module-template
 
-For a v1 module
+For a v2 module
 
 .. code-block:: sh
   :linenos:
