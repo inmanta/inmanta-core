@@ -4,7 +4,7 @@ Module creation guide
 ============================
 
 This guide explains how to create a module.
-For detailed documentation see: :ref:`module_yml` and :ref:`_modules_v2_setup_cfg`.
+For detailed documentation see: :ref:`module_yml` and :ref:`modules_v2_setup_cfg`.
 
 Create a new source module
 ---------------------------
