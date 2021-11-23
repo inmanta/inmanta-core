@@ -32,5 +32,5 @@ For a v2 module
 
 
 Inside the module the compiler expects a ``module.yml`` file (for v1) or a ``setup.cfg`` file (for v2) that defines metadata
-about the module. :ref:`module_yml` and :ref:`_modules_v2_setup_cfg` provide an overview about the supported metadata
+about the module. :ref:`module_yml` and :ref:`modules_v2_setup_cfg` provide an overview about the supported metadata
 attributes.
