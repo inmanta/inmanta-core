@@ -487,7 +487,4 @@ class AgentProcess(BaseModel):
     first_seen: Optional[datetime.datetime]
     last_seen: Optional[datetime.datetime]
     expired: Optional[datetime.datetime]
-
-
-class AgentProcessDetails(AgentProcess):
     state: Optional[Dict[str, "ReportReturn"]]

@@ -385,9 +385,7 @@ def get_agents(
 @typedmethod(
     path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def get_agent_process_details(
-    tid: uuid.UUID, id: uuid.UUID, report: bool = False
-) -> Union[model.AgentProcess, model.AgentProcessDetails]:
+def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
     """
     Get the details of an agent process
 
