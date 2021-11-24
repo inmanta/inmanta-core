@@ -874,15 +874,12 @@ class AgentManager(ServerSlice, SessionListener):
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
     @protocol.handle(methods_v2.get_agent_process_details, env="tid")
-    async def get_agent_process_details(
-        self, env: data.Environment, id: uuid.UUID, report: bool = False
-    ) -> Union[model.AgentProcess, model.AgentProcessDetails]:
+    async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
         agent_process = await data.AgentProcess.get_one(environment=env.id, sid=id)
         if not agent_process:
             raise NotFound(f"Agent process with id {id} not found")
         dto = agent_process.to_dto()
         if report:
-            dto = model.AgentProcessDetails(**dto.dict())
             report_status, report_result = await self.get_agent_process_report(id)
             if report_status == 200:
                 dto.state = report_result
