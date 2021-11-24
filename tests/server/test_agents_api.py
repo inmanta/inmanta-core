@@ -252,7 +252,7 @@ async def test_agent_process_details(client, environment: str) -> None:
 
     result = await client.get_agent_process_details(environment, process_sid)
     assert result.code == 200
-    assert "state" not in result.result["data"]
+    assert result.result["data"]["state"] is None
 
     # Get with a random id
     result = await client.get_agent_process_details(environment, uuid.uuid4())
