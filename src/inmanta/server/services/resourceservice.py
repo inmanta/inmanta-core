@@ -940,6 +940,7 @@ class ResourceService(protocol.ServerSlice):
             end=end,
             has_next=paging_metadata.after > 0,
             has_prev=paging_metadata.before > 0,
+            deploy_summary=deploy_summary,
         )
         metadata = vars(paging_metadata)
         if deploy_summary:

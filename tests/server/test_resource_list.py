@@ -435,6 +435,11 @@ async def test_deploy_summary(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["metadata"]["deploy_summary"] == expected_summary
 
+    # If the page is requested with the deploy summary, the links have it enabled as well
+    result = await client.resource_list(env.id, deploy_summary=True, limit=2)
+    assert result.code == 200
+    assert "deploy_summary=True" in result.result["links"]["next"]
+
     # The summary is returned only when the parameter is set
     result = await client.resource_list(env.id)
     assert result.code == 200
