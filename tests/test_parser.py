@@ -1809,9 +1809,9 @@ x = y > 0 ? y : y < 0 ? -1 : 0
 
 def test_rstring():
     statements = parse_code(
-        """
+        r"""
 a="{{a}}"
-b=r"{{a}}"
+b=r"{{a}}\n"
         """
     )
     assert len(statements) == 2
@@ -1825,4 +1825,4 @@ b=r"{{a}}"
     assert isinstance(assign_stmt_2, Assign)
     assert assign_stmt_2.name == "b"
     assert isinstance(assign_stmt_2.value, Literal)
-    assert assign_stmt_2.value.value.value == "{{a}}"
+    assert assign_stmt_2.value.value.value == r"{{a}}\n"
