@@ -723,6 +723,12 @@ def p_constant_string(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
+def p_constant_rstring(p: YaccProduction) -> None:
+    " constant : RSTRING "
+    p[0] = Literal(p[1])
+    attach_from_string(p)
+
+
 def p_constant_mls(p: YaccProduction) -> None:
     " constant : mls "
     p[0] = get_string_ast_node(p[1], p[1].location)
