@@ -59,9 +59,25 @@ literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "MLS_END", "CMP_OP", "REGEX", "REL", "PEQ"] + sorted(
+tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "MLS_END", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING"] + sorted(
     list(reserved.values())
 )
+
+
+def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"r(\"([^\\\"]|\\.)*\")|r(\'([^\\\']|\\.)*\')"
+    t.value = t.value[2:-1]
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(
+        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
+
+    return t
 
 
 def t_ID(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
