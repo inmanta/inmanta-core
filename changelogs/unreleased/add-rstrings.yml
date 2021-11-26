@@ -1,6 +1,6 @@
 ---
 description: Added raw strings to the inmanta language.
 change-type: minor
-destination-branches: [master]
+destination-branches: [master, iso4]
 sections:
   feature: "{{description}}"
