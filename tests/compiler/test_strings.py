@@ -30,3 +30,23 @@ str = \"\"\"var == {{var}}\"\"\"
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
     assert root.lookup("str").get_value() == "var == 42"
+
+
+def test_rstring(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+z=r"{{xxx}}"
+
+entity X:
+    string a
+end
+
+# Force typecheck
+X(a=z)
+
+implement X using none
+implementation none for X:
+end
+        """,
+    )
+    compiler.do_compile()

@@ -725,7 +725,7 @@ def p_constant_string(p: YaccProduction) -> None:
 
 def p_constant_rstring(p: YaccProduction) -> None:
     " constant : RSTRING "
-    p[0] = Literal(p[1])
+    p[0] = Literal(str(p[1]))
     attach_from_string(p)
 
 
