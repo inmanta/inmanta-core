@@ -1824,5 +1824,6 @@ b=r"{{a}}\n"
     assign_stmt_2 = statements[1]
     assert isinstance(assign_stmt_2, Assign)
     assert assign_stmt_2.name == "b"
-    assert isinstance(assign_stmt_2.value, Literal)
-    assert assign_stmt_2.value.value.value == r"{{a}}\n"
+    literal = assign_stmt_2.value
+    assert isinstance(literal, Literal)
+    assert literal.value == r"{{a}}\n"
