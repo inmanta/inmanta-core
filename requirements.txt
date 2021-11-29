@@ -25,5 +25,5 @@ tornado==6.1
 typing_inspect==0.7.1
 
 # Optional import in code
-graphviz==0.18.2
+graphviz==0.19
 rpdb==0.1.6
