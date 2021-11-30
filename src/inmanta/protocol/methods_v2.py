@@ -77,7 +77,7 @@ def environment_create(
     repository: Optional[str] = None,
     branch: Optional[str] = None,
     environment_id: uuid.UUID = None,
-    description: Optional[str] = None,
+    description: str = "",
     icon: str = "",
 ) -> model.Environment:
     """
@@ -89,7 +89,7 @@ def environment_create(
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
     :param description: The description of the environment, maximum 255 characters
-    :param icon: The data-url of the icon of the environment. It should follow the pattern <mime-type>;base64,<image>, where
+    :param icon: The data-url of the icon of the environment. It should follow the pattern `<mime-type>;base64,<image>`, where
                  <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
                  the format matching the specified mime-type, and base64 encoded.
                  The length of the whole string should be maximum 64 kb.
@@ -110,6 +110,7 @@ def environment_modify(
 ) -> model.Environment:
     """
     Modify the given environment
+    The optional parameters that are unspecified will be left unchanged by the update.
 
     :param id: The id of the environment
     :param name: The name of the environment
@@ -117,7 +118,7 @@ def environment_modify(
     :param branch: The name of the branch in the repository
     :param project_id: The id of the project the environment belongs to
     :param description: The description of the environment, maximum 255 characters
-    :param icon: The data-url of the icon of the environment. It should follow the pattern <mime-type>;base64,<image>, where
+    :param icon: The data-url of the icon of the environment. It should follow the pattern `<mime-type>;base64,<image>` , where
                  <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
                  the format matching the specified mime-type, and base64 encoded.
                  The length of the whole string should be maximum 64 kb.

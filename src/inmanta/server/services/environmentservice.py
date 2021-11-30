@@ -303,7 +303,7 @@ class EnvironmentService(protocol.ServerSlice):
         repository: str,
         branch: str,
         environment_id: Optional[uuid.UUID],
-        description: Optional[str] = None,
+        description: str = "",
         icon: str = "",
     ) -> model.Environment:
         if environment_id is None:

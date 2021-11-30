@@ -1709,7 +1709,7 @@ class Environment(BaseDocument):
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
     last_version: int = Field(field_type=int, default=0)
     halted: bool = Field(field_type=bool, default=False)
-    description: str = Field(field_type=str)
+    description: str = Field(field_type=str, default="")
     icon: str = Field(field_type=str, default="")
 
     def to_dto(self) -> m.Environment:

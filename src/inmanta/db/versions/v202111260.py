@@ -25,7 +25,7 @@ async def update(connection: Connection) -> None:
     schema = """
 
     ALTER TABLE public.environment
-        ADD COLUMN description varchar(255),
+        ADD COLUMN description varchar(255) DEFAULT '',
         ADD COLUMN icon varchar(65535) DEFAULT '';
     """
     async with connection.transaction():

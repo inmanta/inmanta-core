@@ -67,7 +67,7 @@ async def test_added_environment_columns(
     columns += ["description", "icon"]
     assert (await get_columns_in_db_table("environment")) == columns
 
-    # The environment data is still ok after the migration
+    # The environment data is still ok after the migration, and has the correct default values
     result = await client.environment_list()
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -75,3 +75,5 @@ async def test_added_environment_columns(
     env_id = "982a35ab-2785-4221-9926-f4f389416ce3"
     result = await client.environment_get(env_id)
     assert result.code == 200
+    assert result.result["data"]["icon"] == ""
+    assert result.result["data"]["description"] == ""

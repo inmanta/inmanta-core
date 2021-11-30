@@ -451,6 +451,7 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     )
     assert result.code == 400
 
+    # Specify an icon with an invalid base64 encoding
     result = await client_v2.environment_create(
         project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;base64,{raw_icon[0:10]}"
     )
@@ -508,13 +509,23 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     assert result.code == 200
     assert result.result["data"]["icon"] == icon_data_url
 
+    new_description = "new desc"
     # Change the description, but keep the icon the same
-    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, description="new desc")
+    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, description=new_description)
     assert result.code == 200
     assert result.result["data"]["icon"] == icon_data_url
 
+    # Make sure GET request works
+    result = await client_v2.environment_get(id_of_env_to_modify)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == icon_data_url
+    assert result.result["data"]["description"] == new_description
+
     # Delete the icon
     result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, icon="")
+    assert result.code == 200
+
+    result = await client_v2.environment_get(id_of_env_to_modify)
     assert result.code == 200
     assert result.result["data"]["icon"] == ""
 
