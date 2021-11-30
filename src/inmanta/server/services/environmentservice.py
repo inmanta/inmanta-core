@@ -16,13 +16,18 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import base64
+import binascii
 import logging
 import os
+import re
 import shutil
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Pattern, Set, cast
+
+from asyncpg import StringDataRightTruncationError
 
 from inmanta import data
 from inmanta.data import model
@@ -113,6 +118,7 @@ class EnvironmentService(protocol.ServerSlice):
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
     agent_state_lock: asyncio.Lock
+    icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
@@ -291,7 +297,14 @@ class EnvironmentService(protocol.ServerSlice):
     # v2 handlers
     @handle(methods_v2.environment_create)
     async def environment_create(
-        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
+        self,
+        project_id: uuid.UUID,
+        name: str,
+        repository: str,
+        branch: str,
+        environment_id: Optional[uuid.UUID],
+        description: str = "",
+        icon: str = "",
     ) -> model.Environment:
         if environment_id is None:
             environment_id = uuid.uuid4()
@@ -309,10 +322,37 @@ class EnvironmentService(protocol.ServerSlice):
         if len(envs) > 0:
             raise ServerError(f"Project {project.name} (id={project.id}) already has an environment with name {name}")
 
-        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
-        await env.insert()
+        self.validate_icon(icon)
+
+        env = data.Environment(
+            id=environment_id,
+            name=name,
+            project=project_id,
+            repo_url=repository,
+            repo_branch=branch,
+            description=description,
+            icon=icon,
+        )
+        try:
+            await env.insert()
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
         return env.to_dto()
+
+    def validate_icon(self, icon: str) -> None:
+        """Check if the icon is in the supported format, raise an exception otherwise"""
+        if icon == "":
+            return
+        match = self.icon_regex.match(icon)
+        if match and len(match.groups()) == 3:
+            encoded_image = match.groups()[2]
+            try:
+                base64.b64decode(encoded_image, validate=True)
+            except binascii.Error:
+                raise BadRequest("The icon is not a valid base64 encoded string")
+        else:
+            raise BadRequest("The value supplied for the icon parameter is invalid")
 
     @handle(methods_v2.environment_modify, environment_id="id")
     async def environment_modify(
@@ -322,6 +362,8 @@ class EnvironmentService(protocol.ServerSlice):
         repository: Optional[str],
         branch: Optional[str],
         project_id: Optional[uuid.UUID] = None,
+        description: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
@@ -349,7 +391,17 @@ class EnvironmentService(protocol.ServerSlice):
                 raise BadRequest(f"Project with id={project_id} doesn't exist")
             fields["project"] = project_id
 
-        await env.update_fields(connection=None, **fields)
+        if description is not None:
+            fields["description"] = description
+
+        if icon is not None:
+            self.validate_icon(icon)
+            fields["icon"] = icon
+
+        try:
+            await env.update_fields(connection=None, **fields)
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
         return env.to_dto()
 
