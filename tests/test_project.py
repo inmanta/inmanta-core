@@ -15,9 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import base64
 import logging
+import os
 import uuid
-from typing import cast
+from pathlib import Path
+from typing import Dict, cast
 
 import pytest
 
@@ -386,3 +389,128 @@ async def test_environment_listener(server, client_v2, caplog):
     assert environment_listener.updated_counter == 2
     assert environment_listener.cleared_counter == 1
     assert environment_listener.deleted_counter == 1
+
+
+@pytest.fixture
+def environment_icons() -> Dict[str, str]:
+    icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "icon")
+    icon_names = ["logo.jpeg", "logo.png", "logo.svg", "logo.webp"]
+    icon_dict = {}
+    for name in icon_names:
+        icon_dict[name.split(".")[1]] = base64.b64encode(Path(os.path.join(icon_dir, name)).read_bytes()).decode("utf-8")
+    return icon_dict
+
+
+@pytest.mark.asyncio
+async def test_environment_icon_description(client_v2, environment_icons: Dict[str, str]):
+    """Test creating an environment with an icon and description"""
+
+    result = await client_v2.project_create("dev-project")
+    assert result.code == 200
+    project_id_a = result.result["data"]["id"]
+    desc = "This is an environment"
+    result = await client_v2.environment_create(project_id=project_id_a, name="env", description=desc)
+    assert result.code == 200
+    assert result.result["data"]["description"] == desc
+
+    # Test description length
+    result = await client_v2.environment_create(project_id=project_id_a, name="env2", description="a" * 256)
+    assert result.code == 400
+    result = await client_v2.environment_create(project_id=project_id_a, name="env2", description="a" * 255)
+    assert result.code == 200
+
+    for image_type, image in environment_icons.items():
+        mime_type = image_type if image_type != "svg" else "svg+xml"
+        result = await client_v2.environment_create(
+            project_id=project_id_a, name=f"env_{image_type}", description=desc, icon=f"image/{mime_type};base64,{image}"
+        )
+        assert result.code == 200
+
+    raw_icon = environment_icons["svg"]
+
+    # Test invalid icon data strings
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xm;base64,{raw_icon}"
+    )
+    assert result.code == 400
+
+    # Specify an icon with an invalid base64 encoding
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;base64,{raw_icon[0:10]}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;,{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;base64;{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml,base64;{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml,base64,{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xmlbase64{raw_icon}"
+    )
+    assert result.code == 400
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/svg+xml;base64{raw_icon}"
+    )
+    assert result.code == 400
+
+    # Check too large icon, base64 encoding increases the size
+    large_icon = base64.b64encode(b"a" * 65535).decode("utf-8")
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon=f"image/png;base64,{large_icon}"
+    )
+    assert result.code == 400
+
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="envx", description=desc, icon="image/png;base64,"
+    )
+    assert result.code == 400
+
+    # Test modification of the description and icon
+    name_of_env_to_modify = "env_no_icon"
+    result = await client_v2.environment_create(project_id=project_id_a, name=name_of_env_to_modify, description=desc, icon="")
+    assert result.code == 200
+    id_of_env_to_modify = result.result["data"]["id"]
+
+    icon_data_url = f"image/png;base64,{environment_icons['png']}"
+    # Add an icon
+    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, icon=icon_data_url)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == icon_data_url
+
+    new_description = "new desc"
+    # Change the description, but keep the icon the same
+    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, description=new_description)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == icon_data_url
+
+    # Make sure GET request works
+    result = await client_v2.environment_get(id_of_env_to_modify)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == icon_data_url
+    assert result.result["data"]["description"] == new_description
+
+    # Delete the icon
+    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, icon="")
+    assert result.code == 200
+
+    result = await client_v2.environment_get(id_of_env_to_modify)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == ""
+
+    result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, description="b" * 256)
+    assert result.code == 400

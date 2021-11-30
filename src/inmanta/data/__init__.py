@@ -1697,6 +1697,8 @@ class Environment(BaseDocument):
     :param repo_branch: The repository branch that contains the configuration model code for this environment
     :param settings: Key/value settings for this environment
     :param last_version: The last version number that was reserved for this environment
+    :param description: The description of the environment
+    :param icon: An icon for the environment
     """
 
     id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -1707,6 +1709,8 @@ class Environment(BaseDocument):
     settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
     last_version: int = Field(field_type=int, default=0)
     halted: bool = Field(field_type=bool, default=False)
+    description: str = Field(field_type=str, default="")
+    icon: str = Field(field_type=str, default="")
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -1717,6 +1721,8 @@ class Environment(BaseDocument):
             repo_branch=self.repo_branch,
             settings=self.settings,
             halted=self.halted,
+            description=self.description,
+            icon=self.icon,
         )
 
     _settings: Dict[str, Setting] = {

@@ -1,0 +1,4 @@
+description: Added icon and description to environments
+issue-nr: 3391
+change-type: minor
+destination-branches: [iso4]
