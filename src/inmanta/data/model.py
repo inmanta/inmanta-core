@@ -215,6 +215,8 @@ class Environment(BaseModel):
     repo_branch: str
     settings: Dict[str, EnvSettingType]
     halted: bool
+    description: Optional[str]
+    icon: Optional[str]
 
 
 class Project(BaseModel):

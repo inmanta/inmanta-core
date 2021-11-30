@@ -77,6 +77,8 @@ def environment_create(
     repository: Optional[str] = None,
     branch: Optional[str] = None,
     environment_id: uuid.UUID = None,
+    description: Optional[str] = None,
+    icon: str = "",
 ) -> model.Environment:
     """
     Create a new environment
@@ -86,12 +88,25 @@ def environment_create(
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
+    :param description: The description of the environment, maximum 255 characters
+    :param icon: The data-url of the icon of the environment. It should follow the pattern <mime-type>;base64,<image>, where
+                 <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
+                 the format matching the specified mime-type, and base64 encoded.
+                 The length of the whole string should be maximum 64 kb.
+
+    :raises BadRequest: When the parameters supplied are not valid.
     """
 
 
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def environment_modify(
-    id: uuid.UUID, name: str, repository: str = None, branch: str = None, project_id: Optional[uuid.UUID] = None
+    id: uuid.UUID,
+    name: str,
+    repository: str = None,
+    branch: str = None,
+    project_id: Optional[uuid.UUID] = None,
+    description: Optional[str] = None,
+    icon: Optional[str] = None,
 ) -> model.Environment:
     """
     Modify the given environment
@@ -101,6 +116,12 @@ def environment_modify(
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param project_id: The id of the project the environment belongs to
+    :param description: The description of the environment, maximum 255 characters
+    :param icon: The data-url of the icon of the environment. It should follow the pattern <mime-type>;base64,<image>, where
+                 <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
+                 the format matching the specified mime-type, and base64 encoded.
+                 The length of the whole string should be maximum 64 kb.
+                 The icon can be removed by setting this parameter to an empty string.
 
     :raises BadRequest: When the parameters supplied are not valid.
     :raises NotFound: The given environment doesn't exist.
