@@ -56,16 +56,18 @@ def project_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_list() -> List[model.Project]:
+def project_list(environment_details: bool = False) -> List[model.Project]:
     """
-    Create a list of projects
+    Returns a list of projects
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_get(id: uuid.UUID) -> model.Project:
+def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
-    Get a project and a list of the ids of all environments
+    Get a project and a list of the environments under this project
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 
@@ -142,9 +144,10 @@ def environment_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
-def environment_list() -> List[model.Environment]:
+def environment_list(details: bool = False) -> List[model.Environment]:
     """
-    Create a list of environments
+    Returns a list of environments
+    :param details: Whether to include the icon and description of the environments in the results
     """
 
 
@@ -155,11 +158,12 @@ def environment_list() -> List[model.Environment]:
     arg_options={"id": methods.ArgOption(getter=methods.add_env)},
     api_version=2,
 )
-def environment_get(id: uuid.UUID) -> model.Environment:
+def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
     """
     Get an environment and all versions associated
 
     :param id: The id of the environment to return
+    :param details: Whether to include the icon and description of the environment
     """
 
 
