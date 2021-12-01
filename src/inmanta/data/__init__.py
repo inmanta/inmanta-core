@@ -1079,12 +1079,41 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
+        return await cls.get_list_with_columns(
+            order_by_column=order_by_column,
+            order=order,
+            limit=limit,
+            offset=offset,
+            no_obj=no_obj,
+            connection=connection,
+            columns=None,
+            **query,
+        )
+
+    @classmethod
+    async def get_list_with_columns(
+        cls: Type[TBaseDocument],
+        order_by_column: Optional[str] = None,
+        order: str = "ASC",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        columns: Optional[List[str]] = None,
+        **query: object,
+    ) -> List[TBaseDocument]:
+        """
+        Get a list of documents matching the filter args
+        """
         if order_by_column:
             cls._validate_order(order_by_column, order)
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
-        sql_query = "SELECT * FROM " + cls.table_name()
+        selected_columns = " * "
+        if columns:
+            selected_columns = ",".join([cls.validate_field_name(column) for column in columns])
+        sql_query = f"SELECT {selected_columns} FROM " + cls.table_name()
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
@@ -2023,25 +2052,17 @@ RETURNING last_version;
         Get a list of environments matching the filter args.
         Don't return the description and icon columns.
         """
-        if order_by_column:
-            cls._validate_order(order_by_column, order)
-
-        query = cls._convert_field_names_to_db_column_names(query)
-        (filter_statement, values) = cls._get_composed_filter(**query)
-        columns = ",".join(["id", "name", "project", "repo_url", "repo_branch", "settings", "last_version", "halted"])
-        sql_query = f"SELECT {columns} FROM {cls.table_name()} "
-        if filter_statement:
-            sql_query += " WHERE " + filter_statement
-        if order_by_column is not None:
-            sql_query += f" ORDER BY {order_by_column} {order}"
-        if limit is not None and limit > 0:
-            sql_query += " LIMIT $" + str(len(values) + 1)
-            values.append(int(limit))
-        if offset is not None and offset > 0:
-            sql_query += " OFFSET $" + str(len(values) + 1)
-            values.append(int(offset))
-        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
-        return result
+        columns = ["id", "name", "project", "repo_url", "repo_branch", "settings", "last_version", "halted"]
+        return await super().get_list_with_columns(
+            order_by_column=order_by_column,
+            order=order,
+            limit=limit,
+            offset=offset,
+            no_obj=no_obj,
+            connection=connection,
+            columns=columns,
+            **query,
+        )
 
     @classmethod
     async def get_by_id(
