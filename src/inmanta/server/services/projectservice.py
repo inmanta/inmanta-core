@@ -130,25 +130,35 @@ class ProjectService(protocol.ServerSlice):
             raise ServerError(f"A project with name {name} already exists.")
 
     @handle(methods_v2.project_list)
-    async def project_list(self) -> List[model.Project]:
+    async def project_list(self, details: bool = False) -> List[model.Project]:
         project_list = []
 
         for project in await data.Project.get_list():
             project_model = project.to_dto()
-            project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project.id)]
+            environment_list = (
+                await data.Environment.get_list_with_details(project=project.id)
+                if details
+                else await data.Environment.get_list(project=project.id)
+            )
+            project_model.environments = [e.to_dto() for e in environment_list]
 
             project_list.append(project_model)
 
         return project_list
 
     @handle(methods_v2.project_get, project_id="id")
-    async def project_get(self, project_id: uuid.UUID) -> model.Project:
+    async def project_get(self, project_id: uuid.UUID, details: bool = False) -> model.Project:
         project = await data.Project.get_by_id(project_id)
 
         if project is None:
             raise NotFound("The project with given id does not exist.")
 
         project_model = project.to_dto()
-        project_model.environments = [e.to_dto() for e in await data.Environment.get_list(project=project_id)]
+        environment_list = (
+            await data.Environment.get_list_with_details(project=project.id)
+            if details
+            else await data.Environment.get_list(project=project.id)
+        )
+        project_model.environments = [e.to_dto() for e in environment_list]
 
         return project_model
