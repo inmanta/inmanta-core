@@ -499,7 +499,7 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     assert result.result["data"]["icon"] == icon_data_url
 
     # Make sure GET request works
-    result = await client_v2.environment_get(id_of_env_to_modify)
+    result = await client_v2.environment_get(id_of_env_to_modify, details=True)
     assert result.code == 200
     assert result.result["data"]["icon"] == icon_data_url
     assert result.result["data"]["description"] == new_description
@@ -508,9 +508,65 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, icon="")
     assert result.code == 200
 
-    result = await client_v2.environment_get(id_of_env_to_modify)
+    result = await client_v2.environment_get(id_of_env_to_modify, details=True)
     assert result.code == 200
     assert result.result["data"]["icon"] == ""
 
     result = await client_v2.environment_modify(id_of_env_to_modify, name_of_env_to_modify, description="b" * 256)
     assert result.code == 400
+
+
+@pytest.mark.asyncio
+async def test_environment_icon_with_details_only(client_v2, environment_icons: Dict[str, str]):
+    """Test that the icon for an environment is only returned when explicitly requested"""
+    result = await client_v2.project_create("dev-project")
+    assert result.code == 200
+    project_id_a = result.result["data"]["id"]
+    # Create environment with description and icon
+    icon_data_string = f"image/png;base64,{environment_icons['png']}"
+    description = "desc"
+    result = await client_v2.environment_create(
+        project_id=project_id_a, name="env", description=description, icon=icon_data_string
+    )
+    assert result.code == 200
+    env_id = result.result["data"]["id"]
+    # Check that the icon and description are not returned without the details flag
+    result = await client_v2.environment_get(env_id)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == ""
+    assert result.result["data"]["description"] == ""
+    # With the details, they should be returned correctly
+    result = await client_v2.environment_get(env_id, details=True)
+    assert result.code == 200
+    assert result.result["data"]["icon"] == icon_data_string
+    assert result.result["data"]["description"] == description
+
+    result = await client_v2.environment_list()
+    assert result.code == 200
+    assert result.result["data"][0]["icon"] == ""
+    assert result.result["data"][0]["description"] == ""
+
+    result = await client_v2.environment_list(details=True)
+    assert result.code == 200
+    assert result.result["data"][0]["icon"] == icon_data_string
+    assert result.result["data"][0]["description"] == description
+
+    result = await client_v2.project_get(project_id_a)
+    assert result.code == 200
+    assert result.result["data"]["environments"][0]["icon"] == ""
+    assert result.result["data"]["environments"][0]["description"] == ""
+
+    result = await client_v2.project_get(project_id_a, environment_details=True)
+    assert result.code == 200
+    assert result.result["data"]["environments"][0]["icon"] == icon_data_string
+    assert result.result["data"]["environments"][0]["description"] == description
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+    assert result.result["data"][0]["environments"][0]["icon"] == ""
+    assert result.result["data"][0]["environments"][0]["description"] == ""
+
+    result = await client_v2.project_list(environment_details=True)
+    assert result.code == 200
+    assert result.result["data"][0]["environments"][0]["icon"] == icon_data_string
+    assert result.result["data"][0]["environments"][0]["description"] == description
