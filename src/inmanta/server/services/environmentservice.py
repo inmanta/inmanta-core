@@ -365,7 +365,7 @@ class EnvironmentService(protocol.ServerSlice):
         description: Optional[str] = None,
         icon: Optional[str] = None,
     ) -> model.Environment:
-        env = await data.Environment.get_by_id_with_details(environment_id)
+        env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
         original_env = env.to_dto()
@@ -407,11 +407,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_get, environment_id="id", api_version=2)
     async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> model.Environment:
-        env = (
-            await data.Environment.get_by_id_with_details(environment_id)
-            if details
-            else await data.Environment.get_by_id(environment_id)
-        )
+        env = await data.Environment.get_by_id(environment_id, details=details)
 
         if env is None:
             raise NotFound("The environment id does not exist.")
@@ -420,7 +416,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_list)
     async def environment_list(self, details: bool = False) -> List[model.Environment]:
-        env_list = await data.Environment.get_list_with_details() if details else await data.Environment.get_list()
+        env_list = await data.Environment.get_list(details=details)
         return [env.to_dto() for env in env_list]
 
     @handle(methods_v2.environment_delete, environment_id="id")

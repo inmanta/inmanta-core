@@ -56,18 +56,18 @@ def project_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_list(details: bool = False) -> List[model.Project]:
+def project_list(environment_details: bool = False) -> List[model.Project]:
     """
     Returns a list of projects
-    :param details: Whether to include the icon and description of the environments in the results
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_get(id: uuid.UUID, details: bool = False) -> model.Project:
+def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
     Get a project and a list of the environments under this project
-    :param details: Whether to include the icon and description of the environments in the results
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 

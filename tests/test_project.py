@@ -573,7 +573,7 @@ async def test_environment_icon_with_details_only(client_v2, environment_icons: 
     assert result.result["data"]["environments"][0]["icon"] == ""
     assert result.result["data"]["environments"][0]["description"] == ""
 
-    result = await client_v2.project_get(project_id_a, details=True)
+    result = await client_v2.project_get(project_id_a, environment_details=True)
     assert result.code == 200
     assert result.result["data"]["environments"][0]["icon"] == icon_data_string
     assert result.result["data"]["environments"][0]["description"] == description
@@ -583,7 +583,7 @@ async def test_environment_icon_with_details_only(client_v2, environment_icons: 
     assert result.result["data"][0]["environments"][0]["icon"] == ""
     assert result.result["data"][0]["environments"][0]["description"] == ""
 
-    result = await client_v2.project_list(details=True)
+    result = await client_v2.project_list(environment_details=True)
     assert result.code == 200
     assert result.result["data"][0]["environments"][0]["icon"] == icon_data_string
     assert result.result["data"][0]["environments"][0]["description"] == description

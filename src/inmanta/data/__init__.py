@@ -1074,7 +1074,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         offset: Optional[int] = None,
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
-        columns: str = "*",
         **query: object,
     ) -> List[TBaseDocument]:
         """
@@ -1085,7 +1084,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
-        sql_query = f"SELECT {columns} FROM " + cls.table_name()
+        sql_query = "SELECT * FROM " + cls.table_name()
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
@@ -1982,15 +1981,24 @@ RETURNING last_version;
         offset: Optional[int] = None,
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
-        columns: str = ",".join(["id", "name", "project", "repo_url", "repo_branch", "settings", "last_version", "halted"]),
+        details: bool = True,
         **query: object,
     ) -> List["BaseDocument"]:
         """
         Get a list of documents matching the filter args.
-        Don't return the description and icon columns.
+
         """
-        return await super().get_list(
-            columns=columns,
+        if details:
+            return await super().get_list(
+                order_by_column=order_by_column,
+                order=order,
+                limit=limit,
+                offset=offset,
+                no_obj=no_obj,
+                connection=connection,
+                **query,
+            )
+        return await cls.get_list_without_details(
             order_by_column=order_by_column,
             order=order,
             limit=limit,
@@ -2001,7 +2009,7 @@ RETURNING last_version;
         )
 
     @classmethod
-    async def get_list_with_details(
+    async def get_list_without_details(
         cls,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
@@ -2012,30 +2020,42 @@ RETURNING last_version;
         **query: object,
     ) -> List["BaseDocument"]:
         """
-        Get a list of documents matching the filter args.
-        Including the description and icon columns.
+        Get a list of environments matching the filter args.
+        Don't return the description and icon columns.
         """
-        return await cls.get_list(
-            columns="*",
-            order_by_column=order_by_column,
-            order=order,
-            limit=limit,
-            offset=offset,
-            no_obj=no_obj,
-            connection=connection,
-            **query,
-        )
+        if order_by_column:
+            cls._validate_order(order_by_column, order)
+
+        query = cls._convert_field_names_to_db_column_names(query)
+        (filter_statement, values) = cls._get_composed_filter(**query)
+        columns = ",".join(["id", "name", "project", "repo_url", "repo_branch", "settings", "last_version", "halted"])
+        sql_query = f"SELECT {columns} FROM {cls.table_name()} "
+        if filter_statement:
+            sql_query += " WHERE " + filter_statement
+        if order_by_column is not None:
+            sql_query += f" ORDER BY {order_by_column} {order}"
+        if limit is not None and limit > 0:
+            sql_query += " LIMIT $" + str(len(values) + 1)
+            values.append(int(limit))
+        if offset is not None and offset > 0:
+            sql_query += " OFFSET $" + str(len(values) + 1)
+            values.append(int(offset))
+        result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
+        return result
 
     @classmethod
-    async def get_by_id_with_details(
-        cls: Type[TBaseDocument], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[TBaseDocument]:
+    async def get_by_id(
+        cls,
+        doc_id: uuid.UUID,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        details: bool = True,
+    ) -> Optional["BaseDocument"]:
         """
-        Get a specific document based on its ID
+        Get a specific environment based on its ID
 
         :return: An instance of this class with its fields filled from the database.
         """
-        result = await cls.get_list_with_details(id=doc_id, connection=connection)
+        result = await cls.get_list(id=doc_id, connection=connection, details=details)
         if len(result) > 0:
             return result[0]
         return None
