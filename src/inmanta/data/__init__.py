@@ -2052,7 +2052,7 @@ RETURNING last_version;
         Get a list of environments matching the filter args.
         Don't return the description and icon columns.
         """
-        columns = ["id", "name", "project", "repo_url", "repo_branch", "settings", "last_version", "halted"]
+        columns = [column_name for column_name in cls.get_valid_field_names() if column_name not in {"description", "icon"}]
         return await super().get_list_with_columns(
             order_by_column=order_by_column,
             order=order,
