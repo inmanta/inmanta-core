@@ -183,6 +183,8 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
 
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
 
+for a v1 module. For a v2 module, add ``--checkout v2`` to the cookiecutter command.
+
 
 There are also guides :ref:`here <moddev-module>` and `here <https://github.com/inmanta/inmanta-module-template>`_ that help you get up and running.
 
@@ -191,11 +193,19 @@ There are also guides :ref:`here <moddev-module>` and `here <https://github.com/
 Working on an Existing Module
 =============================
 
-Modules that you want to work on, have to be add to your Inmanta project using the following command. This command also installs the module into the project.
+Modules that you want to work on, have to be added to your Inmanta project using the following command. This command also installs the module into the project.
 
 .. code-block:: bash
 
-    inmanta module add <module-name>
+    inmanta module add --v1 <module-name>
+
+for a v1 module or
+
+.. code-block:: bash
+
+    inmanta module add --v2 <module-name>
+
+for a v2 module. The latter will implicitly trust any Python package named ``inmanta-module-<module-name>`` in the project's configured module source.
 
 When starting to work on an existing module, it is recommended to check the ``readme.md`` file that comes with the module to see the instructions on how to install and use them.
 

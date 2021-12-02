@@ -19,6 +19,9 @@ The source is organized in modules. Each module is a git repository with the fol
     +-- templates/
     +-- module.yml
 
+.. note::
+    The module format described here is the v1 module format. For more details see :ref:`moddev-module`.
+
 The ``module.yml`` file, the ``model`` directory and the ``model/_init.cf`` are required.
 
 For example::

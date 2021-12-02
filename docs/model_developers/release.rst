@@ -1,10 +1,6 @@
 Releasing Modules
 =================
 
-.. warning::
-
-   The V2 module format is currently under development.
-
 Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file for V1 modules or
 in the ``setup.cfg`` file for V2 modules. The commit should be tagged with the version in the git repository as well. To
 ease the use inmanta provides a command (``inmanta modules commit``) to modify module versions, commit to git and place the

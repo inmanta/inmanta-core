@@ -9,7 +9,7 @@ For detailed documentation see: :ref:`module_yml` and :ref:`modules_v2_setup_cfg
 Create a new source module
 ---------------------------
 
-For a v1 module
+For a v1 module:
 
 .. code-block:: sh
   :linenos:
@@ -17,7 +17,7 @@ For a v1 module
   pip install cookiecutter
   cookiecutter gh:inmanta/inmanta-module-template
 
-For a v2 module
+For a v2 module:
 
 .. code-block:: sh
   :linenos:
