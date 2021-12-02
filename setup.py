@@ -8,7 +8,8 @@ requires = [
     "colorlog",
     "cookiecutter",
     "cryptography",
-    "docstring-parser<0.14.0",
+    # docstring-parser has been known to publish non-backwards compatible minors in the past
+    "docstring-parser>=0.10,<0.14.0",
     "email-validator",
     "execnet",
     "importlib_metadata",
