@@ -227,7 +227,6 @@ Finally compile the project and deploy it:
 
 .. code-block:: sh
 
-    inmanta -vvv  project install
     inmanta -vvv  export -d
 
 When the model is sent to the server, it will start deploying the configuration.
