@@ -1,0 +1,6 @@
+description: Added module repo info to project metadata docs and applied venv fix
+change-type: patch
+issue-repo: pytest-inmanta
+issue-nr: 241
+destination-branches:
+  - master
