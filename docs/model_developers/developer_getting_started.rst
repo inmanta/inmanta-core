@@ -133,7 +133,10 @@ Set project sources
 
 When starting a new project, the next step is to set the sources of your project so that it knows where to get its required modules from.
 
-If you only use opensource modules as provided by Inmanta, you can skip below step.
+V1 module source
+================
+
+If you only use opensource v1 modules as provided by Inmanta, you can skip below step.
 
 1. Find the module you want to work on
 2. Copy the SSH URL of the repo
@@ -160,6 +163,18 @@ Becomes:
 * Now, in your ``main.cf`` file, if you import a module like, ``import <my_module>`` and save the file, you can get code completion. If you are working on an existing project with a populated ``main.cf`` file, code completion will work as expected.
 
 **Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
+
+V2 module source
+================
+
+Add the pip index where your modules are hosted to ``project.yml`` as a repo of type ``package``.
+For example, for modules hosted on PyPi:
+
+.. code-block:: yaml
+
+    repo:
+        - url: https://pypi.org/simple
+          type: package
 
 
 Setting up a module
