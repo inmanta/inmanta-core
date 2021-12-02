@@ -682,6 +682,7 @@ class VirtualEnv(ActiveEnv):
 
         self.init_env()
         self._activate_that()
+        mock_process_env(python_path=self.python_path)
 
         # patch up pkg
         self.notify_change()
