@@ -11,10 +11,6 @@ files.
 V2 module format
 ################
 
-.. warning::
-
-   The V2 module format is currently under development.
-
 
 A complete V2 module might contain the following files:
 
@@ -259,7 +255,7 @@ visible to the compiler. This procedure is of course applicable for working on a
 Setting up the dev environment
 ##############################
 To set up the development environment for a project, activate your development Python environment and
-install the project with ``inmanta project install``. To set up the environment for a single module,
+install the project with ``inmanta project install``. To set up the environment for a single v2 module,
 run ``inmanta module install -e`` instead.
 
 The following subsections explain any additional steps you need to take if you want to make changes

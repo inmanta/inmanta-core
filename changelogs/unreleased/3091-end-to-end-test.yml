@@ -1,0 +1,6 @@
+description: Reviewed and completed modules v2 documentation
+sections:
+  upgrade-note: "`inmanta compile` no longer installs any modules. Run `inmanta project install` before compiling the first time."
+change-type: patch
+destination-branches:
+  - master
