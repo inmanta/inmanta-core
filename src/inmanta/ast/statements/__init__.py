@@ -139,7 +139,7 @@ class ExpressionStatement(DynamicStatement):
         """
         Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
         """
-        raise RuntimeException(None, "%s is not a constant")
+        raise RuntimeException(None, "%s is not a constant" % self)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         """
