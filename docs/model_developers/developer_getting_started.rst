@@ -195,13 +195,25 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
 .. code-block:: bash
 
     pip install cookiecutter
-
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
 
-for a v1 module. For a v2 module, add ``--checkout v2`` to the cookiecutter command.
+for a v1 module. If you want to use the module in a project, make sure to put it in the project's module path.
+
+For a v2 module, use the v2 cookiecutter template, then install the module:
+
+.. code-block:: bash
+
+    pip install cookiecutter
+    cookiecutter --checkout v2 https://github.com/inmanta/inmanta-module-template.git
+    inmanta module install -e ./inmanta-module-<module-name>
+
+If you want to use the v2 module in a project, make sure to set up a v2 module source as outlined in the section above,
+then add the module as a dependency of the project as described in :ref:`dgs-existing-module`.
+The location of the module directory is not important for a v2 module.
 
 
-There are also guides :ref:`here <moddev-module>` and `here <https://github.com/inmanta/inmanta-module-template>`_ that help you get up and running.
+
+For more information on how to work on modules, see :ref:`moddev-module` and `the module template documentation <https://github.com/inmanta/inmanta-module-template>`_.
 
 .. _dgs-existing-module:
 
