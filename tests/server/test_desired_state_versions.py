@@ -25,6 +25,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
+from inmanta.data.model import DesiredStateLabel
 from inmanta.server.config import get_bind_port
 
 
@@ -123,6 +124,11 @@ async def test_filter_versions(
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["version"] == 7
+    # Check the labels
+    assert len(result.result["data"][0]["labels"]) == 1
+    assert DesiredStateLabel(**result.result["data"][0]["labels"][0]) == DesiredStateLabel(
+        name="lsm_export", message="Recompile model because state transition"
+    )
 
     result = await client.list_desired_state_versions(env, filter={"status": ["skipped_candidate"]}, sort="version.asc")
     assert result.code == 200
@@ -160,6 +166,7 @@ async def test_filter_versions(
     assert result.code == 200
     assert result.result["data"][0]["version"] == 7
     assert result.result["data"][0]["status"] == "candidate"
+    # The version_info field of this ConfigurationModel is empty, which should result in an empty label list
     assert result.result["data"][0]["labels"] == []
 
     result = await client.list_desired_state_versions(environments["no_versions"])
