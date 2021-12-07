@@ -124,7 +124,7 @@ directory. The inmanta build tool takes care of this to ensure the included file
 installation directory.
 
 
-.. _moddev-module-v2:
+.. _moddev-module-v1:
 
 V1 module format
 ################
