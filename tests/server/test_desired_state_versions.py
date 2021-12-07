@@ -160,6 +160,7 @@ async def test_filter_versions(
     assert result.code == 200
     assert result.result["data"][0]["version"] == 7
     assert result.result["data"][0]["status"] == "candidate"
+    assert result.result["data"][0]["labels"] == []
 
     result = await client.list_desired_state_versions(environments["no_versions"])
     assert result.code == 200
