@@ -487,3 +487,16 @@ class AgentProcess(BaseModel):
     last_seen: Optional[datetime.datetime]
     expired: Optional[datetime.datetime]
     state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]]
+
+
+class DesiredStateLabel(BaseModel):
+    name: str
+    message: str
+
+
+class DesiredStateVersion(BaseModel):
+    version: int
+    date: datetime.datetime
+    total: int
+    labels: List[DesiredStateLabel]
+    status: const.DesiredStateVersionStatus
