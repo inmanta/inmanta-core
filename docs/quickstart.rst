@@ -143,7 +143,10 @@ Reusing existing modules
 
 We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically.
+When you use an import statement in your model, Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
+V2 modules (See :ref:`moddev-module-v2`) need to be declared as Python dependencies in addition
+to using them in an import statement. Some of our public modules are hosted in the v2 format on https://pypi.org/.
+
 
 .. _qsconfigmodel:
 
@@ -351,6 +354,11 @@ ________________________
 Inmanta enables developers of a configuration model to make it modular and
 reusable. In this section we will create a configuration module that defines how to
 deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
+
+.. note::
+    This section describes how to create a v1 module. To create a v2 module instead see :ref:`module-creation-guide` and
+    :ref:`moddev-module-v2`. Note that a v2 module can only depend on other v2 modules.
+
 
 Module layout
 ==========================

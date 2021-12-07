@@ -8,6 +8,9 @@ that all Python tools can run on V2 modules, because V2 modules are essentially 
 module format. The following sections describe the directory layout of the V1 and the V2 module formats and their metadata
 files.
 
+
+.. _moddev-module-v2:
+
 V2 module format
 ################
 
@@ -120,6 +123,8 @@ You might notice that the model, files and templates directories, nor the metada
 directory. The inmanta build tool takes care of this to ensure the included files are included in the package
 installation directory.
 
+
+.. _moddev-module-v1:
 
 V1 module format
 ################
