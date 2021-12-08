@@ -744,6 +744,7 @@ def test_project_install_requirement_not_loaded(
     message: str = "Module thismoduledoesnotexist is present in requires but it is not used by the model."
     assert message in (rec.message for rec in caplog.records)
 
+
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
