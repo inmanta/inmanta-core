@@ -47,7 +47,7 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
-            date=cm_timestamps[i-1],
+            date=cm_timestamps[i - 1],
             total=1,
             released=i in {2, 3, 7},
             version_info={"export_metadata": {"message": "Recompile model because state transition", "type": "lsm_export"}}
