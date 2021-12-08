@@ -866,3 +866,25 @@ def list_desired_state_versions(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+@typedmethod(
+    path="/desiredstate/<version>/promote",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def promote_desired_state_version(
+    tid: uuid.UUID, version: int, trigger_method: Optional[model.PromoteTriggerMethod] = None
+) -> None:
+    """
+    Promote a desired state version, making it the active version in the environment
+    :param tid: The id of the environment
+    :param version: The number of the version to promote
+    :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
+        the agents will perform an incremental or full deploy, respectively.
+        If set to 'no_push', the new version is not pushed to the agents.
+        If the parameter is not set (or set to null), the new version is pushed and
+        the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
+    """
