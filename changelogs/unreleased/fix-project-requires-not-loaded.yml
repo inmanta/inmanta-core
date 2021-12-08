@@ -1,0 +1,4 @@
+description: Fixed project installation when the project has a requirement on a module that is not loaded by the model
+change-type: patch
+destination-branches:
+  - master

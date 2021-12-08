@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import argparse
+import logging
 import os
 import re
 import shutil
@@ -722,6 +723,26 @@ def test_project_install_incompatible_dependencies(
         is not None
         for rec in caplog.records
     )
+
+
+def test_project_install_requirement_not_loaded(
+    caplog,
+    snippetcompiler,
+) -> None:
+    """
+    Verify that installing a project with a module requirement does not fail if the module is not loaded in the project's AST.
+    """
+    module_name: str = "thismoduledoesnotexist"
+    with caplog.at_level(logging.WARNING):
+        # make sure the project installation does not fail on verification
+        snippetcompiler.setup_for_snippet(
+            "",
+            project_requires=[module.InmantaModuleRequirement.parse(module_name)],
+            install_project=True,
+        )
+
+    message: str = "Module thismoduledoesnotexist is present in requires but it is not used by the model."
+    assert message in (rec.message for rec in caplog.records)
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
