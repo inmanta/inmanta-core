@@ -735,3 +735,31 @@ def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     :return: The details of a compile
     :raise NotFound: This exception is raised when the referenced environment or compile is not found
     """
+
+
+@typedmethod(path="/desiredstate", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def list_desired_state_versions(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "version.desc",
+) -> List[model.DesiredStateVersion]:
+    """
+    Get the desired state versions from an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of versions that are returned
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned desired state versions.
+                Filtering by 'version' range, 'date' range and 'status' is supported.
+    :param sort: Return the results sorted according to the parameter value.
+                Only sorting by 'version' is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching compile reports
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
