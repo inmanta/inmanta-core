@@ -25,7 +25,8 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
-from inmanta.data.model import DesiredStateLabel
+from inmanta.data.model import DesiredStateLabel, PromoteTriggerMethod
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.server.config import get_bind_port
 
 
@@ -325,3 +326,33 @@ async def test_filter_validation(
     for filter, expected_status in filter_status_map:
         result = await client.list_desired_state_versions(env, filter=filter)
         assert result.code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_promote_no_versions(server, client, environment: str):
+    result = await client.promote_desired_state_version(environment, version=1)
+    assert result.code == 404
+
+
+@pytest.mark.parametrize(
+    "trigger_method",
+    [None, PromoteTriggerMethod.no_push, PromoteTriggerMethod.push_incremental_deploy, PromoteTriggerMethod.push_full_deploy],
+)
+@pytest.mark.asyncio
+async def test_promote_version(server, client, clienthelper, agent, environment: str, trigger_method):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    env_obj = await data.Environment.get_by_id(uuid.UUID(environment))
+    await agentmanager.ensure_agent_registered(env=env_obj, nodename="agent1")
+    version = await clienthelper.get_version()
+    resource_id_wov = "test::Resource[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
+
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.promote_desired_state_version(environment, version=version, trigger_method=trigger_method)
+    assert result.code == 200
+    result = await client.list_desired_state_versions(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["status"] == "active"

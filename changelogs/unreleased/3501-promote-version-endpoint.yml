@@ -1,0 +1,4 @@
+description: Added endpoint to promote a desired state version
+issue-nr: 3501
+change-type: minor
+destination-branches: [master, iso4]

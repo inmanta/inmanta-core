@@ -500,3 +500,12 @@ class DesiredStateVersion(BaseModel):
     total: int
     labels: List[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
+
+
+class NoPushTriggerMethod(str, Enum):
+    no_push = "no_push"
+
+
+PromoteTriggerMethod = StrEnum(
+    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
+)
