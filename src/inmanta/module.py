@@ -1931,6 +1931,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
         for name, spec in requirements.items():
+            if name not in self.modules:
+                # the module is in the project requirements but it is not part of the loaded AST so there is no need to verify
+                # its compatibility
+                LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
+                continue
             module = self.modules[name]
             version = parse_version(str(module.version))
             for r in spec:
