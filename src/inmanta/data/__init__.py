@@ -106,6 +106,7 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
+RangeConstraint = List[Tuple[RangeOperator, int]]
 DateRangeConstraint = List[Tuple[RangeOperator, datetime.datetime]]
 QueryFilter = Tuple[QueryType, object]
 
@@ -388,6 +389,24 @@ class AgentOrder(DatabaseOrder):
     def get_order_by_column_db_name(self) -> ColumnNameStr:
         # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
         return self.coalesce_to_min(self.order_by_column)
+
+
+class DesiredStateVersionOrder(DatabaseOrder):
+    """Represents the ordering by which desired state versions should be sorted"""
+
+    valid_sort_columns = {
+        "version": int,
+    }
+    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return ConfigurationModel
+
+    @property
+    def id_column(self) -> ColumnNameStr:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("version")
 
 
 class BaseQueryBuilder(ABC):
@@ -1323,7 +1342,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def get_range_filter(
-        cls, name: str, value: DateRangeConstraint, index: int, col_name_prefix: Optional[str] = None
+        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
@@ -4271,6 +4290,10 @@ class ConfigurationModel(BaseDocument):
         self._status = {}
         self._done = 0
 
+    @classmethod
+    def get_valid_field_names(cls) -> List[str]:
+        return super().get_valid_field_names() + ["status"]
+
     @property
     def done(self) -> int:
         # Keep resources which are deployed in done, even when a repair operation
@@ -4659,6 +4682,113 @@ class ConfigurationModel(BaseDocument):
             outset.update(provides)
 
         return set(outset), negative
+
+    @classmethod
+    def active_version_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""
+            SELECT max(version)
+            """,
+            from_clause=f" FROM {cls.table_name()} ",
+            filter_statements=[" environment = $1 AND released = TRUE"],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    def desired_state_versions_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        active_version, values = cls.active_version_subquery(environment)
+        # Coalesce to 0 in case there is no active version
+        active_version = f"(SELECT COALESCE(({active_version}), 0))"
+        query_builder = SimpleQueryBuilder(
+            select_clause=f"""SELECT cm.version, cm.date, cm.total,
+                                     version_info -> 'export_metadata' ->> 'message' as message,
+                                     version_info -> 'export_metadata' ->> 'type' as type,
+                                        (CASE WHEN cm.version = {active_version} THEN 'active'
+                                            WHEN cm.version > {active_version} THEN 'candidate'
+                                            WHEN cm.version < {active_version} AND cm.released=TRUE THEN 'retired'
+                                            ELSE 'skipped_candidate'
+                                        END) as status""",
+            from_clause=f" FROM {cls.table_name()} as cm",
+            filter_statements=[" environment = $1 "],
+            values=values,
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_items_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def get_desired_state_versions(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.DesiredStateVersion]:
+        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
+            order == PagingOrder.DESC and start is not None
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        desired_state_version_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        desired_state_version_records = cast(Iterable[Record], desired_state_version_records)
+
+        dtos = [
+            m.DesiredStateVersion(
+                version=desired_state["version"],
+                date=desired_state["date"],
+                total=desired_state["total"],
+                labels=[m.DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
+                if desired_state["type"] and desired_state["message"]
+                else [],
+                status=desired_state["status"],
+            )
+            for desired_state in desired_state_version_records
+        ]
+        return dtos
 
 
 class Code(BaseDocument):

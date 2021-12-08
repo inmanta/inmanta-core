@@ -17,14 +17,14 @@
 """
 import datetime
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools
 from pydantic import BaseModel, ValidationError, validator
 
 from inmanta import const
-from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeOperator
+from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator
 from inmanta.data.model import ReleasedResourceState
 
 
@@ -57,33 +57,50 @@ def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.da
         return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
 
 
-def parse_range_operator(v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
-    """
-    Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
-    """
+def parse_range_value_to_int(single_constraint: str, value: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError("Invalid range constraint %s: '%s' is not an integer" % (single_constraint, value))
 
-    def transform_single(single: str) -> Tuple[RangeOperator, datetime.datetime]:
-        split: List[str] = single.split(":", maxsplit=1)
-        if len(split) != 2:
-            raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
-        operator: RangeOperator
-        try:
-            operator = RangeOperator.parse(split[0])
-        except ValueError:
-            raise ValueError("Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single))
-        bound = parse_range_value_to_date(single, split[1])
-        return (operator, bound)
 
-    if v is None:
-        return None
+S = TypeVar("S", int, datetime.datetime)
 
-    if isinstance(v, str):
-        return [transform_single(v)]
 
-    if isinstance(v, list) and all(isinstance(x, str) for x in v):
-        return [transform_single(x) for x in v]
+def get_range_operator_parser(
+    parse_value_to_type: Callable[[str, str], S]
+) -> Callable[[object, object], Optional[List[Tuple[RangeOperator, S]]]]:
+    def parse_range_operator(v: object) -> Optional[List[Tuple[RangeOperator, S]]]:
+        """
+        Transform list of "<lt|le|gt|ge>:<x>" constraint specifiers to typed objects.
+        """
 
-    raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
+        def transform_single(single: str, parse_value_to_type: Callable[[str, str], S]) -> Tuple[RangeOperator, S]:
+            split: List[str] = single.split(":", maxsplit=1)
+            if len(split) != 2:
+                raise ValueError("Invalid range constraint %s, expected '<lt|le|gt|ge>:<x>`" % single)
+            operator: RangeOperator
+            try:
+                operator = RangeOperator.parse(split[0])
+            except ValueError:
+                raise ValueError(
+                    "Invalid range operator %s in constraint %s, expected one of lt, le, gt, ge" % (split[0], single)
+                )
+            bound = parse_value_to_type(single, split[1])
+            return (operator, bound)
+
+        if v is None:
+            return None
+
+        if isinstance(v, str):
+            return [transform_single(v, parse_value_to_type=parse_value_to_type)]
+
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            return [transform_single(x, parse_value_to_type=parse_value_to_type) for x in v]
+
+        raise ValueError(f"value is not a valid list of range constraints: {str(v)}")
+
+    return parse_range_operator
 
 
 class Filter(ABC, BaseModel):
@@ -130,7 +147,21 @@ class DateRangeFilter(Filter):
     @validator("field", pre=True)
     @classmethod
     def parse_requested(cls, v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
-        return parse_range_operator(v)
+        return get_range_operator_parser(parse_range_value_to_date)(v)
+
+    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
+        if self.field:
+            return (QueryType.RANGE, self.field)
+        return None
+
+
+class IntRangeFilter(Filter):
+    field: Optional[RangeConstraint]
+
+    @validator("field", pre=True)
+    @classmethod
+    def parse_field(cls, v: object) -> Optional[List[Tuple[RangeOperator, int]]]:
+        return get_range_operator_parser(parse_range_value_to_int)(v)
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field:
@@ -303,5 +334,15 @@ class AgentFilterValidator(FilterValidator):
         return {
             "name": ContainsPartialFilter,
             "process_name": ContainsPartialFilter,
+            "status": ContainsFilter,
+        }
+
+
+class DesiredStateVersionFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "version": IntRangeFilter,
+            "date": DateRangeFilter,
             "status": ContainsFilter,
         }

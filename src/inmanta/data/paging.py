@@ -25,6 +25,7 @@ from inmanta.data import (
     Agent,
     ColumnNameStr,
     Compile,
+    ConfigurationModel,
     DatabaseOrder,
     InvalidFieldNameException,
     InvalidQueryParameter,
@@ -38,6 +39,7 @@ from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import (
     BaseModel,
     CompileReport,
+    DesiredStateVersion,
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
@@ -174,6 +176,22 @@ class AgentPagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await Agent.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
+
+
+class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await ConfigurationModel.count_items_for_paging(
+            environment, database_order, first_id, last_id, start, end, **query
+        )
 
 
 class PagingHandler(ABC, Generic[T]):
@@ -479,3 +497,24 @@ class CompileReportPagingHandler(PagingHandler[CompileReport]):
 class AgentPagingHandler(PagingHandler[AgentModel]):
     def get_base_url(self) -> str:
         return "/api/v2/agents"
+
+
+class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion]):
+    def get_base_url(self) -> str:
+        return "/api/v2/desiredstate"
+
+    def _get_paging_boundaries(self, dtos: List[DesiredStateVersion], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
+                first_id=None,
+                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
+                last_id=None,
+            )
+        else:
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
+                first_id=None,
+                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
+                last_id=None,
+            )
