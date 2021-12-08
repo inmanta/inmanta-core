@@ -33,11 +33,11 @@ from inmanta.data import (
     InvalidSort,
     QueryType,
 )
-from inmanta.data.model import DesiredStateVersion, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceIdStr, ResourceVersionIdStr
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
@@ -586,3 +586,29 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.promote_desired_state_version, env="tid")
+    async def promote_desired_state_version(
+        self,
+        env: data.Environment,
+        version: int,
+        trigger_method: Optional[PromoteTriggerMethod] = None,
+    ) -> None:
+        if trigger_method == PromoteTriggerMethod.push_incremental_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_incremental_deploy
+        elif trigger_method == PromoteTriggerMethod.push_full_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_full_deploy
+        elif trigger_method == PromoteTriggerMethod.no_push:
+            push = False
+            agent_trigger_method = None
+        else:
+            push = True
+            agent_trigger_method = None
+
+        status_code, result = await self.release_version(
+            env, version_id=version, push=push, agent_trigger_method=agent_trigger_method
+        )
+        if status_code != 200:
+            raise BaseHttpException(status_code, result["message"])
