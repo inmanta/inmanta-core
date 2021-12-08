@@ -612,3 +612,7 @@ class OrchestrationService(protocol.ServerSlice):
         )
         if status_code == 404:
             raise NotFound(result["message"])
+        elif 400 <= status_code < 500:
+            raise BadRequest(result["message"])
+        elif status_code != 200:
+            raise ServerError(result["message"])
