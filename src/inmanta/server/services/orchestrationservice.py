@@ -37,7 +37,7 @@ from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, Resour
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
@@ -610,9 +610,5 @@ class OrchestrationService(protocol.ServerSlice):
         status_code, result = await self.release_version(
             env, version_id=version, push=push, agent_trigger_method=agent_trigger_method
         )
-        if status_code == 404:
-            raise NotFound(result["message"])
-        elif 400 <= status_code < 500:
-            raise BadRequest(result["message"])
-        elif status_code != 200:
-            raise ServerError(result["message"])
+        if status_code != 200:
+            raise BaseHttpException(status_code, result["message"])
