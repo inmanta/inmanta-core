@@ -38,7 +38,7 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
     await env.insert()
 
     cm_timestamps = []
-    for i in range(1, 11):
+    for i in range(0, 10):
         cm_timestamps.append(datetime.datetime.strptime(f"2021-12-06T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
 
     # Add multiple versions of model
@@ -47,7 +47,7 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
-            date=cm_timestamps[i],
+            date=cm_timestamps[i-1],
             total=1,
             released=i in {2, 3, 7},
             version_info={"export_metadata": {"message": "Recompile model because state transition", "type": "lsm_export"}}
@@ -98,7 +98,7 @@ async def test_filter_versions(
     server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
     """ Test querying desired state versions."""
-    environments, cm_times = environments_with_versions
+    environments, cm_timestamps = environments_with_versions
     env = environments["multiple_versions"]
 
     result = await client.list_desired_state_versions(env)
@@ -114,7 +114,7 @@ async def test_filter_versions(
     assert len(result.result["data"]) == 0
 
     result = await client.list_desired_state_versions(
-        env, filter={"date": [f"le:{cm_times[4].astimezone(datetime.timezone.utc)}"]}
+        env, filter={"date": [f"le:{cm_timestamps[3].astimezone(datetime.timezone.utc)}"]}
     )
     assert result.code == 200
     assert len(result.result["data"]) == 4
@@ -146,13 +146,13 @@ async def test_filter_versions(
     assert version_numbers(result.result["data"]) == [8, 9]
 
     result = await client.list_desired_state_versions(
-        env, filter={"status": ["active"], "date": [f"le:{cm_times[4].astimezone(datetime.timezone.utc)}"]}
+        env, filter={"status": ["active"], "date": [f"le:{cm_timestamps[3].astimezone(datetime.timezone.utc)}"]}
     )
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
     result = await client.list_desired_state_versions(
-        env, limit=2, filter={"date": [f"le:{cm_times[4].astimezone(datetime.timezone.utc)}"]}
+        env, limit=2, filter={"date": [f"le:{cm_timestamps[3].astimezone(datetime.timezone.utc)}"]}
     )
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -172,6 +172,10 @@ async def test_filter_versions(
     result = await client.list_desired_state_versions(environments["no_versions"])
     assert result.code == 200
     assert len(result.result["data"]) == 0
+
+    # Querying with a not existing environment should result in 404
+    result = await client.list_desired_state_versions(uuid.uuid4())
+    assert result.code == 404
 
 
 def version_numbers(desired_state_objects):
@@ -196,7 +200,7 @@ async def test_desired_state_versions_paging(
 
     result = await client.list_desired_state_versions(
         env,
-        filter={"date": [f"gt:{timestamps[2].astimezone(datetime.timezone.utc)}"]},
+        filter={"date": [f"gt:{timestamps[1].astimezone(datetime.timezone.utc)}"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 7
@@ -207,7 +211,7 @@ async def test_desired_state_versions_paging(
         env,
         limit=2,
         sort=f"{order_by_column}.{order}",
-        filter={"date": [f"gt:{timestamps[2].astimezone(datetime.timezone.utc)}"]},
+        filter={"date": [f"gt:{timestamps[1].astimezone(datetime.timezone.utc)}"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 2
@@ -276,7 +280,7 @@ async def test_desired_state_versions_paging(
         env,
         limit=100,
         sort=f"{order_by_column}.{order}",
-        filter={"date": [f"gt:{timestamps[2].astimezone(datetime.timezone.utc)}"]},
+        filter={"date": [f"gt:{timestamps[1].astimezone(datetime.timezone.utc)}"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 7
