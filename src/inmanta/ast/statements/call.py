@@ -238,9 +238,11 @@ class PluginFunction(Function):
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
             except UnsetException as e:
-                module: str = self.plugin.__module__
-                func: str = self.plugin.__function_name__
-                call: str = f"{module}::{func}"
+                # Don't handle it here!
+                # This exception is used by the scheduler to re-queue the unit
+                # If it is handled here, the re-queueing can not be done,
+                # leading to very subtle errors such as #2787
+                call: str = str(self.plugin)
                 location: str = str(self.ast_node.location)
                 LOGGER.debug(
                     "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)", call, location

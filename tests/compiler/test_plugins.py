@@ -275,7 +275,7 @@ a.other = A()
         compiler.do_compile()
     dir: str = snippetcompiler.project_dir
     message: str = (
-        "Unset value in python code in plugin at call: inmanta_plugins.std::attr "
+        "Unset value in python code in plugin at call: std::attr "
         f"({dir}/main.cf:7) (Will be rescheduled by compiler)"
     )
     log_contains(caplog, "inmanta.ast.statements.call", logging.DEBUG, message)
