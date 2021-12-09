@@ -4070,7 +4070,7 @@ class Resource(BaseDocument):
         return should_purge
 
     @classmethod
-    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ResourceDetails]:
+    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -4129,7 +4129,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        return m.ResourceDetails(
+        return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
             resource_type=record["resource_type"],
             agent=record["agent"],
