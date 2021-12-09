@@ -54,6 +54,7 @@ from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes
 from inmanta.util import retry_limited
 
+from ..data.paging import QueryIdentifier
 from . import config as server_config
 from .validate_filter import AgentFilterValidator, InvalidFilter
 
@@ -857,7 +858,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         paging_handler = paging.AgentPagingHandler(paging.AgentPagingCountsProvider())
         metadata = await paging_handler.prepare_paging_metadata(
-            env.id, dtos, limit=limit, database_order=agent_order, db_query=query
+            QueryIdentifier(environment=env.id), dtos, limit=limit, database_order=agent_order, db_query=query
         )
         links = await paging_handler.prepare_paging_links(
             dtos,

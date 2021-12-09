@@ -1,0 +1,4 @@
+description: Added endpoint to list resources for a version
+issue-nr: 3538
+change-type: minor
+destination-branches: [master, iso4]
