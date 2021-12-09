@@ -34,7 +34,7 @@ from inmanta.data import (
     QueryType,
 )
 from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceIdStr, ResourceVersionIdStr
-from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler
+from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, ServerError
@@ -571,7 +571,9 @@ class OrchestrationService(protocol.ServerSlice):
             raise BadRequest(e.message)
 
         paging_handler = DesiredStateVersionPagingHandler(DesiredStateVersionPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
+        )
         links = await paging_handler.prepare_paging_links(
             dtos,
             filter,

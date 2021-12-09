@@ -785,3 +785,48 @@ def promote_desired_state_version(
         If the parameter is not set (or set to null), the new version is pushed and
         the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
     """
+
+
+@typedmethod(
+    path="/desiredstate/<version>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_resources_in_version(
+    tid: uuid.UUID,
+    version: int,
+    limit: Optional[int] = None,
+    first_id: Optional[model.ResourceVersionIdStr] = None,
+    last_id: Optional[model.ResourceVersionIdStr] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "resource_type.desc",
+) -> List[model.VersionedResource]:
+    """
+    Get the resources that belong to a specific version
+    :param tid: The id of the environment
+    :param version: The version number
+    :param limit: Limit the number of resources that are returned
+    :param first_id: The resource_version_id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The resource_version_id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned resources.
+                The following options are available:
+                agent: filter by the agent name of the resource
+                resource_type: filter by the type of the resource
+                resource_id_value: filter by the attribute values of the resource
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'resource_type', 'agent', 'resource_id_value'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching resources
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
