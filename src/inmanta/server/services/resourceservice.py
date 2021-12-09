@@ -28,7 +28,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder
+from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -41,6 +41,7 @@ from inmanta.data.model import (
     ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
+    VersionedResource,
 )
 from inmanta.data.paging import (
     ResourceHistoryPagingCountsProvider,
@@ -49,6 +50,8 @@ from inmanta.data.paging import (
     ResourceLogPagingHandler,
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
+    VersionedResourcePagingCountsProvider,
+    VersionedResourcePagingHandler,
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -59,7 +62,12 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator, ResourceLogFilterValidator
+from inmanta.server.validate_filter import (
+    InvalidFilter,
+    ResourceFilterValidator,
+    ResourceLogFilterValidator,
+    VersionedResourceFilterValidator,
+)
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -1049,6 +1057,67 @@ class ResourceService(protocol.ServerSlice):
             limit,
             first_id=None,
             last_id=None,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.get_resources_in_version, env="tid")
+    async def get_resources_in_version(
+        self,
+        env: data.Environment,
+        version: int,
+        limit: Optional[int] = None,
+        first_id: Optional[ResourceVersionIdStr] = None,
+        last_id: Optional[ResourceVersionIdStr] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+    ) -> ReturnValue[List[VersionedResource]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(VersionedResourceFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            resource_order = VersionedResourceOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            dtos = await data.Resource.get_versioned_resources(
+                version=version,
+                database_order=resource_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = VersionedResourcePagingHandler(VersionedResourcePagingCountsProvider(version), version)
+        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
             start=start,
             end=end,
             has_next=metadata.after > 0,

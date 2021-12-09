@@ -44,6 +44,7 @@ from inmanta.data.model import (
     PagingBoundaries,
     ResourceHistory,
     ResourceIdStr,
+    VersionedResource,
 )
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
@@ -148,6 +149,32 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+
+class VersionedResourcePagingCountsProvider(PagingCountsProvider):
+    def __init__(self, version: int) -> None:
+        self.version = version
+
+    async def count_items_for_paging(
+        self,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Resource.count_versioned_resources_for_paging(
+            environment,
+            self.version,
+            database_order,
+            first_id,
+            last_id,
+            start,
+            end,
+            **query,
+        )
 
 
 class CompileReportPagingCountsProvider(PagingCountsProvider):
@@ -517,4 +544,29 @@ class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion]):
                 first_id=None,
                 end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
+            )
+
+
+class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
+    def __init__(self, counts_provider: PagingCountsProvider, version: int) -> None:
+        super().__init__(counts_provider)
+        self.version = version
+
+    def get_base_url(self) -> str:
+        return f"/api/v2/desiredstate/{self.version}"
+
+    def _get_paging_boundaries(self, dtos: List[VersionedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
+                first_id=dtos[0].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
+                last_id=dtos[-1].resource_version_id,
+            )
+        else:
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
+                first_id=dtos[-1].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
+                last_id=dtos[0].resource_version_id,
             )
