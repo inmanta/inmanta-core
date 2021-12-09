@@ -387,16 +387,19 @@ ReleasedResourceState = StrEnum(
 )
 
 
-class LatestReleasedResource(BaseModel):
+class VersionedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
     requires: List[ResourceVersionIdStr]
-    status: ReleasedResourceState
 
     @property
     def all_fields(self) -> Dict[str, Any]:
         return {**self.dict(), **self.id_details.dict()}
+
+
+class LatestReleasedResource(VersionedResource):
+    status: ReleasedResourceState
 
 
 class PagingBoundaries:

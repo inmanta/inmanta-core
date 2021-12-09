@@ -44,6 +44,7 @@ from inmanta.data.model import (
     PagingBoundaries,
     ResourceHistory,
     ResourceIdStr,
+    VersionedResource,
 )
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
@@ -59,11 +60,25 @@ class PagingMetadata:
         self.page_size = page_size
 
 
+class QueryIdentifier(BaseModel):
+    """ The identifier for a paged query"""
+
+    environment: uuid.UUID
+
+
+class ResourceQueryIdentifier(QueryIdentifier):
+    resource_id: ResourceIdStr
+
+
+class VersionedQueryIdentifier(QueryIdentifier):
+    version: int
+
+
 class PagingCountsProvider(ABC):
     @abstractmethod
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -83,7 +98,7 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
 
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -92,20 +107,26 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_item_count_query(
-            environment, database_order, ColumnNameStr("resource_version_id"), first_id, last_id, start, end, **query
+            query_identifier.environment,
+            database_order,
+            ColumnNameStr("resource_version_id"),
+            first_id,
+            last_id,
+            start,
+            end,
+            **query,
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
 class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
-    def __init__(self, data_class: Type[Resource], resource_id: ResourceIdStr) -> None:
+    def __init__(self, data_class: Type[Resource]) -> None:
         self.data_class = data_class
-        self.resource_id = resource_id
 
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: ResourceQueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -114,8 +135,8 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_history_item_count_query(
-            environment,
-            self.resource_id,
+            query_identifier.environment,
+            query_identifier.resource_id,
             database_order,
             ColumnNameStr("attribute_hash"),
             first_id,
@@ -129,13 +150,12 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
 
 
 class ResourceLogPagingCountsProvider(PagingCountsProvider):
-    def __init__(self, data_class: Type[ResourceAction], resource_id: ResourceIdStr) -> None:
+    def __init__(self, data_class: Type[ResourceAction]) -> None:
         self.data_class = data_class
-        self.resource_id = resource_id
 
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: ResourceQueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -144,16 +164,24 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
-            environment, self.resource_id, database_order, ColumnNameStr("timestamp"), first_id, last_id, start, end, **query
+            query_identifier.environment,
+            query_identifier.resource_id,
+            database_order,
+            ColumnNameStr("timestamp"),
+            first_id,
+            last_id,
+            start,
+            end,
+            **query,
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
-class CompileReportPagingCountsProvider(PagingCountsProvider):
+class VersionedResourcePagingCountsProvider(PagingCountsProvider):
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: VersionedQueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -161,13 +189,38 @@ class CompileReportPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        return await Compile.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
+        return await Resource.count_versioned_resources_for_paging(
+            query_identifier.environment,
+            query_identifier.version,
+            database_order,
+            first_id,
+            last_id,
+            start,
+            end,
+            **query,
+        )
+
+
+class CompileReportPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        query_identifier: QueryIdentifier,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Compile.count_items_for_paging(
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
+        )
 
 
 class AgentPagingCountsProvider(PagingCountsProvider):
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -175,13 +228,15 @@ class AgentPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        return await Agent.count_items_for_paging(environment, database_order, first_id, last_id, start, end, **query)
+        return await Agent.count_items_for_paging(
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
+        )
 
 
 class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
     async def count_items_for_paging(
         self,
-        environment: uuid.UUID,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -190,7 +245,7 @@ class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await ConfigurationModel.count_items_for_paging(
-            environment, database_order, first_id, last_id, start, end, **query
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
         )
 
 
@@ -200,7 +255,7 @@ class PagingHandler(ABC, Generic[T]):
 
     async def prepare_paging_metadata(
         self,
-        environment: uuid.UUID,
+        query_identifier: QueryIdentifier,
         dtos: List[T],
         db_query: Mapping[str, Tuple[QueryType, object]],
         limit: int,
@@ -217,7 +272,7 @@ class PagingHandler(ABC, Generic[T]):
             last_id = paging_borders.last_id
             try:
                 paging_counts = await self.counts_provider.count_items_for_paging(
-                    environment=environment,
+                    query_identifier=query_identifier,
                     database_order=database_order,
                     start=start,
                     first_id=first_id,
@@ -517,4 +572,29 @@ class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion]):
                 first_id=None,
                 end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
+            )
+
+
+class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
+    def __init__(self, counts_provider: PagingCountsProvider, version: int) -> None:
+        super().__init__(counts_provider)
+        self.version = version
+
+    def get_base_url(self) -> str:
+        return f"/api/v2/desiredstate/{self.version}"
+
+    def _get_paging_boundaries(self, dtos: List[VersionedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
+        if sort_order.get_order() == "DESC":
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
+                first_id=dtos[0].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
+                last_id=dtos[-1].resource_version_id,
+            )
+        else:
+            return PagingBoundaries(
+                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
+                first_id=dtos[-1].resource_version_id,
+                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
+                last_id=dtos[0].resource_version_id,
             )

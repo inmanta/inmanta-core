@@ -166,8 +166,10 @@ class InvalidSort(Exception):
 class DatabaseOrder:
     """Represents an ordering for database queries"""
 
-    valid_sort_columns: Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]] = {}
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -179,7 +181,9 @@ class DatabaseOrder:
         cls,
         sort: str,
     ) -> "DatabaseOrder":
-        valid_sort_pattern: Pattern[str] = re.compile(f"^({'|'.join(cls.valid_sort_columns)})\\.(asc|desc)$", re.IGNORECASE)
+        valid_sort_pattern: Pattern[str] = re.compile(
+            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+        )
         match = valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
             order_by_column = match.groups()[0].lower()
@@ -231,7 +235,7 @@ class DatabaseOrder:
 
     def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
         """ The type of the order by column"""
-        return self.valid_sort_columns[self.order_by_column]
+        return self.get_valid_sort_columns()[self.order_by_column]
 
     def get_order_by_column_api_name(self) -> str:
         """ The name of the column that the results should be ordered by """
@@ -311,15 +315,31 @@ class DatabaseOrder:
         return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
 
 
-class ResourceOrder(DatabaseOrder):
+class VersionedResourceOrder(DatabaseOrder):
     """Represents the ordering by which resources should be sorted"""
 
-    valid_sort_columns = {"resource_type": str, "agent": str, "status": str, "resource_id_value": str}
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {"resource_type": str, "agent": str, "resource_id_value": str}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Resource
+
+    @property
+    def id_column(self) -> ColumnNameStr:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("resource_version_id")
+
+
+class ResourceOrder(VersionedResourceOrder):
+    """Represents the ordering by which resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {**super().get_valid_sort_columns(), "status": str}
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
         return ColumnNameStr(
@@ -334,8 +354,10 @@ class ResourceOrder(DatabaseOrder):
 class ResourceHistoryOrder(DatabaseOrder):
     """Represents the ordering by which resource history should be sorted """
 
-    valid_sort_columns = {"date": datetime.datetime}
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {"date": datetime.datetime}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -346,8 +368,10 @@ class ResourceHistoryOrder(DatabaseOrder):
 class ResourceLogOrder(DatabaseOrder):
     """Represents the ordering by which resource logs should be sorted """
 
-    valid_sort_columns = {"timestamp": datetime.datetime}
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {"timestamp": datetime.datetime}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -357,8 +381,10 @@ class ResourceLogOrder(DatabaseOrder):
 class CompileReportOrder(DatabaseOrder):
     """Represents the ordering by which compile reports should be sorted """
 
-    valid_sort_columns = {"requested": datetime.datetime}
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {"requested": datetime.datetime}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -368,14 +394,16 @@ class CompileReportOrder(DatabaseOrder):
 class AgentOrder(DatabaseOrder):
     """Represents the ordering by which agents should be sorted"""
 
-    valid_sort_columns = {
-        "name": str,
-        "process_name": Optional[str],
-        "paused": bool,
-        "last_failover": Optional[datetime.datetime],
-        "status": str,
-    }
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {
+            "name": str,
+            "process_name": Optional[str],
+            "paused": bool,
+            "last_failover": Optional[datetime.datetime],
+            "status": str,
+        }
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -394,10 +422,12 @@ class AgentOrder(DatabaseOrder):
 class DesiredStateVersionOrder(DatabaseOrder):
     """Represents the ordering by which desired state versions should be sorted"""
 
-    valid_sort_columns = {
-        "version": int,
-    }
-    """Describes the names and types of the columns that are valid for this DatabaseOrder """
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {
+            "version": int,
+        }
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
@@ -4213,6 +4243,93 @@ class Resource(BaseDocument):
         for row in raw_results:
             results[row["status"]] = row["count"]
         return m.ResourceDeploySummary.create_from_db_result(results)
+
+    @classmethod
+    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                                    r.agent, r.resource_id_value, r.environment""",
+            from_clause=f" FROM {cls.table_name()} as r",
+            filter_statements=[" environment = $1 ", " model = $2"],
+            values=[cls._get_value(environment), cls._get_value(version)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_versioned_resources_for_paging(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def get_versioned_resources(
+        cls,
+        version: int,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.VersionedResource]:
+        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
+            order == PagingOrder.DESC and start is not None
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        versioned_resource_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        versioned_resource_records = cast(Iterable[Record], versioned_resource_records)
+
+        dtos = [
+            m.VersionedResource(
+                resource_id=versioned_resource["resource_id"],
+                resource_version_id=versioned_resource["resource_version_id"],
+                id_details=cls.get_details_from_resource_id(versioned_resource["resource_id"]),
+                requires=json.loads(versioned_resource["attributes"]).get("requires", []),
+            )
+            for versioned_resource in versioned_resource_records
+        ]
+        return dtos
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
