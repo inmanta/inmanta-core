@@ -44,12 +44,15 @@ from inmanta.data.model import (
     VersionedResource,
 )
 from inmanta.data.paging import (
+    QueryIdentifier,
     ResourceHistoryPagingCountsProvider,
     ResourceHistoryPagingHandler,
     ResourceLogPagingCountsProvider,
     ResourceLogPagingHandler,
     ResourcePagingCountsProvider,
     ResourcePagingHandler,
+    ResourceQueryIdentifier,
+    VersionedQueryIdentifier,
     VersionedResourcePagingCountsProvider,
     VersionedResourcePagingHandler,
 )
@@ -936,7 +939,9 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(e.message)
 
         paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
-        paging_metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        paging_metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
+        )
         links = await paging_handler.prepare_paging_links(
             dtos,
             filter,
@@ -999,9 +1004,13 @@ class ResourceService(protocol.ServerSlice):
         except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message)
 
-        paging_handler = ResourceHistoryPagingHandler(ResourceHistoryPagingCountsProvider(data.Resource, rid), rid)
+        paging_handler = ResourceHistoryPagingHandler(ResourceHistoryPagingCountsProvider(data.Resource), rid)
         metadata = await paging_handler.prepare_paging_metadata(
-            env.id, history, limit=limit, database_order=resource_order, db_query={}
+            ResourceQueryIdentifier(environment=env.id, resource_id=rid),
+            history,
+            limit=limit,
+            database_order=resource_order,
+            db_query={},
         )
         links = await paging_handler.prepare_paging_links(
             history,
@@ -1048,8 +1057,10 @@ class ResourceService(protocol.ServerSlice):
             )
         except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message)
-        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction, rid), rid)
-        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction), rid)
+        metadata = await paging_handler.prepare_paging_metadata(
+            ResourceQueryIdentifier(environment=env.id, resource_id=rid), dtos, query, limit, resource_order
+        )
         links = await paging_handler.prepare_paging_links(
             dtos,
             filter,
@@ -1109,8 +1120,10 @@ class ResourceService(protocol.ServerSlice):
         except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message)
 
-        paging_handler = VersionedResourcePagingHandler(VersionedResourcePagingCountsProvider(version), version)
-        metadata = await paging_handler.prepare_paging_metadata(env.id, dtos, query, limit, resource_order)
+        paging_handler = VersionedResourcePagingHandler(VersionedResourcePagingCountsProvider(), version)
+        metadata = await paging_handler.prepare_paging_metadata(
+            VersionedQueryIdentifier(environment=env.id, version=version), dtos, query, limit, resource_order
+        )
         links = await paging_handler.prepare_paging_links(
             dtos,
             filter,

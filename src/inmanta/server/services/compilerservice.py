@@ -39,7 +39,7 @@ import pydantic
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort, QueryType
-from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler
+from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
 from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -806,7 +806,7 @@ class CompilerService(ServerSlice):
 
         paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider())
         metadata = await paging_handler.prepare_paging_metadata(
-            env.id, dtos, limit=limit, database_order=compile_report_order, db_query=query
+            QueryIdentifier(environment=env.id), dtos, limit=limit, database_order=compile_report_order, db_query=query
         )
         links = await paging_handler.prepare_paging_links(
             dtos,
