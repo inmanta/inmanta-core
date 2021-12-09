@@ -238,6 +238,15 @@ class PluginFunction(Function):
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
             except UnsetException as e:
+                call: str = str(self.plugin)
+                location: str = str(self.ast_node.location)
+                LOGGER.debug(
+                    "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)", call, location
+                )
+                # Don't handle it here!
+                # This exception is used by the scheduler to re-queue the unit
+                # If it is handled here, the re-queueing can not be done,
+                # leading to very subtle errors such as #2787
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
@@ -271,13 +280,6 @@ class FunctionUnit(Waiter):
         try:
             self.function.resume(requires, self.resolver, self.queue, self.result)
             self.done = True
-        except UnsetException as e:
-            LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
-            # Don't handle it here!
-            # This exception is used by the scheduler to re-queue the unit
-            # If it is handled here, the re-queueing can not be done,
-            # leading to very subtle errors such as #2787
-            raise
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
