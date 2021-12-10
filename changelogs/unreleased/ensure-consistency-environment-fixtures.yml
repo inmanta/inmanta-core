@@ -1,0 +1,5 @@
+---
+description: Ensure that the `environment` and `environment_multi` fixtures use consistent environment settings.
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso4]
