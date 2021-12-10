@@ -944,6 +944,9 @@ def get_resources_in_version(
 )
 def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.ResourceIdStr) -> model.VersionedResourceDetails:
     """
+    :param tid: The id of the environment
+    :param version: The version number of the resource
+    :param rid: The id of the resource
     :return: The details of a specific version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """

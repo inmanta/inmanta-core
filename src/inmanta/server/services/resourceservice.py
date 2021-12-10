@@ -1144,18 +1144,7 @@ class ResourceService(protocol.ServerSlice):
     async def versioned_resource_details(
         self, env: data.Environment, version: int, rid: ResourceIdStr
     ) -> VersionedResourceDetails:
-        resource = await data.Resource.get_one(environment=env.id, model=version, resource_id=rid)
+        resource = await data.Resource.get_versioned_resource_details(environment=env.id, version=version, resource_id=rid)
         if not resource:
             raise NotFound("The resource with the given id does not exist")
-        parsed_id = Id.parse_id(resource.resource_id)
-        dto = VersionedResourceDetails(
-            resource_id=resource.resource_id,
-            resource_version_id=resource.resource_version_id,
-            resource_type=resource.resource_type,
-            agent=resource.agent,
-            id_attribute=parsed_id.attribute,
-            id_attribute_value=resource.resource_id_value,
-            version=resource.model,
-            attributes=resource.attributes,
-        )
-        return dto
+        return resource

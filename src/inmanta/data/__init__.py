@@ -4144,6 +4144,25 @@ class Resource(BaseDocument):
         )
 
     @classmethod
+    async def get_versioned_resource_details(
+        cls, environment: uuid.UUID, version: int, resource_id: m.ResourceIdStr
+    ) -> Optional[m.VersionedResourceDetails]:
+        resource = await cls.get_one(environment=environment, model=version, resource_id=resource_id)
+        if not resource:
+            return None
+        parsed_id = resources.Id.parse_id(resource.resource_id)
+        return m.VersionedResourceDetails(
+            resource_id=resource.resource_id,
+            resource_version_id=resource.resource_version_id,
+            resource_type=resource.resource_type,
+            agent=resource.agent,
+            id_attribute=parsed_id.attribute,
+            id_attribute_value=resource.resource_id_value,
+            version=resource.model,
+            attributes=resource.attributes,
+        )
+
+    @classmethod
     def get_history_base_query(
         cls,
         select_clause: str,
