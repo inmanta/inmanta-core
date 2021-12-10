@@ -4070,7 +4070,7 @@ class Resource(BaseDocument):
         return should_purge
 
     @classmethod
-    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ResourceDetails]:
+    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -4129,7 +4129,7 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
-        return m.ResourceDetails(
+        return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
             resource_type=record["resource_type"],
             agent=record["agent"],
@@ -4141,6 +4141,25 @@ class Resource(BaseDocument):
             attributes=json.loads(record["attributes"]),
             status=record["status"],
             requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
+        )
+
+    @classmethod
+    async def get_versioned_resource_details(
+        cls, environment: uuid.UUID, version: int, resource_id: m.ResourceIdStr
+    ) -> Optional[m.VersionedResourceDetails]:
+        resource = await cls.get_one(environment=environment, model=version, resource_id=resource_id)
+        if not resource:
+            return None
+        parsed_id = resources.Id.parse_id(resource.resource_id)
+        return m.VersionedResourceDetails(
+            resource_id=resource.resource_id,
+            resource_version_id=resource.resource_version_id,
+            resource_type=resource.resource_type,
+            agent=resource.agent,
+            id_attribute=parsed_id.attribute,
+            id_attribute_value=resource.resource_id_value,
+            version=resource.model,
+            attributes=resource.attributes,
         )
 
     @classmethod

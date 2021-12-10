@@ -410,17 +410,13 @@ class PagingBoundaries:
 
 
 class ResourceDetails(BaseModel):
-    """The details of a released resource
+    """The details of a resource
     :param resource_id: The id of the resource
     :param resource_type: The type of the resource
     :param agent: The agent associated with this resource
     :param id_attribute: The name of the identifying attribute of the resource
     :param id_attribute_value: The value of the identifying attribute of the resource
-    :param last_deploy: The value of the last_deploy on the latest released version of the resource
-    :param first_generated_time: The first time this resource was generated
-    :param first_generated_version: The first model version this resource was in
-    :param status: The current status of the resource
-    :param requires_status: The id and status of the resources this resource requires
+    :param attributes: The attributes of the resource
     """
 
     resource_id: ResourceIdStr
@@ -428,10 +424,31 @@ class ResourceDetails(BaseModel):
     agent: str
     id_attribute: str
     id_attribute_value: str
+    attributes: JsonType
+
+
+class VersionedResourceDetails(ResourceDetails):
+    """The details of a resource version
+    :param resource_version_id: The id of the resource
+    :param version: The version of the resource
+    """
+
+    resource_version_id: ResourceVersionIdStr
+    version: int
+
+
+class ReleasedResourceDetails(ResourceDetails):
+    """The details of a released resource
+    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param first_generated_time: The first time this resource was generated
+    :param first_generated_version: The first model version this resource was in
+    :param status: The current status of the resource
+    :param requires_status: The id and status of the resources this resource requires
+    """
+
     last_deploy: Optional[datetime.datetime]
     first_generated_time: datetime.datetime
     first_generated_version: int
-    attributes: JsonType
     status: ReleasedResourceState
     requires_status: Dict[ResourceIdStr, ReleasedResourceState]
 
