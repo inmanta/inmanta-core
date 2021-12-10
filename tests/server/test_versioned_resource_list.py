@@ -57,7 +57,7 @@ async def env_with_resources(server, client):
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-                attributes={"path": path},
+                attributes={"path": path, "v": version},
                 status=ResourceState.deployed,
             )
             await res.insert()
@@ -268,3 +268,21 @@ async def test_filter_validation(server, client, env_with_resources):
     for filter, expected_status in filter_status_map:
         result = await client.get_resources_in_version(env_with_resources.id, version=3, filter=filter)
         assert result.code == expected_status
+
+
+@pytest.mark.asyncio
+async def test_versioned_resource_details(server, client, env_with_resources):
+    result = await client.get_resources_in_version(env_with_resources.id, version=3, sort="resource_id_value.asc")
+    assert result.code == 200
+    resource_id = result.result["data"][0]["resource_id"]
+    result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2}
+    result = await client.versioned_resource_details(env_with_resources.id, version=3, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3}
+    result = await client.versioned_resource_details(env_with_resources.id, version=4, rid=resource_id)
+    assert result.code == 404
+
+    result = await client.versioned_resource_details(uuid.uuid4(), version=3, rid=resource_id)
+    assert result.code == 404

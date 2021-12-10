@@ -30,15 +30,16 @@ from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID
 from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
 from inmanta.data.model import (
     LatestReleasedResource,
+    ReleasedResourceDetails,
     Resource,
     ResourceAction,
-    ResourceDetails,
     ResourceHistory,
     ResourceIdStr,
     ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
     VersionedResource,
+    VersionedResourceDetails,
 )
 from inmanta.data.paging import (
     QueryIdentifier,
@@ -749,7 +750,7 @@ class ResourceService(protocol.ServerSlice):
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata)
 
     @handle(methods_v2.resource_details, env="tid")
-    async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ResourceDetails:
+    async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
 
         details = await data.Resource.get_resource_details(env.id, rid)
         if not details:
@@ -925,3 +926,12 @@ class ResourceService(protocol.ServerSlice):
         )
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.versioned_resource_details, env="tid")
+    async def versioned_resource_details(
+        self, env: data.Environment, version: int, rid: ResourceIdStr
+    ) -> VersionedResourceDetails:
+        resource = await data.Resource.get_versioned_resource_details(environment=env.id, version=version, resource_id=rid)
+        if not resource:
+            raise NotFound("The resource with the given id does not exist")
+        return resource

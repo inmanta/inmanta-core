@@ -544,7 +544,7 @@ def resource_list(
 @typedmethod(
     path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ResourceDetails:
+def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
     """
     :return: The details of the latest released version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
@@ -829,4 +829,21 @@ def get_resources_in_version(
     :return: A list of all matching resources
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/desiredstate/<version>/resource/<rid>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.ResourceIdStr) -> model.VersionedResourceDetails:
+    """
+    :param tid: The id of the environment
+    :param version: The version number of the resource
+    :param rid: The id of the resource
+    :return: The details of a specific version of a resource
+    :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
