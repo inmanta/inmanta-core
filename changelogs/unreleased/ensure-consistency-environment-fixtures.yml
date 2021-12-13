@@ -1,4 +1,4 @@
 ---
 description: Ensure that the `environment` and `environment_multi` fixtures use consistent environment settings.
 change-type: patch
-destination-branches: [master, iso4]
+destination-branches: [iso4]
