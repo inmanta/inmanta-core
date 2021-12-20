@@ -24,6 +24,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 import pydantic
 import pydantic.schema
 from pydantic.fields import ModelField
+from pydantic.schema import field_schema
 
 import inmanta.ast.export as ast_export
 from inmanta import const
@@ -32,7 +33,7 @@ from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
 # This reference to the actual pydantic field_type_schema method is only loaded once
-old_field_type_schema = pydantic.schema.field_type_schema
+old_field_type_schema = field_schema
 
 
 def patch_pydantic_field_type_schema() -> None:
