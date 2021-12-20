@@ -1,0 +1,4 @@
+---
+description: Constraint `pydantic~=1.8.2` in order to work around incompatibility problem
+change-type: patch
+destination-branches: [master, iso4]
