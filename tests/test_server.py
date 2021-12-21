@@ -1323,3 +1323,9 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         change=const.Change.nochange,
     )
     assert result.code == 404, result.result
+
+@pytest.mark.asyncio
+async def test_start_location_no_redirect(server):
+    redirects = [elm for elm in server._handlers if isinstance(elm, tuple)]
+    redirects_start_location = any(t[0] == '/' for t in redirects)
+    assert(redirects_start_location == False)
