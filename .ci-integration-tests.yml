@@ -1,3 +1,2 @@
 pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-with-fast
 repo_name: inmanta-core
-tox_envlist: pep8,py36,mypy,docs
