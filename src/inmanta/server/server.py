@@ -111,7 +111,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             auth
         )
         self.add_static_content("/dashboard/config.js", content=content)
-        self.add_static_handler("/dashboard", dashboard_path, start=True)
+        self.add_static_handler("/dashboard", dashboard_path)
 
     def check_storage(self) -> Dict[str, str]:
         """
