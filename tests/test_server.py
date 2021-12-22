@@ -1324,6 +1324,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     )
     assert result.code == 404, result.result
 
+
 @pytest.mark.asyncio
 async def test_start_location_no_redirect(server):
     """
