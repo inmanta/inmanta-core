@@ -645,6 +645,10 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
+    config.Config.set("dashboard", "enable", "True")
+    config.Config.set("dashboard", "path", "../inmanta-dashboard")
+    print("=========================")
+    print(port)
     yield config
     shutil.rmtree(state_dir)
 
