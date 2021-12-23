@@ -1,3 +1,2 @@
 pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-with-fast
 repo_name: inmanta-core
-python_version: 36
