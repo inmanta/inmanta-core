@@ -1330,6 +1330,12 @@ async def test_start_location_no_redirect(server):
     """
     Ensure that there is no redirection for the "start" location. (issue #3497)
     """
-    redirects = [elm for elm in server._handlers if isinstance(elm, tuple)]
-    redirect_start_location = any(t[0] == "/" for t in redirects)
-    assert not redirect_start_location
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/" % (port,)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert base_url == response.effective_url
+
