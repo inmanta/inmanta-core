@@ -1323,3 +1323,18 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         change=const.Change.nochange,
     )
     assert result.code == 404, result.result
+
+
+@pytest.mark.asyncio
+async def test_start_location_no_redirect(server):
+    """
+    Ensure that there is no redirection for the "start" location. (issue #3497)
+    """
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/" % (port,)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert base_url == response.effective_url
