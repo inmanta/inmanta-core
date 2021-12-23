@@ -1338,4 +1338,3 @@ async def test_start_location_no_redirect(server):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert base_url == response.effective_url
-
