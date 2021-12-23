@@ -137,7 +137,9 @@ class VirtualEnv(object):
         else:
             binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
             base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+            site_packages = os.path.join(
+                base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            )
 
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
