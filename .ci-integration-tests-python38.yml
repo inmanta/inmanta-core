@@ -1,2 +1,0 @@
-pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-python38
-repo_name: inmanta-core
