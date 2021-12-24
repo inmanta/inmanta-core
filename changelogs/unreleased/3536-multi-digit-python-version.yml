@@ -2,4 +2,5 @@ change-type: patch
 issue-nr: 3536
 description: Fixes a bug where minor version of python were wrongly set as only the first digit of multi-digit number was used.
 destination-branches: [iso4]
-  bugfix: "minor version of python were wrongly set"
+sections:
+  bugfix: "{{description}}"
