@@ -24,7 +24,7 @@ texttable==1.6.4
 tornado==6.1
 typing_inspect==0.7.1
 build==0.7.0
-ruamel.yaml==0.17.17
+ruamel.yaml==0.17.18
 
 # Optional import in code
 graphviz==0.19.1
