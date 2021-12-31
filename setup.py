@@ -18,7 +18,7 @@ requires = [
     "netifaces",
     "packaging",
     "ply",
-    "pydantic~=1.8.2",
+    "pydantic>=1.8.2,<1.10.0",
     "pyformance",
     "PyJWT",
     "python-dateutil",
