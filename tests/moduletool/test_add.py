@@ -298,7 +298,7 @@ def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
 
 def test_module_add_v2_wrong_name_error(tmpdir: py.path.local, monkeypatch, modules_v2_dir: str) -> None:
     """
-    Test the error messages of v2 modules when adding with the wrong name. (issue #3556)
+    Test the error messages of v2 modules when adding with a wrong name. (issue #3556)
     """
     # Create module to execute `inmanta module add` command on
     module_dir = os.path.join(tmpdir, "test")
