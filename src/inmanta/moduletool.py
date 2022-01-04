@@ -456,6 +456,12 @@ mode.
             module_requirement = InmantaModuleRequirement.parse(module_req)
         except InvalidRequirement:
             raise CLIException(f"'{module_req}' is not a valid requirement", exitcode=1)
+        except ValueError as e:
+            if module_req.startswith("inmanta-module-"):
+                raise ValueError(
+                    "Invalid Inmanta module requirement: Use the Inmanta module name instead of the Python package name"
+                )
+            raise e
         if not override and module_like.has_module_requirement(module_requirement.key):
             raise CLIException(
                 "A dependency on the given module was already defined, use --override to override the version constraint",

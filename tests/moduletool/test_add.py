@@ -294,3 +294,21 @@ def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
             in caplog.messages
         )
     assert ModuleTool().get_module(module_name).version == Version("2.1.10")
+
+
+def test_module_add_v2_wrong_name_error(tmpdir: py.path.local, monkeypatch, modules_v2_dir: str) -> None:
+    """
+    Test the error messages of v2 modules when adding with the wrong name. (issue #3556)
+    """
+    # Create module to execute `inmanta module add` command on
+    module_dir = os.path.join(tmpdir, "test")
+    module_from_template(source_dir=os.path.join(modules_v2_dir, "elaboratev2module"), dest_dir=module_dir)
+    monkeypatch.chdir(module_dir)
+
+    with pytest.raises(ValueError, match="Invalid Inmanta module requirement: Inmanta module names use '_', not '-'."):
+        ModuleTool().add(module_req="a-module", v2=True, override=False)
+
+    with pytest.raises(
+        ValueError, match="Invalid Inmanta module requirement: Use the Inmanta module name instead of the Python package name"
+    ):
+        ModuleTool().add(module_req="inmanta-module-a-module", v2=True, override=False)

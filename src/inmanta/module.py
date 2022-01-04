@@ -154,7 +154,7 @@ class InmantaModuleRequirement:
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
         if "-" in spec:
-            raise ValueError("Invalid inmanta module requirement: inmanta module names use '_', not '-'.")
+            raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(Requirement.parse(spec))
 
 
