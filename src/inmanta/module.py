@@ -510,6 +510,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+        if not self.urls:
+            raise Exception(
+                "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
+                " \"package\" to the project config file."
+            )
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
