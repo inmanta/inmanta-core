@@ -160,7 +160,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
         )
     message: str = (
         "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
-        " \"package\" to the project config file."
+        ' "package" to the project config file.'
     )
     assert message in e.value.format_trace()
 
