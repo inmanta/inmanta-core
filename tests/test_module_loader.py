@@ -144,6 +144,27 @@ def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcom
     assert "Hello world" in output
 
 
+def test_install_module_no_v2_source(snippetcompiler) -> None:
+    """
+    Verify that attempting to install a v2 module without a v2 module source configured results in the appropriate exception.
+    """
+    module_name = "non_existing_module"
+    with pytest.raises(Exception) as e:
+        snippetcompiler.setup_for_snippet(
+            snippet=f"import {module_name}",
+            install_project=True,
+            python_package_sources=[],
+            python_requires=[
+                ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name)),
+            ],
+        )
+    message: str = (
+        "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
+        " \"package\" to the project config file."
+    )
+    assert message in e.value.format_trace()
+
+
 @pytest.mark.parametrize("allow_v1", [True, False])
 def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, allow_v1: bool) -> None:
     """
@@ -232,13 +253,15 @@ def test_load_module_v2_module_using_install(
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
-def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool):
+def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool) -> None:
     """
     Assert behavior when a module is not found as a V1 or a V2 module.
     """
     module_name = "non_existing_module"
     snippetcompiler_clean.modules_dir = None
-    project: Project = snippetcompiler_clean.setup_for_snippet(snippet=f"import {module_name}", install_project=False)
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        snippet=f"import {module_name}", install_project=False, python_package_sources=["non_existing_local_index"]
+    )
     with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
         project.load_module(module_name=module_name, install_v1=allow_v1, install_v2=True, allow_v1=allow_v1)
 
