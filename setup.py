@@ -18,7 +18,8 @@ requires = [
     "netifaces",
     "packaging",
     "ply",
-    "pydantic>=1.8.2,<1.10.0",
+    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
+    "pydantic!=1.9.0a1",
     "pyformance",
     "PyJWT",
     "python-dateutil",
