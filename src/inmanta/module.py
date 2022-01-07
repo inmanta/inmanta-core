@@ -153,8 +153,12 @@ class InmantaModuleRequirement:
 
     @classmethod
     def parse(cls: Type[TInmantaModuleRequirement], spec: str) -> TInmantaModuleRequirement:
+        if spec.startswith(ModuleV2.PKG_NAME_PREFIX):
+            raise ValueError(
+                "Invalid Inmanta module requirement: Use the Inmanta module name instead of the Python package name"
+            )
         if "-" in spec:
-            raise ValueError("Invalid inmanta module requirement: inmanta module names use '_', not '-'.")
+            raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(Requirement.parse(spec))
 
 
