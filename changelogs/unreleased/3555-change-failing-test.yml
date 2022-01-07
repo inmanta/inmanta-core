@@ -1,0 +1,5 @@
+issue-nr: 3555
+change-type: patch
+description:  fix a test after name changes in the template module. 
+destination-branches:
+- master
