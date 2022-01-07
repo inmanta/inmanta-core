@@ -541,5 +541,5 @@ def test_moduletool_create_v2(tmp_working_dir: py.path.local) -> None:
     Verify that `inmanta module create` creates a valid v2 module with expected parameters.
     """
     ModuleTool().execute("create", argparse.Namespace(name="my_module", v1=False, no_input=True))
-    mod: module.ModuleV2 = module.ModuleV2(project=None, path=str(tmp_working_dir.join("inmanta-module-my-module")))
+    mod: module.ModuleV2 = module.ModuleV2(project=None, path=str(tmp_working_dir.join("my-module")))
     assert mod.name == "my_module"
