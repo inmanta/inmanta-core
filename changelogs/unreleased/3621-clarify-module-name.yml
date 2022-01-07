@@ -1,0 +1,5 @@
+issue-nr: 3555
+change-type: patch
+description:  Add to the docs that an inmanta module with name x is distributed as inmanta-module-x
+destination-branches:
+- master
