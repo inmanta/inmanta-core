@@ -453,16 +453,16 @@ class ProjectMetadata(Metadata):
         result = []
         for elem in v_as_list:
             if isinstance(elem, dict):
-                if('type' in elem and 'url' in elem and elem['type'] == 'git'):
-                    result.append(elem['url'])
-                elif('type' in elem and 'url' in elem):
-                    LOGGER.warning("Repos of type %s are not supported", elem['type'])
+                if "type" in elem and "url" in elem and elem["type"] == "git":
+                    result.append(elem["url"])
+                elif "type" in elem and "url" in elem:
+                    LOGGER.warning("Repos of type %s are not supported", elem["type"])
                 else:
-                    raise ValueError(f"Repo should be a string or a dict containing keys 'url' and 'type', got {elem}") 
+                    raise ValueError(f"Repo should be a string or a dict containing keys 'url' and 'type', got {elem}")
             elif isinstance(elem, str):
                 result.append(elem)
             else:
-                raise ValueError(f"Value should be either a string of a dict, got {elem}") 
+                raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
 
 
