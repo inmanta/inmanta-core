@@ -248,7 +248,7 @@ async def test_module_version_non_pep440_complient(inmanta_module):
         """
 name: mod
 license: ASL
-version: non_pep440_valuemo
+version: non_pep440_value
 compiler_version: 2017.2
     """
     )
