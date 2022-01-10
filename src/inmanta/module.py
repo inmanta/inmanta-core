@@ -441,10 +441,30 @@ class ProjectMetadata(Metadata):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
 
-    @validator("repo", "modulepath", pre=True)
+    @validator("modulepath", pre=True)
     @classmethod
-    def repo_and_modulepath_to_list(cls, v: object) -> object:
+    def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
+
+
+    @validator("repo", pre=True)
+    @classmethod
+    def validate_repo_field(cls, v: object) -> object:
+        v_as_list = cls.to_list(v)
+        result = []
+        for elem in v_as_list:
+            if isinstance(elem, dict):
+                if('type' in elem and 'url' in elem and elem['type'] == 'git'):
+                    result.append(elem['url'])
+                elif('type' in elem and 'url' in elem):
+                    LOGGER.warning("Repos of type %s are not supported", elem['type'])
+                else:
+                    raise ValueError(f"Repo should be a string or a dict containing keys 'url' and 'type', got {elem}") 
+            elif isinstance(elem, str):
+                result.append(elem)
+            else:
+                raise ValueError(f"Value should be either a string of a dict, got {elem}") 
+        return result
 
 
 T = TypeVar("T", bound=Metadata)
@@ -1034,6 +1054,7 @@ class Module(ModuleLike[ModuleMetadata]):
                     f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
                 )
             path = os.path.join(project.downloadpath, modulename)
+            print(path)
             result = project.externalResolver.clone(modulename, project.downloadpath)
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s" % modulename)
