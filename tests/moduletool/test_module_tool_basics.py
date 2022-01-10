@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import warnings
+import logging
 
 import pytest
 import yaml
@@ -33,6 +34,7 @@ from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
+from utils import log_contains, no_error_in_logs
 
 
 def test_versioning():
@@ -246,7 +248,7 @@ async def test_module_version_non_pep440_complient(inmanta_module):
         """
 name: mod
 license: ASL
-version: non_pep440_value
+version: non_pep440_valuemo
 compiler_version: 2017.2
     """
     )
@@ -332,3 +334,51 @@ requires:
     )
     with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
         module.Module(None, inmanta_module.get_root_dir_of_module())
+
+
+def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
+    """
+    Tests that repos of type 'git' are accepted and that repos with 
+    another type set will raise a warning. (issue #3565)
+    """
+    make_module_simple(modules_repo, "module")
+    project = makeproject(modules_repo, "project",[],["module"])
+    commitmodule(project, "first commit")
+
+    proj = install_project(modules_dir, "project")
+    print(os.listdir(proj))
+
+    projectyml = os.path.join(proj, "project.yml")
+    assert os.path.exists(projectyml)
+    app(["modules", "install"])
+    with open(projectyml, "r", encoding="utf-8") as fh:
+        pyml = yaml.safe_load(fh)
+
+    # repo is a string instance (accepted)
+    Project._project = None
+    with caplog.at_level(logging.WARNING):
+        app(["compile"])
+    no_error_in_logs(caplog)
+
+    # repo is a dict instance with type git (accepted)
+    repo = {'url':"https://github.com/inmanta/", 'type':'git'}
+    pyml["repo"] = repo
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+    Project._project = None
+    with caplog.at_level(logging.WARNING):
+        app(["compile"])
+    no_error_in_logs(caplog)
+
+    # repo is a dict instance with type package (raises warning)
+    repo = {'url':"https://github.com/inmanta/", 'type':'package'}
+    pyml["repo"] = repo
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+    Project._project = None
+    with caplog.at_level(logging.WARNING):
+        app(["compile"])
+    warning = "Repos of type package are not supported"
+    log_contains(caplog, "inmanta.module", logging.WARNING, warning)
