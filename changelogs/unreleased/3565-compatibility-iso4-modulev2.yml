@@ -4,5 +4,5 @@ description: Raise a warning when trying to use repo of type package.
 destination-branches: [iso4]
 sections:
     bugfix: "{{description}}"
-    upgrade-note: "Creating new modules using the template should be done using the v1 branch"
+    upgrade-note: "Creating new modules using the template should be done by first checking out on the v1 branch"
 
