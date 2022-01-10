@@ -446,7 +446,6 @@ class ProjectMetadata(Metadata):
     def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
-
     @validator("repo", pre=True)
     @classmethod
     def validate_repo_field(cls, v: object) -> object:
@@ -1054,7 +1053,6 @@ class Module(ModuleLike[ModuleMetadata]):
                     f"Can not install module {modulename} because 'downloadpath' is not set in {project.PROJECT_FILE}"
                 )
             path = os.path.join(project.downloadpath, modulename)
-            print(path)
             result = project.externalResolver.clone(modulename, project.downloadpath)
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s" % modulename)
