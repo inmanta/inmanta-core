@@ -16,13 +16,13 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
 import warnings
-import logging
 
 import pytest
 import yaml
@@ -338,11 +338,11 @@ requires:
 
 def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     """
-    Tests that repos of type 'git' are accepted and that repos with 
+    Tests that repos of type 'git' are accepted and that repos with
     another type set will raise a warning. (issue #3565)
     """
     make_module_simple(modules_repo, "module")
-    project = makeproject(modules_repo, "project",[],["module"])
+    project = makeproject(modules_repo, "project", [], ["module"])
     commitmodule(project, "first commit")
 
     proj = install_project(modules_dir, "project")
@@ -361,7 +361,7 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     no_error_in_logs(caplog)
 
     # repo is a dict instance with type git (accepted)
-    repo = {'url':"https://github.com/inmanta/", 'type':'git'}
+    repo = {"url": "https://github.com/inmanta/", "type": "git"}
     pyml["repo"] = repo
 
     with open(projectyml, "w", encoding="utf-8") as fh:
@@ -372,7 +372,7 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     no_error_in_logs(caplog)
 
     # repo is a dict instance with type package (raises warning)
-    repo = {'url':"https://github.com/inmanta/", 'type':'package'}
+    repo = {"url": "https://github.com/inmanta/", "type": "package"}
     pyml["repo"] = repo
 
     with open(projectyml, "w", encoding="utf-8") as fh:
