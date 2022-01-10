@@ -1,0 +1,6 @@
+change-type: patch
+issue-nr: 3536
+description: Raise a warning when trying to use repo type package.
+destination-branches: [iso4]
+sections:
+  bugfix: "{{description}}"
