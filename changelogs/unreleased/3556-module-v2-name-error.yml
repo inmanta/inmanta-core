@@ -1,0 +1,4 @@
+description: Adds a new error message if the user tries to add a v2 module using the Python package name instead of the Inmanta module name
+issue-nr: 3556
+change-type: patch
+destination-branches: [master]

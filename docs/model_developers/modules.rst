@@ -309,6 +309,7 @@ to consider it released.
 You can package a v2 module with ``inmanta module build`` which will create a Python wheel.
 You can then publish this to the Python package repository of your choice,
 for example the public PyPi repository.
+The inmanta module ``my_module`` will be packaged as a Python package ``inmanta-module-my-module``.
 
 The orchestrator server generally (see
 :ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package

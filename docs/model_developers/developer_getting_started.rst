@@ -205,7 +205,9 @@ For a v2 module, use the v2 cookiecutter template, then install the module:
 
     pip install cookiecutter
     cookiecutter --checkout v2 https://github.com/inmanta/inmanta-module-template.git
-    inmanta module install -e ./inmanta-module-<module-name>
+    inmanta module install -e ./<module-name>
+
+This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
 
 If you want to use the v2 module in a project, make sure to set up a v2 module source as outlined in the section above,
 then add the module as a dependency of the project as described in :ref:`dgs-existing-module`.
