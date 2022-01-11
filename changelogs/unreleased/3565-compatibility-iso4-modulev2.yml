@@ -1,5 +1,5 @@
 change-type: patch
-issue-nr: 3536
+issue-nr: 3565
 description: Raise a warning when trying to use repo of type package.
 destination-branches: [iso4]
 sections:
