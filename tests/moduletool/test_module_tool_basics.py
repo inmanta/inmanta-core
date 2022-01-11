@@ -378,7 +378,6 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
 
     with open(projectyml, "w", encoding="utf-8") as fh:
         yaml.dump(pyml, fh)
-    Project._project = None
     with caplog.at_level(logging.WARNING):
         compiler.do_compile()
     no_error_in_logs(caplog)
