@@ -342,11 +342,7 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     type 'git' are accepted and that repos with another type
     will raise a warning. (issue #3565)
     """
-    make_module_simple(modules_repo, "module")
-    project = makeproject(modules_repo, "project", [], ["module"])
-    commitmodule(project, "first commit")
-
-    install_project(modules_dir, "project")
+    makeproject(modules_repo, "project", [], [])
     projectdir = os.path.join(modules_repo, "project")
     Project.set(Project(projectdir, autostd=True))
 
@@ -355,6 +351,7 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
         pyml = yaml.safe_load(fh)
 
     # repo is a string instance (accepted)
+    Project._project = None
     with caplog.at_level(logging.WARNING):
         compiler.do_compile()
     no_error_in_logs(caplog)

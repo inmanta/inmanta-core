@@ -458,11 +458,11 @@ class ProjectMetadata(Metadata):
                 elif "type" in elem and "url" in elem:
                     LOGGER.warning("Repos of type %s are not supported", elem["type"])
                 else:
-                    raise ValueError(f"Repo should be a string or a dict containing keys 'url' and 'type', got {elem}")
+                    raise ValueError(f"Repo should be a string(url) or a dict containing an 'url' and 'type: git', got {elem}")
             elif isinstance(elem, str):
                 result.append(elem)
             else:
-                raise ValueError(f"Value should be either a string of a dict, got {elem}")
+                raise ValueError(f"Value should be either a string or a dict, got {elem}")
         return result
 
 
