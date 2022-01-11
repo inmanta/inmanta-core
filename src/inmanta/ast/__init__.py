@@ -318,16 +318,12 @@ class Namespace(Namespaced):
         return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
-        print("------")
         name: str = str(typ)
-        print(name)
         assert self.primitives is not None
         if "::" in name:
             parts = name.rsplit("::", 1)
-            print(parts)
             if parts[0] in self.visible_namespaces:
                 ns = self.visible_namespaces[parts[0]].target
-                print(ns)
                 if parts[1] in ns.defines_types:
                     return ns.defines_types[parts[1]]
                 else:
