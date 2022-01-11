@@ -338,8 +338,9 @@ requires:
 
 def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     """
-    Tests that repos of type 'git' are accepted and that repos with
-    another type set will raise a warning. (issue #3565)
+    Tests that repos that are strings and repos that are dict with 
+    type 'git' are accepted and that repos with another type
+    will raise a warning. (issue #3565)
     """
     make_module_simple(modules_repo, "module")
     project = makeproject(modules_repo, "project", [], ["module"])
