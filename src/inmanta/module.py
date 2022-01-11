@@ -513,7 +513,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         if not self.urls:
             raise Exception(
                 "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
-                ' "package" to the project config file.'
+                ' "package" to the project config file. e.g. to add PyPi as a module source, add the following to the `repo`'
+                " section of the project's `project.yml`:"
+                "\n\t- type: package"
+                "\n\t  url: https://pypi.org/simple"
             )
         module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
