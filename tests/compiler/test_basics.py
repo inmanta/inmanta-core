@@ -51,6 +51,7 @@ end
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 3
+    assert False
 
 
 def test_str_on_instance_neg(snippetcompiler):

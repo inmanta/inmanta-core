@@ -19,8 +19,8 @@
 import configparser
 import enum
 import glob
-import importlib
 import logging
+import importlib
 import os
 import re
 import subprocess
@@ -2677,7 +2677,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
             new_install_requires.append(str(python_pkg_requirement))
         else:
             new_install_requires = [str(python_pkg_requirement)]
-        config_parser.set("options", "install_requires", "\n".join(new_install_requires))
+        config_parser.set("options",
+            "install_requires", "\n".join(new_install_requires))
         # Write config back to disk
         with open(self.get_metadata_file_path(), "w", encoding="utf-8") as fd:
             config_parser.write(fd)
