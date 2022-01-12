@@ -110,6 +110,7 @@ a = TestC()
 
     root = scopes.get_child("__config__")
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
+    assert False
 
 
 def test_keyword_excn(snippetcompiler):
