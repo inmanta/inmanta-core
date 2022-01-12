@@ -9,13 +9,6 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  ignore:
-    # importlib-metadata>=4.9.0 requires Python>=3.7
-    - dependency-name: "importlib-metadata"
-      versions: [">=4.9.0"]
-    # setuptools>=59.7.0 requires Python>=3.7
-    - dependency-name: "setuptools"
-      versions: [">=59.7.0"]
 - package-ecosystem: pip
   target-branch: iso4
   directory: "/"
