@@ -819,10 +819,16 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
-    def install_from_list(self, requirements_list: List[str]) -> None:
+    def install_from_list(
+        self,
+        requirements_list: Sequence[str],
+        *,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+    ) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_list(requirements_list)
+        super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 
 
 class VenvCreationFailedError(Exception):
