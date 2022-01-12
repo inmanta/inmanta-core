@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite errors="1" failures="0" name="flake8" tests="1" time="1"><testcase name="src/inmanta/module.py"><failure file="src/inmanta/module.py" line="2681" col="13" message="E128 continuation line under-indented for visual indent" type="flake8 E128">2681:13 E128 continuation line under-indented for visual indent</failure></testcase></testsuite>
