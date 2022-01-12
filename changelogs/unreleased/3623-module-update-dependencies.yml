@@ -1,0 +1,6 @@
+description: "Make sure `inmanta project update` installs and updates Python dependencies"
+issue-nr: 3623
+change-type: minor
+sections:
+  feature: "`inmanta project update` now updates modules' Python dependencies to the latest compatible version. The same goes for triggering an update and recompile from the web console."
+  deprecation-note: "`inmanta modules update` has been replaced by `inmanta project update`. The old command has been deprecated and will be removed in a future release."
