@@ -51,7 +51,6 @@ end
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 3
-    assert False
 
 
 def test_str_on_instance_neg(snippetcompiler):
@@ -110,7 +109,6 @@ a = TestC()
 
     root = scopes.get_child("__config__")
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
-    assert False
 
 
 def test_keyword_excn(snippetcompiler):
