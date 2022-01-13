@@ -787,6 +787,7 @@ def test_project_install_with_install_mode(
     assert installed_packages[package_name] == expected_version
 
 
+@pytest.mark.slowtest
 def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
 ) -> None:

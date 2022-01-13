@@ -428,6 +428,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
         env: data.Environment = await environment_factory.create_environment(main)
