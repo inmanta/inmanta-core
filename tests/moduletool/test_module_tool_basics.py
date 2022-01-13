@@ -342,11 +342,10 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     type 'git' are accepted and that repos with another type
     will raise a warning. (issue #3565)
     """
-    makeproject(modules_repo, "project", [], [])
-    projectdir = os.path.join(modules_repo, "project")
+    projectdir = makeproject(modules_repo, "project_repo_type_module_v2", [], [])
     Project.set(Project(projectdir, autostd=True))
 
-    projectyml = os.path.join(projectdir, "project.yml")
+    projectyml = os.path.join(projectdir, "project_repo_type_module_v2.yml")
     with open(projectyml, "r", encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
@@ -354,7 +353,18 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     Project._project = None
     with caplog.at_level(logging.WARNING):
         compiler.do_compile()
-    no_error_in_logs(caplog)
+    no_error_in_logs(caplog, levels=(logging.ERROR, logging.WARNING))
+
+    # repo is a dict instance with type git (accepted)
+    Project._project = None
+    repo = {"url": "https://github.com/inmanta/", "type": "git"}
+    pyml["repo"] = repo
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    no_error_in_logs(caplog, levels=(logging.ERROR, logging.WARNING))
 
     # repo is a dict instance with type package (raises warning)
     Project._project = None
@@ -367,14 +377,3 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
         compiler.do_compile()
     warning = "Repos of type package are not supported"
     log_contains(caplog, "inmanta.module", logging.WARNING, warning)
-
-    # repo is a dict instance with type git (accepted)
-    Project._project = None
-    repo = {"url": "https://github.com/inmanta/", "type": "git"}
-    pyml["repo"] = repo
-
-    with open(projectyml, "w", encoding="utf-8") as fh:
-        yaml.dump(pyml, fh)
-    with caplog.at_level(logging.WARNING):
-        compiler.do_compile()
-    no_error_in_logs(caplog)
