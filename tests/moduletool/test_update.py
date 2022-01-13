@@ -183,6 +183,7 @@ def test_module_update_with_v2_module(
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
 
 
+@pytest.mark.slowtest
 def test_module_update_dependencies(
     tmpdir: py.path.local,
     snippetcompiler_clean,
