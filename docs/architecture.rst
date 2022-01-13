@@ -11,7 +11,7 @@ The Inmanta orchestrator consists of several components:
 
 * The Inmanta **server**: This server manages the deployment process, it keeps track of all agents and the current state of all
   projects. The server stores it state in PostgreSQL. All other state can be recovered after a server restart or failover.
-* A PostgresSQL database: The Inmanta server stores its state in a PostgresSQL database.
+* A PostgreSQL database: The Inmanta server stores its state in a PostgreSQL database.
 * The git server: The source code of the configuration models is stored in (one or more) git repositories.
 * The **compiler**: The compiler converts the source code into deployable resources and exports it to the server.
 * CLI and web-console: To control the server, you can use either the web-console or the command line tools. Both communicate
