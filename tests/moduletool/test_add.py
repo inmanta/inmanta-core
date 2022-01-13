@@ -215,6 +215,7 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     _assert_module_requirements(expected_requirements=["mod3==1.0.1"])
 
 
+@pytest.mark.slowtest
 def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, caplog) -> None:
     """
     Verify that `inmanta module add` respects preinstalled modules when they're compatible and logs a warning when they're
