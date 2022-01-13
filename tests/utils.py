@@ -395,7 +395,9 @@ requires = ["setuptools"]
             f"""
 [egg_info]
 tag_build = .dev{pkg_version.dev}
-            """.strip() if pkg_version.is_devrelease else ""
+            """.strip()
+            if pkg_version.is_devrelease
+            else ""
         )
         fd.write(
             f"""
@@ -410,7 +412,8 @@ author = Inmanta <code@inmanta.com>
 
 [options]
 install_requires =%s
-            """.strip() % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+            """.strip()
+            % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
         )
 
     if install:
