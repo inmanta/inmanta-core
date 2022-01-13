@@ -345,7 +345,7 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
     projectdir = makeproject(modules_repo, "project_repo_type_module_v2", [], [])
     Project.set(Project(projectdir, autostd=True))
 
-    projectyml = os.path.join(projectdir, "project_repo_type_module_v2.yml")
+    projectyml = os.path.join(projectdir, "project.yml")
     with open(projectyml, "r", encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
