@@ -462,6 +462,9 @@ class EnvironmentService(protocol.ServerSlice):
 
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server. Execute rmtree() after
+            # notify_listeners() to ensure that the listeners are notified.
             shutil.rmtree(project_dir)
 
     @handle(methods_v2.environment_create_token, env="tid")
