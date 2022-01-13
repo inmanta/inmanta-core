@@ -1,3 +1,6 @@
+.. warning::
+    The Inmanta dashboard has been deprecated in favour of the :ref:`Inmanta Web Console`
+
 The project overview
 --------------------
 

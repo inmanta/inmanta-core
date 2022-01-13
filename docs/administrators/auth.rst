@@ -34,7 +34,7 @@ Authentication
 --------------
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through
-the dashboard Inmanta uses 3rd party auth brokers. Currently the dashboard only supports redirecting users to keycloak for
+the web-console Inmanta uses 3rd party auth brokers. Currently the web-console only supports redirecting users to keycloak for
 authentication.
 
 Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with
@@ -49,7 +49,7 @@ are prefixed with ``urn:inmanta:``. These claims are:
 
     - agent
     - compiler
-    - api (cli, dashboard, 3rd party service)
+    - api (cli, web-console, 3rd party service)
  * ``urn:inmanta:env`` An *optional* claim. When this claim is present the token is scoped to this inmanta environment. All
    tokens that the server generates for agents and compilers have this claim present to limit their access to the environment
    they belong to.
@@ -70,18 +70,19 @@ Compilers, cli and agents that are not started by the server itself, require a t
 token is configured with the ``token`` option in the groups :inmanta.config:group:`agent_rest_transport`,
 :inmanta.config:group:`cmdline_rest_transport` and :inmanta.config:group:`compiler_rest_transport`.
 
-A token can be retrieved either with ``inmanta-cli token create`` or under Settings of the environment in the dashboard.
+A token can be retrieved either with ``inmanta-cli token create`` or via the web-console using the ``tokens`` tab on
+the settings page.
 
-.. figure:: /administrators/images/dashboard_token.png
+.. figure:: /administrators/images/web_console_token.png
    :width: 100%
    :align: center
-   :alt: Generating a new token in the dashboard.
+   :alt: Generating a new token in the web-console.
 
-   Generating a new token in the dashboard.
+   Generating a new token in the web-console.
 
 
-Configure an external issuer (See :ref:`auth-ext`) for dashboard access to bootstrap access to the create token api call.
-When no external issuer is available and dashboard access is not required, the ``inmanta-cli token bootstrap`` command
+Configure an external issuer (See :ref:`auth-ext`) for web-console access to bootstrap access to the create token api call.
+When no external issuer is available and web-console access is not required, the ``inmanta-cli token bootstrap`` command
 can be used to create a token that has access to everything. However, it expires after 3600s for security reasons.
 
 For this command to function, it requires the issuers configuration with sign=true to be available for the cli command.
@@ -96,7 +97,7 @@ section expects the following keys:
 
 * algorithm: The algorithm used for this key. Only HS256 and RS256 are supported.
 * sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
-* client_types: The client types from the ``urn:inmanta:ct`` claim that can be valided and/or signed with this key.
+* client_types: The client types from the ``urn:inmanta:ct`` claim that can be validated and/or signed with this key.
 * key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
   to the length of the HMAC (For HS256 == 256). The key should be a urlsafe base64 encoded bytestring without padding.
   (see below of a command to generate such a key)
@@ -133,21 +134,21 @@ External authentication providers
 ---------------------------------
 
 Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to
-add a claims that indicate the allowed client type (``urn:inmanta:ct``). Currently, the dashboard only has support for keycloak.
-However, each provider that can insert custom (private) claims should work. The dashboard now relies on the keycloak js library
+add a claims that indicate the allowed client type (``urn:inmanta:ct``). Currently, the web-console only has support for keycloak.
+However, each provider that can insert custom (private) claims should work. The web-console now relies on the keycloak js library
 to implement the OAuth2 implicit flow, required to obtain a JWT.
 
-.. tip:: All patches to support additional providers such as Auth0 are welcome. Alternativelyr contact Inmanta NV for custom
+.. tip:: All patches to support additional providers such as Auth0 are welcome. Alternatively contact Inmanta NV for custom
     integration services.
 
 Keycloak configuration
 **********************
-The dashboard has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
-create an initial login as decribed in the Keycloak documentation and login with admin credentials.
+The web-console has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
+create an initial login as described in the Keycloak documentation and login with admin credentials.
 
 This guide was made based on Keycloak 3.3
 
-If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the dashboard will not be
+If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the web-console will not be
 able to fetch user information from the authentication provider.
 
 
@@ -208,7 +209,7 @@ vallid callback URLs. As a best practice, also add the allowed origins. See the 
    :width: 100%
    :align: center
 
-   Allow implicits flows (others may be disabled) and configure allowed callback urls of the dashboard.
+   Allow implicit flows (others may be disabled) and configure allowed callback urls of the web-console.
 
 Add a mapper to add custom claims to the issued tokens for the API client type. Open de mappers tab of your new client and click
 `add`.
@@ -242,7 +243,7 @@ Step 3: Configure inmanta server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Go to the installation tab and select JSON format in the select box. This JSON string provides you with the details to
-configure the server correctly to redirect dashboard users to this keycloak instance and to valide the tokens
+configure the server correctly to redirect web-console users to this keycloak instance and to validate the tokens
 issued by keycloak.
 
 .. figure:: /administrators/images/kc_install.png
@@ -251,20 +252,14 @@ issued by keycloak.
 
    Show the correct configuration parameters in JSON format.
 
-Add a keycloak configuration parameters to the dashboard section of the server configuration file.
-(/etc/inmanta/inmanta.d/dashboard.cfg in most installs.) This section should already contain enabled=true and the
-path to the dashboard source.
-
-Add the realm, auth_url and client_id to the dashboard section. Use the parameters from the installation json file created
-by keycloak.
+Add the keycloak configuration parameters to the dashboard section of the server configuration file. Add a configuration
+file called `/etc/inmanta/inmanta.d/keycloak.cfg`. Add the realm, auth_url and client_id to the dashboard section. Use
+the parameters from the installation json file created by keycloak.
 
 .. code-block:: ini
 
     [dashboard]
-    enabled=true
-    path=/opt/inmanta/dashboard
-
-    # keycloack specific configuration
+    # keycloak specific configuration
     realm=master
     auth_url=http://localhost:8080/auth
     client_id=inmanta
@@ -272,7 +267,7 @@ by keycloak.
 .. warning:: In a real setup, the url should contain public names instead of localhost, otherwise logins will only work
    on the machine that hosts inmanta server.
 
-Configure a ``auth_jwt_`` block (for example ``auth_jwt_keycloak``) and configure it to valide the tokens keycloak issues.
+Configure a ``auth_jwt_`` block (for example ``auth_jwt_keycloak``) and configure it to validate the tokens keycloak issues.
 
 .. code-block:: ini
 
