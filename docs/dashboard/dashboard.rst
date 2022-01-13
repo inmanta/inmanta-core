@@ -1,5 +1,5 @@
 .. warning::
-    The Inmanta dashboard has been deprecated in favour of the :ref:`Inmanta Web Console`
+    The Inmanta dashboard has been deprecated in favour of the `Inmanta Web Console <../../extensions/inmanta-ui/index.html>`_.
 
 The project overview
 --------------------
