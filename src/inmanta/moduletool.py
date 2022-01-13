@@ -797,14 +797,12 @@ version: 0.0.1dev0"""
         Update all modules to the latest version compatible with the given module version constraints.
         """
 
-        LOGGER.warning(
-            "The `inmanta modules update` command has been deprecated in favor of `inmanta project update`."
-        )
+        LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
         ProjectTool().update(module, project)
 
     def status(self, module: Optional[str] = None) -> None:
         """
-         a git status on all modules and report
+        a git status on all modules and report
         """
         for mod in self.get_modules(module):
             if not isinstance(mod, ModuleV1):
