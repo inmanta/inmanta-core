@@ -373,7 +373,7 @@ class ActiveEnv(PythonEnvironment):
         else:
             return requirements
 
-    def _are_installed(self, requirements: req_list) -> bool:
+    def are_installed(self, requirements: req_list) -> bool:
         """
         Return True iff the given requirements are installed in this venv.
         """
@@ -391,7 +391,7 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
-        if not upgrade and self._are_installed(requirements):
+        if not upgrade and self.are_installed(requirements):
             return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
@@ -499,7 +499,7 @@ class ActiveEnv(PythonEnvironment):
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         """
-        if not upgrade and self._are_installed(requirements_list):
+        if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
             return
         try:

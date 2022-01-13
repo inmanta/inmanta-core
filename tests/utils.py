@@ -32,8 +32,10 @@ import yaml
 from pkg_resources import Requirement, parse_version
 from pydantic.tools import lru_cache
 
+import build
+import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, module
+from inmanta import const, data, env, module
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -350,6 +352,80 @@ class PipIndex:
         dir2pi(argv=["dir2pi", self.artifact_dir])
 
 
+def create_python_package(
+    name: str,
+    pkg_version: version.Version,
+    path: str,
+    *,
+    requirements: Optional[Sequence[Requirement]] = None,
+    install: bool = False,
+    editable: bool = False,
+    publish_index: Optional[PipIndex] = None,
+) -> None:
+    """
+    Creates an empty Python package.
+
+    :param name: The name of the package.
+    :param pkg_version: The version of the package.
+    :param path: The path to an empty or non-existant directory to create the package in.
+    :param requirements: The requirements for the package, if any.
+    :param install: Install the newly created package in the active Python environment. Requires virtualenv to be installed in
+        the Python environment unless editable is True.
+    :param editable: Whether to install the package in editable mode, ignored if install is False.
+    :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
+    """
+    if os.path.exists(path):
+        if not os.path.isdir(path):
+            raise Exception(f"{path} is not a directory.")
+        if os.listdir(path):
+            raise Exception(f"{path} is not an empty directory.")
+    else:
+        os.makedirs(path)
+
+    with open(os.path.join(path, "pyproject.toml"), "w") as fd:
+        fd.write(
+            """
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools"]
+            """.strip()
+        )
+    with open(os.path.join(path, "setup.cfg"), "w") as fd:
+        egg_info: str = (
+            f"""
+[egg_info]
+tag_build = .dev{pkg_version.dev}
+            """.strip() if pkg_version.is_devrelease else ""
+        )
+        fd.write(
+            f"""
+[metadata]
+name = {name}
+version = {pkg_version.base_version}
+description = An empty package for testing purposes
+license = Apache 2.0
+author = Inmanta <code@inmanta.com>
+
+{egg_info}
+
+[options]
+install_requires =%s
+            """.strip() % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+        )
+
+    if install:
+        env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
+    if publish_index is not None:
+        with build.env.IsolatedEnvBuilder() as build_env:
+            builder = build.ProjectBuilder(
+                srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
+            )
+            build_env.install(builder.build_system_requires)
+            build_env.install(builder.get_requires_for_build(distribution="wheel"))
+            builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
+        publish_index.publish()
+
+
 def module_from_template(
     source_dir: str,
     dest_dir: Optional[str] = None,
@@ -390,7 +466,7 @@ def module_from_template(
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
     if new_version is not None:
-        config["metadata"]["version"] = str(new_version)
+        config["metadata"]["version"] = new_version.base_version
         if new_version.is_devrelease:
             config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
     if new_name is not None:
