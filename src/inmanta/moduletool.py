@@ -301,7 +301,7 @@ compatible with the dependencies specified by the updated modules.
         """
         install all modules the project requires.
         """
-        project: project = self.get_project(load=False)
+        project: Project = self.get_project(load=False)
         project.install_modules()
 
     def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
