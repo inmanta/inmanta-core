@@ -340,7 +340,7 @@ compatible with the dependencies specified by the updated modules.
                     LOGGER.exception("Failed to update module %s", v1_module)
 
             # Load the newly installed modules into the modules cache
-            my_project.install_modules(bypass_module_cache=True)
+            my_project.install_modules(bypass_module_cache=True, update_dependencies=True)
 
         attempt = 0
         done = False
