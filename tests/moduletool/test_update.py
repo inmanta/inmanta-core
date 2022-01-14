@@ -186,6 +186,7 @@ def test_module_update_with_v2_module(
 @pytest.mark.slowtest
 def test_module_update_dependencies(
     tmpdir: py.path.local,
+    monkeypatch,
     snippetcompiler_clean,
     modules_dir: str,
 ) -> None:
@@ -224,15 +225,8 @@ def test_module_update_dependencies(
     )
 
     # run `inmanta project update` without running install first
-    environ_index: Optional[str] = os.environ.get("PIP_INDEX_URL", None)
-    try:
-        os.environ["PIP_INDEX_URL"] = index.url
-        ProjectTool().update()
-    finally:
-        if environ_index is None:
-            del os.environ["PIP_INDEX_URL"]
-        else:
-            os.environ["PIP_INDEX_URL"] = environ_index
+    monkeypatch.setenv("PIP_INDEX_URL", index.url)
+    ProjectTool().update()
 
     # Verify that:
     #   - direct dependency a has been installed
