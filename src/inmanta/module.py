@@ -31,7 +31,7 @@ from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import Dict, Generic, Iterable, Iterator, List, Mapping, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Generic, Iterable, Iterator, List, Mapping, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -461,7 +461,7 @@ class ProjectMetadata(Metadata):
 
     @validator("repo", pre=True)
     @classmethod
-    def validate_repo_field(cls, v: object) -> List[ModuleRepoInfo]:
+    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
         v_as_list = cls.to_list(v)
         result = []
         for elem in v_as_list:
@@ -475,7 +475,7 @@ class ProjectMetadata(Metadata):
         return result
 
     @validator("repo")
-    def warn_repo_type_unsupported(v: List[ModuleRepoInfo]) -> object:
+    def warn_repo_type_unsupported(v: List[ModuleRepoInfo]) -> List[ModuleRepoInfo]:
         if any(repo.type == ModuleRepoType.package for repo in v):
             LOGGER.warning(
                 "Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.",
