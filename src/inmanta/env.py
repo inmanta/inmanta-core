@@ -590,7 +590,6 @@ class ActiveEnv(PythonEnvironment):
         the change. Namespace packages installed in editable mode in particular require this method to allow them to be found by
         get_module_file().
         """
-        PythonWorkingSet.rebuild_working_set()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
@@ -627,6 +626,7 @@ class ActiveEnv(PythonEnvironment):
                            are executed in a subprocess.
                     """
                     importlib.reload(mod)
+        PythonWorkingSet.rebuild_working_set()
 
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
