@@ -403,6 +403,15 @@ class ModuleMetadata(Metadata):
             raise ValueError(f"Version {v} is not PEP440 compliant") from e
         return v
 
+@stable_api
+class ModuleRepoType(enum.Enum):
+    git = "git"
+    package = "package"
+
+@stable_api
+class ModuleRepoInfoV2(BaseModel):
+    url: str
+    type: ModuleRepoType = ModuleRepoType.git
 
 class ProjectMetadata(Metadata):
     """
@@ -452,9 +461,11 @@ class ProjectMetadata(Metadata):
         v_as_list = cls.to_list(v)
         result = []
         for elem in v_as_list:
-            if isinstance(elem, dict):
-                if "type" in elem and "url" in elem and elem["type"] == "git":
+            if isinstance(elem, ModuleRepoInfoV2):
+                if "type" in elem and "url" in elem and elem["type"] == ModuleRepoType.git:
                     result.append(elem["url"])
+                elif "type" in elem and "url" in elem and elem["type"] == ModuleRepoType.package:
+                    LOGGER.warning("Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.", elem["type"])
                 elif "type" in elem and "url" in elem:
                     LOGGER.warning("Repos of type %s are not supported", elem["type"])
                 else:
