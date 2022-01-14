@@ -1,0 +1,4 @@
+description: "Marked some 8s+ tests for edge cases as slow tests. Reduces fast test time from 23 min to 21 min 50."
+change-type: patch
+destination-branhces:
+  - master
