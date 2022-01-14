@@ -23,7 +23,7 @@ Take the following plugin as an example:
 .. code-block:: python
     :linenos:
 
-    # <module-name>/plugins/__init__.py
+    # example_module/plugins/__init__.py
 
     from inmanta.plugins import plugin
 
@@ -40,18 +40,22 @@ A test case, to test this plugin looks like this:
 .. code-block:: python
     :linenos:
 
-    # <module-name>/tests/test_hostname.py
+    # example_module/tests/test_hostname.py
 
-    def test_hostname(project):
+    def test_hostname(project, inmanta_plugins):
         host = "test"
         fqdn = f"{host}.something.com"
-        assert project.get_plugin_function("hostname")(fqdn) == host
+        assert inmanta_plugins.example_module.hostname(fqdn) == host
 
 
 * **Line 3:** Creates a pytest test case, which requires the ``project`` fixture.
-* **Line 6:** Calls the function ``project.get_plugin_function(plugin_name: str): FunctionType``, which returns the plugin
-  function named ``plugin_name``. As such, this line tests whether ``host`` is returned when the plugin function
+* **Line 6:** Uses the ``inmanta_plugins`` fixture to access the ``hostname`` function from the ``example_module``
+    module's Python namespace. As such, this line tests whether ``host`` is returned when the plugin function
   ``hostname`` is called with the parameter ``fqdn``.
+
+.. note::
+    V2 modules do not need to use the ``inmanta_plugins`` fixture. They can just import from the ``inmanta_plugins`` namespace
+    directly at the top of the test file.
 
 
 For more information see: `pytest-inmanta <https://github.com/inmanta/pytest-inmanta>`_

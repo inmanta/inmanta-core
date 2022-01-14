@@ -9,6 +9,11 @@ module format. The following sections describe the directory layout of the V1 an
 files.
 
 
+.. note::
+
+    V2 modules can not depend on V1 modules.
+
+
 .. _moddev-module-v2:
 
 V2 module format
@@ -249,7 +254,7 @@ The format for requires in requirements.txt is the following:
    to use is then: eggname@git+https://../repository#branch with branch being optional.
 
 
-Working on modules
+Installing modules
 ==================
 Since modules often have dependencies on other modules, it is common to develop against multiple
 modules (or a project and one or more modules) simultaneously. One might for example need to

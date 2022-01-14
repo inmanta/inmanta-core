@@ -17,6 +17,10 @@ Through the arguments of the function, the Python code in the plugin can navigat
 model. The compiler takes care of scheduling the execution at the correct point in the model
 evaluation.
 
+.. note::
+
+    A module's Python code lives in the `inmanta_plugins.<module_name>` namespace.
+
 A simple plugin that accepts no arguments, prints out "hello world" and returns no value requires
 the following code:
 
@@ -94,8 +98,8 @@ from a plugin should be of a subtype of this base exception.
     def raise_exception(message: "string"):
         raise PluginException(message)
 
-If your plugin requires external libraries, include a requirements.txt in the module. The libraries
-listed in this file are automatically installed by the compiler and agents.
+If your plugin requires external libraries, add them as dependencies of the module. For more details on how to add dependencies
+see :ref:`moddev-module`.
 
 .. todo:: context
 .. todo:: new statements
