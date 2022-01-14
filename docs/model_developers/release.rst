@@ -1,13 +1,34 @@
-Releasing Modules
-=================
+Releasing and distributing modules
+==================================
 
-Inmanta modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file for V1 modules or
-in the ``setup.cfg`` file for V2 modules. The commit should be tagged with the version in the git repository as well. To
+V2 modules
+##########
+
+.. _modules-distribution-v2:
+
+Distributing V2 modules
+-----------------------
+
+V2 modules are distributed as Python packages. To build a package for a module, run ``inmanta module build`` in
+the source directory of the module. The resulting Python wheel can then be found in the dist directory of the module.
+You can then publish this to the Python package repository of your choice, for example the public PyPi repository.
+The inmanta build tool will package a module named ``my_module`` under the name ``inmanta-module-my-module``.
+
+The orchestrator server generally (see
+:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
+repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
+for supplying the agents with the appropriate ``inmanta_plugins`` packages.
+
+V1 modules
+##########
+
+Inmanta V1 modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file.
+The commit should be tagged with the version in the git repository as well. To
 ease the use inmanta provides a command (``inmanta modules commit``) to modify module versions, commit to git and place the
 correct tag.
 
 Development Versions
-####################
+--------------------
 To make changes to a module, first create a new git branch:
 
 .. code-block:: bash
@@ -34,7 +55,7 @@ Use one of ``--major``, ``--minor`` or ``--patch`` to update version numbers: <m
 For the dev releases, no tags are created.
 
 Release Versions
-################
+----------------
 
 To make an actual release (without `.dev` at the end):
 
@@ -57,23 +78,46 @@ Or for the current project
 
 	inmanta project freeze --recursive --operator ==
 
-Distributing Inmanta modules
-############################
+Distributing V1 modules
+-----------------------
 
-Inmanta modules can be distributed in two different ways: using a Git repository (V1 modules) or using a Python package (V2
-modules).
+V1 modules are generally simply distributed using a Git repository. They can however also be built as a V2 Python package
+and distributed the same as other V2 modules.
 
 Git repository distribution format
-----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Distributing a V1 module using a Git repository happens by storing the source code of that module on a Git repository
 that is accessible by the Inmanta orchestrator. The orchestrator will clone the source code of the module and install it in the
-Inmanta project.
+Inmanta project. Tagging release versions as outlined above allows specifying constraints on the module version.
 
-Python package distribution format
-----------------------------------
+V2 package distribution format
+------------------------------
 
-Modules defined in the V2 module format can be distributed as a Python package. Run the ``inmanta module build`` command in
-the source directory of a module to build a Python Wheel from that module. The resulting package is stored in the dist directory
-of the module. The Python packages should be stored on a Python package repository, reachable by the orchestrator.
-Uploading packages to the package repository should be done with the appropriate tool for the specific repository at hand.
+A V2 package can be built for a V1 module with ``inmanta module build``. This package can be distributed as described in
+:ref:`modules-distribution-v2`.
+Modules installed from a package will always act as V2 modules and will be considered such by the compiler.
+
+
+.. _modules-distribution-advanced-concepts:
+
+Advanced concepts
+#################
+
+Freezing a project
+------------------
+Prior to releasing a new stable version of an inmanta project, you might wish to freeze its module
+dependencies. This will ensure that the orchestrator server will always work with the exact
+versions specified. You can achieve this with
+``inmanta project freeze --recursive --operator "=="``. This command will freeze all module
+dependencies to their exact version as they currently exist in the Python environment. The recursive
+option makes sure all module dependencies are frozen, not just the direct dependencies. In other
+words, if the project depends on module ``a`` which in turn depends on module ``b``, both modules
+will be pinned to their current version in ``setup.cfg``.
+
+Manual export
+-------------
+The ``inmanta export`` command exports a project and all its modules' ``inmanta_plugins`` packages
+to the orchestrator server. When this method is used, the orchestrator does not install any modules
+from the Python package repository but instead contains all Python code as present in the local
+Python environment.
