@@ -299,7 +299,7 @@ compatible with the dependencies specified by the updated modules.
 
     def install(self) -> None:
         """
-        install all modules the project requires.
+        Install all modules the project requires.
         """
         project: Project = self.get_project(load=False)
         project.install_modules()
