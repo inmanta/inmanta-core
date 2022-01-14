@@ -1539,11 +1539,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
-            if update_dependencies:
-                # upgrade both direct and transitive module dependencies: eager upgrade strategy
-                self.virtualenv.install_from_list(pyreq, upgrade=True, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
-            else:
-                self.virtualenv.install_from_list(pyreq, upgrade=False)
+            # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
             # installing new dependencies into the virtual environment might introduce new conflicts
             self.verify_python_environment()
 
