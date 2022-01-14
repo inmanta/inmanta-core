@@ -19,7 +19,7 @@ evaluation.
 
 .. note::
 
-    A module's Python code lives in the `inmanta_plugins.<module_name>` namespace.
+    A module's Python code lives in the ``inmanta_plugins.<module_name>`` namespace.
 
 A simple plugin that accepts no arguments, prints out "hello world" and returns no value requires
 the following code:

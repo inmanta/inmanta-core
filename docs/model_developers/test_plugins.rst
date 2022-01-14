@@ -50,7 +50,7 @@ A test case, to test this plugin looks like this:
 
 * **Line 3:** Creates a pytest test case, which requires the ``project`` fixture.
 * **Line 6:** Uses the ``inmanta_plugins`` fixture to access the ``hostname`` function from the ``example_module``
-    module's Python namespace. As such, this line tests whether ``host`` is returned when the plugin function
+  module's Python namespace. As such, this line tests whether ``host`` is returned when the plugin function
   ``hostname`` is called with the parameter ``fqdn``.
 
 .. note::
