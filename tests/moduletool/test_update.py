@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 import py.path
 import pytest
