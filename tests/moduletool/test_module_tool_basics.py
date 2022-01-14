@@ -337,7 +337,7 @@ requires:
 
 
 def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
-    """ LOOK TO REMOVE MODULES_DIR
+    """LOOK TO REMOVE MODULES_DIR
     Tests that repos that are strings and repos that are dict with
     type 'git' are accepted and that repos with another type
     will raise a warning. (issue #3565)

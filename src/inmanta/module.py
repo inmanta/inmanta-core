@@ -403,15 +403,18 @@ class ModuleMetadata(Metadata):
             raise ValueError(f"Version {v} is not PEP440 compliant") from e
         return v
 
+
 @stable_api
 class ModuleRepoType(enum.Enum):
     git = "git"
     package = "package"
 
+
 @stable_api
 class ModuleRepoInfoV2(BaseModel):
     url: str
     type: ModuleRepoType = ModuleRepoType.git
+
 
 class ProjectMetadata(Metadata):
     """
@@ -467,11 +470,16 @@ class ProjectMetadata(Metadata):
                 try:
                     repo = ModuleRepoInfoV2(**elem)
                     if repo.type == ModuleRepoType.package:
-                        LOGGER.warning("Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.", elem["type"])
+                        LOGGER.warning(
+                            "Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.",
+                            elem["type"],
+                        )
                     else:
                         result.append(elem["url"])
                 except TypeError:
-                    raise ValueError(f"Value should be either a string or a dict containing an 'url' and 'type: git', got {elem}")
+                    raise ValueError(
+                        f"Value should be either a string or a dict containing an 'url' and 'type: git', got {elem}"
+                    )
         return result
 
 
