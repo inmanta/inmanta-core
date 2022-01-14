@@ -411,7 +411,8 @@ class ModuleRepoType(enum.Enum):
 
 
 @stable_api
-class ModuleRepoInfoV2(BaseModel):
+class ModuleRepoInfo(BaseModel):
+
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
@@ -449,7 +450,7 @@ class ProjectMetadata(Metadata):
     license: Optional[str] = None
     copyright: Optional[str] = None
     modulepath: List[str] = []
-    repo: List[str] = []
+    repo: List[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
 
@@ -460,27 +461,27 @@ class ProjectMetadata(Metadata):
 
     @validator("repo", pre=True)
     @classmethod
-    def validate_repo_field(cls, v: object) -> object:
+    def validate_repo_field(cls, v: object) -> List[ModuleRepoInfo]:
         v_as_list = cls.to_list(v)
         result = []
         for elem in v_as_list:
             if isinstance(elem, str):
+                # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
+                result.append({"url": elem, "type": ModuleRepoType.git})
+            elif isinstance(elem, dict):
                 result.append(elem)
             else:
-                try:
-                    repo = ModuleRepoInfoV2(**elem)
-                    if repo.type == ModuleRepoType.package:
-                        LOGGER.warning(
-                            "Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.",
-                            elem["type"],
-                        )
-                    else:
-                        result.append(elem["url"])
-                except TypeError:
-                    raise ValueError(
-                        f"Value should be either a string or a dict containing an 'url' and 'type: git', got {elem}"
-                    )
+                raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
+
+    @validator("repo")
+    def warn_repo_type_unsupported(v: List[ModuleRepoInfo]) -> object:
+        if any(repo.type == ModuleRepoType.package for repo in v):
+            LOGGER.warning(
+                "Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.",
+                ModuleRepoType.package.value,
+            )
+        return v
 
 
 T = TypeVar("T", bound=Metadata)
@@ -653,7 +654,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-        self.repolist = [x for x in self._metadata.repo]
+        self.repolist = [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
         if self._metadata.downloadpath is not None:
