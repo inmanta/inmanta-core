@@ -461,19 +461,17 @@ class ProjectMetadata(Metadata):
         v_as_list = cls.to_list(v)
         result = []
         for elem in v_as_list:
-            if isinstance(elem, ModuleRepoInfoV2):
-                if "type" in elem and "url" in elem and elem["type"] == ModuleRepoType.git:
-                    result.append(elem["url"])
-                elif "type" in elem and "url" in elem and elem["type"] == ModuleRepoType.package:
-                    LOGGER.warning("Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.", elem["type"])
-                elif "type" in elem and "url" in elem:
-                    LOGGER.warning("Repos of type %s are not supported", elem["type"])
-                else:
-                    raise ValueError(f"Repo should be a string(url) or a dict containing an 'url' and 'type: git', got {elem}")
-            elif isinstance(elem, str):
+            if isinstance(elem, str):
                 result.append(elem)
             else:
-                raise ValueError(f"Value should be either a string or a dict, got {elem}")
+                try:
+                    repo = ModuleRepoInfoV2(**elem)
+                    if repo.type == ModuleRepoType.package:
+                        LOGGER.warning("Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.", elem["type"])
+                    else:
+                        result.append(elem["url"])
+                except TypeError:
+                    raise ValueError(f"Value should be either a string or a dict containing an 'url' and 'type: git', got {elem}")
         return result
 
 

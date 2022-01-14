@@ -375,5 +375,5 @@ def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
         yaml.dump(pyml, fh)
     with caplog.at_level(logging.WARNING):
         compiler.do_compile()
-    warning = "Repos of type package are not supported"
+    warning = "Repos of type package where introduced in Modules v2, which are not supported by current Inmanta version."
     log_contains(caplog, "inmanta.module", logging.WARNING, warning)
