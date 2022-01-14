@@ -4,4 +4,4 @@ description: Raise a warning when trying to use repo of type package.
 destination-branches: [iso4]
 sections:
     bugfix: "{{description}}"
-    upgrade-note: "Creating new modules using the cookiecutter template should now requires the --checkout v1 option."
+    upgrade-note: "Creating new modules using the cookiecutter template now requires the --checkout v1 option."
