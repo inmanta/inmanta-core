@@ -105,7 +105,7 @@ Logging
 """""""
 
 The agent has a built-in logging facility, similar to the standard python logger. All logs written
-to this logger will be sent to the server and are available via the dashboard and the API.
+to this logger will be sent to the server and are available via the web-console and the API.
 Additionally, the logs go into the agent's logfile and into the resource-action log on the server.
 
 To use this logger, use one of the methods: :py:meth:`ctx.debug<inmanta.agent.handler.HandlerContext.debug>`,

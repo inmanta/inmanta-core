@@ -190,7 +190,7 @@ Like projects, there are also two scenarios:
 Working on a New Module
 =======================
 
-Same as :ref:`Working on a New Project` part, modules can also be created like:
+Same as :ref:`Working on a New Project <dgs-new-project>` part, modules can also be created like:
 
 .. code-block:: bash
 
