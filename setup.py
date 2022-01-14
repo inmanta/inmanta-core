@@ -1,3 +1,4 @@
+__requires__ = ['pip >= 21.3']
 from setuptools import setup, find_packages
 from os import path
 
