@@ -173,7 +173,7 @@ Same as :ref:`Working on a New Project` part, modules can also be created like:
 
     pip install cookiecutter
 
-    cookiecutter https://github.com/inmanta/inmanta-module-template.git
+    cookiecutter --checkout v1 https://github.com/inmanta/inmanta-module-template.git
 
 
 There are also guides :ref:`here <moddev-module>` and `here <https://github.com/inmanta/inmanta-module-template>`_ that help you get up and running.
