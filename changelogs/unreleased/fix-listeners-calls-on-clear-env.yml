@@ -1,0 +1,7 @@
+---
+description: Fix bug where the listeners of the environment clear action are not notified when files of that environment cannot be deleted from the filesystem.
+issue-nr: 3637
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+  bugfix: "{{description}}"
