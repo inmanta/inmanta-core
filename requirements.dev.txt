@@ -1,6 +1,6 @@
 inmanta-dev-dependencies[pytest,async,core,sphinx]==1.75.0
 bumpversion==0.6.0
-openapi_spec_validator==0.3.1
+openapi_spec_validator==0.3.2
 pip2pi==0.8.2
 types-PyYAML==6.0.3
 types-python-dateutil==2.8.7
