@@ -1,0 +1,6 @@
+---
+description: Ensure that the `server_config` fixture takes into account the PostgreSQL host set via the `--postgresql-host` pytest option.
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+  bugfix: "{{description}}"
