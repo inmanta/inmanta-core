@@ -359,6 +359,7 @@ build-backend = "setuptools.build_meta"
         env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
 
 
+@pytest.mark.slowtest
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,
@@ -461,7 +462,7 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     def _assert_install(requirement: str, installed: bool) -> None:
         parsed_requirement = Requirement.parse(requirement)
         for r in [requirement, parsed_requirement]:
-            assert tmpvenv_active_inherit._are_installed(requirements=[r]) == installed
+            assert tmpvenv_active_inherit.are_installed(requirements=[r]) == installed
 
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
     tmpvenv_active_inherit.install_from_index(

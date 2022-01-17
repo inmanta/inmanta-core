@@ -1527,16 +1527,20 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    def install_modules(self) -> None:
+    def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
         Installs all modules, both v1 and v2.
+
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
+        :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
-        self.load_module_recursive(install=True)
+        self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
         self.verify()
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
-            self.virtualenv.install_from_list(pyreq)
+            # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
             # installing new dependencies into the virtual environment might introduce new conflicts
             self.verify_python_environment()
 

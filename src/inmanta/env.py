@@ -33,7 +33,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
@@ -88,6 +88,16 @@ class PipListFormat(enum.Enum):
     json = "json"
 
 
+class PipUpgradeStrategy(enum.Enum):
+    """
+    The upgrade strategy used by pip (`--upgrade-strategy` option). Determines upgrade behavior for dependencies of packages to
+    upgrade.
+    """
+
+    EAGER = "eager"
+    ONLY_IF_NEEDED = "only-if-needed"
+
+
 class PipCommandBuilder:
     """
     Class used to compose pip commands.
@@ -101,6 +111,7 @@ class PipCommandBuilder:
         paths: Optional[List[LocalPackagePath]] = None,
         index_urls: Optional[List[str]] = None,
         upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
@@ -113,6 +124,7 @@ class PipCommandBuilder:
         :param paths: Paths to python projects on disk that should be installed in the venv.
         :param index_urls: The Python package repositories to use. When set to None, the system default will be used.
         :param upgrade: Upgrade the specified packages to the latest version.
+        :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
@@ -139,7 +151,7 @@ class PipCommandBuilder:
             "-m",
             "pip",
             "install",
-            *(["--upgrade"] if upgrade else []),
+            *(["--upgrade", "--upgrade-strategy", upgrade_strategy.value] if upgrade else []),
             *(["--pre"] if allow_pre_releases else []),
             *chain.from_iterable(["-c", f] for f in constraints_files),
             *chain.from_iterable(["-r", f] for f in requirements_files),
@@ -327,7 +339,7 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         yield fd.name
 
 
-req_list = TypeVar("req_list", List[str], List[Requirement])
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class ActiveEnv(PythonEnvironment):
@@ -352,22 +364,22 @@ class ActiveEnv(PythonEnvironment):
         return
 
     @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> List[Requirement]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
         """
-        Convert requirements from Union[List[str], List[Requirement]] to List[Requirement]
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
         """
         if isinstance(requirements[0], str):
             return [Requirement.parse(r) for r in requirements]
         else:
             return requirements
 
-    def _are_installed(self, requirements: req_list) -> bool:
+    def are_installed(self, requirements: req_list) -> bool:
         """
         Return True iff the given requirements are installed in this venv.
         """
         if not requirements:
             return True
-        reqs_as_requirements: List[Requirement] = self._get_as_requirements_type(requirements)
+        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
         installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in reqs_as_requirements)
 
@@ -379,7 +391,7 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
-        if not upgrade and self._are_installed(requirements):
+        if not upgrade and self.are_installed(requirements):
             return
         try:
             super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
@@ -410,7 +422,7 @@ class ActiveEnv(PythonEnvironment):
         return None, req_line
 
     @classmethod
-    def _gen_content_requirements_file(cls, requirements_list: List[str]) -> str:
+    def _gen_content_requirements_file(cls, requirements_list: Sequence[str]) -> str:
         """Generate a new requirements file based on the requirements list.
         :param requirements_list:  A list of Python requirements as strings.
         :return: A string that can be written to a requirements file that pip understands.
@@ -472,23 +484,42 @@ class ActiveEnv(PythonEnvironment):
 
         return requirements_file
 
-    def install_from_list(self, requirements_list: List[str]) -> None:
+    def install_from_list(
+        self,
+        requirements_list: Sequence[str],
+        *,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+    ) -> None:
         """
         Install requirements from a list of requirement strings. This method uses the Python package repositories
         configured on the host.
 
-        This method differs from the `_install_from_index()` method in the sense that it calls
-        `_gen_content_requirements_file()`, which rewrites the requirements from pep440 format to a format that pip understands.
-        This method is maintained for V1 modules only.
+        :param requirements_list: List of requirement strings to install.
+        :param upgrade: Upgrade requirements to the latest compatible version.
+        :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         """
-        if self._are_installed(requirements_list):
+        if not upgrade and self.are_installed(requirements_list):
+            # don't fork subprocess if requirements are already met
             return
         try:
-            self._install_from_list(requirements_list)
+            self._install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
         finally:
             self.notify_change()
 
-    def _install_from_list(self, requirements_list: List[str]) -> None:
+    def _install_from_list(
+        self,
+        requirements_list: Sequence[str],
+        *,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+    ) -> None:
+        """
+        This method differs from the `install_from_index()` method in the sense that it calls
+        `_gen_content_requirements_file()`, which rewrites the requirements from pep440 format to a format that pip understands.
+        This method is maintained for V1 modules only: V2 modules do not require this conversion. It is currently used for both
+        v1 and v2 for consistency but it can be substituted by `install_from_index` once V1 support is removed.
+        """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
             with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
@@ -496,6 +527,8 @@ class ActiveEnv(PythonEnvironment):
                     python_path=self.python_path,
                     requirements_files=[requirements_file],
                     constraints_files=[constraint_file],
+                    upgrade=upgrade,
+                    upgrade_strategy=upgrade_strategy,
                 )
                 try:
                     self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
@@ -557,7 +590,6 @@ class ActiveEnv(PythonEnvironment):
         the change. Namespace packages installed in editable mode in particular require this method to allow them to be found by
         get_module_file().
         """
-        PythonWorkingSet.rebuild_working_set()
         # Make sure that the .pth files in the site-packages directory are processed.
         # This is required to make editable installs work.
         site.addsitedir(self.site_packages_dir)
@@ -594,6 +626,7 @@ class ActiveEnv(PythonEnvironment):
                            are executed in a subprocess.
                     """
                     importlib.reload(mod)
+        PythonWorkingSet.rebuild_working_set()
 
 
 process_env: ActiveEnv = ActiveEnv(python_path=sys.executable)
@@ -786,10 +819,16 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
-    def install_from_list(self, requirements_list: List[str]) -> None:
+    def install_from_list(
+        self,
+        requirements_list: Sequence[str],
+        *,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+    ) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_list(requirements_list)
+        super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 
 
 class VenvCreationFailedError(Exception):

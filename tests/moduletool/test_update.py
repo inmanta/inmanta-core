@@ -25,11 +25,11 @@ from pkg_resources import Requirement
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import ModuleTool, ProjectTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, clone_repo
 from packaging.version import Version
-from utils import PipIndex, module_from_template
+from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any(
@@ -181,6 +181,58 @@ def test_module_update_with_v2_module(
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0" if install_mode == InstallMode.release else "2.2.1.dev0")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
+
+
+@pytest.mark.slowtest
+def test_module_update_dependencies(
+    tmpdir: py.path.local,
+    monkeypatch,
+    snippetcompiler_clean,
+    modules_dir: str,
+) -> None:
+    """
+    Verify that `inmanta project update` correctly handles module's Python dependencies:
+        - update should include install
+        - update should update Python dependencies within module's constraints
+        - update should update transitive Python dependencies
+    """
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="import my_mod",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[str(tmpdir.join("modules"))],
+    )
+
+    # create index with multiple versions for packages a, b and c
+    index: PipIndex = PipIndex(str(tmpdir.join("index")))
+    create_python_package("a", Version("1.0.0"), str(tmpdir.join("a-1.0.0")), publish_index=index)
+    for v in ("1.0.0", "1.0.1", "2.0.0"):
+        create_python_package(
+            "b", Version(v), str(tmpdir.join(f"b-{v}")), requirements=[Requirement.parse("c")], publish_index=index
+        )
+    for v in ("1.0.0", "2.0.0"):
+        create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
+
+    # install b-1.0.0 and c-1.0.0
+    process_env.install_from_index([Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")], index_urls=[index.url])
+
+    # create my_mod
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=str(tmpdir.join("modules", "my_mod")),
+        new_name="my_mod",
+        new_requirements=[Requirement.parse(req) for req in ("a", "b~=1.0.0")],
+    )
+
+    # run `inmanta project update` without running install first
+    monkeypatch.setenv("PIP_INDEX_URL", index.url)
+    ProjectTool().update()
+
+    # Verify that:
+    #   - direct dependency a has been installed
+    #   - direct dependency b has been updated but not past the allowed constraint
+    #   - transitive dependency c has been updated
+    assert process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
 
 
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
