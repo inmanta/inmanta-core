@@ -359,6 +359,7 @@ build-backend = "setuptools.build_meta"
         env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
 
 
+@pytest.mark.slowtest
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,

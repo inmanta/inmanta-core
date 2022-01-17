@@ -331,6 +331,7 @@ If you want to use the module as a v2 module:
     )
 
 
+@pytest.mark.slowtest
 def test_module_v2_incorrect_install_warning(
     tmpdir: py.path.local,
     modules_v2_dir: str,

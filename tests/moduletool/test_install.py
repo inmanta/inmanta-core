@@ -298,6 +298,7 @@ def test_module_install_reinstall(
     assert all(new_files_exist())
 
 
+@pytest.mark.slowtest
 def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
     """
     Verify that module installation includes data files regardless of depth in the directory structure.
@@ -662,6 +663,7 @@ def test_project_install_incompatible_versions(
     assert expected.issubset(log_messages)
 
 
+@pytest.mark.slowtest
 def test_project_install_incompatible_dependencies(
     caplog,
     snippetcompiler_clean,
@@ -787,6 +789,7 @@ def test_project_install_with_install_mode(
     assert installed_packages[package_name] == expected_version
 
 
+@pytest.mark.slowtest
 def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
 ) -> None:
