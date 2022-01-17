@@ -1,0 +1,5 @@
+description: Configured tox to generate junit xml for pep8 failures
+change-type: patch
+destination-branches:
+  - master
+  - iso4
