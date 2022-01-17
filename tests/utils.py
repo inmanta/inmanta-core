@@ -215,7 +215,7 @@ class LogSequence(object):
         self.assert_not("", logging.ERROR, "")
 
 
-def configure(unused_tcp_port, database_name, database_port):
+def configure(unused_tcp_port, database_name, database_port, database_host):
     import inmanta.agent.config  # noqa: F401
     import inmanta.server.config  # noqa: F401
     from inmanta.config import Config
@@ -228,7 +228,7 @@ def configure(unused_tcp_port, database_name, database_port):
     Config.set("client_rest_transport", "port", free_port)
     Config.set("cmdline_rest_transport", "port", free_port)
     Config.set("database", "name", database_name)
-    Config.set("database", "host", "localhost")
+    Config.set("database", "host", database_host)
     Config.set("database", "port", str(database_port))
 
 

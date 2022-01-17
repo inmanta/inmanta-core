@@ -236,7 +236,7 @@ async def test_custom_feature_manager(
         state_dir = str(tmp_path)
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
-        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "host", postgres_db.host)
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
         config.Config.set("database", "password", postgres_db.password)

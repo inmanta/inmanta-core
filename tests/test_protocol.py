@@ -439,7 +439,7 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
     """
     Round trip test on aliased object
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         source: str
@@ -502,7 +502,7 @@ async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, 
     """
     Test return none but pushing warnings
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
@@ -559,7 +559,7 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name, async_f
     """
     Test the use and validation of methods that use common.ReturnValue
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         id: uuid.UUID
@@ -598,7 +598,7 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name, async_f
     """
     Test the use and validation of methods that use common.ReturnValue
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         id: uuid.UUID
@@ -659,7 +659,7 @@ async def test_data_envelope(unused_tcp_port, postgres_db, database_name, async_
     """
     Test the use and validation of methods that use common.ReturnValue
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         id: uuid.UUID
@@ -766,7 +766,7 @@ async def test_invalid_paths():
 @pytest.mark.asyncio
 async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test overlapping path definition"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -811,7 +811,7 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
 @pytest.mark.asyncio
 async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test list of basemodel arguments and primitive types"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -845,7 +845,7 @@ async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_na
 @pytest.mark.asyncio
 async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test dict of basemodel arguments and primitive types"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -879,7 +879,7 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
 @pytest.mark.asyncio
 async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test dict which may have None as a value"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     types = Union[pydantic.StrictInt, pydantic.StrictStr]
 
@@ -935,7 +935,7 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
 @pytest.mark.asyncio
 async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test list of basemodel arguments"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -1051,7 +1051,7 @@ def test_optional():
 @pytest.mark.asyncio
 async def test_union_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test use of union types"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     SimpleTypes = Union[float, int, StrictBool, str]  # NOQA
     AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
@@ -1110,7 +1110,7 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
 @pytest.mark.asyncio
 async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test validation of basemodel arguments and return, and how they are reported"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -1177,7 +1177,7 @@ async def test_ACOA_header(server):
 @pytest.mark.asyncio
 async def test_multi_version_method(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test multi version methods"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -1256,7 +1256,7 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name,
 @pytest.mark.asyncio
 async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test multi version methods"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -1300,7 +1300,7 @@ async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name
 @pytest.mark.asyncio
 async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test methods with simple return types"""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
@@ -1328,7 +1328,7 @@ async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, a
 @pytest.mark.asyncio
 async def test_html_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with a text/html content-type work."""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     html_content = "<html><body>test</body></html>"
 
@@ -1358,7 +1358,7 @@ async def test_html_content_type(unused_tcp_port, postgres_db, database_name, as
 @pytest.mark.asyncio
 async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with a "text/html; charset=UTF-8" content-type work."""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     html_content = "<html><body>test</body></html>"
 
@@ -1389,7 +1389,7 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
 @pytest.mark.asyncio
 async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with an application/octet-stream content-type work."""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     byte_stream = b"test123"
 
@@ -1419,7 +1419,7 @@ async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_
 @pytest.mark.asyncio
 async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with an application/zip content-type work."""
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     zip_content = b"test123"
 
@@ -1483,7 +1483,7 @@ async def test_auth_enabled_options_method(
     options_server,
     options_request,
 ):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
     config.Config.set("server", "auth", str(auth_enabled))
     rs = Server()
     rs.add_slice(options_server)
@@ -1523,7 +1523,7 @@ async def test_malformed_json(server):
 
 @pytest.mark.asyncio
 async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class Project(BaseModel):
         name: str
@@ -1563,7 +1563,7 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
 
 @pytest.mark.asyncio
 async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -1748,7 +1748,7 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
 async def test_dict_list_get_roundtrip(
     unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, param_value, expected_url
 ):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"], strict_typing=False)
@@ -1779,7 +1779,7 @@ async def test_dict_list_get_roundtrip(
 
 @pytest.mark.asyncio
 async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -1814,7 +1814,7 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
 
 @pytest.mark.asyncio
 async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -1866,7 +1866,7 @@ async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, datab
 async def test_dict_list_get_invalid(
     unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, expected_error_message
 ):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -1884,7 +1884,7 @@ async def test_dict_list_get_invalid(
 
 @pytest.mark.asyncio
 async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -1930,7 +1930,7 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
 
 @pytest.mark.asyncio
 async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -1964,7 +1964,7 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
 
 @pytest.mark.asyncio
 async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
@@ -2053,7 +2053,7 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
     """
     Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     timezone: datetime.timezone = datetime.timezone(datetime.timedelta(hours=2))
     now: datetime.datetime = datetime.datetime.now().astimezone(timezone)
@@ -2125,7 +2125,7 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
     """
     Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
     """
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class APydanticType(BaseModel):
         attr: int
@@ -2155,7 +2155,7 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
 
 @pytest.mark.asyncio
 async def test_return_value_with_meta(unused_tcp_port, postgres_db, database_name, async_finalizer):
-    configure(unused_tcp_port, database_name, postgres_db.port)
+    configure(unused_tcp_port, database_name, postgres_db.port, postgres_db.host)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
