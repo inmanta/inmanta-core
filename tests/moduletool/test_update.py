@@ -230,7 +230,7 @@ def test_module_update_dependencies(
 
     # Verify that:
     #   - direct dependency a has been installed
-    #   - direct depdendency b has been updated but not past the allowed constraint
+    #   - direct dependency b has been updated but not past the allowed constraint
     #   - transitive dependency c has been updated
     assert process_env.are_installed(("a==1.0.0", "b==1.0.1", "c==2.0.0"))
 
