@@ -229,6 +229,20 @@ with the dependencies specified by the different Inmanta modules.
         """.strip(),
         )
 
+        subparser.add_parser(
+            "update",
+            help=(
+                "Update all modules to the latest version compatible with the module version constraints and install missing "
+                "modules"
+            ),
+            description="""
+Update all modules to the latest version compatible with the module version constraints and install missing modules.
+
+This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
+compatible with the dependencies specified by the updated modules.
+            """.strip(),
+        )
+
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
@@ -290,6 +304,91 @@ with the dependencies specified by the different Inmanta modules.
         project: Project = self.get_project(load=False)
         project.install_modules()
 
+    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+        """
+        Update all modules to the latest version compatible with the given module version constraints.
+        """
+
+        if project is None:
+            # rename var to make mypy happy
+            my_project = self.get_project(load=False)
+        else:
+            my_project = project
+
+        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
+            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
+
+            v2_python_specs: List[Requirement] = [
+                ModuleV2Source.get_python_package_requirement(module_spec)
+                for module, module_specs in specs.items()
+                for module_spec in module_specs
+                if module in v2_modules
+            ]
+            if v2_python_specs:
+                env.process_env.install_from_index(
+                    v2_python_specs,
+                    my_project.module_source.urls,
+                    upgrade=True,
+                    allow_pre_releases=my_project.install_mode != InstallMode.release,
+                )
+
+            for v1_module in set(modules).difference(v2_modules):
+                spec = specs.get(v1_module, [])
+                try:
+                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                except Exception:
+                    LOGGER.exception("Failed to update module %s", v1_module)
+
+            # Load the newly installed modules into the modules cache
+            my_project.install_modules(bypass_module_cache=True, update_dependencies=True)
+
+        attempt = 0
+        done = False
+        last_failure = None
+
+        while not done and attempt < MAX_UPDATE_ATTEMPT:
+            LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
+            try:
+                loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
+
+                # get AST
+                my_project.load_module_recursive(install=True)
+                # get current full set of requirements
+                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
+                if module is None:
+                    modules = list(specs.keys())
+                else:
+                    modules = [module]
+                do_update(specs, modules)
+
+                loaded_mods_post_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
+                if loaded_mods_pre_update == loaded_mods_post_update:
+                    # No changes => state has converged
+                    done = True
+                else:
+                    # New modules were downloaded or existing modules were updated to a new version. Perform another pass to
+                    # make sure that all dependencies, defined in these new modules, are taken into account.
+                    last_failure = CompilerException("Module update did not converge")
+            except CompilerException as e:
+                last_failure = e
+                # model is corrupt
+                LOGGER.info(
+                    "The model is not currently in an executable state, performing intermediate updates", stack_info=True
+                )
+                # get all specs from all already loaded modules
+                specs = my_project.collect_requirements()
+
+                if module is None:
+                    # get all loaded/partly loaded modules
+                    modules = list(my_project.modules.keys())
+                else:
+                    modules = [module]
+                do_update(specs, modules)
+            attempt += 1
+
+        if last_failure is not None and not done:
+            raise last_failure
+
 
 class ModuleTool(ModuleLikeTool):
     """
@@ -338,14 +437,16 @@ class ModuleTool(ModuleLikeTool):
 
         subparser.add_parser(
             "update",
-            help="Update all modules to the latest version compatible with the module version constraints and install missing "
-            "modules",
+            help=(
+                "(deprecated: use `inmanta project update` instead) Update all modules to the latest version compatible with"
+                " the module version constraints and install missing modules"
+            ),
             description="""
 Update all modules to the latest version compatible with the module version constraints and install missing modules.
 
-This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
-with the dependencies specified by the updated modules.
-        """.strip(),
+This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
+compatible with the dependencies specified by the updated modules.
+            """.strip(),
         )
 
         install: ArgumentParser = subparser.add_parser(
@@ -669,91 +770,6 @@ version: 0.0.1dev0"""
                 t.add_row(row)
             print(t.draw())
 
-    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
-        """
-        Update all modules to the latest version compatible with the given module version constraints.
-        """
-
-        if project is None:
-            # rename var to make mypy happy
-            my_project = self.get_project(False)
-        else:
-            my_project = project
-
-        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
-            v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
-
-            v2_python_specs: List[Requirement] = [
-                ModuleV2Source.get_python_package_requirement(module_spec)
-                for module, module_specs in specs.items()
-                for module_spec in module_specs
-                if module in v2_modules
-            ]
-            if v2_python_specs:
-                env.process_env.install_from_index(
-                    v2_python_specs,
-                    my_project.module_source.urls,
-                    upgrade=True,
-                    allow_pre_releases=my_project.install_mode != InstallMode.release,
-                )
-
-            for v1_module in set(modules).difference(v2_modules):
-                spec = specs.get(v1_module, [])
-                try:
-                    ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
-                except Exception:
-                    LOGGER.exception("Failed to update module %s", v1_module)
-
-            # Load the newly installed modules into the modules cache
-            my_project.load_module_recursive(bypass_module_cache=True)
-
-        attempt = 0
-        done = False
-        last_failure = None
-
-        while not done and attempt < MAX_UPDATE_ATTEMPT:
-            LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
-            try:
-                loaded_mods_pre_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-
-                # get AST
-                my_project.load_module_recursive(install=True)
-                # get current full set of requirements
-                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
-                if module is None:
-                    modules = list(specs.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-
-                loaded_mods_post_update = {module_name: mod.version for module_name, mod in my_project.modules.items()}
-                if loaded_mods_pre_update == loaded_mods_post_update:
-                    # No changes => state has converged
-                    done = True
-                else:
-                    # New modules were downloaded or existing modules were updated to a new version. Perform another pass to
-                    # make sure that all dependencies, defined in these new modules, are taken into account.
-                    last_failure = CompilerException("Module update did not converge")
-            except CompilerException as e:
-                last_failure = e
-                # model is corrupt
-                LOGGER.info(
-                    "The model is not currently in an executable state, performing intermediate updates", stack_info=True
-                )
-                # get all specs from all already loaded modules
-                specs = my_project.collect_requirements()
-
-                if module is None:
-                    # get all loaded/partly loaded modules
-                    modules = list(my_project.modules.keys())
-                else:
-                    modules = [module]
-                do_update(specs, modules)
-            attempt += 1
-
-        if last_failure is not None and not done:
-            raise last_failure
-
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
@@ -776,9 +792,17 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
+    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+        """
+        Update all modules to the latest version compatible with the given module version constraints.
+        """
+
+        LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
+        ProjectTool().update(module, project)
+
     def status(self, module: Optional[str] = None) -> None:
         """
-        Run a git status on all modules and report
+        a git status on all modules and report
         """
         for mod in self.get_modules(module):
             if not isinstance(mod, ModuleV1):
