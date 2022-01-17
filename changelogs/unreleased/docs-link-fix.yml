@@ -1,0 +1,4 @@
+description: Fixed inmanta-ui link in docs
+change-type: patch
+destination-branches:
+  - master
