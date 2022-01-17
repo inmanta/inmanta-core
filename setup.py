@@ -1,4 +1,3 @@
-__requires__ = ['pip >= 21.3']
 from setuptools import setup, find_packages
 from os import path
 
@@ -18,6 +17,8 @@ requires = [
     "more-itertools",
     "netifaces",
     "packaging",
+    # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
+    "pip>=21.3",
     "ply",
     # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
     "pydantic!=1.9.0a1",
