@@ -303,3 +303,16 @@ Similarly, when you run a module's unit tests, the installed v2 modules will aut
 by the compiler. As for v1 modules, by default, the ``pytest-inmanta`` extension makes sure the
 compile itself runs against an isolated project, downloading any v1 module dependencies. If you want to compile against local
 versions of v1 modules, have a look at the ``--use-module-in-place`` option in the ``pytest-inmanta`` documentation.
+
+
+Module installation on the server
+#################################
+
+The orchestrator server generally (see
+:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
+repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
+for supplying the agents with the appropriate ``inmanta_plugins`` packages.
+
+The only exception to this rule is when using the ``inmanta export`` command. It command exports a project and all its modules'
+``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
+from the Python package repository but instead contains all Python code as present in the local Python environment.

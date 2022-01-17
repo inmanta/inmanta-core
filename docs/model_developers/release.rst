@@ -14,11 +14,6 @@ the source directory of the module. The resulting Python wheel can then be found
 You can then publish this to the Python package repository of your choice, for example the public PyPi repository.
 The inmanta build tool will package a module named ``my_module`` under the name ``inmanta-module-my-module``.
 
-The orchestrator server generally (see
-:ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
-repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
-for supplying the agents with the appropriate ``inmanta_plugins`` packages.
-
 V1 modules
 ##########
 
@@ -99,13 +94,8 @@ A V2 package can be built for a V1 module with ``inmanta module build``. This pa
 Modules installed from a package will always act as V2 modules and will be considered such by the compiler.
 
 
-.. _modules-distribution-advanced-concepts:
-
-Advanced concepts
-#################
-
 Freezing a project
-------------------
+##################
 Prior to releasing a new stable version of an inmanta project, you might wish to freeze its module
 dependencies. This will ensure that the orchestrator server will always work with the exact
 versions specified. You can achieve this with
@@ -114,10 +104,3 @@ dependencies to their exact version as they currently exist in the Python enviro
 option makes sure all module dependencies are frozen, not just the direct dependencies. In other
 words, if the project depends on module ``a`` which in turn depends on module ``b``, both modules
 will be pinned to their current version in ``setup.cfg``.
-
-Manual export
--------------
-The ``inmanta export`` command exports a project and all its modules' ``inmanta_plugins`` packages
-to the orchestrator server. When this method is used, the orchestrator does not install any modules
-from the Python package repository but instead contains all Python code as present in the local
-Python environment.
