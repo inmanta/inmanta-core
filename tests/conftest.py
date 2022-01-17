@@ -627,7 +627,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     port = str(unused_tcp_port_factory())
 
     config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "host", postgres_db.host)
     config.Config.set("database", "port", str(postgres_db.port))
     config.Config.set("database", "username", postgres_db.user)
     config.Config.set("database", "password", postgres_db.password)
