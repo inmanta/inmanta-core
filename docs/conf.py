@@ -287,7 +287,15 @@ texinfo_documents = [
 
 # Ingnore link check of openapi.html because it's used in a toctree.
 # A trick was required to include a non-sphinx document in a toctee.
-linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+', r'openapi.html', r'https://twitter.com/inmanta_com', '../_specs/openapi.json']
+linkcheck_ignore = [
+    r'http(s)?://localhost:\d+/',
+    r'http://127.0.0.1:\d+',
+    r'openapi.html',
+    r'https://twitter.com/inmanta_com',
+    '../_specs/openapi.json',
+    'extensions/inmanta-ui/index.html',
+    '../extensions/inmanta-ui/index.html',
+]
 
 # Do not print the warning that tabs only work in html
 # https://github.com/djungelorm/sphinx-tabs/issues/39
