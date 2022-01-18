@@ -9,9 +9,9 @@ Model developer documentation
     model_developers/project_creation.rst
     model_developers/module_creation.rst
     model_developers/modules.rst
+    model_developers/release.rst
     model_developers/plugins.rst
     model_developers/handlers.rst
-    model_developers/release.rst
     model_developers/test_plugins
     model_developers/*
 
