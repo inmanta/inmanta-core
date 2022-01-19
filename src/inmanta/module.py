@@ -1802,7 +1802,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         loaded_modules: Set[str] = set(self.modules.keys())
         imported_modules: Set[str] = set(i.name.split("::")[0] for i in all_imports)
         for module_to_unload in loaded_modules - imported_modules:
-            del self.modules[module_to_unload]
+            self.invalidate_state(module_to_unload)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
