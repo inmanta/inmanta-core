@@ -485,3 +485,44 @@ import elaboratev2module
     assert "inmanta_plugins.elaboratev2module" not in sys.modules
 
     assert "elaboratev2module::print_message" not in plugins.PluginMeta.get_functions()
+
+
+def test_project_has_v2_requirements_on_non_imported_module(
+    snippetcompiler,
+    local_module_package_index: str,
+) -> None:
+    """
+    A Project has a module V2 requirement on a module that it doesn't import.
+    Ensure that the non-imported module is not loaded.
+    """
+    dependency = "elaboratev2module"
+    project: Project = snippetcompiler.setup_for_snippet(
+        snippet="",  # Don't import elaboratev2module
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(dependency)),
+        ],
+        autostd=False,
+    )
+    project.load_module_recursive()
+    assert dependency not in project.modules
+
+
+def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, local_module_package_index: str) -> None:
+    """
+    A module has a module V2 requirement on a module that it doesn't import.
+    Ensure that the non-imported module is not loaded.
+
+    Scenario: module dependency_but_no_import has dependency on minimalv2module
+              but dependency_but_no_import doesn't import minimalv2module.
+    """
+    project: Project = snippetcompiler.setup_for_snippet(
+        snippet="import dependency_but_no_import",
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("dependency_but_no_import")),
+        ],
+        autostd=False,
+    )
+    project.load_module_recursive()
+    assert "minimalv2module" not in project.modules
