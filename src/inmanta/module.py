@@ -1667,9 +1667,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
+        # List of imports that still have to be loaded.
         # get imports: don't use a set because this collection is used to drive control flow and we want to keep control flow as
         # deterministic as possible
         imports: List[DefineImport] = [x for x in self.get_imports()]
+
+        # All imports of the entire project
+        all_imports: Set[DefineImport] = set(imports)
 
         v2_modules: Set[str] = set()
         """
@@ -1697,7 +1701,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 set_up.remove(module_name)
             if module_name in done:
                 # some submodules already loaded as v1 => reload
-                imports.extend(done[module_name].values())
+                add_imports_to_be_loaded(done[module_name].values())
                 del done[module_name]
                 if module_name in ast_by_top_level_mod:
                     del ast_by_top_level_mod[module_name]
@@ -1750,12 +1754,16 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
                 # get imports and add to list
                 subs_imports: List[DefineImport] = module.get_imports(subs)
-                imports.extend(subs_imports)
+                add_imports_to_be_loaded(subs_imports)
                 if isinstance(module, ModuleV2):
                     # A V2 module can only depend on V2 modules. Ensure that all dependencies
                     # of this module will be loaded as a V2 module.
                     for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
                         require_v2(dep_module_name)
+
+        def add_imports_to_be_loaded(new_imports: Iterable[DefineImport]) -> None:
+            imports.extend(new_imports)
+            all_imports.update(new_imports)
 
         # load this project's v2 requirements
         load_module_v2_requirements(self)
@@ -1787,6 +1795,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 load_sub_module(module, ns)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
+
+        # Remove modules from self.modules that were not part of an import statement.
+        # This happens when a module or a project defines a V2 module requirement in
+        # its dependencies, but the requirement is never imported anywhere.
+        loaded_modules: Set[str] = set(self.modules.keys())
+        imported_modules: Set[str] = set(i.name.split("::")[0] for i in all_imports)
+        for module_to_unload in loaded_modules - imported_modules:
+            self.invalidate_state(module_to_unload)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
