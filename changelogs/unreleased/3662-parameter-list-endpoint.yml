@@ -1,4 +1,4 @@
 description: Added endpoint to list parameters
 issue-nr: 3662
 change-type: minor
-destination-branches: [master, iso4, iso5]
+destination-branches: [master, iso5]
