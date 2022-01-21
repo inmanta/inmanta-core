@@ -100,6 +100,11 @@ async def test_parameter_list_filters(client, env_with_parameters: Tuple[str, Li
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["name"] == "param5"
 
+    result = await client.get_parameters(
+        uuid.uuid4(),
+    )
+    assert result.code == 404
+
 
 def parameter_ids(parameter_objects):
     return [parameter["id"] for parameter in parameter_objects]
