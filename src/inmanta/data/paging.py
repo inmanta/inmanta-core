@@ -612,4 +612,4 @@ class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
 
 class ParameterPagingHandler(PagingHandler[ParameterModel]):
     def get_base_url(self) -> str:
-        return "/api/v2/parameter"
+        return "/api/v2/parameters"

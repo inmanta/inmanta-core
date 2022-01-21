@@ -953,7 +953,7 @@ def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.Resource
 
 
 @typedmethod(
-    path="/parameter",
+    path="/parameters",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
