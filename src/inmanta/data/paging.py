@@ -425,7 +425,8 @@ class PagingHandler(ABC, Generic[T]):
         start: Union[datetime.datetime, int, str],
     ) -> str:
         previous_params = url_query_params_without_paging_params.copy()
-        previous_params["start"] = start
+        if start is not None:
+            previous_params["start"] = start
         if first_id:
             previous_params[self.get_first_id_name()] = first_id
         return self._encode_paging_url(base_url, previous_params)
@@ -438,7 +439,8 @@ class PagingHandler(ABC, Generic[T]):
         end: Union[datetime.datetime, int, str],
     ) -> str:
         next_params = url_query_params_without_paging_params.copy()
-        next_params["end"] = end
+        if end is not None:
+            next_params["end"] = end
         if last_id:
             next_params[self.get_last_id_name()] = last_id
         return self._encode_paging_url(base_url, next_params)
