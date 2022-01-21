@@ -1923,8 +1923,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 - some v1 (or even v2 when in install mode) mod depends on a<2
                 - after loading, during plugin requirements install, `pip install a<2` is run
                 - Python downgrades direct dependency a to a<2
-        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded module
-        a, steps would need to be taken to take this change into account.
+        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded
+        module a, steps would need to be taken to take this change into account.
         """
         result: bool = True
         for name, module in self.modules.items():
