@@ -1,0 +1,5 @@
+description: Fixed typo in modules v2 docstrings and error messages
+change-type: patch
+destination-branches:
+  - master
+  - iso5
