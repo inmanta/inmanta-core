@@ -351,8 +351,8 @@ class ParameterService(protocol.ServerSlice):
             limit,
             first_id=first_id,
             last_id=last_id,
-            start=start,
-            end=end,
+            start=typed_start,
+            end=typed_end,
             has_next=paging_metadata.after > 0,
             has_prev=paging_metadata.before > 0,
         )
