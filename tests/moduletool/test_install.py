@@ -568,7 +568,7 @@ def test_project_install_modules_cache_invalid(
     with pytest.raises(
         CompilerException,
         match=(
-            "Not all modules were loaded correctly as a result of transient dependencies."
+            "Not all modules were loaded correctly as a result of transitive dependencies."
             " A recompile should load them correctly."
         ),
     ):
