@@ -471,10 +471,13 @@ class Parameter(BaseModel):
     name: str
     value: str
     environment: uuid.UUID
-    resource_id: ResourceIdStr
     source: str
     updated: Optional[datetime.datetime]
     metadata: Optional[JsonType]
+
+
+class Fact(Parameter):
+    resource_id: ResourceIdStr
 
 
 class Agent(BaseModel):
