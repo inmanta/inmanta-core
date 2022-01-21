@@ -480,7 +480,6 @@ def test_project_install_preinstalled(
     assert_module_install()
 
 
-@pytest.mark.parametrize("preinstall_v2", [True, False])
 @pytest.mark.slowtest
 def test_project_install_modules_cache_invalid(
     caplog,
@@ -489,15 +488,12 @@ def test_project_install_modules_cache_invalid(
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
-    preinstall_v2: bool,
 ) -> None:
     """
     Verify that introducing invalidities in the modules cache results in the appropriate exception and warnings.
 
     - preinstall old (v1 or v2) version of {dependency_module}
     - install project with {main_module} that depends on {dependency_module}>={v2_version}
-
-    :param preinstall_v2: Whether the preinstalled module should be a v2.
     """
     main_module: str = "main_module"
     dependency_module: str = "minimalv1module"
@@ -524,6 +520,7 @@ def test_project_install_modules_cache_invalid(
         v2_template_path,
         os.path.join(str(tmpdir), main_module),
         new_name=main_module,
+        new_content_init_cf=f"import {dependency_module}",
         # requires stable version, not currently installed dev version
         new_requirements=[module.InmantaModuleRequirement.parse(f"{dependency_module}>={v2_version}")],
         install=False,
@@ -531,28 +528,19 @@ def test_project_install_modules_cache_invalid(
     )
 
     # preinstall module
-    if preinstall_v2:
-        # set up project, including activation of venv before installing the module
-        snippetcompiler_clean.setup_for_snippet("", install_project=False)
-        # install older v2 module
-        module_from_template(
-            v2_template_path,
-            os.path.join(str(tmpdir), dependency_module, "dev"),
-            new_version=version.Version(f"{v2_version}.dev0"),
-            install=True,
-        )
-    else:
-        # install module as v1
-        snippetcompiler_clean.setup_for_snippet(
-            f"import {dependency_module}",
-            autostd=False,
-            install_project=False,
-        )
-        ProjectTool().execute("install", [])
+    # set up project, including activation of venv before installing the module
+    snippetcompiler_clean.setup_for_snippet("", install_project=False)
+    # install older v2 module
+    module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), dependency_module, "dev"),
+        new_version=version.Version(f"{v2_version}.dev0"),
+        install=True,
+    )
 
     # set up project for installation
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "",
+        f"import {main_module}",
         autostd=False,
         install_project=False,
         add_to_module_path=[libs_dir],
@@ -577,8 +565,6 @@ def test_project_install_modules_cache_invalid(
     message: str = (
         f"Compiler has loaded module {dependency_module}=={v2_version}.dev0 but {dependency_module}=={v2_version} has"
         " later been installed as a side effect."
-        if preinstall_v2
-        else f"Compiler has loaded module {dependency_module} as v1 but it has later been installed as v2 as a side effect."
     )
 
     assert message in (rec.message for rec in caplog.records)
