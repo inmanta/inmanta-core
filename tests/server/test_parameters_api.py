@@ -56,7 +56,7 @@ async def env_with_parameters(server, client, environment: str):
         ).insert()
         return param_id
 
-    def get_timestamp(minutes: int):
+    def get_timestamp(minutes: int) -> datetime.datetime:
         return datetime.datetime.strptime(f"2022-01-20T11:{minutes}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
 
     timestamps = []
