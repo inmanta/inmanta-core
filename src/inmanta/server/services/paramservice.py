@@ -320,6 +320,12 @@ class ParameterService(protocol.ServerSlice):
         except InvalidSort as e:
             raise BadRequest(e.message) from e
 
+        typed_start, typed_end = None, None
+        if start is not None:
+            typed_start = parameter_order.ensure_boundary_type(start)
+        if end is not None:
+            typed_end = parameter_order.ensure_boundary_type(end)
+
         try:
             dtos = await data.Parameter.get_parameter_list(
                 database_order=parameter_order,
@@ -327,8 +333,8 @@ class ParameterService(protocol.ServerSlice):
                 environment=env.id,
                 first_id=first_id,
                 last_id=last_id,
-                start=start,
-                end=end,
+                start=typed_start,
+                end=typed_end,
                 connection=None,
                 **query,
             )
@@ -346,8 +352,8 @@ class ParameterService(protocol.ServerSlice):
             limit,
             first_id=first_id,
             last_id=last_id,
-            start=start,
-            end=end,
+            start=typed_start,
+            end=typed_end,
             has_next=paging_metadata.after > 0,
             has_prev=paging_metadata.before > 0,
         )
