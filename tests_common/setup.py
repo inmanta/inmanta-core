@@ -29,8 +29,8 @@ requires = [
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
-    "pytest-postgresql",
-    "psycopg2",
+    "pytest-postgresql>=4",
+    "psycopg>=3",
     "tornado",
 ]
 
