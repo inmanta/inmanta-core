@@ -748,7 +748,7 @@ def resource_logs(
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Parameter]:
+def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
     """
     Get the facts related to a specific resource
     :param tid: The id of the environment
@@ -765,7 +765,7 @@ def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Parameter]
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.Parameter:
+def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.Fact:
     """
     Get one specific fact
     :param tid: The id of the environment
@@ -949,4 +949,89 @@ def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.Resource
     :param rid: The id of the resource
     :return: The details of a specific version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
+    """
+
+
+@typedmethod(
+    path="/parameters",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_parameters(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[Union[datetime.datetime, str]] = None,
+    end: Optional[Union[datetime.datetime, str]] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Parameter]:
+    """
+    List the parameters in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of parameters that are returned
+    :param first_id: The parameter id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The parameter id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned parameters.
+                The following options are available:
+                name: filter by the name of the parameter
+                source: filter by the source of the parameter
+                updated: filter by the updated time of the parameter
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'name', 'source', 'updated'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching parameters
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/facts",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_all_facts(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Fact]:
+    """
+    List the facts in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of facts that are returned
+    :param first_id: The fact id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The fact id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned facts.
+                The following options are available:
+                name: filter by the name of the fact
+                resource_id: filter by the resource_id of the fact
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'name', 'resource_id'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching facts
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """

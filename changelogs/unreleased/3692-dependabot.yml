@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-python-dateutil from 2.8.7 to 2.8.8
+destination-branches:
+- master
+- iso5
+sections: {}

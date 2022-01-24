@@ -439,6 +439,43 @@ class DesiredStateVersionOrder(DatabaseOrder):
         return ColumnNameStr("version")
 
 
+class ParameterOrder(DatabaseOrder):
+    """Represents the ordering by which parameters should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {
+            "name": str,
+            "source": str,
+            "updated": Optional[datetime.datetime],
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Parameter
+
+    def get_order_by_column_db_name(self) -> ColumnNameStr:
+        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
+        return self.coalesce_to_min(self.order_by_column)
+
+
+class FactOrder(DatabaseOrder):
+    """Represents the ordering by which facts should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        return {
+            "name": str,
+            "resource_id": str,
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Parameter
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -2175,8 +2212,9 @@ class Parameter(BaseDocument):
         result = await cls.select_query(query, values)
         return result
 
-    def to_dto(self) -> m.Parameter:
-        return m.Parameter(
+    def as_fact(self) -> m.Fact:
+        assert self.source == "fact"
+        return m.Fact(
             id=self.id,
             name=self.name,
             value=self.value,
@@ -2186,6 +2224,177 @@ class Parameter(BaseDocument):
             updated=self.updated,
             metadata=self.metadata,
         )
+
+    @classmethod
+    def parameter_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT p.id, p.name, p.value, p.source, p.updated, p.metadata, p.environment""",
+            from_clause=f" FROM {cls.table_name()} as p",
+            filter_statements=[" environment = $1 ", "p.source != 'fact'"],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_parameters_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.parameter_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def get_parameter_list(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Parameter]:
+        subquery, subquery_values = cls.parameter_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
+            order == PagingOrder.DESC and (start is not None or first_id)
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        parameter_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        parameter_records = cast(Iterable[Record], parameter_records)
+        dtos = [
+            m.Parameter(
+                id=parameter["id"],
+                name=parameter["name"],
+                value=parameter["value"],
+                source=parameter["source"],
+                updated=parameter["updated"],
+                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
+                environment=parameter["environment"],
+            )
+            for parameter in parameter_records
+        ]
+        return dtos
+
+    @classmethod
+    def fact_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT p.id, p.name, p.value, p.source, p.resource_id, p.updated, p.metadata, p.environment""",
+            from_clause=f" FROM {cls.table_name()} as p",
+            filter_statements=[" environment = $1 ", "p.source = 'fact'"],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_facts_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.fact_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def get_fact_list(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Fact]:
+        subquery, subquery_values = cls.fact_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        fact_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        fact_records = cast(Iterable[Record], fact_records)
+        dtos = [
+            m.Fact(
+                id=fact["id"],
+                name=fact["name"],
+                value=fact["value"],
+                source=fact["source"],
+                updated=fact["updated"],
+                resource_id=fact["resource_id"],
+                metadata=json.loads(fact["metadata"]) if fact["metadata"] else None,
+                environment=fact["environment"],
+            )
+            for fact in fact_records
+        ]
+        return dtos
 
 
 class UnknownParameter(BaseDocument):

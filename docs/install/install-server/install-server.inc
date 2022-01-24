@@ -60,7 +60,7 @@ Install the software
         files and systemd unit files. The dashboard is installed with the server package.
 
 
-    .. tab:: Debian, Ubuntu and derivatives. 
+    .. tab:: Debian, Ubuntu and derivatives.
 
         First make sure Python >= 3.6 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
@@ -80,7 +80,7 @@ Install the software
             sudo /opt/inmanta/bin/pip install wheel
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
-            
+
             # Install PostgreSQL
             sudo apt-get install postgresql postgresql-client
 
@@ -123,9 +123,9 @@ Install the software
             sudo python3 -m venv /opt/inmanta
             sudo /opt/inmanta/bin/pip install inmanta
             sudo /opt/inmanta/bin/inmanta --help
-            
 
-        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/10/tutorial-install.html>`_
+
+        Install PostgreSQL using this `guide <https://www.postgresql.org/docs/13/tutorial-install.html>`_
 
 
         Download the configuration file named ``inmanta.cfg`` (this name is arbitrary) in your virtual env:

@@ -14,7 +14,7 @@ The Inmanta orchestrator consists of several components:
 * A PostgreSQL database: The Inmanta server stores its state in a PostgreSQL database.
 * The git server: The source code of the configuration models is stored in (one or more) git repositories.
 * The **compiler**: The compiler converts the source code into deployable resources and exports it to the server.
-* CLI and Dashboard: To control the server, you can use either the web dashboard or the command line tools. Both communicate
+* CLI and web-console: To control the server, you can use either the web-console or the command line tools. Both communicate
   through the server rest API.
 * The Inmanta **agents**: Agents execute configuration changes on targets. A target can be a server, a network switch or an API
   or cloud service. An agent can manage local and remote resources. This provides the flexibility to work in an agent based or
@@ -41,17 +41,13 @@ All in one
    :alt: Embedded deployment
 
 
-In a all in one deployment, all components (server, agent and postgres) are started embedded in the compiler and terminated after
+In a all-in-one deployment, all components (server, agent and postgres) are started embedded in the compiler and terminated after
 the deploy is complete. No specific setup is required. To deploy the current model, use::
 
    inmanta deploy
 
 
-The `--dashboard` option disable CLI reporting and sets up the dashboard. The embedded server is setup in such a way that
-the current project is also availble for server compilation. After the first deploy finshes, the command keeps running for
-additional deploys until ctrl+c is used to terminate the command.
-
-The all in one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
+The all-in-one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
 locally in data/deploy.
 
 .. _push-to-server:

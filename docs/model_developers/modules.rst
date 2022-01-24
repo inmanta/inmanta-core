@@ -9,6 +9,11 @@ module format. The following sections describe the directory layout of the V1 an
 files.
 
 
+.. note::
+
+    V2 modules can not depend on V1 modules.
+
+
 .. _moddev-module-v2:
 
 V2 module format
@@ -249,7 +254,7 @@ The format for requires in requirements.txt is the following:
    to use is then: eggname@git+https://../repository#branch with branch being optional.
 
 
-Working on modules
+Installing modules
 ==================
 Since modules often have dependencies on other modules, it is common to develop against multiple
 modules (or a project and one or more modules) simultaneously. One might for example need to
@@ -300,42 +305,14 @@ compile itself runs against an isolated project, downloading any v1 module depen
 versions of v1 modules, have a look at the ``--use-module-in-place`` option in the ``pytest-inmanta`` documentation.
 
 
-Distributing modules
-====================
-This section is about v2 modules. V1 modules only require a version tag to be recognized as a
-released version. While a version tag is still good practice for v2 modules, it isn't sufficient
-to consider it released.
-
-You can package a v2 module with ``inmanta module build`` which will create a Python wheel.
-You can then publish this to the Python package repository of your choice,
-for example the public PyPi repository.
-The inmanta module ``my_module`` will be packaged as a Python package ``inmanta-module-my-module``.
+Module installation on the server
+#################################
 
 The orchestrator server generally (see
 :ref:`Advanced concepts<modules-distribution-advanced-concepts>`) installs modules from the configured Python package
 repository, respecting the project's constraints on its modules and all inter-module constraints. The server is then responsible
 for supplying the agents with the appropriate ``inmanta_plugins`` packages.
 
-
-.. _modules-distribution-advanced-concepts:
-
-Advanced concepts
-#################
-
-Freezing a project
-------------------
-Prior to releasing a new stable version of an inmanta project, you might wish to freeze its module
-dependencies. This will ensure that the orchestrator server will always work with the exact
-versions specified. You can achieve this with
-``inmanta project freeze --recursive --operator "=="``. This command will freeze all module
-dependencies to their exact version as they currently exist in the Python environment. The recursive
-option makes sure all module dependencies are frozen, not just the direct dependencies. In other
-words, if the project depends on module ``a`` which in turn depends on module ``b``, both modules
-will be pinned to their current version in ``setup.cfg``.
-
-Manual export
--------------
-The ``inmanta export`` command exports a project and all its modules' ``inmanta_plugins`` packages
-to the orchestrator server. When this method is used, the orchestrator does not install any modules
-from the Python package repository but instead contains all Python code as present in the local
-Python environment.
+The only exception to this rule is when using the ``inmanta export`` command. It command exports a project and all its modules'
+``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
+from the Python package repository but instead contains all Python code as present in the local Python environment.

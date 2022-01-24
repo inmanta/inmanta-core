@@ -1527,16 +1527,20 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    def install_modules(self) -> None:
+    def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
         Installs all modules, both v1 and v2.
+
+        :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
+        :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
-        self.load_module_recursive(install=True)
+        self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
         self.verify()
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
-            self.virtualenv.install_from_list(pyreq)
+            # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
             # installing new dependencies into the virtual environment might introduce new conflicts
             self.verify_python_environment()
 
@@ -1663,9 +1667,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         ast_by_top_level_mod: Dict[str, List[Tuple[str, List[Statement], BasicBlock]]] = defaultdict(list)
 
+        # List of imports that still have to be loaded.
         # get imports: don't use a set because this collection is used to drive control flow and we want to keep control flow as
         # deterministic as possible
         imports: List[DefineImport] = [x for x in self.get_imports()]
+
+        # All imports of the entire project
+        all_imports: Set[DefineImport] = set(imports)
 
         v2_modules: Set[str] = set()
         """
@@ -1693,7 +1701,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 set_up.remove(module_name)
             if module_name in done:
                 # some submodules already loaded as v1 => reload
-                imports.extend(done[module_name].values())
+                add_imports_to_be_loaded(done[module_name].values())
                 del done[module_name]
                 if module_name in ast_by_top_level_mod:
                     del ast_by_top_level_mod[module_name]
@@ -1746,12 +1754,16 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
                 # get imports and add to list
                 subs_imports: List[DefineImport] = module.get_imports(subs)
-                imports.extend(subs_imports)
+                add_imports_to_be_loaded(subs_imports)
                 if isinstance(module, ModuleV2):
                     # A V2 module can only depend on V2 modules. Ensure that all dependencies
                     # of this module will be loaded as a V2 module.
                     for dep_module_name in (subs_imp.name.split("::")[0] for subs_imp in subs_imports):
                         require_v2(dep_module_name)
+
+        def add_imports_to_be_loaded(new_imports: Iterable[DefineImport]) -> None:
+            imports.extend(new_imports)
+            all_imports.update(new_imports)
 
         # load this project's v2 requirements
         load_module_v2_requirements(self)
@@ -1760,7 +1772,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for
         #   security reasons. v2 modules installation is done in step 2.
         # 2. Set up top level module if it has not been set up yet, loading v2 requirements and installing them if install=True.
-        # 3. Load AST for imported submodule and its parent modules, queueing any transient imports.
+        # 3. Load AST for imported submodule and its parent modules, queueing any transitive imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
             ns: str = imp.name
@@ -1783,6 +1795,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 load_sub_module(module, ns)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
+
+        # Remove modules from self.modules that were not part of an import statement.
+        # This happens when a module or a project defines a V2 module requirement in
+        # its dependencies, but the requirement is never imported anywhere.
+        loaded_modules: Set[str] = set(self.modules.keys())
+        imported_modules: Set[str] = set(i.name.split("::")[0] for i in all_imports)
+        for module_to_unload in loaded_modules - imported_modules:
+            self.invalidate_state(module_to_unload)
 
         return list(chain.from_iterable(ast_by_top_level_mod.values()))
 
@@ -1865,7 +1885,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def verify_modules_cache(self) -> None:
         if not self._modules_cache_is_valid():
             raise CompilerException(
-                "Not all modules were loaded correctly as a result of transient dependencies. A recompile should load them"
+                "Not all modules were loaded correctly as a result of transitive dependencies. A recompile should load them"
                 " correctly."
             )
 
@@ -1897,14 +1917,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 - latest v2 mod a is installed
                 - some v1 mod depends on v2 mod b, which depends on a<2
                 - during loading, after a has been loaded, mod b is installed
-                - Python downgrades transient dependency a to a<2
+                - Python downgrades transitive dependency a to a<2
             2.
                 - latest v2 mod a is installed
                 - some v1 (or even v2 when in install mode) mod depends on a<2
                 - after loading, during plugin requirements install, `pip install a<2` is run
                 - Python downgrades direct dependency a to a<2
-        In both cases, a<2 might be a valid version, but since it was installed transiently after the compiler has loaded module
-        a, steps would need to be taken to take this change into account.
+        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded
+        module a, steps would need to be taken to take this change into account.
         """
         result: bool = True
         for name, module in self.modules.items():

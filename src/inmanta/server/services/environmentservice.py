@@ -458,10 +458,14 @@ class EnvironmentService(protocol.ServerSlice):
         await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
+        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
+
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server. Execute rmtree() after
+            # notify_listeners() to ensure that the listeners are notified.
             shutil.rmtree(project_dir)
-        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
 
     @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:

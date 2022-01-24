@@ -58,7 +58,7 @@ Finally, have Docker Compose deploy the quickstart environment:
     docker-compose up
 
 Docker Compose will set up the Inmanta server, a postgres server and two VM-like containers to experiment on.
-When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888.
+When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888/dashboard.
 When you see the following output, the Inmanta server is ready to be used:
 
 .. code-block:: sh
@@ -233,7 +233,7 @@ Finally compile the project and deploy it:
     inmanta -vvv  export -d
 
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888/dashboard>`_, select the `test` project and then the
 `quickstart-env` environment. When the deployment fails for some reason, consult the
 :ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
 
@@ -318,7 +318,7 @@ Using the dashboard
 Inmanta can deploy from the server using only the dashboard. All changes have to go through the repository in this case.
 
 #. Clone the quickstart project on github (or to another repository location).
-#. Go to the `dashboard <http://127.0.0.1:8888>`_.
+#. Go to the `dashboard <http://127.0.0.1:8888/dashboard>`_.
 #. Create a new project with the name ``test`` by clicking *Add new project*.
 #. Go into the new project and create a new environment by clicking *Add new environment*:
 

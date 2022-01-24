@@ -356,3 +356,22 @@ class VersionedResourceFilterValidator(FilterValidator):
             "agent": ContainsPartialFilter,
             "resource_id_value": ContainsPartialFilter,
         }
+
+
+class ParameterFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "source": ContainsPartialFilter,
+            "updated": DateRangeFilter,
+        }
+
+
+class FactsFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "resource_id": ContainsPartialFilter,
+        }

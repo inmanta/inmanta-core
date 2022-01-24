@@ -20,7 +20,7 @@ the Inmanta server. The agent log files are produces by the Inmanta agents.
 Server log
 ----------
 
-The ``server.log`` file contains general debugging information regarding the Imanta server. It shows information about actions
+The ``server.log`` file contains general debugging information regarding the Inmanta server. It shows information about actions
 performed by the Inmanta server (renewing parameters, purging resource action logs, etc.), API requests received by the
 Inmanta server, etc.
 
@@ -124,7 +124,7 @@ The log level of the resource action log file is DEBUG. Currently it's not possi
 Log level server-side compiles
 ------------------------------
 
-The logs of a server side compile can be seen via the "Compile Reports" button in the dashboard. The log level of these logs is
+The logs of a server side compile can be seen via the "Compile Reports" button in the web-console. The log level of these logs is
 DEBUG. Currently, it's not possible to change this log level.
 
 

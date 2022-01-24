@@ -1,0 +1,2 @@
+pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-all-postgres-versions
+repo_name: inmanta-core

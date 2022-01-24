@@ -3,7 +3,7 @@
 Environment Settings Reference
 ==============================
 
-This document lists all settings that can be set per environment. These changes are made through the API, the dashboard or the
+This document lists all settings that can be set per environment. These changes are made through the API, the web-console or the
 CLI tool.
 
 The supported settings are:

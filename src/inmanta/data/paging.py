@@ -31,21 +31,15 @@ from inmanta.data import (
     InvalidQueryParameter,
     PagingCounts,
     PagingOrder,
+    Parameter,
     QueryType,
     Resource,
     ResourceAction,
 )
 from inmanta.data.model import Agent as AgentModel
-from inmanta.data.model import (
-    BaseModel,
-    CompileReport,
-    DesiredStateVersion,
-    LatestReleasedResource,
-    PagingBoundaries,
-    ResourceHistory,
-    ResourceIdStr,
-    VersionedResource,
-)
+from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource, PagingBoundaries
+from inmanta.data.model import Parameter as ParameterModel
+from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -249,6 +243,38 @@ class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
         )
 
 
+class ParameterPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        query_identifier: QueryIdentifier,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Parameter.count_parameters_for_paging(
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
+        )
+
+
+class FactPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        query_identifier: QueryIdentifier,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Parameter.count_facts_for_paging(
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
+        )
+
+
 class PagingHandler(ABC, Generic[T]):
     def __init__(self, counts_provider: PagingCountsProvider) -> None:
         self.counts_provider = counts_provider
@@ -415,7 +441,8 @@ class PagingHandler(ABC, Generic[T]):
         start: Union[datetime.datetime, int, str],
     ) -> str:
         previous_params = url_query_params_without_paging_params.copy()
-        previous_params["start"] = start
+        if start is not None:
+            previous_params["start"] = start
         if first_id:
             previous_params[self.get_first_id_name()] = first_id
         return self._encode_paging_url(base_url, previous_params)
@@ -428,7 +455,8 @@ class PagingHandler(ABC, Generic[T]):
         end: Union[datetime.datetime, int, str],
     ) -> str:
         next_params = url_query_params_without_paging_params.copy()
-        next_params["end"] = end
+        if end is not None:
+            next_params["end"] = end
         if last_id:
             next_params[self.get_last_id_name()] = last_id
         return self._encode_paging_url(base_url, next_params)
@@ -598,3 +626,13 @@ class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
                 end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
                 last_id=dtos[0].resource_version_id,
             )
+
+
+class ParameterPagingHandler(PagingHandler[ParameterModel]):
+    def get_base_url(self) -> str:
+        return "/api/v2/parameters"
+
+
+class FactPagingHandler(PagingHandler[Fact]):
+    def get_base_url(self) -> str:
+        return "/api/v2/facts"
