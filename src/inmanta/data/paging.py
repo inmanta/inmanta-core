@@ -37,7 +37,7 @@ from inmanta.data import (
     ResourceAction,
 )
 from inmanta.data.model import Agent as AgentModel
-from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, LatestReleasedResource, PagingBoundaries
+from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource, PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
 from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource
 from inmanta.protocol import exceptions
@@ -255,6 +255,22 @@ class ParameterPagingCountsProvider(PagingCountsProvider):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await Parameter.count_parameters_for_paging(
+            query_identifier.environment, database_order, first_id, last_id, start, end, **query
+        )
+
+
+class FactPagingCountsProvider(PagingCountsProvider):
+    async def count_items_for_paging(
+        self,
+        query_identifier: QueryIdentifier,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        return await Parameter.count_facts_for_paging(
             query_identifier.environment, database_order, first_id, last_id, start, end, **query
         )
 
@@ -615,3 +631,8 @@ class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
 class ParameterPagingHandler(PagingHandler[ParameterModel]):
     def get_base_url(self) -> str:
         return "/api/v2/parameters"
+
+
+class FactPagingHandler(PagingHandler[Fact]):
+    def get_base_url(self) -> str:
+        return "/api/v2/facts"

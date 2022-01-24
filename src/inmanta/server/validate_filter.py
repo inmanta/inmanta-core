@@ -366,3 +366,12 @@ class ParameterFilterValidator(FilterValidator):
             "source": ContainsPartialFilter,
             "updated": DateRangeFilter,
         }
+
+
+class FactsFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "resource_id": ContainsPartialFilter,
+        }

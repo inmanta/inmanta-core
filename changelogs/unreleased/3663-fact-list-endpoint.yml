@@ -1,0 +1,4 @@
+description: Added endpoint to list facts
+issue-nr: 3662
+change-type: minor
+destination-branches: [master, iso5]

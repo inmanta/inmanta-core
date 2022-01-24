@@ -22,9 +22,15 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.data import APILIMIT, InvalidSort, ParameterOrder, QueryType
+from inmanta.data import APILIMIT, FactOrder, InvalidSort, ParameterOrder, QueryType
 from inmanta.data.model import Fact, Parameter, ResourceIdStr
-from inmanta.data.paging import ParameterPagingCountsProvider, ParameterPagingHandler, QueryIdentifier
+from inmanta.data.paging import (
+    FactPagingCountsProvider,
+    FactPagingHandler,
+    ParameterPagingCountsProvider,
+    ParameterPagingHandler,
+    QueryIdentifier,
+)
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -34,7 +40,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
-from inmanta.server.validate_filter import InvalidFilter, ParameterFilterValidator
+from inmanta.server.validate_filter import FactsFilterValidator, InvalidFilter, ParameterFilterValidator
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -354,6 +360,68 @@ class ParameterService(protocol.ServerSlice):
             last_id=last_id,
             start=typed_start,
             end=typed_end,
+            has_next=paging_metadata.after > 0,
+            has_prev=paging_metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))
+
+    @handle(methods_v2.get_all_facts, env="tid")
+    async def get_all_facts(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "name.asc",
+    ) -> ReturnValue[List[Fact]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(FactsFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            parameter_order = FactOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Parameter.get_fact_list(
+                database_order=parameter_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = FactPagingHandler(FactPagingCountsProvider())
+        paging_metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            parameter_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
             has_next=paging_metadata.after > 0,
             has_prev=paging_metadata.before > 0,
         )
