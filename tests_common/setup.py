@@ -24,7 +24,7 @@ version = "4.4.0"
 requires = [
     "asyncpg",
     "click",
-    "inmanta-core~=4.3.1.dev",
+    f"inmanta-core~={version}.dev",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
