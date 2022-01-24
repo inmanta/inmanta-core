@@ -1772,7 +1772,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         # 1. Load the top level module. For v1, install if install=True, for v2 import-based installation is disabled for
         #   security reasons. v2 modules installation is done in step 2.
         # 2. Set up top level module if it has not been set up yet, loading v2 requirements and installing them if install=True.
-        # 3. Load AST for imported submodule and its parent modules, queueing any transient imports.
+        # 3. Load AST for imported submodule and its parent modules, queueing any transitive imports.
         while len(imports) > 0:
             imp: DefineImport = imports.pop()
             ns: str = imp.name
@@ -1885,7 +1885,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
     def verify_modules_cache(self) -> None:
         if not self._modules_cache_is_valid():
             raise CompilerException(
-                "Not all modules were loaded correctly as a result of transient dependencies. A recompile should load them"
+                "Not all modules were loaded correctly as a result of transitive dependencies. A recompile should load them"
                 " correctly."
             )
 
@@ -1917,14 +1917,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 - latest v2 mod a is installed
                 - some v1 mod depends on v2 mod b, which depends on a<2
                 - during loading, after a has been loaded, mod b is installed
-                - Python downgrades transient dependency a to a<2
+                - Python downgrades transitive dependency a to a<2
             2.
                 - latest v2 mod a is installed
                 - some v1 (or even v2 when in install mode) mod depends on a<2
                 - after loading, during plugin requirements install, `pip install a<2` is run
                 - Python downgrades direct dependency a to a<2
-        In both cases, a<2 might be a valid version, but since it was installed transiently after the compiler has loaded module
-        a, steps would need to be taken to take this change into account.
+        In both cases, a<2 might be a valid version, but since it was installed transitively after the compiler has loaded
+        module a, steps would need to be taken to take this change into account.
         """
         result: bool = True
         for name, module in self.modules.items():

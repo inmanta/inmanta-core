@@ -256,7 +256,7 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         assert ModuleTool().get_module(module_name).version == Version("1.0.0")
-        assert not caplog.messages
+        assert "does not match constraint" not in caplog.text
 
     # verify that incompatible constraint does reinstall and logs a warning
     with caplog.at_level(logging.WARNING):
