@@ -426,7 +426,7 @@ class MethodProperties(object):
         self._strict_typing = strict_typing
         self.function = function
 
-        self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.styles.Style.rest)
+        self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
 
         # validate client types

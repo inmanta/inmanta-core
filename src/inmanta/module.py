@@ -31,7 +31,23 @@ from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import Dict, Generic, Iterable, Iterator, List, Mapping, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NewType,
+    Optional,
+    Set,
+    TextIO,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import yaml
 from pkg_resources import parse_requirements, parse_version
@@ -404,6 +420,19 @@ class ModuleMetadata(Metadata):
         return v
 
 
+@stable_api
+class ModuleRepoType(enum.Enum):
+    git = "git"
+    package = "package"
+
+
+@stable_api
+class ModuleRepoInfo(BaseModel):
+
+    url: str
+    type: ModuleRepoType = ModuleRepoType.git
+
+
 class ProjectMetadata(Metadata):
     """
     :param name: The name of the project.
@@ -437,14 +466,38 @@ class ProjectMetadata(Metadata):
     license: Optional[str] = None
     copyright: Optional[str] = None
     modulepath: List[str] = []
-    repo: List[str] = []
+    repo: List[ModuleRepoInfo] = []
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
 
-    @validator("repo", "modulepath", pre=True)
+    @validator("modulepath", pre=True)
     @classmethod
-    def repo_and_modulepath_to_list(cls, v: object) -> object:
+    def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
+
+    @validator("repo", pre=True)
+    @classmethod
+    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
+        v_as_list = cls.to_list(v)
+        result = []
+        for elem in v_as_list:
+            if isinstance(elem, str):
+                # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
+                result.append({"url": elem, "type": ModuleRepoType.git})
+            elif isinstance(elem, dict):
+                result.append(elem)
+            else:
+                raise ValueError(f"Value should be either a string of a dict, got {elem}")
+        return result
+
+    @validator("repo")
+    def warn_repo_type_unsupported(v: List[ModuleRepoInfo]) -> List[ModuleRepoInfo]:
+        if any(repo.type == ModuleRepoType.package for repo in v):
+            LOGGER.warning(
+                "Repos of type %s where introduced in Modules v2, which are not supported by current Inmanta version.",
+                ModuleRepoType.package.value,
+            )
+        return v
 
 
 T = TypeVar("T", bound=Metadata)
@@ -617,7 +670,7 @@ class Project(ModuleLike[ProjectMetadata]):
 
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
-        self.repolist = [x for x in self._metadata.repo]
+        self.repolist = [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.git]
         self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
         if self._metadata.downloadpath is not None:
@@ -1212,9 +1265,11 @@ class Module(ModuleLike[ModuleMetadata]):
     def get_imports(self, name: str) -> List[DefineImport]:
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
-        if self._project.autostd:
-            std_locatable = LocatableString("std", Range("internal", 0, 0, 0, 0), 0, block.namespace)
-            imports.insert(0, DefineImport(std_locatable, std_locatable))
+        if self.name != "std" and self._project.autostd:
+            std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, block.namespace)
+            imp = DefineImport(std_locatable, std_locatable)
+            imp.location = std_locatable.location
+            imports.insert(0, imp)
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:

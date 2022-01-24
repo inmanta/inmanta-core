@@ -8,7 +8,8 @@ requires = [
     "colorlog",
     "cookiecutter",
     "cryptography",
-    "docstring-parser<0.8.0",
+    # docstring-parser has been known to publish non-backwards compatible minors in the past
+    "docstring-parser>=0.10,<0.14.0",
     "email-validator",
     "execnet",
     "importlib_metadata",
@@ -17,7 +18,8 @@ requires = [
     "netifaces",
     "packaging",
     "ply",
-    "pydantic",
+    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
+    "pydantic!=1.9.0a1",
     "pyformance",
     "PyJWT",
     "python-dateutil",
@@ -35,7 +37,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "4.3.1"
+version = "4.4.0"
 
 setup(
     version=version,

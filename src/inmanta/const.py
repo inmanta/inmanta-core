@@ -294,3 +294,10 @@ class ApiDocsFormat(str, Enum):
     # swagger: the api docs in html, using a Swagger-UI view
     openapi = "openapi"
     swagger = "swagger"
+
+
+class DesiredStateVersionStatus(str, Enum):
+    active = "active"
+    candidate = "candidate"
+    retired = "retired"
+    skipped_candidate = "skipped_candidate"

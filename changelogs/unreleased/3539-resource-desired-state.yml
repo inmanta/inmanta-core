@@ -1,0 +1,4 @@
+description: Added endpoint to get the details of resource with a specific version
+issue-nr: 3539
+change-type: minor
+destination-branches: [iso4]

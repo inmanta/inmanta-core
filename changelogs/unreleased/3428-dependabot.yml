@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump typing-inspect from 0.6.0 to 0.7.1
+destination-branches:
+- iso4
+sections: {}

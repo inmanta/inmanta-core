@@ -226,6 +226,8 @@ class Environment(BaseModel):
     repo_branch: str
     settings: Dict[str, EnvSettingType]
     halted: bool
+    description: Optional[str]
+    icon: Optional[str]
 
 
 class Project(BaseModel):
@@ -319,6 +321,34 @@ class ResourceAction(BaseModel):
     send_event: Optional[bool]
 
 
+class ResourceDeploySummary(BaseModel):
+    """
+    :param total: The total number of resources
+    :param by_state: The number of resources by state in the latest released version
+    """
+
+    total: int
+    by_state: Dict[str, int]
+
+    @classmethod
+    def create_from_db_result(cls, summary_by_state: Dict[str, int]) -> "ResourceDeploySummary":
+        full_summary_by_state = cls._ensure_summary_has_all_states(summary_by_state)
+        total = cls._count_all_resources(full_summary_by_state)
+        return ResourceDeploySummary(by_state=full_summary_by_state, total=total)
+
+    @classmethod
+    def _ensure_summary_has_all_states(cls, summary_by_state: Dict[str, int]) -> Dict[str, int]:
+        full_summary = summary_by_state.copy()
+        for state in const.ResourceState:
+            if state not in summary_by_state.keys() and state != const.ResourceState.dry:
+                full_summary[state] = 0
+        return full_summary
+
+    @classmethod
+    def _count_all_resources(cls, summary_by_state: Dict[str, int]) -> int:
+        return sum(resource_count for resource_count in summary_by_state.values())
+
+
 class LogLine(BaseModel):
     class Config:
         """
@@ -357,16 +387,19 @@ ReleasedResourceState = StrEnum(
 )
 
 
-class LatestReleasedResource(BaseModel):
+class VersionedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
     requires: List[ResourceVersionIdStr]
-    status: ReleasedResourceState
 
     @property
     def all_fields(self) -> Dict[str, Any]:
         return {**self.dict(), **self.id_details.dict()}
+
+
+class LatestReleasedResource(VersionedResource):
+    status: ReleasedResourceState
 
 
 class PagingBoundaries:
@@ -387,17 +420,13 @@ class PagingBoundaries:
 
 
 class ResourceDetails(BaseModel):
-    """The details of a released resource
+    """The details of a resource
     :param resource_id: The id of the resource
     :param resource_type: The type of the resource
     :param agent: The agent associated with this resource
     :param id_attribute: The name of the identifying attribute of the resource
     :param id_attribute_value: The value of the identifying attribute of the resource
-    :param last_deploy: The value of the last_deploy on the latest released version of the resource
-    :param first_generated_time: The first time this resource was generated
-    :param first_generated_version: The first model version this resource was in
-    :param status: The current status of the resource
-    :param requires_status: The id and status of the resources this resource requires
+    :param attributes: The attributes of the resource
     """
 
     resource_id: ResourceIdStr
@@ -405,10 +434,31 @@ class ResourceDetails(BaseModel):
     agent: str
     id_attribute: str
     id_attribute_value: str
+    attributes: JsonType
+
+
+class VersionedResourceDetails(ResourceDetails):
+    """The details of a resource version
+    :param resource_version_id: The id of the resource
+    :param version: The version of the resource
+    """
+
+    resource_version_id: ResourceVersionIdStr
+    version: int
+
+
+class ReleasedResourceDetails(ResourceDetails):
+    """The details of a released resource
+    :param last_deploy: The value of the last_deploy on the latest released version of the resource
+    :param first_generated_time: The first time this resource was generated
+    :param first_generated_version: The first model version this resource was in
+    :param status: The current status of the resource
+    :param requires_status: The id and status of the resources this resource requires
+    """
+
     last_deploy: Optional[datetime.datetime]
     first_generated_time: datetime.datetime
     first_generated_version: int
-    attributes: JsonType
     status: ReleasedResourceState
     requires_status: Dict[ResourceIdStr, ReleasedResourceState]
 
@@ -424,3 +474,68 @@ class ResourceHistory(BaseModel):
 class ResourceLog(LogLine):
     action_id: uuid.UUID
     action: const.ResourceAction
+
+
+class Parameter(BaseModel):
+    id: uuid.UUID
+    name: str
+    value: str
+    environment: uuid.UUID
+    resource_id: ResourceIdStr
+    source: str
+    updated: Optional[datetime.datetime]
+    metadata: Optional[JsonType]
+
+
+class Agent(BaseModel):
+    """
+    :param environment: Id of the agent's environment
+    :param name: The name of the agent
+    :param last_failover: The time of the last failover
+    :param paused: Whether the agent is paused or not
+    :param unpause_on_resume: Whether the agent should be unpaused when the environment is resumed
+    :param status: The current status of the agent
+    :param process_id: The id of the agent process that belongs to this agent, if there is one
+    :param process_name: The name of the agent process that belongs to this agent, if there is one
+    """
+
+    environment: uuid.UUID
+    name: str
+    last_failover: Optional[datetime.datetime]
+    paused: bool
+    process_id: Optional[uuid.UUID]
+    process_name: Optional[str]
+    unpause_on_resume: Optional[bool]
+    status: const.AgentStatus
+
+
+class AgentProcess(BaseModel):
+    sid: uuid.UUID
+    hostname: str
+    environment: uuid.UUID
+    first_seen: Optional[datetime.datetime]
+    last_seen: Optional[datetime.datetime]
+    expired: Optional[datetime.datetime]
+    state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]]
+
+
+class DesiredStateLabel(BaseModel):
+    name: str
+    message: str
+
+
+class DesiredStateVersion(BaseModel):
+    version: int
+    date: datetime.datetime
+    total: int
+    labels: List[DesiredStateLabel]
+    status: const.DesiredStateVersionStatus
+
+
+class NoPushTriggerMethod(str, Enum):
+    no_push = "no_push"
+
+
+PromoteTriggerMethod = StrEnum(
+    "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
+)

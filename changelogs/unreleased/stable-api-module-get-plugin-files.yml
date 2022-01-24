@@ -1,0 +1,7 @@
+description: Added Module.get_plugin_files to stable API
+change-type: patch
+issue-repo: pytest-inmanta
+issue-nr: 76
+destination-branches:
+  - iso4
+  - iso3

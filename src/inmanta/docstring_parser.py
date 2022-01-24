@@ -68,5 +68,5 @@ def parse_docstring(doc_string: str) -> DocString:
     """
     Parse the docstring of an entity.
     """
-    doc_string = docstring_parser.parse(doc_string, style=docstring_parser.Style.rest)
+    doc_string = docstring_parser.parse(doc_string, style=docstring_parser.DocstringStyle.REST)
     return DocString(doc_string)

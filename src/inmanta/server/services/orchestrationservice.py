@@ -20,16 +20,25 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Set, Tuple, cast
 
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.data import (
+    APILIMIT,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PURGE_ON_DELETE,
+    DesiredStateVersionOrder,
+    InvalidSort,
+    QueryType,
+)
+from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
-from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import BadRequest, ServerError
+from inmanta.protocol.common import ReturnValue, attach_warnings
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, ServerError
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -43,6 +52,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -521,3 +531,86 @@ class OrchestrationService(protocol.ServerSlice):
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
         return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
+
+    @handle(methods_v2.list_desired_state_versions, env="tid")
+    async def desired_state_version_list(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "version.desc",
+    ) -> ReturnValue[List[DesiredStateVersion]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(DesiredStateVersionFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            resource_order = DesiredStateVersionOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            dtos = await data.ConfigurationModel.get_desired_state_versions(
+                database_order=resource_order,
+                limit=limit,
+                environment=env.id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = DesiredStateVersionPagingHandler(DesiredStateVersionPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            start=start,
+            end=end,
+            first_id=None,
+            last_id=None,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.promote_desired_state_version, env="tid")
+    async def promote_desired_state_version(
+        self,
+        env: data.Environment,
+        version: int,
+        trigger_method: Optional[PromoteTriggerMethod] = None,
+    ) -> None:
+        if trigger_method == PromoteTriggerMethod.push_incremental_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_incremental_deploy
+        elif trigger_method == PromoteTriggerMethod.push_full_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_full_deploy
+        elif trigger_method == PromoteTriggerMethod.no_push:
+            push = False
+            agent_trigger_method = None
+        else:
+            push = True
+            agent_trigger_method = None
+
+        status_code, result = await self.release_version(
+            env, version_id=version, push=push, agent_trigger_method=agent_trigger_method
+        )
+        if status_code != 200:
+            raise BaseHttpException(status_code, result["message"])

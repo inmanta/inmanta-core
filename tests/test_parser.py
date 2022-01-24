@@ -1805,3 +1805,25 @@ x = y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(else_if_expression, Literal)
     else_else_expression: ExpressionStatement = else_expression.else_expression
     assert isinstance(else_else_expression, Literal)
+
+
+def test_rstring():
+    statements = parse_code(
+        r"""
+a="{{a}}"
+b=r"{{a}}\n"
+        """
+    )
+    assert len(statements) == 2
+
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert assign_stmt.name == "a"
+    assert isinstance(assign_stmt.value, StringFormat)
+
+    assign_stmt_2 = statements[1]
+    assert isinstance(assign_stmt_2, Assign)
+    assert assign_stmt_2.name == "b"
+    literal = assign_stmt_2.value
+    assert isinstance(literal, Literal)
+    assert literal.value == r"{{a}}\n"

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import logging
 import os
 import re
 import shutil
@@ -27,12 +28,13 @@ import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
 
-from inmanta import module
+from inmanta import compiler, module
 from inmanta.module import InvalidMetadata, MetadataDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
 from test_app_cli import app
+from utils import log_contains, no_error_in_logs
 
 
 def test_versioning():
@@ -125,7 +127,7 @@ def test_module_corruption(modules_dir, modules_repo):
     assert os.path.exists(projectyml)
 
     with open(projectyml, "r", encoding="utf-8") as fh:
-        pyml = yaml.load(fh)
+        pyml = yaml.safe_load(fh)
 
     pyml["requires"] = ["mod10 == 3.5"]
 
@@ -332,3 +334,46 @@ requires:
     )
     with pytest.raises(InvalidMetadata, match="Invalid legacy requires"):
         module.Module(None, inmanta_module.get_root_dir_of_module())
+
+
+def test_project_repo_type_module_v2(modules_dir, modules_repo, caplog):
+    """LOOK TO REMOVE MODULES_DIR
+    Tests that repos that are strings and repos that are dict with
+    type 'git' are accepted and that repos with another type
+    will raise a warning. (issue #3565)
+    """
+    projectdir = makeproject(modules_repo, "project_repo_type_module_v2", [], [])
+    Project.set(Project(projectdir, autostd=True))
+
+    projectyml = os.path.join(projectdir, "project.yml")
+    with open(projectyml, "r", encoding="utf-8") as fh:
+        pyml = yaml.safe_load(fh)
+
+    # repo is a string instance (accepted)
+    Project._project = None
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    no_error_in_logs(caplog, levels=(logging.ERROR, logging.WARNING))
+
+    # repo is a dict instance with type git (accepted)
+    Project._project = None
+    repo = {"url": "https://github.com/inmanta/", "type": "git"}
+    pyml["repo"] = repo
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    no_error_in_logs(caplog, levels=(logging.ERROR, logging.WARNING))
+
+    # repo is a dict instance with type package (raises warning)
+    Project._project = None
+    repo = {"url": "https://github.com/inmanta/", "type": "package"}
+    pyml["repo"] = repo
+
+    with open(projectyml, "w", encoding="utf-8") as fh:
+        yaml.dump(pyml, fh)
+    with caplog.at_level(logging.WARNING):
+        compiler.do_compile()
+    warning = "Repos of type package where introduced in Modules v2, which are not supported by current Inmanta version."
+    log_contains(caplog, "inmanta.module", logging.WARNING, warning)

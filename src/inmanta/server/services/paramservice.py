@@ -17,13 +17,15 @@
 """
 import datetime
 import logging
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.data.model import ResourceIdStr
-from inmanta.protocol import handle, methods
+from inmanta.data.model import Parameter, ResourceIdStr
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import attach_warnings
+from inmanta.protocol.exceptions import NotFound
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
@@ -272,3 +274,16 @@ class ParameterService(protocol.ServerSlice):
                 "now": util.datetime_utc_isoformat(datetime.datetime.now()),
             },
         )
+
+    @handle(methods_v2.get_facts, env="tid")
+    async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> List[Parameter]:
+        params = await data.Parameter.get_list(environment=env.id, resource_id=rid)
+        dtos = [param.to_dto() for param in params]
+        return dtos
+
+    @handle(methods_v2.get_fact, env="tid")
+    async def get_fact(self, env: data.Environment, rid: ResourceIdStr, id: uuid.UUID) -> Parameter:
+        param = await data.Parameter.get_one(environment=env.id, resource_id=rid, id=id)
+        if not param:
+            raise NotFound(f"Fact with id {id} does not exist")
+        return param.to_dto()

@@ -92,19 +92,20 @@ Literal values can be assigned to variables
     var1 = 1 # assign an integer, var1 contains now a number
     var2 = 3.14 # assign a float, var2 also contains a number
     var3 = "This is a string" # var3 contains a string
+    var4 = r"This is a raw string" # var4 contains a raw string
 
-    # var 4 and 5 are both booleans
-    var4 = true
-    var5 = false
+    # var 5 and 6 are both booleans
+    var5 = true
+    var6 = false
 
-    # var6 is a list of values
-    var6 = ["fedora", "ubuntu", "rhel"]
+    # var7 is a list of values
+    var7 = ["fedora", "ubuntu", "rhel"]
 
     # a dictionary with string keys and any type of values is also a primitive
-    var7 = { "foo":"bar", "baz": 1}
+    var8 = { "foo":"bar", "baz": 1}
 
-    # var8 contains the same value as var2
-    var8 = var2
+    # var9 contains the same value as var2
+    var9 = var2
 
     # next assignment will not return an error because var1 already contains this value
     var1 = 1
@@ -560,6 +561,14 @@ Interpolating strings
 
     hostname = "serv1.example.org"
     motd = "Welcome to {{hostname}}\n"
+
+To prevent string interpolation, use raw strings
+
+.. code-block:: inmanta
+
+    # this string will go into the variable as is
+    # containing the {{ and \n
+    motd = r"Welcome to {{hostname}}\n"
 
 
 Templates

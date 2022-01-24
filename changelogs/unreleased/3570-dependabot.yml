@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump graphviz from 0.19 to 0.19.1
+destination-branches:
+- iso4
+sections: {}
