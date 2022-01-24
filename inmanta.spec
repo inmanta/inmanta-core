@@ -129,6 +129,10 @@ mkdir -p %{buildroot}/var/log/inmanta
 mkdir -p %{buildroot}/etc/logrotate.d
 install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta/inmanta.cfg
 install -p -m 644 misc/logrotation_config %{buildroot}/etc/logrotate.d/inmanta
+cat <<EOF > %{buildroot}/etc/inmanta/inmanta.d/extensions.cfg
+[server]
+enabled_extensions=ui
+EOF
 
 # Setup systemd
 mkdir -p %{buildroot}%{_unitdir}
