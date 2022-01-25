@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
 import re
 
@@ -22,6 +23,7 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace
+from utils import log_contains
 
 
 def test_plugin_excn(snippetcompiler):
@@ -255,3 +257,24 @@ def test_plugin_load_exception(snippetcompiler):
     )
     with pytest.raises(CompilerException, match=re.escape(expected)):
         compiler.do_compile()
+
+
+def test_3457_helpful_string(snippetcompiler, caplog):
+    with caplog.at_level(logging.DEBUG):
+        snippetcompiler.setup_for_snippet(
+            """
+entity A:
+end
+A.other [0:] -- A
+implement A using std::none
+a = A()
+std::attr(a, "other")
+a.other = A()
+            """
+        )
+        compiler.do_compile()
+    dir: str = snippetcompiler.project_dir
+    message: str = (
+        "Unset value in python code in plugin at call: std::attr " f"({dir}/main.cf:7) (Will be rescheduled by compiler)"
+    )
+    log_contains(caplog, "inmanta.ast.statements.call", logging.DEBUG, message)

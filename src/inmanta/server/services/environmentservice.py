@@ -16,13 +16,18 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import base64
+import binascii
 import logging
 import os
+import re
 import shutil
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Pattern, Set, cast
+
+from asyncpg import StringDataRightTruncationError
 
 from inmanta import data
 from inmanta.data import model
@@ -113,6 +118,7 @@ class EnvironmentService(protocol.ServerSlice):
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
     agent_state_lock: asyncio.Lock
+    icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
@@ -291,7 +297,14 @@ class EnvironmentService(protocol.ServerSlice):
     # v2 handlers
     @handle(methods_v2.environment_create)
     async def environment_create(
-        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
+        self,
+        project_id: uuid.UUID,
+        name: str,
+        repository: str,
+        branch: str,
+        environment_id: Optional[uuid.UUID],
+        description: str = "",
+        icon: str = "",
     ) -> model.Environment:
         if environment_id is None:
             environment_id = uuid.uuid4()
@@ -309,24 +322,60 @@ class EnvironmentService(protocol.ServerSlice):
         if len(envs) > 0:
             raise ServerError(f"Project {project.name} (id={project.id}) already has an environment with name {name}")
 
-        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
-        await env.insert()
+        self.validate_icon(icon)
+
+        env = data.Environment(
+            id=environment_id,
+            name=name,
+            project=project_id,
+            repo_url=repository,
+            repo_branch=branch,
+            description=description,
+            icon=icon,
+        )
+        try:
+            await env.insert()
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
         return env.to_dto()
 
+    def validate_icon(self, icon: str) -> None:
+        """Check if the icon is in the supported format, raise an exception otherwise"""
+        if icon == "":
+            return
+        match = self.icon_regex.match(icon)
+        if match and len(match.groups()) == 3:
+            encoded_image = match.groups()[2]
+            try:
+                base64.b64decode(encoded_image, validate=True)
+            except binascii.Error:
+                raise BadRequest("The icon is not a valid base64 encoded string")
+        else:
+            raise BadRequest("The value supplied for the icon parameter is invalid")
+
     @handle(methods_v2.environment_modify, environment_id="id")
     async def environment_modify(
-        self, environment_id: uuid.UUID, name: str, repository: Optional[str], branch: Optional[str]
+        self,
+        environment_id: uuid.UUID,
+        name: str,
+        repository: Optional[str],
+        branch: Optional[str],
+        project_id: Optional[uuid.UUID] = None,
+        description: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
         original_env = env.to_dto()
 
+        project = project_id or env.project
+
         # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=env.project, name=name)
+        envs = await data.Environment.get_list(project=project, name=name)
         if len(envs) > 0 and envs[0].id != environment_id:
-            raise ServerError(f"Project with id={env.project} already has an environment with name {name}")
+            raise BadRequest(f"Project with id={project} already has an environment with name {name}")
 
         fields = {"name": name}
         if repository is not None:
@@ -335,13 +384,30 @@ class EnvironmentService(protocol.ServerSlice):
         if branch is not None:
             fields["repo_branch"] = branch
 
-        await env.update_fields(connection=None, **fields)
+        # Update the project field if requested and the project exists
+        if project_id is not None:
+            project_from_db = await data.Project.get_by_id(project_id)
+            if not project_from_db:
+                raise BadRequest(f"Project with id={project_id} doesn't exist")
+            fields["project"] = project_id
+
+        if description is not None:
+            fields["description"] = description
+
+        if icon is not None:
+            self.validate_icon(icon)
+            fields["icon"] = icon
+
+        try:
+            await env.update_fields(connection=None, **fields)
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
         return env.to_dto()
 
     @handle(methods_v2.environment_get, environment_id="id", api_version=2)
-    async def environment_get(self, environment_id: uuid.UUID) -> model.Environment:
-        env = await data.Environment.get_by_id(environment_id)
+    async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> model.Environment:
+        env = await data.Environment.get_by_id(environment_id, details=details)
 
         if env is None:
             raise NotFound("The environment id does not exist.")
@@ -349,8 +415,9 @@ class EnvironmentService(protocol.ServerSlice):
         return env.to_dto()
 
     @handle(methods_v2.environment_list)
-    async def environment_list(self) -> List[model.Environment]:
-        return [env.to_dto() for env in await data.Environment.get_list()]
+    async def environment_list(self, details: bool = False) -> List[model.Environment]:
+        env_list = await data.Environment.get_list(details=details)
+        return [env.to_dto() for env in env_list]
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
@@ -391,10 +458,14 @@ class EnvironmentService(protocol.ServerSlice):
         await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
+        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
+
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server. Execute rmtree() after
+            # notify_listeners() to ensure that the listeners are notified.
             shutil.rmtree(project_dir)
-        await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
 
     @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:

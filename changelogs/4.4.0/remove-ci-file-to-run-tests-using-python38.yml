@@ -1,0 +1,4 @@
+---
+description: Remove the `.ci-integration-tests-python38.yml` file as we don't need to run tests against python3.8 anymore.
+change-type: patch
+destination-branches: [master, iso4]

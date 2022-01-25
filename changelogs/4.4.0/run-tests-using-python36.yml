@@ -1,0 +1,6 @@
+---
+description: Update the .ci-integration-tests.yml file as such the test run using python3.6 by default
+issue-nr: 917
+issue-repo: irt
+change-type: patch
+destination-branches: [iso4]

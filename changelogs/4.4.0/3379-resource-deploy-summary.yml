@@ -1,0 +1,4 @@
+description: Add deployment state summary to resource list endpoint
+issue-nr: 3379
+change-type: minor
+destination-branches: [master, iso4]
