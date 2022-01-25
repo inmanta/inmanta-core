@@ -329,7 +329,7 @@ class Option(Generic[T]):
             return defa
 
     def set(self, value: str) -> None:
-        """ Only for tests"""
+        """Only for tests"""
         Config.set(self.section, self.name, value)
 
 

@@ -32,7 +32,7 @@ from inmanta.server.config import get_bind_port
 
 @pytest.mark.asyncio
 async def test_resource_list_no_released_version(server, client):
-    """ Test that if there are no released versions of a resource, the result set is empty """
+    """Test that if there are no released versions of a resource, the result set is empty"""
     project = data.Project(name="test")
     await project.insert()
 
@@ -202,7 +202,7 @@ async def env_with_resources(server, client):
 
 @pytest.mark.asyncio
 async def test_filter_resources(server, client, env_with_resources):
-    """ Test querying resources."""
+    """Test querying resources."""
     env = env_with_resources
 
     # Exact match
@@ -273,7 +273,7 @@ def resource_ids(resource_objects):
 )
 @pytest.mark.asyncio
 async def test_resources_paging(server, client, order_by_column, order, env_with_resources):
-    """ Test querying resources with paging, using different sorting parameters."""
+    """Test querying resources with paging, using different sorting parameters."""
     env = env_with_resources
 
     result = await client.resource_list(
@@ -410,7 +410,7 @@ async def test_paging_param_validation(server, client, env_with_resources):
 
 @pytest.mark.asyncio
 async def test_deploy_summary(server, client, env_with_resources):
-    """ Test querying the deployment summary of resources."""
+    """Test querying the deployment summary of resources."""
     env = env_with_resources
     expected_summary = {
         "total": 4,

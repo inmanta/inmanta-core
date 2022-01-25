@@ -55,7 +55,7 @@ class PagingMetadata:
 
 
 class QueryIdentifier(BaseModel):
-    """ The identifier for a paged query"""
+    """The identifier for a paged query"""
 
     environment: uuid.UUID
 
@@ -342,15 +342,15 @@ class PagingHandler(ABC, Generic[T]):
 
     @abstractmethod
     def get_base_url(self) -> str:
-        """ The base url for the method, with the path parameters already specified (if applicable)"""
+        """The base url for the method, with the path parameters already specified (if applicable)"""
         pass
 
     def get_first_id_name(self) -> str:
-        """ The name of the first id parameter in the api, used when creating links """
+        """The name of the first id parameter in the api, used when creating links"""
         return "first_id"
 
     def get_last_id_name(self) -> str:
-        """ The name of the last id parameter in the api, used when creating links """
+        """The name of the last id parameter in the api, used when creating links"""
         return "last_id"
 
     async def prepare_paging_links(

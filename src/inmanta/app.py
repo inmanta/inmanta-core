@@ -221,11 +221,11 @@ class ExperimentalFeatureFlags:
         return f"flag_{option.name}"
 
     def add(self, option: Option[bool]) -> None:
-        """ Add an option to the set of feature flags """
+        """Add an option to the set of feature flags"""
         self.metavar_to_option[self._get_name(option)] = option
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """ Add all feature flag options to the argument parser """
+        """Add all feature flag options to the argument parser"""
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",

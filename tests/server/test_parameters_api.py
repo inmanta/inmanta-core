@@ -114,7 +114,7 @@ def parameter_ids(parameter_objects):
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 @pytest.mark.asyncio
 async def test_parameters_paging(server, client, order_by_column, order, env_with_parameters):
-    """ Test querying parameters with paging, using different sorting parameters."""
+    """Test querying parameters with paging, using different sorting parameters."""
     env, timestamps = env_with_parameters
     result = await client.get_parameters(
         env,

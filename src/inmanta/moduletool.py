@@ -101,7 +101,7 @@ class ModuleVersionException(CLIException):
 
 
 class ModuleLikeTool(object):
-    """Shared code for modules and projects """
+    """Shared code for modules and projects"""
 
     def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
         """
@@ -613,7 +613,7 @@ mode.
             return DummyProject()
 
     def construct_module(self, project: Optional[Project], path: str) -> Module:
-        """ Construct a V1 or V2 module from a folder"""
+        """Construct a V1 or V2 module from a folder"""
         try:
             return ModuleV2(project, path)
         except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):

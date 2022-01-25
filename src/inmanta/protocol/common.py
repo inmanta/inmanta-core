@@ -834,7 +834,7 @@ class MethodProperties(object):
     def _encode_dict_for_get(
         self, query_param_name: str, query_param_value: Dict[str, Union[Any, List[Any]]]
     ) -> Dict[str, str]:
-        """ Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2 """
+        """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 
