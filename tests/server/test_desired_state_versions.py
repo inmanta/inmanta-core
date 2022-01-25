@@ -98,7 +98,7 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
 async def test_filter_versions(
     server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
-    """ Test querying desired state versions."""
+    """Test querying desired state versions."""
     environments, cm_timestamps = environments_with_versions
     env = environments["multiple_versions"]
 
@@ -194,7 +194,7 @@ def version_numbers(desired_state_objects):
 async def test_desired_state_versions_paging(
     server, client, order: str, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
-    """ Test querying desired state versions with paging, using different sorting parameters."""
+    """Test querying desired state versions with paging, using different sorting parameters."""
     environments, timestamps = environments_with_versions
     env = environments["multiple_versions"]
     order_by_column = "version"

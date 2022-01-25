@@ -2091,7 +2091,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
 
 class DummyProject(Project):
-    """ Placeholder project that does nothing """
+    """Placeholder project that does nothing"""
 
     def __init__(self, autostd: bool = True) -> None:
         super().__init__(tempfile.gettempdir(), autostd=autostd)

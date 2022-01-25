@@ -28,7 +28,7 @@ MODE_READ_INPUT = 1
 
 
 class AsyncSingleton(collections.abc.AsyncIterable):
-    """ AsyncPG wants an async iterable """
+    """AsyncPG wants an async iterable"""
 
     def __init__(self, item):
         self.item = item

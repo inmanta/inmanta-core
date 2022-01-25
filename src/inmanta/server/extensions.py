@@ -46,7 +46,7 @@ T = TypeVar("T")
 
 
 class Feature(Generic[T]):
-    """ A feature offered by a slice """
+    """A feature offered by a slice"""
 
     def __init__(self, slice: str, name: str, description: str = "", default_value: Optional[T] = None) -> None:
         self._name: str = name

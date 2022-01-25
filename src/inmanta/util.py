@@ -104,7 +104,7 @@ def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
 
 
 def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[Coroutine]) -> None:
-    """ Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message """
+    """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
     def handler(future):

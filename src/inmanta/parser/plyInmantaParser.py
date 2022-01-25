@@ -136,7 +136,7 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 
 def p_empty(p: YaccProduction) -> None:
-    "empty : "
+    "empty :"
     pass
 
 
@@ -228,24 +228,24 @@ def p_if_else(p: YaccProduction) -> None:
 
 
 def p_entity(p: YaccProduction) -> None:
-    "entity_def : ENTITY CID ':' entity_body_outer "
+    "entity_def : ENTITY CID ':' entity_body_outer"
     p[0] = DefineEntity(namespace, p[2], p[4][0], [], p[4][1])
     attach_lnr(p)
 
 
 def p_entity_err_1(p: YaccProduction) -> None:
-    "entity_def : ENTITY ID ':' entity_body_outer "
+    "entity_def : ENTITY ID ':' entity_body_outer"
     raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Entity names must start with a capital")
 
 
 def p_entity_extends(p: YaccProduction) -> None:
-    "entity_def : ENTITY CID EXTENDS class_ref_list ':' entity_body_outer "
+    "entity_def : ENTITY CID EXTENDS class_ref_list ':' entity_body_outer"
     p[0] = DefineEntity(namespace, p[2], p[6][0], p[4], p[6][1])
     attach_lnr(p)
 
 
 def p_entity_extends_err(p: YaccProduction) -> None:
-    "entity_def : ENTITY ID EXTENDS class_ref_list ':' entity_body_outer "
+    "entity_def : ENTITY ID EXTENDS class_ref_list ':' entity_body_outer"
     raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Entity names must start with a capital")
 
 
@@ -255,12 +255,12 @@ def p_entity_body_outer(p: YaccProduction) -> None:
 
 
 def p_entity_body_outer_1(p: YaccProduction) -> None:
-    """entity_body_outer : entity_body END """
+    """entity_body_outer : entity_body END"""
     p[0] = (None, p[1])
 
 
 def p_entity_body_outer_none(p: YaccProduction) -> None:
-    """entity_body_outer : END """
+    """entity_body_outer : END"""
     p[0] = (None, [])
 
 
@@ -270,13 +270,13 @@ def p_entity_body_outer_4(p: YaccProduction) -> None:
 
 
 def p_entity_body_collect(p: YaccProduction) -> None:
-    """ entity_body : entity_body attr"""
+    """entity_body : entity_body attr"""
     p[1].append(p[2])
     p[0] = p[1]
 
 
 def p_entity_body(p: YaccProduction) -> None:
-    """ entity_body : attr"""
+    """entity_body : attr"""
     p[0] = [p[1]]
 
 
@@ -506,22 +506,22 @@ def p_relation_annotated_unidir(p: YaccProduction) -> None:
 
 
 def p_multi_1(p: YaccProduction) -> None:
-    "multi : '[' INT ']' "
+    "multi : '[' INT ']'"
     p[0] = (p[2], p[2])
 
 
 def p_multi_2(p: YaccProduction) -> None:
-    "multi : '[' INT ':' ']' "
+    "multi : '[' INT ':' ']'"
     p[0] = (p[2], None)
 
 
 def p_multi_3(p: YaccProduction) -> None:
-    "multi : '[' INT ':' INT ']' "
+    "multi : '[' INT ':' INT ']'"
     p[0] = (p[2], p[4])
 
 
 def p_multi_4(p: YaccProduction) -> None:
-    "multi : '['  ':' INT ']' "
+    "multi : '['  ':' INT ']'"
     p[0] = (0, p[3])
 
 
@@ -556,7 +556,7 @@ def p_typedef_cls(p: YaccProduction) -> None:
 
 
 def p_index(p: YaccProduction) -> None:
-    """index : INDEX class_ref '(' id_list ')' """
+    """index : INDEX class_ref '(' id_list ')'"""
     p[0] = DefineIndex(p[2], p[4])
     attach_lnr(p, 1)
 
@@ -580,7 +580,7 @@ def p_expression(p: YaccProduction) -> None:
 
 
 def p_expression_parentheses(p: YaccProduction) -> None:
-    """ expression : '(' expression ')' """
+    """expression : '(' expression ')'"""
     p[0] = p[2]
 
 
@@ -597,25 +597,25 @@ def p_boolean_expression(p: YaccProduction) -> None:
 
 
 def p_boolean_expression_not(p: YaccProduction) -> None:
-    """ boolean_expression : NOT expression """
+    """boolean_expression : NOT expression"""
     p[0] = Not(p[2])
     attach_lnr(p)
 
 
 def p_boolean_expression_is_defined(p: YaccProduction) -> None:
-    """ boolean_expression : var_ref '.' ID IS DEFINED"""
+    """boolean_expression : var_ref '.' ID IS DEFINED"""
     p[0] = IsDefined(p[1], p[3])
     attach_lnr(p, 2)
 
 
 def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
-    """ boolean_expression : ID IS DEFINED """
+    """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
 
 
 def p_operand(p: YaccProduction) -> None:
-    """ operand : expression """
+    """operand : expression"""
     p[0] = p[1]
 
 
@@ -627,18 +627,18 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 
 def p_constructor(p: YaccProduction) -> None:
-    " constructor : class_ref '(' param_list ')' "
+    "constructor : class_ref '(' param_list ')'"
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call(p: YaccProduction) -> None:
-    " function_call : ns_ref '(' function_param_list ')'"
+    "function_call : ns_ref '(' function_param_list ')'"
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
 def p_list_def(p: YaccProduction) -> None:
-    " list_def : '[' operand_list ']'"
+    "list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
     attach_lnr(p, 1)
 
@@ -657,26 +657,26 @@ def p_pair_list_empty(p: YaccProduction) -> None:
 
 
 def p_map_def(p: YaccProduction) -> None:
-    " map_def : '{' pair_list '}'"
+    "map_def : '{' pair_list '}'"
     p[0] = CreateDict(p[2])
     attach_lnr(p, 1)
 
 
 def p_index_lookup(p: YaccProduction) -> None:
-    " index_lookup : class_ref '[' param_list ']'"
+    "index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
-    " index_lookup : attr_ref '[' param_list ']'"
+    "index_lookup : attr_ref '[' param_list ']'"
     attref = p[1]
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 
 
 def p_conditional_expression(p: YaccProduction) -> None:
-    " conditional_expression : expression '?' expression ':' expression"
+    "conditional_expression : expression '?' expression ':' expression"
     p[0] = ConditionalExpression(p[1], p[3], p[5])
     attach_from_string(p, 1)
 
@@ -718,19 +718,19 @@ def p_constant_false(p: YaccProduction) -> None:
 
 
 def p_constant_string(p: YaccProduction) -> None:
-    " constant : STRING "
+    "constant : STRING"
     p[0] = get_string_ast_node(p[1], Location(file, p.lineno(1)))
     attach_lnr(p)
 
 
 def p_constant_rstring(p: YaccProduction) -> None:
-    " constant : RSTRING "
+    "constant : RSTRING"
     p[0] = Literal(str(p[1]))
     attach_from_string(p)
 
 
 def p_constant_mls(p: YaccProduction) -> None:
-    " constant : mls "
+    "constant : mls"
     p[0] = get_string_ast_node(p[1], p[1].location)
     attach_from_string(p)
 
@@ -770,7 +770,7 @@ def create_string_format(format_string: LocatableString, variables: List[List[st
 
 
 def p_constant_list(p: YaccProduction) -> None:
-    " constant_list : '[' constants ']' "
+    "constant_list : '[' constants ']'"
     p[0] = CreateList(p[2])
     attach_lnr(p, 1)
 
@@ -781,7 +781,7 @@ def p_constants_term(p: YaccProduction) -> None:
 
 
 def p_constants_term_2(p: YaccProduction) -> None:
-    "constants : "
+    "constants :"
     p[0] = []
 
 
@@ -1018,7 +1018,7 @@ parser = yacc.yacc()
 
 
 def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
-    """ Actual parsing code """
+    """Actual parsing code"""
     global file
     file = tfile
     lexer.inmfile = tfile

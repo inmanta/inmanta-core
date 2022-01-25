@@ -44,19 +44,19 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 
 
 class TableNotFound(Exception):
-    """ Raised when a table is not found in the database """
+    """Raised when a table is not found in the database"""
 
     pass
 
 
 class ColumnNotFound(Exception):
-    """ Raised when a column is not found in the database """
+    """Raised when a column is not found in the database"""
 
     pass
 
 
 class Version(object):
-    """ Internal representation of a version """
+    """Internal representation of a version"""
 
     def __init__(self, name: str, function: Callable[[Connection], Coroutine[Any, Any, None]]):
         self.name = name

@@ -205,7 +205,7 @@ class CompileRun(object):
             returncode = await self.drain(sub_process)
             return await self._end_stage(returncode)
         except CancelledError:
-            """ Propagate Cancel """
+            """Propagate Cancel"""
             raise
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
@@ -507,7 +507,7 @@ class CompilerService(ServerSlice):
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
         except CancelledError:
-            """ Propagate Cancel """
+            """Propagate Cancel"""
             raise
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
@@ -589,7 +589,7 @@ class CompilerService(ServerSlice):
             try:
                 await listener.compile_done(compile)
             except CancelledError:
-                """ Propagate Cancel """
+                """Propagate Cancel"""
                 raise
             except Exception:
                 logging.exception("CompileStateListener failed")

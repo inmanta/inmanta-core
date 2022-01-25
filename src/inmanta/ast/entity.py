@@ -57,7 +57,7 @@ class EntityLike(NamedType):
 
     @abstractmethod
     def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
-        """ get defaults defined on this entity"""
+        """get defaults defined on this entity"""
         pass
 
     def get_default(self, name: str) -> "ExpressionStatement":
