@@ -5,3 +5,4 @@ sections:
   feature: "{{description}}"
 destination-branches:
   - master
+  - iso5
