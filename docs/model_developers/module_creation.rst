@@ -15,7 +15,7 @@ For a v1 module:
   :linenos:
 
   pip install cookiecutter
-  cookiecutter gh:inmanta/inmanta-module-template
+  cookiecutter --checkout v1 gh:inmanta/inmanta-module-template
 
 For a v2 module:
 
@@ -23,7 +23,7 @@ For a v2 module:
   :linenos:
 
   pip install cookiecutter
-  cookiecutter --checkout v2 gh:inmanta/inmanta-module-template
+  cookiecutter gh:inmanta/inmanta-module-template
 
 .. note::
 
