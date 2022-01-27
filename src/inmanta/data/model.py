@@ -466,6 +466,38 @@ class ResourceLog(LogLine):
     action: const.ResourceAction
 
 
+class ResourceDiffStatus(str, Enum):
+    added = "added"
+    modified = "modified"
+    deleted = "deleted"
+
+
+class AttributeDiff(BaseModel):
+    """
+    :param from_value: The value of the attribute in the earlier version
+    :param to_value: The value of the attribute in the later version
+    :param from_value_compare: A stringified, diff-friendly form of the 'from_value' field
+    :param to_value_compare: A stringified, diff-friendly form of the 'to_value' field
+    """
+
+    from_value: Optional[object] = None
+    to_value: Optional[object] = None
+    from_value_compare: Optional[str] = None
+    to_value_compare: Optional[str] = None
+
+
+class ResourceDiff(BaseModel):
+    """
+    :param resource_id: The id of the resource the diff is about (without version)
+    :param attributes: The diff between the attributes of two versions of the resource
+    :param status: The kind of diff between the versions of the resource
+    """
+
+    resource_id: ResourceIdStr
+    attributes: Dict[str, AttributeDiff]
+    status: ResourceDiffStatus
+
+
 class Parameter(BaseModel):
     id: uuid.UUID
     name: str
