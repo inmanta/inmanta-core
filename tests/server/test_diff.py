@@ -184,7 +184,7 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
             1: {
                 "dict_attr_removed": {"a": "b"},
                 "dict_attr_modified": {"x": [6, 7], "y": "y", "z": {"abc": "test1", "d": ["test2"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir2]","std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::Directory[internal,path=/tmp/dir2]", "std::Directory[internal,path=/tmp/dir1]"],
             },
             2: {
                 "dict_attr_added": {"x": "y"},
