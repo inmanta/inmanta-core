@@ -195,7 +195,7 @@ Same as :ref:`Working on a New Project <dgs-new-project>` part, modules can also
 .. code-block:: bash
 
     pip install cookiecutter
-    cookiecutter https://github.com/inmanta/inmanta-module-template.git
+    cookiecutter --checkout v1 https://github.com/inmanta/inmanta-module-template.git
 
 for a v1 module. If you want to use the module in a project, make sure to put it in the project's module path.
 
@@ -204,7 +204,7 @@ For a v2 module, use the v2 cookiecutter template, then install the module:
 .. code-block:: bash
 
     pip install cookiecutter
-    cookiecutter --checkout v2 https://github.com/inmanta/inmanta-module-template.git
+    cookiecutter https://github.com/inmanta/inmanta-module-template.git
     inmanta module install -e ./<module-name>
 
 This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
