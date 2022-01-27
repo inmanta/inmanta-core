@@ -29,7 +29,8 @@ class Attribute:
         self._value = value
 
         if self._name == "requires":
-            self._value = [resources.Id.parse_id(req).resource_str() for req in self._value]
+            # Sort the requires list
+            self._value = sorted([resources.Id.parse_id(req).resource_str() for req in self._value])
 
         self._compare_value: Optional[str] = None
 
@@ -49,8 +50,7 @@ class Attribute:
             return
 
         if isinstance(self._value, list) and len(self._value) > 0 and not isinstance(self._value[0], (dict, list)):
-            # sort list that are not a json entry
-            self._compare_value = "\n".join([str(x) for x in sorted(self._value)])
+            self._compare_value = "\n".join([str(x) for x in self._value])
 
         elif isinstance(self._value, (dict, list)):  # json
             self._compare_value = json.dumps(self._value, indent=4, sort_keys=True)

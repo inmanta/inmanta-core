@@ -90,16 +90,16 @@ async def test_list_attr_diff(client, environment, env_with_versions):
             2: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
-                "list_attr_modified": [3, 4, 4],
+                "list_attr_modified": [5, 4, 3],
                 "list_attr_type_change": ["1", "2"],
                 "requires": ["std::Directory[internal,path=/tmp/dir1]"],
             },
             3: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
-                "list_attr_modified": [3, 4, 4],
+                "list_attr_modified": [5, 4, 3],
                 "list_attr_type_change": ["1", "2"],
-                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dito_revision]"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
             },
         },
     )
@@ -133,9 +133,9 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     }
     assert result.result["data"][0]["attributes"]["list_attr_modified"] == {
         "from_value": [1, 2],
-        "to_value": [3, 4, 4],
+        "to_value": [5, 4, 3],
         "from_value_compare": "1\n2",
-        "to_value_compare": "3\n4\n4",
+        "to_value_compare": "5\n4\n3",
     }
     v1_v2_diff = result.result["data"][0]["attributes"]
     # The only difference between v2 and v3 should be the extended requires
@@ -146,9 +146,9 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     assert len(result.result["data"][0]["attributes"]) == 1
     assert result.result["data"][0]["attributes"]["requires"] == {
         "from_value": ["std::Directory[internal,path=/tmp/dir1]"],
-        "to_value": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dito_revision]"],
+        "to_value": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
         "from_value_compare": "std::Directory[internal,path=/tmp/dir1]",
-        "to_value_compare": "std::Directory[internal,path=/tmp/dir1]\nstd::Directory[internal,path=/tmp/dito_revision]",
+        "to_value_compare": "std::Directory[internal,path=/tmp/dir1]\nstd::Directory[internal,path=/tmp/dir2]",
     }
     v2_v3_diff = result.result["data"][0]["attributes"]
     # In this specific case, the v1 to v3 diff should be the union of the v1_v2 and v2_v3 diffs
@@ -170,6 +170,12 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
         {1: constant_value, 2: constant_value, 3: constant_value},
         resource_type="std::Directory",
     )
+    await create_resource_in_multiple_versions(
+        env_id,
+        "/tmp/dir2",
+        {1: constant_value, 2: constant_value, 3: constant_value},
+        resource_type="std::Directory",
+    )
     # v1 and v3 are identical
     await create_resource_in_multiple_versions(
         env_id,
@@ -178,17 +184,17 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
             1: {
                 "dict_attr_removed": {"a": "b"},
                 "dict_attr_modified": {"x": [6, 7], "y": "y", "z": {"abc": "test1", "d": ["test2"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::Directory[internal,path=/tmp/dir2]","std::Directory[internal,path=/tmp/dir1]"],
             },
             2: {
                 "dict_attr_added": {"x": "y"},
                 "dict_attr_modified": {"x": [42], "z": {"abc": "test1", "d": ["test3"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
             },
             3: {
                 "dict_attr_removed": {"a": "b"},
                 "dict_attr_modified": {"x": [6, 7], "y": "y", "z": {"abc": "test1", "d": ["test2"]}},
-                "requires": ["std::Directory[internal,path=/tmp/dir1]"],
+                "requires": ["std::Directory[internal,path=/tmp/dir2]", "std::Directory[internal,path=/tmp/dir1]"],
             },
         },
     )
