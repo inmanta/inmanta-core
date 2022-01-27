@@ -31,14 +31,14 @@ class Attribute:
         if self._name == "requires":
             self._value = [resources.Id.parse_id(req).resource_str() for req in self._value]
 
-        self._compare_value = None
+        self._compare_value: Optional[str] = None
 
     @property
     def value(self) -> object:
         return self._value
 
     @property
-    def compare_value(self) -> str:
+    def compare_value(self) -> Optional[str]:
         self._generate_compare_value()
 
         return self._compare_value
