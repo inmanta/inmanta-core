@@ -2,3 +2,5 @@ description: Added version diff api endpoint
 issue-nr: 3659
 change-type: minor
 destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"

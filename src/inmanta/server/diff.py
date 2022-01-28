@@ -54,8 +54,8 @@ class Attribute:
         if isinstance(self._value, list) and len(self._value) > 0 and not isinstance(self._value[0], (dict, list)):
             self._compare_value = "\n".join([str(x) for x in self._value])
 
-        elif isinstance(self._value, (dict, list)):  # json
-            self._compare_value = json.dumps(self._value, indent=4, sort_keys=True)
+        elif isinstance(self.value, (dict, list)):  # json
+            self._compare_value = json.dumps(self.value, indent=4, sort_keys=True)
         else:
             self._compare_value = str(self.value)
 

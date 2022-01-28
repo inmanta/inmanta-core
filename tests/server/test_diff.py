@@ -66,7 +66,7 @@ async def create_resource_in_multiple_versions(
 
 @pytest.mark.asyncio
 async def test_list_attr_diff(client, environment, env_with_versions):
-    """Test the diff functionality with simple values and lists. """
+    """Test the diff functionality with simple values and lists."""
     env_id = uuid.UUID(environment)
     # Add a resource that doesn't change, so it shouldn't be included in either of the diffs
     constant_value = {"key2": "val2"}
