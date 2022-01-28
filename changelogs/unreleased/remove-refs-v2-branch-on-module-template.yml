@@ -1,0 +1,6 @@
+---
+description: Remove the references to the v2 branch of the inmanta module tempate in documentation.
+issue-nr: 16
+issue-repo: inmanta-module-template
+change-type: patch
+destination-branches: [master, iso5]
