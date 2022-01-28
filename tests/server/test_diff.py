@@ -88,21 +88,21 @@ async def test_list_attr_diff(client, environment, env_with_versions):
                 "key1": "val1",
                 "list_attr_removed": [1, 2],
                 "list_attr_modified": [1, 2],
-                "list_attr_type_change": [1, 2],
+                "simple_attr_type_change": True,
                 "requires": ["std::Directory[internal,path=/tmp/dir1]"],
             },
             2: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
                 "list_attr_modified": [5, 4, 3],
-                "list_attr_type_change": ["1", "2"],
+                "simple_attr_type_change": "True",
                 "requires": ["std::Directory[internal,path=/tmp/dir1]"],
             },
             3: {
                 "key1": "val2",
                 "list_attr_added": [3, 4],
                 "list_attr_modified": [5, 4, 3],
-                "list_attr_type_change": ["1", "2"],
+                "simple_attr_type_change": "True",
                 "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
             },
         },
@@ -122,25 +122,25 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     # The requires list is not changed
     assert "requires" not in result.result["data"][0]["attributes"]
     # Attributes, where the data changed but the string representation didn't, are not included in the diff
-    assert "list_attr_type_change" not in result.result["data"][0]["attributes"]
+    assert "simple_attr_type_change" not in result.result["data"][0]["attributes"]
     assert result.result["data"][0]["attributes"]["list_attr_removed"] == {
         "from_value": [1, 2],
         "to_value": None,
-        "from_value_compare": "1\n2",
+        "from_value_compare": "[\n    1,\n    2\n]",
         "to_value_compare": None,
     }
     assert result.result["data"][0]["attributes"]["list_attr_added"] == {
         "from_value": None,
         "to_value": [3, 4],
         "from_value_compare": None,
-        "to_value_compare": "3\n4",
+        "to_value_compare": "[\n    3,\n    4\n]",
     }
     # Make sure that the order of the list elements doesn't change during comparison (so the [5,4,3] list is not sorted)
     assert result.result["data"][0]["attributes"]["list_attr_modified"] == {
         "from_value": [1, 2],
         "to_value": [5, 4, 3],
-        "from_value_compare": "1\n2",
-        "to_value_compare": "5\n4\n3",
+        "from_value_compare": "[\n    1,\n    2\n]",
+        "to_value_compare": "[\n    5,\n    4,\n    3\n]",
     }
     v1_v2_diff = result.result["data"][0]["attributes"]
     # The only difference between v2 and v3 should be the extended requires
@@ -152,8 +152,9 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     assert result.result["data"][0]["attributes"]["requires"] == {
         "from_value": ["std::Directory[internal,path=/tmp/dir1]"],
         "to_value": ["std::Directory[internal,path=/tmp/dir1]", "std::Directory[internal,path=/tmp/dir2]"],
-        "from_value_compare": "std::Directory[internal,path=/tmp/dir1]",
-        "to_value_compare": "std::Directory[internal,path=/tmp/dir1]\nstd::Directory[internal,path=/tmp/dir2]",
+        "from_value_compare": '[\n    "std::Directory[internal,path=/tmp/dir1]"\n]',
+        "to_value_compare": '[\n    "std::Directory[internal,path=/tmp/dir1]",\n    "std::Directory[internal,path=/tmp/dir2]"\n'
+        "]",
     }
     v2_v3_diff = result.result["data"][0]["attributes"]
     # In this specific case, the v1 to v3 diff should be the union of the v1_v2 and v2_v3 diffs
