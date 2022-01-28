@@ -936,6 +936,37 @@ def get_resources_in_version(
 
 
 @typedmethod(
+    path="/desiredstate/diff/<from_version>/<to_version>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_diff_of_versions(
+    tid: uuid.UUID,
+    from_version: int,
+    to_version: int,
+) -> List[model.ResourceDiff]:
+    """
+    Compare two versions of desired states, and provide the difference between them,
+    with regard to their resources and the attributes of these resources.
+    Resources that are the same in both versions are not mentioned in the results.
+
+    A resource diff describes whether the resource was 'added', 'modified' or 'deleted',
+    and what the values of their attributes were in the versions.
+    The values are also returned in a stringified, easy to compare way,
+    which can be used to calculate a `git diff`-like summary of the changes.
+
+    :param tid: The id of the environment
+    :param from_version: The (lower) version number to compare
+    :param to_version: The other (higher) version number to compare
+    :return: The resource diffs between from_version and to_version
+    :raise NotFound: This exception is raised when the referenced environment or versions are not found
+    :raise BadRequest: When the version parameters are not valid
+    """
+
+
+@typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
