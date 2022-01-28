@@ -66,8 +66,9 @@ async def create_resource_in_multiple_versions(
 
 @pytest.mark.asyncio
 async def test_list_attr_diff(client, environment, env_with_versions):
-    """Test the diff functionality with simple values and lists"""
+    """Test the diff functionality with simple values and lists. """
     env_id = uuid.UUID(environment)
+    # Add a resource that doesn't change, so it shouldn't be included in either of the diffs
     constant_value = {"key2": "val2"}
     await create_resource_in_multiple_versions(
         env_id,
@@ -75,6 +76,9 @@ async def test_list_attr_diff(client, environment, env_with_versions):
         {1: constant_value, 2: constant_value, 3: constant_value},
         resource_type="std::Directory",
     )
+    # from v1 to v2 a single value and a list are changed, a list added another deleted,
+    # and there is another list where the data type changes from ints to strings.
+    # Since the string representations are the same, the latter shouldn't be included in the diff.
     # v2 and v3 have only one difference, the requires list
     await create_resource_in_multiple_versions(
         env_id,
@@ -131,6 +135,7 @@ async def test_list_attr_diff(client, environment, env_with_versions):
         "from_value_compare": None,
         "to_value_compare": "3\n4",
     }
+    # Make sure that the order of the list elements doesn't change during comparison (so the [5,4,3] list is not sorted)
     assert result.result["data"][0]["attributes"]["list_attr_modified"] == {
         "from_value": [1, 2],
         "to_value": [5, 4, 3],
@@ -177,6 +182,8 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
         resource_type="std::Directory",
     )
     # v1 and v3 are identical
+    # The changes from v1 to v2 are adding, removing and modifying dict attributes,
+    # as well as a change in the order of the requires list: this shouldn't be included in the diff
     await create_resource_in_multiple_versions(
         env_id,
         "/tmp/dir1/file1",
@@ -264,12 +271,14 @@ async def test_resources_diff(client, environment, env_with_versions):
     """Test the diff functionality on multiple resources across multiple versions"""
     env_id = uuid.UUID(environment)
     constant_value = {"key2": "val2"}
+    # The resource is only present in version 1 and 3, the attribute values don't change
     await create_resource_in_multiple_versions(
         env_id,
         "/tmp/dir1",
         {1: constant_value, 3: constant_value},
         resource_type="std::Directory",
     )
+    # The resource is only present in version 1 and 3, the attribute values change
     await create_resource_in_multiple_versions(
         env_id,
         "/tmp/dir1/file1",
@@ -290,6 +299,7 @@ async def test_resources_diff(client, environment, env_with_versions):
             },
         },
     )
+    # The resource is only present in version 2 and 3, the attribute values don't change
     await create_resource_in_multiple_versions(
         env_id,
         "/tmp/file2",
@@ -356,7 +366,7 @@ async def test_resources_diff(client, environment, env_with_versions):
 
 @pytest.mark.asyncio
 async def test_validate_versions(client, environment, env_with_versions):
-    """Test the version parameter validation of the diff endpoint"""
+    """Test the version parameter validation of the diff endpoint."""
     result = await client.get_diff_of_versions(environment, 1, 2)
     assert result.code == 200
     result = await client.get_diff_of_versions(environment, 1, 1)
@@ -367,3 +377,5 @@ async def test_validate_versions(client, environment, env_with_versions):
     assert result.code == 404
     result = await client.get_diff_of_versions(environment, 100, 110)
     assert result.code == 404
+    result = await client.get_diff_of_versions(environment, 110, 100)
+    assert result.code == 400

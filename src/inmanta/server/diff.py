@@ -36,10 +36,12 @@ class Attribute:
 
     @property
     def value(self) -> object:
+        """The value of the attribute"""
         return self._value
 
     @property
     def compare_value(self) -> Optional[str]:
+        """The string representation of the value, which can be used for comparison"""
         self._generate_compare_value()
 
         return self._compare_value
@@ -95,6 +97,8 @@ class Resource:
         self._attributes = {name: Attribute(name, value) for name, value in attributes.items() if name != "version"}
 
     def compare(self, other: "Resource") -> Optional[ResourceDiff]:
+        """Compare this resource with another: check which attributes are added, modified and removed.
+        The other resource is considered to be the original"""
         other_attributes = set(other._attributes.keys())
         our_attributes = set(self._attributes.keys())
 
@@ -141,9 +145,12 @@ class Version:
         }
 
     def get_resource_set(self) -> Set[str]:
+        """The names of the resources in this version"""
         return set(self._resources.keys())
 
     def generate_diff(self, other: "Version") -> List[ResourceDiff]:
+        """Compare this version with another: check which resources are added, removed and modified.
+        The other version is considered to be the original."""
         our_set = self.get_resource_set()
         other_set = other.get_resource_set()
         result: List[ResourceDiff] = []
