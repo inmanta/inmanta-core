@@ -51,7 +51,7 @@ Option name  Default value  Description
 ===========  =============  =====================================================================================================================
 retries      10             The amount of times the orchestrator will try to establish the SSH connection when the initial attempt failed.
 retry_wait   30             The amount of second between two attempts to establish the SSH connection.
-python       python         The Python2 interpreter available on the remote side. This executable has to be discoverable through the system PATH.
+python       python         The Python3 interpreter available on the remote side. This executable has to be discoverable through the system PATH.
 ===========  =============  =====================================================================================================================
 
 
