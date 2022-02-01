@@ -10,7 +10,7 @@ For RHEL8-based systems:
 
 .. code-block:: sh
 
-  sudo yum module install postgresql:13/server
+  sudo dnf module install postgresql:13/server
 
 .. _install-step-3:
 
