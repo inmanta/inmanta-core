@@ -79,7 +79,7 @@ Install the software
 
         .. code-block:: bash
 
-            inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
+            /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
 
 
     .. tab:: Other
@@ -125,7 +125,7 @@ Install the software
 
         .. code-block:: bash
 
-            inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
+            /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
 
 
     .. tab:: Windows
