@@ -22,7 +22,7 @@ from typing import List, Optional, cast
 
 from inmanta import data
 from inmanta.data.model import ResourceVersionIdStr
-from inmanta.protocol import handle, methods
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import (
@@ -66,6 +66,11 @@ class DyrunService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
+        dryrun = await self.create_dryrun(env, version_id, model)
+
+        return 200, {"dryrun": dryrun}
+
+    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_list(model=version_id, environment=env.id)
 
@@ -122,7 +127,17 @@ class DyrunService(protocol.ServerSlice):
                 }
                 await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
-        return 200, {"dryrun": dryrun}
+        return dryrun
+
+    @handle(methods_v2.dryrun_trigger, version_id="id", env="tid")
+    async def dryrun_trigger(self, env: data.Environment, version_id: int) -> uuid.UUID:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+        if model is None:
+            raise NotFound("The requested version does not exist.")
+
+        dryrun = await self.create_dryrun(env, version_id, model)
+
+        return dryrun.id
 
     @handle(methods.dryrun_list, env="tid")
     async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:

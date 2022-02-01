@@ -1066,3 +1066,17 @@ def get_all_facts(
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
+
+
+# Dryrun related methods
+
+
+@typedmethod(path="/dryrun/<id>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def dryrun_trigger(tid: uuid.UUID, id: int) -> uuid.UUID:
+    """
+    Trigger a new dryrun
+
+    :param tid: The id of the environment
+    :param id: The version of the configuration model to deploy
+    :return: The id of the new dryrun
+    """
