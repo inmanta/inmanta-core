@@ -316,18 +316,14 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
 
 
 @pytest.mark.asyncio(timeout=150)
-async def test_dryrun_v2(server, client, resource_container, environment):
+async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """
     Dryrun a configuration model with the v2 api, where applicable
     """
 
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    await agent.add_end_point_name("agent1")
-    await agent.start()
-
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await agent_factory(
+        hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False, agent_names=["agent1"]
+    )
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -421,9 +417,11 @@ async def test_dryrun_v2(server, client, resource_container, environment):
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
 
     result = await client.dryrun_report(environment, dry_run_id)
     assert result.code == 200
@@ -443,5 +441,3 @@ async def test_dryrun_v2(server, client, resource_container, environment):
     # Changes for undeployable resources are empty
     for i in range(3, 6):
         assert changes[resources[i]["id"]]["changes"] == {}
-
-    await agent.stop()
