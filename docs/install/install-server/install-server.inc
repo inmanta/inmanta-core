@@ -37,7 +37,7 @@ Install the software
 
         .. code-block:: sh
 
-          sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
           [inmanta-oss-stable]
           name=inmanta-oss-stable
           baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
