@@ -5279,6 +5279,31 @@ class DryRun(BaseDocument):
         await obj.insert()
         return obj
 
+    @classmethod
+    async def list_dryruns(
+        cls,
+        order_by_column: Optional[str] = None,
+        order: str = "ASC",
+        **query: object,
+    ) -> List[m.DryRun]:
+        records = await cls.get_list_with_columns(
+            order_by_column=order_by_column,
+            order=order,
+            columns=["id", "environment", "model", "date", "total", "todo"],
+            **query,
+        )
+        return [
+            m.DryRun(
+                id=record.id,
+                environment=record.environment,
+                model=record.model,
+                date=record.date,
+                total=record.total,
+                todo=record.todo,
+            )
+            for record in records
+        ]
+
     def to_dict(self) -> JsonType:
         dict_result = BaseDocument.to_dict(self)
         resources = {r["id"]: r for r in dict_result["resources"].values()}

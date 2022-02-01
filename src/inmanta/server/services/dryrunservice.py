@@ -163,8 +163,7 @@ class DyrunService(protocol.ServerSlice):
         if model is None:
             raise NotFound("The requested version does not exist.")
 
-        dryruns = await data.DryRun.get_list(order_by_column="date", order="DESC", environment=env.id, model=version)
-        dtos = [dryrun.to_dto() for dryrun in dryruns]
+        dtos = await data.DryRun.list_dryruns(order_by_column="date", order="DESC", environment=env.id, model=version)
         return dtos
 
     @handle(methods.dryrun_report, dryrun_id="id", env="tid")
