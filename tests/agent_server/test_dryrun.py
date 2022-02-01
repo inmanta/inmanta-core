@@ -30,7 +30,6 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-# TODO: add v2 api option?
 @pytest.mark.asyncio(timeout=150)
 async def test_dryrun_and_deploy(server, client, resource_container, environment):
     """
