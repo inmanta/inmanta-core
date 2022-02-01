@@ -14,4 +14,4 @@ machine that will run the agent.
     enabled_metadata=1
     EOF
 
-    sudo yum install -y inmanta-oss-agent
+    sudo dnf install -y inmanta-oss-agent
