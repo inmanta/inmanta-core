@@ -5285,6 +5285,16 @@ class DryRun(BaseDocument):
         dict_result["resources"] = resources
         return dict_result
 
+    def to_dto(self) -> m.DryRun:
+        return m.DryRun(
+            id=self.id,
+            environment=self.environment,
+            model=self.model,
+            date=self.date,
+            total=self.total,
+            todo=self.todo,
+        )
+
 
 _classes = [
     Project,
