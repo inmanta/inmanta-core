@@ -1077,6 +1077,6 @@ def dryrun_trigger(tid: uuid.UUID, id: int) -> uuid.UUID:
     Trigger a new dryrun
 
     :param tid: The id of the environment
-    :param id: The version of the configuration model to deploy
+    :param id: The version of the configuration model to execute the dryrun for
     :return: The id of the new dryrun
     """
