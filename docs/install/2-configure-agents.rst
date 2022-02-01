@@ -51,7 +51,7 @@ Option name  Default value  Description
 ===========  =============  =====================================================================================================================
 retries      10             The amount of times the orchestrator will try to establish the SSH connection when the initial attempt failed.
 retry_wait   30             The amount of second between two attempts to establish the SSH connection.
-python       python         The Python2 interpreter available on the remote side. This executable has to be discoverable through the system PATH.
+python       python         The Python3 interpreter available on the remote side. This executable has to be discoverable through the system PATH.
 ===========  =============  =====================================================================================================================
 
 
@@ -90,24 +90,7 @@ device is remote with respect to the Inmanta agent and the agent has to execute 
 Step 1: Installing the required Inmanta packages
 ================================================
 
-In order to run a manually started agent, the ``inmanta-oss`` and the ``inmanta-oss-agent`` packages are required on the
-machine that will run the agent.
-
-.. code-block:: sh
-
-    sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
-    [inmanta-oss-stable]
-    name=Inmanta OSS stable
-    baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
-    gpgcheck=1
-    gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
-    repo_gpgcheck=1
-    enabled=1
-    enabled_metadata=1
-    EOF
-
-    sudo yum install -y epel-release
-    sudo yum install -y inmanta-oss inmanta-oss-agent
+.. include:: ./configure-agents/install-packages.inc
 
 
 Step 2: Configuring the manually-started agent

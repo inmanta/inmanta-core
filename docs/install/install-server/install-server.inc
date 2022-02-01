@@ -37,7 +37,7 @@ Install the software
 
         .. code-block:: sh
 
-          sudo tee /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
           [inmanta-oss-stable]
           name=inmanta-oss-stable
           baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
@@ -53,7 +53,6 @@ Install the software
           type=rpm-md
           EOF
 
-          sudo dnf install -y epel-release
           sudo dnf install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
 
         The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
