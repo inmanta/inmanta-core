@@ -21,7 +21,7 @@ import uuid
 from typing import List, Optional, cast
 
 from inmanta import data
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.data.model import DryRun, ResourceVersionIdStr
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
@@ -156,6 +156,15 @@ class DyrunService(protocol.ServerSlice):
             200,
             {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo} for x in dryruns]},
         )
+
+    @handle(methods_v2.list_dryruns, env="tid")
+    async def list_dryruns(self, env: data.Environment, version: int) -> List[DryRun]:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
+        if model is None:
+            raise NotFound("The requested version does not exist.")
+
+        dtos = await data.DryRun.list_dryruns(order_by_column="date", order="DESC", environment=env.id, model=version)
+        return dtos
 
     @handle(methods.dryrun_report, dryrun_id="id", env="tid")
     async def dryrun_report(self, env: data.Environment, dryrun_id: uuid.UUID) -> Apireturn:

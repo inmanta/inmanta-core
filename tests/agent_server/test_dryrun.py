@@ -407,19 +407,29 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     result = await client.dryrun_trigger(environment, 123456789)
     assert result.code == 404
 
+    result = await client.list_dryruns(uuid.uuid4(), version)
+    assert result.code == 404
+
+    result = await client.list_dryruns(environment, 123456789)
+    assert result.code == 404
+
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
     # request a dryrun with correct parameters
     result = await client.dryrun_trigger(environment, version)
     assert result.code == 200
     dry_run_id = result.result["data"]
 
     # get the dryrun results
-    result = await client.dryrun_list(environment, version)
+    result = await client.list_dryruns(environment, version)
     assert result.code == 200
-    assert len(result.result["dryruns"]) == 1
+    assert len(result.result["data"]) == 1
 
     async def dryrun_finished():
-        result = await client.dryrun_list(environment, version)
-        return result.result["dryruns"][0]["todo"] == 0
+        result = await client.list_dryruns(environment, version)
+        return result.result["data"][0]["todo"] == 0
 
     await retry_limited(dryrun_finished, 10)
 
@@ -441,3 +451,24 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     # Changes for undeployable resources are empty
     for i in range(3, 6):
         assert changes[resources[i]["id"]]["changes"] == {}
+
+    # Change a value for a new dryrun
+    res = await data.Resource.get(environment, "test::Resource[agent1,key=key1],v=%d" % version)
+    await res.update(attributes={**res.attributes, "value": "updated_value"})
+
+    result = await client.dryrun_trigger(environment, version)
+    assert result.code == 200
+    new_dry_run_id = result.result["data"]
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    # Check if the dryruns are ordered correctly
+    assert result.result["data"][0]["id"] == new_dry_run_id
+    assert result.result["data"][0]["date"] > result.result["data"][1]["date"]
+
+    await retry_limited(dryrun_finished, 10)
+
+    # The new dryrun should have the updated value
+    result = await client.dryrun_report(environment, new_dry_run_id)
+    assert result.code == 200
+    assert result.result["dryrun"]["resources"][resources[0]["id"]]["changes"]["value"]["desired"] == "updated_value"

@@ -1078,5 +1078,18 @@ def dryrun_trigger(tid: uuid.UUID, id: int) -> uuid.UUID:
 
     :param tid: The id of the environment
     :param id: The version of the configuration model to execute the dryrun for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The id of the new dryrun
+    """
+
+
+@typedmethod(path="/dryrun", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
+    """
+    Query a list of dry runs for a specific version
+
+    :param tid: The id of the environment
+    :param version: The configuration model version to return dryruns for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The list of dryruns for the specified version in descending order by date
     """

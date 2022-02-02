@@ -564,3 +564,12 @@ class NoPushTriggerMethod(str, Enum):
 PromoteTriggerMethod = StrEnum(
     "PromoteTriggerMethod", [(i.name, i.value) for i in chain(const.AgentTriggerMethod, NoPushTriggerMethod)]
 )
+
+
+class DryRun(BaseModel):
+    id: uuid.UUID
+    environment: uuid.UUID
+    model: int
+    date: Optional[datetime.datetime]
+    total: int = 0
+    todo: int = 0
