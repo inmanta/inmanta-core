@@ -75,7 +75,7 @@ Install the software
             path=/opt/inmanta/web-console/package/dist
 
 
-        Then the web-console/dashboard can be started using below command (please note, below command has to be run after completing the  :ref:`configure-server`) part:
+        Then the Inmanta server can be started using below command (please note, below command has to be run after completing the  :ref:`configure-server`) part:
 
         .. code-block:: bash
 
