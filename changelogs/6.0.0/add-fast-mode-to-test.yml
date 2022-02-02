@@ -1,0 +1,5 @@
+description: Add fast mode to tests
+change-type: patch
+destination-branches:
+  - iso4
+  - master

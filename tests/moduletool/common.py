@@ -24,7 +24,7 @@ from typing import Optional
 import yaml
 
 from inmanta.config import Config
-from inmanta.module import InstallMode
+from inmanta.module import InstallMode, Project
 from inmanta.moduletool import ModuleTool
 
 
@@ -93,11 +93,11 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
     if version is None:
         return commitmodule(modpath, msg)
     else:
-        ocd = os.curdir
-        os.curdir = modpath
+        old_cwd = os.getcwd()
+        os.chdir(modpath)
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
         ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
-        os.curdir = ocd
+        os.chdir(old_cwd)
 
 
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
@@ -140,20 +140,32 @@ def make_module_simple_deps(reporoot, name, depends=[], project=False, version="
     return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
-def install_project(modules_dir, name, config=True):
+def install_project(modules_dir, name, config=True, config_content: Optional[str] = None):
+    """
+    Install a project without verifying it.
+    """
     subroot = tempfile.mkdtemp()
     coroot = os.path.join(subroot, name)
     subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=subroot, stderr=subprocess.STDOUT)
     os.chdir(coroot)
-    os.curdir = coroot
+    if config_content:
+        with open("project.yml", "w", encoding="utf-8") as fh:
+            fh.write(config_content)
     if config:
         Config.load_config()
+    Project.get().load_module_recursive(install=True)
     return coroot
 
 
-def clone_repo(source_dir, repo_name, destination_dir):
+def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: Optional[str] = None) -> str:
+    """
+    :param tag: Clone commit with the given tag.
+    """
+    additional_clone_args = ["-b", tag] if tag is not None else []
     subprocess.check_output(
-        ["git", "clone", os.path.join(source_dir, repo_name)], cwd=destination_dir, stderr=subprocess.STDOUT
+        ["git", "clone", *additional_clone_args, os.path.join(source_dir, repo_name)],
+        cwd=destination_dir,
+        stderr=subprocess.STDOUT,
     )
     subprocess.check_output(
         ["git", "config", "user.email", '"test@test.example"'],
@@ -163,6 +175,7 @@ def clone_repo(source_dir, repo_name, destination_dir):
     subprocess.check_output(
         ["git", "config", "user.name", "Tester test"], cwd=os.path.join(destination_dir, repo_name), stderr=subprocess.STDOUT
     )
+    return os.path.join(destination_dir, repo_name)
 
 
 class BadModProvider(object):

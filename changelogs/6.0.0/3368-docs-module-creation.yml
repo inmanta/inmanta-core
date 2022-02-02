@@ -1,0 +1,5 @@
+description: Updated module creation documentation for v2 modules
+change-type: patch
+issue-nr: 3368
+destination-branches:
+  - master

@@ -21,8 +21,8 @@ import uuid
 from typing import List, Optional, cast
 
 from inmanta import data
-from inmanta.data.model import ResourceVersionIdStr
-from inmanta.protocol import methods
+from inmanta.data.model import DryRun, ResourceVersionIdStr
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
 from inmanta.server import (
@@ -60,12 +60,17 @@ class DyrunService(protocol.ServerSlice):
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
 
-    @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
+    @handle(methods.dryrun_request, version_id="id", env="tid")
     async def dryrun_request(self, env: data.Environment, version_id: int) -> Apireturn:
         model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
+        dryrun = await self.create_dryrun(env, version_id, model)
+
+        return 200, {"dryrun": dryrun}
+
+    async def create_dryrun(self, env: data.Environment, version_id: int, model: data.ConfigurationModel) -> data.DryRun:
         # fetch all resource in this cm and create a list of distinct agents
         rvs = await data.Resource.get_list(model=version_id, environment=env.id)
 
@@ -122,9 +127,19 @@ class DyrunService(protocol.ServerSlice):
                 }
                 await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
-        return 200, {"dryrun": dryrun}
+        return dryrun
 
-    @protocol.handle(methods.dryrun_list, env="tid")
+    @handle(methods_v2.dryrun_trigger, version_id="id", env="tid")
+    async def dryrun_trigger(self, env: data.Environment, version_id: int) -> uuid.UUID:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+        if model is None:
+            raise NotFound("The requested version does not exist.")
+
+        dryrun = await self.create_dryrun(env, version_id, model)
+
+        return dryrun.id
+
+    @handle(methods.dryrun_list, env="tid")
     async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:
         query_args = {}
         query_args["environment"] = env.id
@@ -142,7 +157,16 @@ class DyrunService(protocol.ServerSlice):
             {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo} for x in dryruns]},
         )
 
-    @protocol.handle(methods.dryrun_report, dryrun_id="id", env="tid")
+    @handle(methods_v2.list_dryruns, env="tid")
+    async def list_dryruns(self, env: data.Environment, version: int) -> List[DryRun]:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
+        if model is None:
+            raise NotFound("The requested version does not exist.")
+
+        dtos = await data.DryRun.list_dryruns(order_by_column="date", order="DESC", environment=env.id, model=version)
+        return dtos
+
+    @handle(methods.dryrun_report, dryrun_id="id", env="tid")
     async def dryrun_report(self, env: data.Environment, dryrun_id: uuid.UUID) -> Apireturn:
         dryrun = await data.DryRun.get_by_id(dryrun_id)
         if dryrun is None:
@@ -150,8 +174,10 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    @protocol.handle(methods.dryrun_update, dryrun_id="id", env="tid")
-    async def dryrun_update(self, env: data.Environment, dryrun_id: uuid.UUID, resource: str, changes: JsonType) -> Apireturn:
+    @handle(methods.dryrun_update, dryrun_id="id", env="tid")
+    async def dryrun_update(
+        self, env: data.Environment, dryrun_id: uuid.UUID, resource: ResourceVersionIdStr, changes: JsonType
+    ) -> Apireturn:
         async with self.dryrun_lock:
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             await data.DryRun.update_resource(dryrun_id, resource, payload)

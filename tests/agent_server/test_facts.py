@@ -128,6 +128,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     """
     dryrun and deploy a configuration model automatically
     """
+    caplog.set_level(logging.ERROR)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     # allow very rapid fact refresh
     agentmanager._fact_resource_block = 0.1

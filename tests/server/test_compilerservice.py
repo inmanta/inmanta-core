@@ -34,7 +34,7 @@ import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
-from inmanta.deploy import cfg_env
+from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
@@ -298,6 +298,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
     no_marker = "__no__marker__"
@@ -358,10 +359,12 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await compile_and_assert(env, True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
+    assert stages["Creating venv"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print} {no_marker}" in out
-    assert len(stages) == 3
+    assert len(stages) == 5
     assert compile.version is not None
 
     # no export
@@ -388,39 +391,44 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     # switch branch
     compile, stages = await compile_and_assert(env2, False)
     assert stages["Init"]["returncode"] == 0
-    assert stages[f"switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
+    assert stages[f"Switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 3
+    assert len(stages) == 4
     assert compile.version is None
 
     # update with no update
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
-    assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 4
     assert compile.version is None
 
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
-    assert stages["Fetching changes"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 5
+    assert len(stages) == 4
     assert compile.version is None
+
+    # Ensure that the pip binary created in the venv of the compiler service works correctly
+    pip_binary_path = os.path.join(project_work_dir, ".env", "bin", "pip")
+    output = subprocess.check_output([pip_binary_path, "list", "--format", "json"], encoding="utf-8")
+    assert "inmanta-core" in output
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
         env: data.Environment = await environment_factory.create_environment(main)
@@ -492,12 +500,11 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         # stages
         init = reports["Init"]
         assert not init["errstream"]
-        assert "project found in" in init["outstream"] and "and no repository set" in init["outstream"]
+        assert "no project found in" in init["outstream"] and "and no repository set" in init["outstream"]
 
-        # compile
-        comp = reports["Recompiling configuration model"]
-        assert "Unable to find an inmanta project (project.yml expected)" in comp["errstream"]
-        assert comp["returncode"] == 1
+        # no compile report
+        assert len(reports) == 1
+
         return report["requested"], report["started"], report["completed"]
 
     r1, s1, f1 = assert_report(u1)

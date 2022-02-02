@@ -200,7 +200,7 @@ class Resource(metaclass=ResourceMeta):
     """
 
     fields: Sequence[str] = ("send_event",)
-    send_event: bool
+    send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: Dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
@@ -306,7 +306,7 @@ class Resource(metaclass=ResourceMeta):
                 # serialize to weed out all unknowns
                 # not very efficient, but the tree has to be traversed anyways
                 # passing along the serialized version would break the resource apis
-                json.dumps(value, default=inmanta.util.custom_json_encoder)
+                json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
@@ -577,6 +577,13 @@ class Id(object):
         return obj
 
     @classmethod
+    def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
+        id: Id = Id.parse_id(resource_id)
+        if id.version == 0:
+            raise Exception(f"Version is missing from resource id: {resource_id}")
+        return id
+
+    @classmethod
     def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
         """
         Parse the resource id and return the type, the hostname and the
@@ -611,6 +618,12 @@ class Id(object):
         """
         result = PARSE_RVID_REGEX.search(value)
         return result is not None
+
+    def is_resource_version_id_obj(self) -> bool:
+        """
+        Check whether this object represents a resource version id
+        """
+        return self.version != 0
 
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)

@@ -241,5 +241,5 @@ def test_is_sub_dict():
 
 
 def test_get_product_meta_data():
-    """ Basic smoke test for testing utils"""
+    """Basic smoke test for testing utils"""
     assert get_product_meta_data() is not None

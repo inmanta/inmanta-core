@@ -29,6 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.resources import Id, ResourceVersionIdStr
 
 
 @pytest.mark.asyncio
@@ -38,7 +39,7 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
         postgres_db.port,
         database_name,
         postgres_db.user,
-        None,
+        postgres_db.password,
         create_db_schema,
         connection_pool_min_size=1,
         connection_pool_max_size=1,
@@ -56,7 +57,9 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
 
 @pytest.mark.asyncio
 async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
-    pool: Pool = await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema)
+    pool: Pool = await data.connect(
+        postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
+    )
     assert pool is not None
     try:
         async with pool.acquire() as connection:
@@ -74,7 +77,7 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
             postgres_db.port,
             database_name,
             postgres_db.user,
-            None,
+            postgres_db.password,
             create_db_schema,
             connection_pool_min_size=min_size,
             connection_pool_max_size=max_size,
@@ -499,7 +502,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
         """
         result = await postgresql_client.fetch(query, env2.id, "proc2")
         assert len(result) == 1
-        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0)
+        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0).astimezone()
 
 
 @pytest.mark.asyncio
@@ -817,7 +820,6 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
         (const.ResourceState.cancelled, True),
         (const.ResourceState.undefined, True),
         (const.ResourceState.skipped_for_undefined, True),
-        (const.ResourceState.processing_events, False),
     ],
 )
 @pytest.mark.asyncio
@@ -911,7 +913,7 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    now = datetime.datetime.now()
+    now = datetime.datetime.now().astimezone()
     cm = data.ConfigurationModel(environment=env.id, version=version, date=now, total=1, version_info={})
     await cm.insert()
 
@@ -1271,7 +1273,7 @@ async def test_order_by_validation(init_dataclasses_and_load_schema):
         await data.Resource.get_list(order_by_column="; DROP DATABASE")
 
     with pytest.raises(RuntimeError):
-        await data.Resource.get_list(order="BAD")
+        await data.Resource.get_list(order_by_column="resource_id", order="BAD")
 
 
 @pytest.mark.asyncio
@@ -1737,13 +1739,17 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["latest_version"] == 2
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30)
+    assert (
+        report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30).astimezone()
+    )
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
-    assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30)
+    assert (
+        report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30).astimezone()
+    )
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
 
     assert report_as_map["std::File[agent1,path=/etc/file3]"]["resource_type"] == "std::File"
@@ -1777,7 +1783,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     )
     await cm.insert()
 
-    now = datetime.datetime.now()
+    now = datetime.datetime.now().astimezone()
     action_id = uuid.uuid4()
     resource_version_ids = ["std::File[agent1,path=/etc/file1],v=1", "std::File[agent1,path=/etc/file2],v=1"]
     resource_action = data.ResourceAction(
@@ -1833,7 +1839,9 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id, version=version, date=datetime.datetime.now().astimezone(), total=1, version_info={}
+    )
     await cm.insert()
 
     for i in range(1, 11):
@@ -1844,7 +1852,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
             action_id=action_id,
             action=const.ResourceAction.deploy,
-            started=datetime.datetime.now(),
+            started=datetime.datetime.now().astimezone(),
         )
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
@@ -1858,10 +1866,10 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
         action_id=action_id,
         action=const.ResourceAction.dryrun,
-        started=datetime.datetime.now(),
+        started=datetime.datetime.now().astimezone(),
     )
     await resource_action.insert()
-    times = datetime.datetime.now()
+    times = datetime.datetime.now().astimezone()
     resource_action.add_logs([data.LogLine.log(logging.WARNING, "warning version %(version)d", version=100, timestamp=times)])
     await resource_action.save()
 
@@ -2214,8 +2222,8 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     await env.insert()
 
     # Compile 1
-    started = datetime.datetime(2018, 7, 15, 12, 30)
-    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    started = datetime.datetime(2018, 7, 15, 12, 30).astimezone()
+    completed = datetime.datetime(2018, 7, 15, 13, 00).astimezone()
     compile1 = data.Compile(environment=env.id, started=started, completed=completed)
     await compile1.insert()
 
@@ -2744,3 +2752,117 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     #  First three of the increasing ones and the first of the ones that share a timestamp
     expected_ids_on_page = action_ids_with_increasing_timestamps[2:] + [action_ids_with_the_same_timestamp[0]]
     assert [resource_action.action_id for resource_action in resource_actions] == expected_ids_on_page
+
+
+@pytest.mark.asyncio
+async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_state_dependencies(
+        environment: uuid.UUID,
+        resource_version_id: ResourceVersionIdStr,
+        expected_states: Dict[ResourceVersionIdStr, const.ResourceState],
+    ) -> None:
+        rvid_to_resource_state = await data.Resource.get_resource_state_for_dependencies(
+            environment=environment, resource_version_id=Id.parse_id(resource_version_id)
+        )
+        assert expected_states == rvid_to_resource_state
+
+    # V1
+    cm = data.ConfigurationModel(version=1, environment=env.id)
+    await cm.insert()
+
+    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
+    rvid_r2_v1 = "std::File[agent1,path=/etc/file2],v=1"
+    rvid_r3_v1 = "std::File[agent1,path=/etc/file3],v=1"
+    rvid_r4_v1 = "std::File[agent1,path=/etc/file4],v=1"
+
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r2_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r3_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r4_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    expected_states = {
+        rvid_r2_v1: const.ResourceState.deployed,
+        rvid_r3_v1: const.ResourceState.failed,
+        rvid_r4_v1: const.ResourceState.available,
+    }
+    await assert_state_dependencies(env.id, rvid_r1_v1, expected_states=expected_states)
+    await assert_state_dependencies(env.id, rvid_r2_v1, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r3_v1, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r4_v1, expected_states={})
+
+    # V2
+    cm = data.ConfigurationModel(version=2, environment=env.id)
+    await cm.insert()
+
+    rvid_r1_v2 = "std::File[agent1,path=/etc/file1],v=2"
+    rvid_r2_v2 = "std::File[agent1,path=/etc/file2],v=2"
+    rvid_r3_v2 = "std::File[agent1,path=/etc/file3],v=2"
+    rvid_r4_v2 = "std::File[agent1,path=/etc/file4],v=2"
+    rvid_r5_v2 = "std::File[agent1,path=/etc/file5],v=2"
+
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v2,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r2_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r3_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r4_v2,
+        attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
+    ).insert()
+    await data.Resource.new(
+        environment=env.id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r5_v2,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    expected_states = {
+        rvid_r2_v2: const.ResourceState.failed,
+        rvid_r3_v2: const.ResourceState.deployed,
+    }
+    await assert_state_dependencies(env.id, rvid_r1_v2, expected_states=expected_states)
+    await assert_state_dependencies(env.id, rvid_r2_v2, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r3_v2, expected_states={})
+    await assert_state_dependencies(env.id, rvid_r4_v2, expected_states={rvid_r3_v2: const.ResourceState.deployed})
+    await assert_state_dependencies(env.id, rvid_r5_v2, expected_states={})

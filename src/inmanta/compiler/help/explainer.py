@@ -17,8 +17,8 @@
 """
 import os
 import re
-from abc import abstractmethod
-from typing import Any, Dict, List, Optional
+from abc import ABC, abstractmethod
+from typing import Generic, List, Mapping, Optional, Sequence, Set, Type, TypeVar
 
 from jinja2 import Environment, PackageLoader
 
@@ -26,62 +26,89 @@ from inmanta.ast import CompilerException, ModifiedAfterFreezeException
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor
 from inmanta.execute.runtime import OptionVariable
+from inmanta.module import ModuleV2InV1PathException
 
 
-def bold(content: str = None) -> str:
+def bold(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[1m"
     return "\033[1m{0}\033[0m".format(content)
 
 
-def underline(content: str = None) -> str:
+def underline(content: Optional[str] = None) -> str:
     if content is None:
         return "\033[4m"
     return "\033[4m{0}\033[0m".format(content)
 
 
-def noformat(content: str = None) -> str:
+def noformat(content: Optional[str] = None) -> str:
     return "\033[0m"
 
 
 CUSTOM_FILTERS = {"bold": bold, "underline": underline, "noformat": noformat}
 
 
-class Explainer(object):
+class ExplainerABC(ABC):
+    """
+    Abstract base class for explainers. This class is purposely kept non-Generic to present a public interface that is invariant
+    of the compiler exception type. This allows correct typing of sequences of explainers.
+    """
+
     @abstractmethod
     def explain(self, problem: CompilerException) -> List[str]:
-        pass
+        ...
 
 
-class JinjaExplainer(Explainer):
-    def __init__(self, template: str, acceptable_type):
-        self.template = template
-        self.acceptable_type = acceptable_type
+Explainable = TypeVar("Explainable", bound=CompilerException)
 
-    def can_handle(self, problem: CompilerException) -> bool:
-        return isinstance(problem, self.acceptable_type)
 
-    def get_template(self, problem: CompilerException) -> str:
-        path = os.path.join(os.path.dirname(__file__), self.template)
-        with open(path, "r", encoding="utf-8") as fh:
-            return fh.read()
+class Explainer(Generic[Explainable], ExplainerABC, ABC):
+    """
+    Abstract explainer, Generic in the compiler exception subtype to allow correct typing of the exception for subtype-specific
+    explanation logic.
+    Concrete subclasses must not be generic in the exception type because this would break explainable checking.
+    """
+
+    explainable_type: Type[Explainable]
 
     def explain(self, problem: CompilerException) -> List[str]:
-        allcauses = set()
-        work = [problem]
+        """
+        Returns a list of explanations for this exception. If neither the exception or any of its causes (recursively)
+        is explainable by this explainer, returns an empty list.
+        """
+        allcauses: Set[CompilerException] = set()
+        work: List[CompilerException] = [problem]
         while work:
             w = work.pop()
             allcauses.add(w)
             work.extend(w.get_causes())
 
-        explainable = [c for c in allcauses if self.can_handle(c)]
+        return [self.do_explain(c) for c in allcauses if isinstance(c, self.explainable_type)]
 
-        if not explainable:
-            return []
-        else:
-            return [self.do_explain(x) for x in explainable]
+    @abstractmethod
+    def do_explain(self, problem: Explainable) -> str:
+        """
+        Explain a single exception, explainable by this explainer. Does not recurse on its causes.
+        """
+        ...
 
-    def do_explain(self, problem: CompilerException) -> str:
+
+class JinjaExplainer(Explainer[Explainable], ABC):
+    """
+    Abstract explainer for explanations based on a Jinja template.
+
+    :param template: path to the Jinja template to use for the explanation.
+    """
+
+    def __init__(self, template: str) -> None:
+        self.template: str = template
+
+    def get_template(self, problem: Explainable) -> str:
+        path = os.path.join(os.path.dirname(__file__), self.template)
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+
+    def do_explain(self, problem: Explainable) -> str:
         env = Environment(loader=PackageLoader("inmanta.compiler.help"))
         for name, filter in CUSTOM_FILTERS.items():
             env.filters[name] = filter
@@ -89,15 +116,25 @@ class JinjaExplainer(Explainer):
         template = env.get_template(self.template)
         return template.render(**self.get_arguments(problem))
 
-    def get_arguments(self, problem: CompilerException) -> Dict[str, Any]:
-        return {}
+    @abstractmethod
+    def get_arguments(self, problem: Explainable) -> Mapping[str, object]:
+        """
+        Returns a mapping for names that are used in the Jinja template.
+        """
+        ...
 
 
-class ModifiedAfterFreezeExplainer(JinjaExplainer):
-    def __init__(self):
-        super(ModifiedAfterFreezeExplainer, self).__init__("modified_after_freeze.j2", ModifiedAfterFreezeException)
+class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException]):
+    """
+    Explainer for ModifiedAfterFreezeException.
+    """
 
-    def build_reverse_hint(self, problem):
+    explainable_type: Type[ModifiedAfterFreezeException] = ModifiedAfterFreezeException
+
+    def __init__(self) -> None:
+        super().__init__("modified_after_freeze.j2")
+
+    def build_reverse_hint(self, problem: ModifiedAfterFreezeException) -> str:
         if isinstance(problem.stmt, AssignStatement):
             return "%s.%s = %s" % (
                 problem.stmt.rhs.pretty_print(),
@@ -114,7 +151,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
                 attr_rhs = problem.stmt.get_attributes()[attr].pretty_print()
             return "%s.%s = %s" % (attr_rhs, problem.attribute.get_name(), problem.stmt.pretty_print())
 
-    def get_arguments(self, problem: CompilerException) -> Dict[str, Any]:
+    def get_arguments(self, problem: ModifiedAfterFreezeException) -> Mapping[str, object]:
         return {
             "relation": problem.attribute.get_name(),
             "instance": problem.instance,
@@ -127,14 +164,34 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
         }
 
 
-def escape_ansi(line):
+class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
+    """
+    Explainer for ModuleV2InV1PathException
+    """
+
+    explainable_type: Type[ModuleV2InV1PathException] = ModuleV2InV1PathException
+
+    def __init__(self) -> None:
+        super().__init__("module_v2_in_v1_path.j2")
+
+    def get_arguments(self, problem: ModuleV2InV1PathException) -> Mapping[str, object]:
+        v2_source_configured: bool = problem.project.module_v2_source_configured() if problem.project is not None else False
+        return {
+            "name": problem.module.name,
+            "path": problem.module.path,
+            "project": problem.project is not None,
+            "v2_source_configured": v2_source_configured,
+        }
+
+
+def escape_ansi(line: str) -> str:
     ansi_escape = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", line)
 
 
-class ExplainerFactory(object):
-    def get_explainers(self) -> List[Explainer]:
-        return [ModifiedAfterFreezeExplainer()]
+class ExplainerFactory:
+    def get_explainers(self) -> Sequence[ExplainerABC]:
+        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer()]
 
     def explain(self, problem: CompilerException) -> List[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]

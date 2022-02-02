@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump docstring-parser from 0.11 to 0.12
+destination-branches:
+- master
+sections: {}

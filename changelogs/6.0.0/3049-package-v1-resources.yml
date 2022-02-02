@@ -1,0 +1,7 @@
+---
+description: Added the ability to package V1 modules as V2 modules
+issue-nr: 3049
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

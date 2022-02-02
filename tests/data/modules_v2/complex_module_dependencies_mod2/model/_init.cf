@@ -1,0 +1,2 @@
+import complex_module_dependencies_mod2::submod
+import complex_module_dependencies_mod1

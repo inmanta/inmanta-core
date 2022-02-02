@@ -1,0 +1,5 @@
+description: Added compilation test for modules v2
+issue-nr: 3209
+change-type: patch
+destination-branches:
+  - master

@@ -1,0 +1,4 @@
+description: Added `__cfcache__` as ignore dir for module packaging warnings
+change-type: patch
+destination-branches:
+  - master

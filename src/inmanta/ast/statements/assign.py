@@ -49,7 +49,7 @@ from inmanta.execute.util import Unknown
 from . import ReferenceStatement
 
 try:
-    from typing import TYPE_CHECKING
+    from typing import TYPE_CHECKING, Dict, Optional
 except ImportError:
     TYPE_CHECKING = False
 
@@ -69,11 +69,11 @@ class CreateList(ReferenceStatement):
         self.items = items
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> typing.Dict[object, ResultVariable]:
 
         if resultcollector is None:
-            return self.requires(resolver, queue)
+            return self.requires_emit(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
@@ -116,7 +116,7 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         qlist = []
 
         for i in range(len(self.items)):
@@ -148,7 +148,7 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         qlist = {}
 
         for i in range(len(self.items)):

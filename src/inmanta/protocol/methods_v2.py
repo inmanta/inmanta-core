@@ -21,7 +21,7 @@ import datetime
 import uuid
 from typing import Dict, List, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, ClientType
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
@@ -56,16 +56,18 @@ def project_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_list() -> List[model.Project]:
+def project_list(environment_details: bool = False) -> List[model.Project]:
     """
-    Create a list of projects
+    Returns a list of projects
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 
 @typedmethod(path="/project/<id>", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_get(id: uuid.UUID) -> model.Project:
+def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
-    Get a project and a list of the ids of all environments
+    Get a project and a list of the environments under this project
+    :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
 
@@ -77,6 +79,8 @@ def environment_create(
     repository: Optional[str] = None,
     branch: Optional[str] = None,
     environment_id: uuid.UUID = None,
+    description: str = "",
+    icon: str = "",
 ) -> model.Environment:
     """
     Create a new environment
@@ -86,18 +90,44 @@ def environment_create(
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
+    :param description: The description of the environment, maximum 255 characters
+    :param icon: The data-url of the icon of the environment. It should follow the pattern `<mime-type>;base64,<image>`, where
+                 <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
+                 the format matching the specified mime-type, and base64 encoded.
+                 The length of the whole string should be maximum 64 kb.
+
+    :raises BadRequest: When the parameters supplied are not valid.
     """
 
 
 @typedmethod(path="/environment/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
-def environment_modify(id: uuid.UUID, name: str, repository: str = None, branch: str = None) -> model.Environment:
+def environment_modify(
+    id: uuid.UUID,
+    name: str,
+    repository: str = None,
+    branch: str = None,
+    project_id: Optional[uuid.UUID] = None,
+    description: Optional[str] = None,
+    icon: Optional[str] = None,
+) -> model.Environment:
     """
     Modify the given environment
+    The optional parameters that are unspecified will be left unchanged by the update.
 
     :param id: The id of the environment
     :param name: The name of the environment
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
+    :param project_id: The id of the project the environment belongs to
+    :param description: The description of the environment, maximum 255 characters
+    :param icon: The data-url of the icon of the environment. It should follow the pattern `<mime-type>;base64,<image>` , where
+                 <mime-type> is one of: 'image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', and <image> is the image in
+                 the format matching the specified mime-type, and base64 encoded.
+                 The length of the whole string should be maximum 64 kb.
+                 The icon can be removed by setting this parameter to an empty string.
+
+    :raises BadRequest: When the parameters supplied are not valid.
+    :raises NotFound: The given environment doesn't exist.
     """
 
 
@@ -114,9 +144,10 @@ def environment_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
-def environment_list() -> List[model.Environment]:
+def environment_list(details: bool = False) -> List[model.Environment]:
     """
-    Create a list of environments
+    Returns a list of environments
+    :param details: Whether to include the icon and description of the environments in the results
     """
 
 
@@ -127,11 +158,12 @@ def environment_list() -> List[model.Environment]:
     arg_options={"id": methods.ArgOption(getter=methods.add_env)},
     api_version=2,
 )
-def environment_get(id: uuid.UUID) -> model.Environment:
+def environment_get(id: uuid.UUID, details: bool = False) -> model.Environment:
     """
     Get an environment and all versions associated
 
     :param id: The id of the environment to return
+    :param details: Whether to include the icon and description of the environment
     """
 
 
@@ -342,6 +374,55 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     """
 
 
+@typedmethod(path="/agents", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def get_agents(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    start: Optional[Union[datetime.datetime, bool, str]] = None,
+    end: Optional[Union[datetime.datetime, bool, str]] = None,
+    first_id: Optional[str] = None,
+    last_id: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Agent]:
+    """
+    Get all of the agents in the given environment
+    :param tid: The id of the environment the agents should belong to
+    :param limit: Limit the number of agents that are returned
+    :param start: The lower limit for the order by column (exclusive).
+    :param first_id: The name to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The name to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned agents.
+                Filtering by 'name', 'process_name' and 'status' is supported.
+    :param sort: Return the results sorted according to the parameter value.
+                Sorting by 'name', 'process_name', 'status', 'paused' and 'last_failover' is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching agents
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/agents/process/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
+    """
+    Get the details of an agent process
+
+    :param tid: Id of the environment
+    :param id: The id of the specific agent process
+    :param report: Whether to include a report from the agent or not
+    :return: The details of an agent process
+    :raise NotFound: This exception is raised when the referenced environment or agent process is not found
+    """
+
+
 @typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
 def update_agent_map(agent_map: Dict[str, str]) -> None:
     """
@@ -404,4 +485,611 @@ def get_resource_actions(
 
     :raises BadRequest: When the supplied parameters are not valid.
 
+    """
+
+
+@typedmethod(
+    path="/resource/<rvid>/deploy/done",
+    operation="POST",
+    agent_server=True,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resource_deploy_done(
+    tid: uuid.UUID,
+    rvid: model.ResourceVersionIdStr,
+    action_id: uuid.UUID,
+    status: ResourceState,
+    messages: List[model.LogLine] = [],
+    changes: Dict[str, model.AttributeStateChange] = {},
+    change: Optional[Change] = None,
+) -> None:
+    """
+    Report to the server that an agent has finished the deployment of a certain resource.
+
+    :param tid: The id of the environment the resource belongs to
+    :param rvid: The resource version id of the resource for which the deployment is finished.
+    :param action_id: A unique ID associated with this resource deployment action. This should be the same ID that was
+                      passed to the `/resource/<resource_id>/deploy/start` API call.
+    :param status: The current status of the resource (if known)
+    :param messages: A list of log entries produced by the deployment action.
+    :param changes: A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                   have been changed. The value contains the new value and/or the original value.
+    :param change: The type of change that was done the given resource.
+    """
+
+
+@typedmethod(
+    path="/resource/<rvid>/deploy/start",
+    operation="POST",
+    agent_server=True,
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resource_deploy_start(
+    tid: uuid.UUID,
+    rvid: model.ResourceVersionIdStr,
+    action_id: uuid.UUID,
+) -> Dict[model.ResourceVersionIdStr, ResourceState]:
+    """
+    Report to the server that the agent will start the deployment of the given resource.
+
+    :param tid: The id of the environment the resource belongs to
+    :param rvid: The resource version id of the resource for which the deployment will start
+    :param action_id: A unique id used to track the action of this deployment
+    :return: A dict mapping the resource version id of each dependency of resource_id to
+             the last deployment status of that resource.
+    """
+
+
+# No pagination support is provided for this endpoint because there is no elegant way to page the output of this endpoint.
+@typedmethod(
+    path="/resource/<rvid>/events",
+    operation="GET",
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
+    agent_server=True,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_resource_events(
+    tid: uuid.UUID,
+    rvid: model.ResourceVersionIdStr,
+) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
+    """
+    Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
+    deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
+    order according to their started timestamp.
+
+    :param tid: The id of the environment this resource belongs to
+    :param rvid: The id of the resource to get events for.
+    :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
+                        in the deploying state.
+    """
+
+
+@typedmethod(
+    path="/resource/<rvid>/did_dependency_change",
+    operation="GET",
+    arg_options={**methods.ENV_OPTS, **methods.RVID_OPTS},
+    agent_server=True,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def resource_did_dependency_change(
+    tid: uuid.UUID,
+    rvid: model.ResourceVersionIdStr,
+) -> bool:
+    """
+    Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
+
+    :param tid: The id of the environment this resource belongs to
+    :param rvid: The id of the resource.
+    :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
+                        in the deploying state.
+    """
+
+
+@typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def resource_list(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[model.ResourceVersionIdStr] = None,
+    last_id: Optional[model.ResourceVersionIdStr] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "resource_type.desc",
+    deploy_summary: bool = False,
+) -> List[model.LatestReleasedResource]:
+    """
+    :param tid: The id of the environment this resource belongs to
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The resource_version_id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The resource_version_id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned resources.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`, for example `?filter.status=deployed`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.status=deployed&filter.status=available` returns instances with either of the statuses
+                deployed or available.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `filter.status=deployed&filter.agent=internal` returns resources
+                with 'deployed' status, where the 'agent' is set to 'internal_agent'.
+                The following options are available:
+                agent: filter by the agent of the resource
+                resource_type: filter by the type of the resource
+                resource_id_value: filter by the attribute values of the resource
+                status: filter by the current status of the resource
+                The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
+                (case insensitive).
+                The following sorting attributes are supported: 'resource_type', 'agent', 'resource_id_value', 'status'.
+                The following orders are supported: 'asc', 'desc'
+    :param deploy_summary: If set to true, returns a summary of the deployment status of the resources in the environment
+                           in the metadata, describing how many resources are in each state as well as the total number
+                           of resources. The summary does not take into account the current filters or paging parameters.
+                           Orphaned resources are not included in the summary
+    :return: A list of all matching released resources
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
+    """
+    :return: The details of the latest released version of a resource
+    :raise NotFound: This exception is raised when the referenced environment or resource is not found
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>/history", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_history(
+    tid: uuid.UUID,
+    rid: model.ResourceIdStr,
+    limit: Optional[int] = None,
+    first_id: Optional[str] = None,
+    last_id: Optional[str] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    sort: str = "date.desc",
+) -> List[model.ResourceHistory]:
+    """
+    :param tid: The id of the environment this resource belongs to
+    :param rid: The id of the resource
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The attribute_hash to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The attribute_hash to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `date.desc`
+                (case insensitive).
+                Sorting by `date` is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: The history of a resource, according to its attributes
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>/logs", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def resource_logs(
+    tid: uuid.UUID,
+    rid: model.ResourceIdStr,
+    limit: Optional[int] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "timestamp.desc",
+) -> List[model.ResourceLog]:
+    """
+    Get the logs of a specific resource
+    :param tid: The id of the environment this resource belongs to
+    :param rid: The id of the resource
+    :param limit: Limit the number of instances that are returned
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned logs.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`,
+                for example `?filter.minimal_log_level=INFO`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.action=pull&filter.action=deploy` returns logs with either of the actions
+                pull or deploy.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `filter.minimal_log_level=INFO&filter.action=deploy` returns logs
+                with 'deploy' action, where the 'log_level' is at least 'INFO'.
+                The following options are available:
+                action: filter by the action of the log
+                timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
+                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+                    in UTC timezone. For example:
+                    `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
+                    Multiple constraints can be specified, in which case only log messages that match all constraints will be
+                    returned.
+                message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
+                minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
+                so messages with either this level, or a higher severity level are going to be included in the result.
+                For example, for `filter.minimal_log_level=INFO`, the log messages with level `INFO, WARNING, ERROR, CRITICAL`
+                all match the query.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `timestamp.desc`
+                (case insensitive).
+                The only sorting by `timestamp` is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching resource logs
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
+    """
+    Get the facts related to a specific resource
+    :param tid: The id of the environment
+    :param rid: Id of the resource
+    :return: The facts related to this resource
+    :raise NotFound: This status code is returned when the referenced environment is not found
+    """
+
+
+@typedmethod(
+    path="/resource/<rid>/facts/<id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.Fact:
+    """
+    Get one specific fact
+    :param tid: The id of the environment
+    :param rid: The id of the resource
+    :param id: The id of the fact
+    :return: A specific fact corresponding to the id
+    :raise NotFound: This status code is returned when the referenced environment or fact is not found
+    """
+
+
+@typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def get_compile_reports(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "requested.desc",
+) -> List[model.CompileReport]:
+    """
+    Get the compile reports from an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned compile reports.
+                Filters should be specified with the syntax `?filter.<filter_key>=value`,
+                for example `?filter.success=True`
+                It's also possible to provide multiple values for the same filter, in this case resources are returned,
+                if they match any of these filter values.
+                For example: `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30.568353`
+                returns compile reports that were requested between the specified dates.
+                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+                For example `?filter.success=True&filter.completed=True` returns compile reports
+                that are completed and successful.
+                The following options are available:
+                success: whether the compile was successful or not
+                started: whether the compile has been started or not
+                completed: whether the compile has been completed or not
+                requested: return the logs matching the timestamp constraints. Valid constraints are of the form
+                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+                    in UTC timezone. Specifying microseconds is optional. For example:
+                    `?filter.requested=ge:2021-08-18T09:21:30.568353&filter.requested=lt:2021-08-18T10:21:30`.
+                    Multiple constraints can be specified, in which case only compile reports that match all constraints will be
+                    returned.
+    :param sort: Return the results sorted according to the parameter value.
+                It should follow the pattern `?sort=<attribute_to_sort_by>.<order>`, for example `?sort=requested.desc`
+                (case insensitive).
+                Only sorting by the `requested` timestamp is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching compile reports
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/compilereport/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
+    """
+    :return: The details of a compile
+    :raise NotFound: This exception is raised when the referenced environment or compile is not found
+    """
+
+
+@typedmethod(path="/desiredstate", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def list_desired_state_versions(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "version.desc",
+) -> List[model.DesiredStateVersion]:
+    """
+    Get the desired state versions from an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of versions that are returned
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned desired state versions.
+                Filtering by 'version' range, 'date' range and 'status' is supported.
+    :param sort: Return the results sorted according to the parameter value.
+                Only sorting by 'version' is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching compile reports
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/desiredstate/<version>/promote",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def promote_desired_state_version(
+    tid: uuid.UUID, version: int, trigger_method: Optional[model.PromoteTriggerMethod] = None
+) -> None:
+    """
+    Promote a desired state version, making it the active version in the environment
+    :param tid: The id of the environment
+    :param version: The number of the version to promote
+    :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
+        the agents will perform an incremental or full deploy, respectively.
+        If set to 'no_push', the new version is not pushed to the agents.
+        If the parameter is not set (or set to null), the new version is pushed and
+        the environment setting 'environment_agent_trigger_method' decides if the deploy should be full or incremental
+    """
+
+
+@typedmethod(
+    path="/desiredstate/<version>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_resources_in_version(
+    tid: uuid.UUID,
+    version: int,
+    limit: Optional[int] = None,
+    first_id: Optional[model.ResourceVersionIdStr] = None,
+    last_id: Optional[model.ResourceVersionIdStr] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "resource_type.desc",
+) -> List[model.VersionedResource]:
+    """
+    Get the resources that belong to a specific version
+    :param tid: The id of the environment
+    :param version: The version number
+    :param limit: Limit the number of resources that are returned
+    :param first_id: The resource_version_id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The resource_version_id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned resources.
+                The following options are available:
+                agent: filter by the agent name of the resource
+                resource_type: filter by the type of the resource
+                resource_id_value: filter by the attribute values of the resource
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'resource_type', 'agent', 'resource_id_value'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching resources
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/desiredstate/diff/<from_version>/<to_version>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_diff_of_versions(
+    tid: uuid.UUID,
+    from_version: int,
+    to_version: int,
+) -> List[model.ResourceDiff]:
+    """
+    Compare two versions of desired states, and provide the difference between them,
+    with regard to their resources and the attributes of these resources.
+    Resources that are the same in both versions are not mentioned in the results.
+
+    A resource diff describes whether the resource was 'added', 'modified' or 'deleted',
+    and what the values of their attributes were in the versions.
+    The values are also returned in a stringified, easy to compare way,
+    which can be used to calculate a `git diff`-like summary of the changes.
+
+    :param tid: The id of the environment
+    :param from_version: The (lower) version number to compare
+    :param to_version: The other (higher) version number to compare
+    :return: The resource diffs between from_version and to_version
+    :raise NotFound: This exception is raised when the referenced environment or versions are not found
+    :raise BadRequest: When the version parameters are not valid
+    """
+
+
+@typedmethod(
+    path="/desiredstate/<version>/resource/<rid>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.ResourceIdStr) -> model.VersionedResourceDetails:
+    """
+    :param tid: The id of the environment
+    :param version: The version number of the resource
+    :param rid: The id of the resource
+    :return: The details of a specific version of a resource
+    :raise NotFound: This exception is raised when the referenced environment or resource is not found
+    """
+
+
+@typedmethod(
+    path="/parameters",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_parameters(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[Union[datetime.datetime, str]] = None,
+    end: Optional[Union[datetime.datetime, str]] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Parameter]:
+    """
+    List the parameters in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of parameters that are returned
+    :param first_id: The parameter id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The parameter id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned parameters.
+                The following options are available:
+                name: filter by the name of the parameter
+                source: filter by the source of the parameter
+                updated: filter by the updated time of the parameter
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'name', 'source', 'updated'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching parameters
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/facts",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_all_facts(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "name.asc",
+) -> List[model.Fact]:
+    """
+    List the facts in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of facts that are returned
+    :param first_id: The fact id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The fact id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned facts.
+                The following options are available:
+                name: filter by the name of the fact
+                resource_id: filter by the resource_id of the fact
+    :param sort: Return the results sorted according to the parameter value.
+                The following sorting attributes are supported: 'name', 'resource_id'.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching facts
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+# Dryrun related methods
+
+
+@typedmethod(path="/dryrun/<id>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def dryrun_trigger(tid: uuid.UUID, id: int) -> uuid.UUID:
+    """
+    Trigger a new dryrun
+
+    :param tid: The id of the environment
+    :param id: The version of the configuration model to execute the dryrun for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The id of the new dryrun
+    """
+
+
+@typedmethod(path="/dryrun", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
+    """
+    Query a list of dry runs for a specific version
+
+    :param tid: The id of the environment
+    :param version: The configuration model version to return dryruns for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The list of dryruns for the specified version in descending order by date
     """

@@ -239,7 +239,7 @@ class AgentCache(object):
         cache_none: bool = True,
         call_on_delete: Optional[Callable[[Any], None]] = None,
         **kwargs,
-    ):
+    ) -> object:
         """
         Attempt to find a value in the cache.
 

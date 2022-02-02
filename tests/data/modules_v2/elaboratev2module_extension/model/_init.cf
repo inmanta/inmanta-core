@@ -1,0 +1,3 @@
+import elaboratev2module
+
+std::print("Hello world")

@@ -1,0 +1,4 @@
+description: Added endpoint to list the desired state versions
+issue-nr: 3500
+change-type: minor
+destination-branches: [master, iso4]

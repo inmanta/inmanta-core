@@ -79,7 +79,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self):
+    def normalize(self) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):
@@ -125,7 +125,7 @@ class FunctionCall(ReferenceStatement):
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("FunctionCall.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(
@@ -137,7 +137,7 @@ class FunctionCall(ReferenceStatement):
             ),
         )
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         return "%s(%s)" % (
             self.name,
             ",".join(
@@ -238,6 +238,15 @@ class PluginFunction(Function):
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
             except UnsetException as e:
+                call: str = str(self.plugin)
+                location: str = str(self.ast_node.location)
+                LOGGER.debug(
+                    "Unset value in python code in plugin at call: %s (%s) (Will be rescheduled by compiler)", call, location
+                )
+                # Don't handle it here!
+                # This exception is used by the scheduler to re-queue the unit
+                # If it is handled here, the re-queueing can not be done,
+                # leading to very subtle errors such as #2787
                 raise e
             except RuntimeException as e:
                 raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
@@ -251,7 +260,7 @@ class FunctionUnit(Waiter):
 
     __slots__ = ("result", "base_requires", "function", "resolver")
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         result.set_provider(self)
@@ -266,18 +275,11 @@ class FunctionUnit(Waiter):
             self.waitfor(r)
         self.ready(self)
 
-    def execute(self):
+    def execute(self) -> None:
         requires = {k: v.get_value() for (k, v) in self.base_requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue, self.result)
             self.done = True
-        except UnsetException as e:
-            LOGGER.debug("Unset value in python code in plugin %s %s.%s.", self.function.function, e.instance, e.attribute)
-            # Don't handle it here!
-            # This exception is used by the scheduler to re-queue the unit
-            # If it is handled here, the re-queueing can not be done,
-            # leading to very subtle errors such as #2787
-            raise
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e

@@ -22,7 +22,7 @@ import subprocess
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
-import inmanta.ast.type as InmantaType
+import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
 from inmanta.ast.type import NamedType
@@ -77,7 +77,7 @@ class Context(object):
     def get_resolver(self) -> Resolver:
         return self.resolver
 
-    def get_type(self, name: LocatableString):
+    def get_type(self, name: LocatableString) -> inmanta_type.Type:
         """
         Get a type from the configuration model.
         """
@@ -137,21 +137,22 @@ class Context(object):
             raise ConnectionRefusedError()
 
 
+@stable_api
 class PluginMeta(type):
     """
-    A metaclass that registers subclasses in the parent class.
+    A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
     """
 
-    def __new__(cls, name, bases, dct):
+    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
             cls.add_function(subclass)
         return subclass
 
-    __functions = {}
+    __functions: Dict[str, Type["Plugin"]] = {}
 
     @classmethod
-    def add_function(cls, plugin_class):
+    def add_function(cls, plugin_class: Type["Plugin"]) -> None:
         """
         Add a function plugin class
         """
@@ -169,11 +170,25 @@ class PluginMeta(type):
         """
         Get all functions that are registered
         """
-        return cls.__functions
+        return dict(cls.__functions)
 
     @classmethod
-    def clear(cls) -> None:
-        cls.__functions = {}
+    def clear(cls, inmanta_module: Optional[str] = None) -> None:
+        """
+        Clears registered plugin functions.
+
+        :param inmanta_module: Clear plugin functions for a specific inmanta module. If omitted, clears all registered plugin
+            functions.
+        """
+        if inmanta_module is not None:
+            top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}"
+            cls.__functions = {
+                fq_name: plugin_class
+                for fq_name, plugin_class in cls.__functions.items()
+                if plugin_class.__module__ != top_level and not plugin_class.__module__.startswith(f"{top_level}.")
+            }
+        else:
+            cls.__functions = {}
 
 
 class Plugin(NamedType, metaclass=PluginMeta):
@@ -188,6 +203,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         self._context = -1
         self._return = None
 
+        self.arguments: List[Tuple]
         if hasattr(self.__class__, "__function__"):
             self.arguments = self._load_signature(self.__class__.__function__)
         else:
@@ -205,7 +221,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-    def _load_signature(self, function):
+    def _load_signature(self, function: Callable[..., object]) -> List[Tuple]:
         """
         Load the signature from the given python function
         """
@@ -238,13 +254,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
         return arguments
 
-    def add_argument(self, arg_type, arg_type_name, arg_name, optional=False) -> None:
-        """
-        Add an argument at the next position, of given type.
-        """
-        self.arguments.append((arg_type, arg_type_name, arg_name, optional))
-
-    def get_signature(self):
+    def get_signature(self) -> str:
         """
         Generate the signature of this plugin
         """
@@ -265,7 +275,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver) -> Optional[InmantaType.Type]:
+    def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
         """
         Convert a string representation of a type to a type
         """
@@ -285,30 +295,30 @@ class Plugin(NamedType, metaclass=PluginMeta):
             return None
 
         # quickfix issue #1774
-        allowed_element_type: InmantaType.Type = InmantaType.Type()
+        allowed_element_type: inmanta_type.Type = inmanta_type.Type()
         if arg_type == "list":
-            return InmantaType.TypedList(allowed_element_type)
+            return inmanta_type.TypedList(allowed_element_type)
         if arg_type == "dict":
-            return InmantaType.TypedDict(allowed_element_type)
+            return inmanta_type.TypedDict(allowed_element_type)
 
         plugin_line: Range = Range(self.location.file, self.location.lnr, 1, self.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(arg_type, plugin_line, 0, None)
 
-        # stack of transformations to be applied to the base InmantaType.Type
+        # stack of transformations to be applied to the base inmanta_type.Type
         # transformations will be applied right to left
-        transformation_stack: List[Callable[[InmantaType.Type], InmantaType.Type]] = []
+        transformation_stack: List[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
 
         if locatable_type.value.endswith("?"):
             locatable_type.value = locatable_type.value[0:-1]
-            transformation_stack.append(InmantaType.NullableType)
+            transformation_stack.append(inmanta_type.NullableType)
 
         if locatable_type.value.endswith("[]"):
             locatable_type.value = locatable_type.value[0:-2]
-            transformation_stack.append(InmantaType.TypedList)
+            transformation_stack.append(inmanta_type.TypedList)
 
         return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
-    def _is_instance(self, value: Any, arg_type: Type) -> bool:
+    def _is_instance(self, value: object, arg_type: Type[object]) -> bool:
         """
         Check if value is of arg_type
         """
@@ -320,7 +330,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
         return isinstance(value, arg_type)
 
-    def check_args(self, args: List[Any], kwargs: Dict[str, object]) -> bool:
+    def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature
         """
@@ -352,7 +362,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
                 % (",".join(present_kwargs.intersection(present_positional_args)), self.__class__.__function_name__),
             )
 
-        def is_valid(expected_arg, expected_type, arg):
+        def is_valid(expected_arg: Tuple[Optional[Type[object]], str], expected_type: Type[object], arg: object) -> bool:
             if isinstance(arg, Unknown):
                 return False
 
@@ -367,7 +377,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
         Argument = Tuple[str, ...]
-        arg_types: Dict[str, Tuple[Argument, Optional[InmantaType.Type]]] = {
+        arg_types: Dict[str, Tuple[Argument, Optional[inmanta_type.Type]]] = {
             arg[0]: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
         }
         for k, v in kwargs.items():
@@ -386,14 +396,8 @@ class Plugin(NamedType, metaclass=PluginMeta):
         """
         return self.new_statement
 
-    def is_accept_unknowns(self):
+    def is_accept_unknowns(self) -> bool:
         return self.opts["allow_unknown"]
-
-    def get_variable(self, name, scope):
-        """
-        Get the given variable
-        """
-        return DynamicProxy.return_value(self._scope.get_variable(name, scope).value)
 
     def check_requirements(self) -> None:
         """
@@ -407,13 +411,13 @@ class Plugin(NamedType, metaclass=PluginMeta):
                 if len(result[0]) == 0:
                     raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
         """
         self.check_requirements()
 
-        def new_arg(arg):
+        def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
                 return arg
             elif isinstance(arg, Unknown) and self.is_accept_unknowns():
@@ -470,8 +474,11 @@ class PluginException(Exception):
 
 @stable_api
 def plugin(
-    function: Callable = None, commands: List[str] = None, emits_statements: bool = False, allow_unknown: bool = False
-) -> None:  # noqa: H801
+    function: Optional[Callable] = None,
+    commands: Optional[List[str]] = None,
+    emits_statements: bool = False,
+    allow_unknown: bool = False,
+) -> Callable:  # noqa: H801
     """
     Python decorator to register functions with inmanta as plugin
 
@@ -483,7 +490,12 @@ def plugin(
     :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
     """
 
-    def curry_name(name=None, commands=None, emits_statements=False, allow_unknown=False):
+    def curry_name(
+        name: Optional[str] = None,
+        commands: Optional[List[str]] = None,
+        emits_statements: bool = False,
+        allow_unknown: bool = False,
+    ) -> Callable:
         """
         Function to curry the name of the function
         """
@@ -493,7 +505,7 @@ def plugin(
             Create class to register the function and return the function itself
             """
 
-            def wrapper(self, *args, **kwargs):
+            def wrapper(self, *args: object, **kwargs: object) -> Any:
                 """
                 Python will bind the function as method into the class
                 """

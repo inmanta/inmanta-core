@@ -15,10 +15,52 @@
 
     Contact: code@inmanta.com
 """
+
+"""
+About the use of @parametrize_any and @slowtest:
+
+For parametrized tests:
+- if the test is fast and tests different things for each parameter, use @parametrize
+- if the parameters only slightly increase the coverage of the test (some different exception path,...), use @parametrize_any.
+- if a test is slow, use @parametrize_any
+
+The @slowtest annotation is usually added on test periodically, when the test suite becomes too slow.
+We analyze performance and place the @slowtest in the best places.
+It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
+This also allows test to run a few hundred times before being marked as slow.
+"""
+
+"""
+About venvs in tests (see linked objects' docstrings for more details):
+During normal operation the module loader and the compiler work with the following environments:
+- inmanta.env.process_env: inmanta.env.ActiveEnv -> presents an interface to interact with the outer (developer's) venv. Used by
+    inmanta.module.Project to install v2 modules in.
+- inmanta.module.Project.virtualenv: inmanta.env.VirtualEnv -> compiler venv. Used by the compiler to install v1 module
+    requirements in. Inherits from the outer venv.
+
+When running the tests we don't want to make changes to the outer environment. So for tests that install Python packages we need
+to make sure those are installed in a test environment. This means patching the inmanta.env.process_env to be an interface
+to a test environment instead of the outer environment.
+The following fixtures manage test environments:
+- snippetcompiler_clean: activates the Project's compiler venv and patches inmanta.env.process_env to use this same venv
+    as if it were the outer venv. The activation and patch is applied when compiling the first snippet.
+- snippetcompiler: same as snippetcompiler_clean but the compiler venv is shared among all tests using the
+    fixture.
+- tmpvenv: provides a decoupled test environment (does not inherit from the outer environment) but does not activate it and
+    does not patch inmanta.env.process_env.
+- tmpvenv_active: provides a decoupled test environment, activates it and patches inmanta.env.process_env to point to this
+    environment.
+
+The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
+environment.
+"""
+
+
 import asyncio
 import concurrent
 import csv
 import datetime
+import importlib.util
 import json
 import logging
 import os
@@ -26,6 +68,7 @@ import queue
 import random
 import re
 import shutil
+import site
 import socket
 import string
 import subprocess
@@ -34,61 +77,140 @@ import tempfile
 import time
 import traceback
 import uuid
-from typing import Dict, List, Optional, Tuple
+import venv
+from configparser import ConfigParser
+from types import ModuleType
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
 import pkg_resources
 import psutil
+import py
 import pyformance
 import pytest
 from asyncpg.exceptions import DuplicateDatabaseError
 from click import testing
+from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+import build.env
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
-from inmanta import config, const, data, loader, protocol, resources
+from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import Project
-from inmanta.postgresproc import PostgresProc
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project
+from inmanta.moduletool import ModuleTool
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from libpip2pi.commands import dir2pi
 
-# Import the utils module differently when conftest is put into the inmanta_tests packages
-if __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests":
+# Import test modules differently when conftest is put into the inmanta_tests packages
+PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
+if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
+    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
+    from db.common import PGRestore
 
 logger = logging.getLogger(__name__)
 
 TABLES_TO_KEEP = [x.table_name() for x in data._classes]
 
-
-# Database
-@pytest.fixture
-def postgres_proc(unused_tcp_port_factory):
-    proc = PostgresProc(unused_tcp_port_factory())
-    yield proc
-    proc.stop()
+# Save the cwd as early as possible to prevent that it gets overridden by another fixture
+# before it's saved.
+initial_cwd = os.getcwd()
 
 
-@pytest.fixture(scope="session", autouse=True)
-def postgres_db(postgresql_proc):
-    yield postgresql_proc
+def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
+    # register custom markers
+    config.addinivalue_line(
+        "markers",
+        "slowtest",
+    )
+    config.addinivalue_line(
+        "markers",
+        "parametrize_any: only execute one of the parameterized cases when in fast mode (see documentation in conftest.py)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
+    )
+
+
+def pytest_configure(config: "pytest.Config") -> None:
+    if PYTEST_PLUGIN_MODE:
+        _pytest_configure_plugin_mode(config)
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--fast",
+        action="store_true",
+        help="Don't run all test, but a representative set",
+    )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
+    """
+    For each test marked as parametrize_any run it either as
+    1. if not in fast mode: as if annotated with @parametrize
+    2. if in fast mode: with only one parameter combination, chosen randomly
+    """
+
+    is_fast = metafunc.config.getoption("fast")
+    for marker in metafunc.definition.iter_markers(name="parametrize_any"):
+        variations = len(marker.args[1])
+        if not is_fast or variations < 2:
+            metafunc.definition.add_marker(pytest.mark.parametrize(*marker.args))
+        else:
+            # select one random item
+            args = list(marker.args)
+            selected = args[1][random.randrange(0, variations)]
+            args[1] = [selected]
+            metafunc.definition.add_marker(pytest.mark.parametrize(*args))
+
+
+def pytest_runtest_setup(item: "pytest.Item"):
+    """
+    When in fast mode, skip test marked as slow
+    """
+    is_fast = item.config.getoption("fast")
+    if not is_fast:
+        return
+    if any(True for mark in item.iter_markers(name="slowtest")):
+        pytest.skip("Skipping slow tests")
+
+
+@pytest.fixture(scope="session")
+def postgres_db(request: pytest.FixtureRequest):
+    """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
+    fixture to use an external database. Without this option, an "embedded" postgres is started.
+    """
+    option_name = "postgresql_host"
+    conf = request.config.getoption(option_name)
+    if conf:
+        fixture = "postgresql_noproc"
+    else:
+        fixture = "postgresql_proc"
+
+    logger.info("Using database fixture %s", fixture)
+    yield request.getfixturevalue(fixture)
 
 
 @pytest.fixture
@@ -103,7 +225,9 @@ async def create_db(postgres_db, database_name_internal):
     """
     see :py:database_name_internal:
     """
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    connection = await asyncpg.connect(
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
+    )
     try:
         await connection.execute(f"CREATE DATABASE {database_name_internal}")
     except DuplicateDatabaseError:
@@ -140,7 +264,13 @@ def database_name(create_db):
 
 @pytest.fixture(scope="function")
 async def postgresql_client(postgres_db, database_name):
-    client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    client = await asyncpg.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield client
     await client.close()
 
@@ -148,7 +278,11 @@ async def postgresql_client(postgres_db, database_name):
 @pytest.fixture(scope="function")
 async def postgresql_pool(postgres_db, database_name):
     client = await asyncpg.create_pool(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
     yield client
     await client.close()
@@ -156,7 +290,13 @@ async def postgresql_pool(postgres_db, database_name):
 
 @pytest.fixture(scope="function")
 async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
-    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
+    await data.connect(
+        host=postgres_db.host,
+        port=postgres_db.port,
+        username=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
+    )
     yield
     await data.disconnect()
 
@@ -243,7 +383,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name):
+    async def _get_columns_in_db_table(table_name: str) -> List[str]:
         result = await postgresql_client.fetch(
             "SELECT column_name "
             "FROM information_schema.columns "
@@ -260,19 +400,28 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
+    old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
+    old_process_env: str = env.process_env.python_path
+    old_working_set = pkg_resources.working_set
 
     yield
 
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
-    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+    pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
-    if "PYTHONPATH" in os.environ:
-        if old_pythonpath is not None:
-            os.environ["PYTHONPATH"] = old_pythonpath
-        else:
-            del os.environ["PYTHONPATH"]
+    if old_pythonpath is not None:
+        os.environ["PYTHONPATH"] = old_pythonpath
+    elif "PYTHONPATH" in os.environ:
+        del os.environ["PYTHONPATH"]
+    # Restore VIRTUAL_ENV
+    if old_os_venv is not None:
+        os.environ["VIRTUAL_ENV"] = old_os_venv
+    elif "VIRTUAL_ENV" in os.environ:
+        del os.environ["VIRTUAL_ENV"]
+    env.mock_process_env(python_path=old_process_env)
+    loader.PluginModuleFinder.reset()
 
 
 def reset_metrics():
@@ -308,9 +457,8 @@ def restore_cwd():
     """
     Restore the current working directory after search test.
     """
-    cwd = os.getcwd()
     yield
-    os.chdir(cwd)
+    os.chdir(initial_cwd)
 
 
 @pytest.fixture(scope="function")
@@ -336,7 +484,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config():
+def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -481,6 +629,8 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -578,6 +728,8 @@ async def server_multi(
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
     config.Config.set("database", "connection_timeout", str(3))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -643,24 +795,14 @@ def capture_warnings():
     logging.captureWarnings(False)
 
 
-@pytest.fixture(scope="function")
-async def environment(client, server, environment_default):
+async def create_environment(client, use_custom_env_settings: bool) -> str:
     """
-    Create a project and environment, with auto_deploy turned off. This fixture returns the uuid of the environment
-    """
+    Create a project (env-test) and an environment (dev).
 
-    env = await data.Environment.get_by_id(uuid.UUID(environment_default))
-    await env.set(data.AUTO_DEPLOY, False)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, False)
-    await env.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-
-    yield environment_default
-
-
-@pytest.fixture(scope="function")
-async def environment_default(client, server):
-    """
-    Create a project and environment. This fixture returns the uuid of the environment
+    :param client: The client that should be used to create the project and environment.
+    :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
+                                    agent trigger method is set to push_full_deploy.
+    :return: The uuid of the newly created environment as a string.
     """
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -671,23 +813,42 @@ async def environment_default(client, server):
 
     cfg_env.set(env_id)
 
+    if use_custom_env_settings:
+        env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
+        await env_obj.set(data.AUTO_DEPLOY, False)
+        await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
+        await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+
+    return env_id
+
+
+@pytest.fixture(scope="function")
+async def environment(client, server) -> AsyncIterator[str]:
+    """
+    Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
+    This fixture returns the uuid of the environment.
+    """
+    env_id = await create_environment(client, use_custom_env_settings=True)
     yield env_id
 
 
 @pytest.fixture(scope="function")
-async def environment_multi(client_multi, server_multi):
+async def environment_default(client, server) -> AsyncIterator[str]:
     """
-    Create a project and environment. This fixture returns the uuid of the environment
+    Create a project and environment with default environment settings.
+    This fixture returns the uuid of the environment.
     """
-    result = await client_multi.create_project("env-test")
-    assert result.code == 200
-    project_id = result.result["project"]["id"]
+    env_id = await create_environment(client, use_custom_env_settings=False)
+    yield env_id
 
-    result = await client_multi.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
 
-    cfg_env.set(env_id)
-
+@pytest.fixture(scope="function")
+async def environment_multi(client_multi, server_multi) -> AsyncIterator[str]:
+    """
+    Create a project and environment, with auto_deploy turned off and the agent trigger method set to push_full_deploy.
+    This fixture returns the uuid of the environment.
+    """
+    env_id = await create_environment(client_multi, use_custom_env_settings=True)
     yield env_id
 
 
@@ -744,59 +905,154 @@ class SnippetCompilationTest(KeepOnFail):
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
-        self.cwd = os.getcwd()
         self.keep_shared = False
+        self.project = None
 
     def tearDownClass(self):
         if not self.keep_shared:
             shutil.rmtree(self.libs)
             shutil.rmtree(self.env)
-        # reset cwd
-        os.chdir(self.cwd)
 
-    def setup_func(self, module_dir):
+    def setup_func(self, module_dir: Optional[str]):
         # init project
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
-        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
         if not self._keep:
             shutil.rmtree(self.project_dir)
+        self.project = None
 
     def keep(self):
         self._keep = True
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
-    def setup_for_snippet(self, snippet, autostd=True):
-        self.setup_for_snippet_external(snippet)
-        Project.set(Project(self.project_dir, autostd=autostd))
-        loader.unload_inmanta_plugins()
+    def setup_for_snippet(
+        self,
+        snippet: str,
+        *,
+        autostd: bool = True,
+        install_project: bool = True,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
+        install_mode: Optional[InstallMode] = None,
+    ) -> Project:
+        """
+        Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
+        env.process_env).
+
+        :param install_project: Install the project and all its modules. This is required to be able to compile the model.
+        :param install_v2_modules: Indicates which V2 modules should be installed in the compiler venv
+        :param add_to_module_path: Additional directories that should be added to the module path.
+        :param python_package_sources: The python package repository that should be configured on the Inmanta project in order
+            to discover V2 modules.
+        :param project_requires: The dependencies on other inmanta modules defined in the requires section of the project.yml
+                                 file
+        :param python_requires: The dependencies on Python packages providing v2 modules.
+        :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
+                             no install mode is set explicitly in the project.yml file.
+        """
+        self.setup_for_snippet_external(
+            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+        )
+        return self._load_project(autostd, install_project, install_v2_modules)
+
+    def _load_project(
+        self,
+        autostd: bool,
+        install_project: bool,
+        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        main_file: str = "main.cf",
+    ):
+        loader.PluginModuleFinder.reset()
+        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
+        Project.set(self.project)
+        self.project.use_virtual_env()
+        self._patch_process_env()
+        self._install_v2_modules(install_v2_modules)
+        if install_project:
+            self.project.install_modules()
+        return self.project
+
+    def _patch_process_env(self) -> None:
+        """
+        Patch env.process_env to accommodate the SnippetCompilationTest's switching between active environments within a single
+        running process.
+        """
+        env.mock_process_env(env_path=self.env)
+
+    def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+        install_v2_modules = install_v2_modules if install_v2_modules is not None else []
+        module_tool = ModuleTool()
+        for mod in install_v2_modules:
+            with tempfile.TemporaryDirectory() as build_dir:
+                if mod.editable:
+                    install_path = mod.path
+                else:
+                    install_path = module_tool.build(mod.path, build_dir)
+                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
 
     def reset(self):
-        Project.set(Project(self.project_dir, autostd=Project.get().autostd))
+        Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
         loader.unload_inmanta_plugins()
+        loader.PluginModuleFinder.reset()
 
-    def setup_for_snippet_external(self, snippet):
-        if self.modules_dir:
-            module_path = f"[{self.libs}, {self.modules_dir}]"
-        else:
-            module_path = f"{self.libs}"
+    def setup_for_snippet_external(
+        self,
+        snippet: str,
+        add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
+        project_requires: Optional[List[InmantaModuleRequirement]] = None,
+        python_requires: Optional[List[Requirement]] = None,
+        install_mode: Optional[InstallMode] = None,
+    ) -> None:
+        add_to_module_path = add_to_module_path if add_to_module_path is not None else []
+        python_package_sources = python_package_sources if python_package_sources is not None else []
+        project_requires = project_requires if project_requires is not None else []
+        python_requires = python_requires if python_requires is not None else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
-                """
+                f"""
             name: snippet test
-            modulepath: %s
-            downloadpath: %s
+            modulepath: {self._get_modulepath_for_project_yml_file(add_to_module_path)}
+            downloadpath: {self.libs}
             version: 1.0
-            repo: ['%s']"""
-                % (module_path, self.libs, self.repo)
+            repo:
+                - {{type: git, url: {self.repo} }}
+            """.rstrip()
             )
+            if python_package_sources:
+                cfg.write(
+                    "".join(
+                        f"""
+                - {{type: package, url: {source} }}
+                        """.rstrip()
+                        for source in python_package_sources
+                    )
+                )
+            if project_requires:
+                cfg.write("\n            requires:\n")
+                cfg.write("\n".join(f"                - {req}" for req in project_requires))
+            if install_mode:
+                cfg.write(f"\n            install_mode: {install_mode.value}")
+        with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
+            fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
+
+    def _get_modulepath_for_project_yml_file(self, add_to_module_path: List[str] = []) -> str:
+        dirs = [self.libs]
+        if self.modules_dir:
+            dirs.append(self.modules_dir)
+        if add_to_module_path:
+            dirs.extend(add_to_module_path)
+        return f"[{', '.join(dirs)}]"
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
@@ -841,8 +1097,11 @@ class SnippetCompilationTest(KeepOnFail):
         return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
-        self.setup_for_snippet(snippet)
+        """
+        Set up project to expect an error during compilation or project install.
+        """
         try:
+            self.setup_for_snippet(snippet)
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
@@ -862,9 +1121,18 @@ class SnippetCompilationTest(KeepOnFail):
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None
 
+    def setup_for_existing_project(self, folder: str, main_file: str = "main.cf") -> Project:
+        shutil.rmtree(self.project_dir)
+        shutil.copytree(folder, self.project_dir)
+        venv = os.path.join(self.project_dir, ".env")
+        if os.path.exists(venv):
+            shutil.rmtree(venv)
+        os.symlink(self.env, venv)
+        return self._load_project(autostd=False, install_project=True, main_file=main_file)
+
 
 @pytest.fixture(scope="session")
-def snippetcompiler_global():
+def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
@@ -872,7 +1140,12 @@ def snippetcompiler_global():
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
+def snippetcompiler(
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
+    """
     # Test with compiler cache enabled
     compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
@@ -881,7 +1154,10 @@ def snippetcompiler(inmanta_config, snippetcompiler_global, modules_dir):
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir):
+def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+    """
+    Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
+    """
     ast = SnippetCompilationTest()
     ast.setUpClass()
     ast.setup_func(modules_dir)
@@ -891,8 +1167,18 @@ def snippetcompiler_clean(modules_dir):
 
 
 @pytest.fixture(scope="session")
-def modules_dir():
+def modules_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules")
+
+
+@pytest.fixture(scope="session")
+def modules_v2_dir():
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
+
+
+@pytest.fixture(scope="session")
+def projects_dir() -> str:
+    yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
 class CLI(object):
@@ -992,3 +1278,182 @@ async def mocked_compiler_service_block(server, monkeypatch):
     monkey_patch_compiler_service(monkeypatch, server, True, runner_queue)
 
     yield runner_queue
+
+
+@pytest.fixture
+def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
+    fixture. This venv is completely decoupled from the active development venv.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    python_path: py.path.local = venv_dir.join("bin", "python")
+    venv.create(venv_dir, with_pip=True)
+    subprocess.check_output([str(python_path), "-m", "pip", "install", "-U", "pip"])
+    yield (venv_dir, python_path)
+
+
+@pytest.fixture
+def tmpvenv_active(
+    deactive_venv, tmpvenv: Tuple[py.path.local, py.path.local]
+) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    """
+    Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
+    from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
+    cleanup. If using this fixture, it should always be listed before other fixtures that are expected to live in this
+    environment context because its setup and teardown will then wrap the dependent setup and teardown. This works because
+    pytest fixture setup and teardown use LIFO semantics
+    (https://docs.pytest.org/en/6.2.x/fixture.html#yield-fixtures-recommended). The snippetcompiler fixture in particular should
+    always come after this one.
+
+    This fixture has a huge side effect that affects the running Python process. For a venv fixture that does not affect the
+    running process, check out tmpvenv.
+
+    :return: A tuple of the paths to the venv and the Python executable respectively.
+    """
+    venv_dir, python_path = tmpvenv
+
+    # adapted from
+    # https://github.com/pypa/virtualenv/blob/9569493453a39d63064ed7c20653987ba15c99e5/src/virtualenv/activation/python/activate_this.py
+    # MIT license
+    # Copyright (c) 2007 Ian Bicking and Contributors
+    # Copyright (c) 2009 Ian Bicking, The Open Planning Project
+    # Copyright (c) 2011-2016 The virtualenv developers
+    # Copyright (c) 2020-202x The virtualenv developers
+    binpath: str
+    base: str
+    site_packages: str
+    if sys.platform == "win32":
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "Scripts"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(base, "Lib", "site-packages")
+    else:
+        binpath = os.path.abspath(os.path.join(str(venv_dir), "bin"))
+        base = os.path.dirname(binpath)
+        site_packages = os.path.join(
+            base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+        )
+
+    # prepend bin to PATH (this file is inside the bin directory), exclude old venv path
+    os.environ["PATH"] = os.pathsep.join(
+        [binpath] + [elem for elem in os.environ.get("PATH", "").split(os.pathsep) if not elem.startswith(sys.prefix)]
+    )
+    os.environ["VIRTUAL_ENV"] = base  # virtual env is right above bin directory
+
+    # add the virtual environments libraries to the host python import mechanism
+    prev_length = len(sys.path)
+    site.addsitedir(site_packages)
+    # exclude old venv path
+    sys.path[:] = sys.path[prev_length:] + [elem for elem in sys.path[0:prev_length] if not elem.startswith(sys.prefix)]
+
+    sys.real_prefix = sys.prefix
+    sys.prefix = base
+
+    # patch env.process_env to recognize this environment as the active one, deactive_venv restores it
+    env.mock_process_env(python_path=str(python_path))
+    env.process_env.notify_change()
+
+    # Force refresh build's decision on whether it should use virtualenv or venv. This decision is made based on the active
+    # environment, which we're changing now.
+    build.env._should_use_virtualenv.cache_clear()
+
+    yield tmpvenv
+
+    unload_modules_for_path(site_packages)
+    # Force refresh build's cache once more
+    build.env._should_use_virtualenv.cache_clear()
+
+
+@pytest.fixture
+def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+    """
+    Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
+    active one.
+    """
+    venv_dir: py.path.local = tmpdir.join(".venv")
+    venv: env.VirtualEnv = env.VirtualEnv(str(venv_dir))
+    venv.use_virtual_env()
+    yield venv
+    unload_modules_for_path(venv.site_packages_dir)
+
+
+def unload_modules_for_path(path: str) -> None:
+    """
+    Unload any modules that are loaded from a given path.
+    """
+
+    def module_in_prefix(module: ModuleType, prefix: str) -> bool:
+        file: Optional[str] = getattr(module, "__file__", None)
+        return file.startswith(prefix) if file is not None else False
+
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
+    for mod_name in loaded_modules:
+        del sys.modules[mod_name]
+    importlib.invalidate_caches()
+
+
+@pytest.fixture(scope="session")
+def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+    """
+    Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+    :return: The path to the index
+    """
+    with tempfile.TemporaryDirectory() as artifact_dir:
+        for module_dir in os.listdir(modules_v2_dir):
+            path: str = os.path.join(modules_v2_dir, module_dir)
+            ModuleTool().build(path=path, output_dir=artifact_dir)
+        dir2pi(argv=["dir2pi", artifact_dir])
+        yield os.path.join(artifact_dir, "simple")
+
+
+@pytest.fixture
+async def migrate_db_from(
+    request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """
+    Restores a db dump and yields a function that starts the server and migrates the database schema to the latest version.
+
+    :param db_restore_dump: The db version dump file to restore (set via `@pytest.mark.db_restore_dump(<file>)`.
+    """
+    marker: Optional[pytest.mark.Mark] = request.node.get_closest_marker("db_restore_dump")
+    if marker is None or len(marker.args) != 1:
+        raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
+    # restore old version
+    with open(marker.args[0], "r") as fh:
+        await PGRestore(fh.readlines(), postgresql_client).run()
+
+    bootloader: InmantaBootloader = InmantaBootloader()
+
+    async def migrate() -> None:
+        # start boatloader, triggering db migration
+        await bootloader.start()
+        # inform asyncpg of any type changes so it knows to refresh its caches
+        await postgresql_client.reload_schema_state()
+
+    yield migrate
+
+    await bootloader.stop()
+
+
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
+def guard_testing_venv():
+    """
+    Ensure that the tests don't install packages into the venv that runs the tests.
+    """
+    venv = env.PythonEnvironment(python_path=sys.executable)
+    installed_packages_before = venv.get_installed_packages()
+    yield
+    installed_packages_after = venv.get_installed_packages()
+
+    venv_was_altered = False
+    error_message = "The venv running the tests was altered by the tests:\n"
+    all_pkgs = set(list(installed_packages_before.keys()) + list(installed_packages_after.keys()))
+    for pkg in all_pkgs:
+        version_before_tests = installed_packages_before.get(pkg)
+        version_after_tests = installed_packages_after.get(pkg)
+        if version_before_tests != version_after_tests:
+            venv_was_altered = True
+            error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
+    assert not venv_was_altered, error_message

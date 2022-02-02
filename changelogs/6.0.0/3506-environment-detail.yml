@@ -1,0 +1,4 @@
+description: Add details parameter to environment endpoints
+issue-nr: 3506
+change-type: minor
+destination-branches: [master, iso4]

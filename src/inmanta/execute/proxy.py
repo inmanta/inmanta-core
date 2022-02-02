@@ -18,7 +18,7 @@
 
 from collections.abc import Mapping
 from copy import copy
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
@@ -33,6 +33,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute
+    from inmanta.ast.entity import Entity
     from inmanta.execute.runtime import Instance
 
 
@@ -42,13 +43,13 @@ class UnsetException(RuntimeException):
     available (i.e. it has not been frozen yet).
     """
 
-    def __init__(self, msg, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
+    def __init__(self, msg: str, instance: Optional["Instance"] = None, attribute: Optional["Attribute"] = None) -> None:
         RuntimeException.__init__(self, None, msg)
-        self.instance: Optional[Instance] = instance
-        self.attribute: Optional[Attribute] = attribute
+        self.instance: Optional["Instance"] = instance
+        self.attribute: Optional["Attribute"] = attribute
         self.msg = msg
 
-    def get_result_variable(self):
+    def get_result_variable(self) -> Optional["Instance"]:
         return self.instance
 
 
@@ -60,7 +61,8 @@ class UnknownException(Exception):
     depending on this value by return an instance of Unknown as well.
     """
 
-    def __init__(self, unknown):
+    def __init__(self, unknown: Unknown):
+        super().__init__()
         self.unknown = unknown
 
 
@@ -75,16 +77,16 @@ class AttributeNotFound(NotFoundException, AttributeError):
 
 
 @stable_api
-class DynamicProxy(object):
+class DynamicProxy:
     """
     This class wraps an object and makes sure that a model is never modified
     by native code.
     """
 
-    def __init__(self, instance):
+    def __init__(self, instance: "Instance") -> None:
         object.__setattr__(self, "__instance", instance)
 
-    def _get_instance(self):
+    def _get_instance(self) -> "Instance":
         return object.__getattribute__(self, "__instance")
 
     @classmethod
@@ -116,7 +118,7 @@ class DynamicProxy(object):
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, tuple, int, float, bool, "DynamicProxy"]:
+    def return_value(cls, value: object) -> Union[None, str, Tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
         """
@@ -146,7 +148,7 @@ class DynamicProxy(object):
 
         return DynamicProxy(value)
 
-    def __getattr__(self, attribute):
+    def __getattr__(self, attribute: str):
         instance = self._get_instance()
 
         try:
@@ -157,16 +159,16 @@ class DynamicProxy(object):
 
         return DynamicProxy.return_value(value)
 
-    def __setattr__(self, attribute, value):
+    def __setattr__(self, attribute: str, value: object) -> None:
         raise Exception("Readonly object")
 
-    def _type(self):
+    def _type(self) -> "Entity":
         """
         Return the type of the proxied instance
         """
         return self._get_instance().type
 
-    def is_unknown(self):
+    def is_unknown(self) -> bool:
         """
         Return true if this value is unknown and cannot be determined
         during this compilation run
@@ -175,40 +177,40 @@ class DynamicProxy(object):
             return True
         return False
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._get_instance())
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if hasattr(other, "_get_instance"):
             other = other._get_instance()
 
         return self._get_instance() == other
 
-    def __lt__(self, other):
+    def __lt__(self, other: object) -> bool:
         if hasattr(other, "_get_instance"):
             other = other._get_instance()
 
         return self._get_instance() < other
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "@%s" % repr(self._get_instance())
 
 
 class SequenceProxy(DynamicProxy, JSONSerializable):
-    def __init__(self, iterator):
+    def __init__(self, iterator: Sequence) -> None:
         DynamicProxy.__init__(self, iterator)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
             raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (key, self._get_instance()))
 
         return DynamicProxy.return_value(instance[key])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._get_instance())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable:
         instance = self._get_instance()
 
         return IteratorProxy(instance.__iter__())
@@ -219,7 +221,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict):
+    def __init__(self, mydict: Dict[object, object]) -> None:
         DynamicProxy.__init__(self, mydict)
 
     def __getitem__(self, key):
@@ -229,7 +231,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
 
         return DynamicProxy.return_value(instance[key])
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._get_instance())
 
     def __iter__(self):
@@ -247,7 +249,7 @@ class CallProxy(DynamicProxy):
     Proxy a value that implements a __call__ function
     """
 
-    def __init__(self, instance):
+    def __init__(self, instance: Callable[..., object]) -> None:
         DynamicProxy.__init__(self, instance)
 
     def __call__(self, *args, **kwargs):
@@ -261,7 +263,7 @@ class IteratorProxy(DynamicProxy):
     Proxy an iterator call
     """
 
-    def __init__(self, iterator):
+    def __init__(self, iterator: Iterable[object]) -> None:
         DynamicProxy.__init__(self, iterator)
 
     def __iter__(self):

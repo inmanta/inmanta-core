@@ -1,0 +1,5 @@
+description: Added a generic fixture for db migration tests that can be used by core and extensions.
+change-type: patch
+destination-branches:
+  - master
+  - iso4

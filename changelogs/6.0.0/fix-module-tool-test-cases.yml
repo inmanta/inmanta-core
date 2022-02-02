@@ -1,0 +1,4 @@
+---
+description: Fix the slow tests that were failing due to PR #3687
+change-type: patch
+destination-branches: [master, iso5]

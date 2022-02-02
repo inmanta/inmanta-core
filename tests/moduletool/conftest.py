@@ -35,14 +35,14 @@ from moduletool.common import (
 
 
 @pytest.fixture(scope="session")
-def modules_dir():
+def git_modules_dir() -> str:
     tempdir = tempfile.mkdtemp()
     yield tempdir
     shutil.rmtree(tempdir)
 
 
 @pytest.fixture(scope="session")
-def modules_repo(modules_dir):
+def modules_repo(git_modules_dir) -> str:
     """
     +--------+-------------+----------+
     | Name   | Requires    | Versions |
@@ -95,7 +95,7 @@ def modules_repo(modules_dir):
     +--------+-------------+----------+
     |        |             | 3.3.dev  |
     +--------+-------------+----------+"""
-    tempdir = modules_dir
+    tempdir = git_modules_dir
 
     reporoot = os.path.join(tempdir, "repos")
     os.makedirs(reporoot)
@@ -129,6 +129,13 @@ def modules_repo(modules_dir):
     mod8 = make_module_simple(reporoot, "mod8", [])
     add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
     add_file(mod8, "mastersignal", "present", "last commit")
+
+    mod11 = make_module_simple(reporoot, "mod11")
+    add_file(mod11, "file", "test", "release version 3.2.1", version="3.2.1")
+    add_file(mod11, "file", "test", "release version 4.0.0", version="4.0.0")
+    add_file(mod11, "file", "test", "release version 4.1.0", version="4.1.0")
+    add_file(mod11, "file", "test", "release version 4.1.2", version="4.1.2")
+    add_file(mod11, "file", "test", "release version 4.2.0", version="4.2.0")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cython from 0.29.23 to 0.29.24
+destination-branches:
+- master
+sections: {}

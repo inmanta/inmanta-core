@@ -1,0 +1,5 @@
+description: Added parsing and internal representation of modules v2 metadata
+change-type: major
+issue-nr: 3106
+destination-branches:
+  - master

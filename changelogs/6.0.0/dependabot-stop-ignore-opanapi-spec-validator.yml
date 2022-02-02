@@ -1,0 +1,5 @@
+change-type: patch
+description: Stop forcing dependabot to ignore openapi-spec-validator version bumps.
+destination-branches:
+- master
+sections: {}

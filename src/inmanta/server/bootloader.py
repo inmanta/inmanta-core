@@ -56,7 +56,7 @@ class ConstrainedApplicationContext(ApplicationContext):
             raise InvalidSliceNameException(f"{name} should be in namespace {self.namespace}")
         self.parent.register_slice(slice)
 
-    def set_feature_manager(self, feature_manager: FeatureManager):
+    def set_feature_manager(self, feature_manager: FeatureManager) -> None:
         self.parent.set_feature_manager(feature_manager)
 
 

@@ -52,6 +52,11 @@ Plugins
 
 .. autoclass:: inmanta.plugins.PluginException
 
+.. autoclass:: inmanta.plugins.PluginMeta
+    :show-inheritance:
+    :members: add_function, clear, get_functions
+    :undoc-members:
+
 Resources
 ---------
 
@@ -127,20 +132,68 @@ Modules
 .. autoclass:: inmanta.module.InvalidMetadata
 
 .. autoclass:: inmanta.module.ModuleLike
-    :members: metadata, name
+    :show-inheritance:
+    :members: metadata, from_path
     :undoc-members:
 
 .. autoclass:: inmanta.module.Module
     :show-inheritance:
+    :members: from_path, get_plugin_files, unload
+    :undoc-members:
+
+.. autodata:: inmanta.module.ModuleName
+
+.. autoclass:: inmanta.module.ModuleV1
+    :show-inheritance:
+    :members: from_path
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV2
+    :show-inheritance:
+    :members: is_editable, from_path
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleSource
+    :show-inheritance:
+    :members: get_installed_module
+    :undoc-members:
+
+.. autoclass:: inmanta.module.ModuleV2Source
+    :show-inheritance:
+
+.. autodata:: inmanta.module.Path
+
+.. autoclass:: inmanta.loader.PluginModuleFinder
+    :show-inheritance:
+    :members: reset
+    :undoc-members:
+
+.. autofunction:: inmanta.loader.unload_inmanta_plugins
 
 
 Project
 -------
 
 .. autoclass:: inmanta.module.Project
-    :members: get, load, set
+    :members: get, load, set, install_modules
     :undoc-members:
     :show-inheritance:
+
+.. autoclass:: inmanta.module.ProjectNotFoundException
+    :undoc-members:
+    :show-inheritance:
+
+
+Python Environment
+------------------
+
+
+.. autofunction:: inmanta.env.mock_process_env
+
+
+.. autoclass:: inmanta.env.VirtualEnv
+    :members: init_env, use_virtual_env
+    :undoc-members:
 
 
 Typing
@@ -286,6 +339,39 @@ Rest API
 ---------
 
 The rest API is also available as a `swagger spec <openapi.html#http://>`_
+
+The (v2) API endpoints that offer paging, sorting and filtering follow a convention.
+They share the following parameters:
+
+limit
+    specifies the page size, so the maximum number of items returned from the query
+start and first_id
+    These parameters define the lower limit for the page,
+end and last_id
+    These parameters define the upper limit for the page
+    (only one of the (`start`, `first_id`), (`end`, `last_id`) pairs should be specified at the same time).
+
+.. note:: The return value of these methods contain a `links` tag, with the urls of the `next` and `prev` pages, so for simply going through the pages a client only needs to follow these links.
+
+filter
+    The `filter` parameter is used for filtering the result set.
+
+    Filters should be specified with the syntax `?filter.<filter_key>=value`.
+
+    It's also possible to provide multiple values for the same filter, in this case results are returned,
+    if they match any of these filter values: `?filter.<filter_key>=value&filter.<filter_key>=value2`
+
+    Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+    For example `?filter.<filter_key>=value&filter.<filter_key2>=value2` returns results that match both filters.
+
+    The documentation of each method describes the supported filters.
+
+sort
+    The sort parameter describes how the result set should be sorted.
+
+    It should follow the pattern `?<attribute_to_sort_by>.<order>`, for example `?value.desc` (case insensitive).
+
+    The documentation of each method describes the supported attributes to sort by.
 
 .. automodule:: inmanta.protocol.methods
     :members:

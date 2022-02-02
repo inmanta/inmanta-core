@@ -1,0 +1,4 @@
+---
+description: Fix problem where the parent venv doesn't get activated when running on the latest Ubuntu release.
+change-type: patch
+destination-branches: [master]

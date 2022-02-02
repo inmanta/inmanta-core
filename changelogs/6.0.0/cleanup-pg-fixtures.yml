@@ -1,0 +1,4 @@
+description: Clean up the use of the pg fixtures
+change-type: patch
+destination-branches:
+  - master

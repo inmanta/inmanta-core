@@ -1,0 +1,4 @@
+---
+description: Make sure that Pydantic objects are timezone ware
+change-type: patch
+destination-branches: [master, iso4]

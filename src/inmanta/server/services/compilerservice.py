@@ -23,14 +23,14 @@ import logging
 import os
 import re
 import subprocess
-import sys
 import traceback
 import uuid
 from asyncio import CancelledError, Task
+from asyncio.subprocess import Process
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, Hashable, List, Optional, Tuple, cast
+from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Tuple, cast
 
 import dateutil
 import dateutil.parser
@@ -38,12 +38,17 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.data import APILIMIT
+from inmanta.data import APILIMIT, InvalidSort, QueryType
+from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
+from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
 
@@ -73,7 +78,7 @@ class CompileRun(object):
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
         self.stage: Optional[data.Report] = None
-        self._project_dir = project_dir
+        self._project_dir = os.path.abspath(project_dir)
         # When set, used to collect tail of std out
         self.tail_stdout: Optional[str] = None
         self.version: Optional[int] = None
@@ -95,7 +100,7 @@ class CompileRun(object):
 
     async def _start_stage(self, name: str, command: str) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "starting stage %s for %s in %s", name, self.request.id, self.request.environment)
-        start = datetime.datetime.now()
+        start = datetime.datetime.now().astimezone()
         stage = data.Report(compile=self.request.id, started=start, name=name, command=command)
         await stage.insert()
         self.stage = stage
@@ -106,7 +111,7 @@ class CompileRun(object):
             const.LOG_LEVEL_TRACE, "ending stage %s for %s in %s", self.stage.name, self.request.id, self.request.environment
         )
         stage = self.stage
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         await stage.update_fields(completed=end, returncode=returncode)
         self.stage = None
         return stage
@@ -159,9 +164,35 @@ class CompileRun(object):
         else:
             return None
 
+    async def get_upstream_branch(self) -> Optional[str]:
+        """
+        Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
+        """
+        try:
+            sub_process = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "--symbolic-full-name",
+                "@{upstream}",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self._project_dir,
+            )
+            out, err = await sub_process.communicate()
+        finally:
+            if sub_process.returncode is None:
+                # The process is still running, kill it
+                sub_process.kill()
+
+        if sub_process.returncode != 0:
+            return None
+
+        return out.decode().strip()
+
     async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
+        sub_process: Optional[Process] = None
         try:
             env_all = os.environ.copy()
             if env is not None:
@@ -174,19 +205,24 @@ class CompileRun(object):
             returncode = await self.drain(sub_process)
             return await self._end_stage(returncode)
         except CancelledError:
-            """ Propagate Cancel """
+            """Propagate Cancel"""
             raise
         except Exception as e:
             await self._error("".join(traceback.format_exception(type(e), e, e.__traceback__)))
             return await self._end_stage(RETURNCODE_INTERNAL_ERROR)
         finally:
-            if sub_process.returncode is None:
+            if sub_process and sub_process.returncode is None:
                 # The process is still running, kill it
                 sub_process.kill()
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
+        """
+        Runs this compile run.
+
+        :return: Tuple of a boolean representing success and the compile data, if any.
+        """
         success = False
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         await self.request.update_fields(started=now)
 
         compile_data_json_file = NamedTemporaryFile()
@@ -199,6 +235,7 @@ class CompileRun(object):
             env = await data.Environment.get_by_id(environment_id)
 
             env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            assert self.stage
             await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
 
             if env is None:
@@ -206,47 +243,120 @@ class CompileRun(object):
                 await self._end_stage(-1)
                 return False, None
 
-            inmanta_path = [sys.executable, "-m", "inmanta.app"]
-
             if not os.path.exists(project_dir):
                 await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
                 os.mkdir(project_dir)
 
-            repo_url: str = env.repo_url
-            repo_branch: str = env.repo_branch
-            if not repo_url:
-                if not os.path.exists(os.path.join(project_dir, "project.yml")):
-                    await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set")
-                await self._end_stage(0)
-            else:
-                await self._end_stage(0)
-                # checkout repo
+            # Use a separate venv to compile the project to prevent that packages are installed in the
+            # venv of the Inmanta server.
+            venv_dir = os.path.join(project_dir, ".env")
 
-                if not os.path.exists(os.path.join(project_dir, ".git")):
+            async def ensure_venv() -> Optional[data.Report]:
+                """
+                Ensure a venv is present at `venv_dir`.
+                """
+                virtual_env = VirtualEnv(venv_dir)
+                if virtual_env.exists():
+                    return None
+
+                await self._start_stage("Creating venv", command="")
+                try:
+                    virtual_env.init_env()
+                except VenvCreationFailedError as e:
+                    await self._error(message=e.msg)
+                    return await self._end_stage(returncode=1)
+                else:
+                    return await self._end_stage(returncode=0)
+
+            async def update_modules() -> data.Report:
+                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
+
+            async def install_modules() -> data.Report:
+                return await run_compile_stage_in_venv(
+                    "Installing modules", ["-vvv", "-X", "project", "install"], cwd=project_dir
+                )
+
+            async def run_compile_stage_in_venv(
+                stage_name: str, inmanta_args: List[str], cwd: str, env: Dict[str, str] = {}
+            ) -> data.Report:
+                """
+                Run a compile stage by executing the given command in the venv `venv_dir`.
+
+                :param stage_name: Name of the compile stage.
+                :param inmanta_args: The command to be executed in the venv. This command should not include the part
+                                      ["<python-interpreter>", "-m", "inmanta.app"]
+                :param cwd: The current working directory to be used for the command invocation.
+                :param env: Execute the command with these environment variables.
+                """
+                LOGGER.info(stage_name)
+                python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
+                assert os.path.exists(python_path)
+                full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
+                return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
+
+            async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
+                """
+                Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
+                """
+                repo_url: str = env.repo_url
+                repo_branch: str = env.repo_branch
+                if os.path.exists(os.path.join(project_dir, "project.yml")):
+                    yield self._end_stage(0)
+
+                    yield ensure_venv()
+
+                    should_update: bool = force_update or self.request.force_update
+
+                    # switch branches
+                    if repo_branch:
+                        branch = await self.get_branch()
+                        if branch is not None and repo_branch != branch:
+                            if should_update:
+                                yield self._run_compile_stage("Fetching new branch heads", ["git", "fetch"], project_dir)
+                            yield self._run_compile_stage(
+                                f"Switching branch from {branch} to {repo_branch}",
+                                ["git", "checkout", repo_branch],
+                                project_dir,
+                            )
+                            if not should_update:
+                                # if we update, update procedure will install modules
+                                yield install_modules()
+
+                    # update project
+                    if should_update:
+                        # only pull changes if there is an upstream branch
+                        if await self.get_upstream_branch():
+                            yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                        yield update_modules()
+                else:
+                    if not repo_url:
+                        await self._warning(f"Failed to compile: no project found in {project_dir} and no repository set.")
+                        yield self._end_stage(1)
+                        return
+
+                    if len(os.listdir(project_dir)) > 0:
+                        await self._warning(f"Failed to compile: no project found in {project_dir} but directory is not empty.")
+                        yield self._end_stage(1)
+                        return
+
+                    yield self._end_stage(0)
+
+                    # clone repo and install project
                     cmd = ["git", "clone", repo_url, "."]
                     if repo_branch:
                         cmd.extend(["-b", repo_branch])
-                    result = await self._run_compile_stage("Cloning repository", cmd, project_dir)
-                    if result.returncode is None or result.returncode > 0:
-                        return False, None
+                    yield self._run_compile_stage("Cloning repository", cmd, project_dir)
+                    yield ensure_venv()
+                    yield install_modules()
 
-                elif force_update or self.request.force_update:
-                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", repo_url], project_dir)
-                if repo_branch:
-                    branch = await self.get_branch()
-                    if branch is not None and repo_branch != branch:
-                        result = await self._run_compile_stage(
-                            f"switching branch from {branch} to {repo_branch}", ["git", "checkout", repo_branch], project_dir
-                        )
-
-                if force_update or self.request.force_update:
-                    await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
-                    LOGGER.info("Installing and updating modules")
-                    await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+            async for stage in setup():
+                stage_result: Optional[data.Report] = await stage
+                if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
+                    return False, None
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
-            cmd = inmanta_path + [
+            cmd = [
                 "-vvv",
                 "export",
                 "-X",
@@ -285,7 +395,9 @@ class CompileRun(object):
             env_vars_compile: Dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
-            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=env_vars_compile)
+            result: data.Report = await run_compile_stage_in_venv(
+                "Recompiling configuration model", cmd, cwd=project_dir, env=env_vars_compile
+            )
             success = result.returncode == 0
             if not success:
                 if self.request.do_export:
@@ -303,23 +415,30 @@ class CompileRun(object):
             pass
 
         except Exception:
-            LOGGER.exception("An error occured while recompiling")
+            LOGGER.exception("An error occurred while recompiling")
 
         finally:
+
+            async def warn(message: str) -> None:
+                if self.stage is not None:
+                    await self._warning(message)
+                else:
+                    LOGGER.warning(message)
+
             with compile_data_json_file as file:
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
                         return success, model.CompileData.parse_raw(compile_data_json)
                     except json.JSONDecodeError:
-                        LOGGER.warning(
-                            "Failed to load compile data json for compile %s. Invalid json: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to load compile data json for compile %s. Invalid json: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
                     except pydantic.ValidationError:
-                        LOGGER.warning(
-                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'",
-                            (self.request.id, compile_data_json),
+                        await warn(
+                            "Failed to parse compile data for compile %s. Json does not match CompileData model: '%s'"
+                            % (self.request.id, compile_data_json)
                         )
             return success, None
 
@@ -381,12 +500,14 @@ class CompilerService(ServerSlice):
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
 
     async def _cleanup(self) -> None:
-        oldest_retained_date = datetime.datetime.now() - datetime.timedelta(seconds=opt.server_compiler_report_retention.get())
+        oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
+            seconds=opt.server_compiler_report_retention.get()
+        )
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
             await data.Compile.delete_older_than(oldest_retained_date)
         except CancelledError:
-            """ Propagate Cancel """
+            """Propagate Cancel"""
             raise
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
@@ -410,7 +531,7 @@ class CompilerService(ServerSlice):
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
 
-        requested = datetime.datetime.now()
+        requested = datetime.datetime.now().astimezone()
 
         compile = data.Compile(
             environment=env.id,
@@ -468,7 +589,7 @@ class CompilerService(ServerSlice):
             try:
                 await listener.compile_done(compile)
             except CancelledError:
-                """ Propagate Cancel """
+                """Propagate Cancel"""
                 raise
             except Exception:
                 logging.exception("CompileStateListener failed")
@@ -506,7 +627,7 @@ class CompilerService(ServerSlice):
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
-    ):
+    ) -> int:
         if wait_time == 0:
             wait: float = 0
         else:
@@ -523,7 +644,9 @@ class CompilerService(ServerSlice):
             wait: float = 0
         else:
             assert last_run.completed is not None
-            wait = self._calculate_recompile_wait(wait_time, compile.requested, last_run.completed, datetime.datetime.now())
+            wait = self._calculate_recompile_wait(
+                wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
+            )
         if wait > 0:
             LOGGER.info(
                 "server-auto-recompile-wait is enabled and set to %s seconds, "
@@ -556,7 +679,7 @@ class CompilerService(ServerSlice):
 
         version = runner.version
 
-        end = datetime.datetime.now()
+        end = datetime.datetime.now().astimezone()
         compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
@@ -638,3 +761,70 @@ class CompilerService(ServerSlice):
         """
         compiles = await data.Compile.get_next_compiles_for_environment(env.id)
         return [x.to_dto() for x in compiles]
+
+    @protocol.handle(methods_v2.get_compile_reports, env="tid")
+    async def get_compile_reports(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "requested.desc",
+    ) -> ReturnValue[List[model.CompileReport]]:
+
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(CompileReportFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            compile_report_order = data.CompileReportOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Compile.get_compile_reports(
+                environment=env.id,
+                database_order=compile_report_order,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                limit=limit,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = CompileReportPagingHandler(CompileReportPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, limit=limit, database_order=compile_report_order, db_query=query
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            database_order=compile_report_order,
+            limit=limit,
+            filter=filter,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @protocol.handle(methods_v2.compile_details, env="tid")
+    async def compile_details(self, env: data.Environment, id: uuid.UUID) -> model.CompileDetails:
+        details = await data.Compile.get_compile_details(env.id, id)
+        if not details:
+            raise NotFound("The compile with the given id does not exist.")
+        return details

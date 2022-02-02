@@ -1,0 +1,4 @@
+---
+description: Ensure that only imported modules are loaded
+change-type: patch
+destination-branches: [master]

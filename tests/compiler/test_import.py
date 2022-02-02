@@ -16,26 +16,21 @@
     Contact: code@inmanta.com
 """
 
-import inmanta.compiler as compiler
-from inmanta.ast import ModuleNotFoundException
+import pytest
+
+from inmanta.module import ModuleLoadingException
 
 
 def test_issue_120_bad_import(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import ip::ip""")
-    try:
-        compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except ModuleNotFoundException as e:
-        assert e.location.lnr == 1
+    with pytest.raises(ModuleLoadingException) as excinfo:
+        snippetcompiler.setup_for_snippet("""import ip::ip""")
+    assert excinfo.value.location.lnr == 1
 
 
 def test_issue_120_bad_import_extra(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import slorpf""")
-    try:
-        compiler.do_compile()
-        raise AssertionError("Should get exception")
-    except ModuleNotFoundException as e:
-        assert e.location.lnr == 1
+    with pytest.raises(ModuleLoadingException) as excinfo:
+        snippetcompiler.setup_for_snippet("""import slorpf""")
+    assert excinfo.value.location.lnr == 1
 
 
 def test_1480_1767_invalid_repo(snippetcompiler_clean):
@@ -44,10 +39,8 @@ def test_1480_1767_invalid_repo(snippetcompiler_clean):
         """
 
         """,
-        "could not find module std (reported in import std (__internal__:1:1))"
+        "Failed to load module std (reported in import std (__internal__:1:1))"
         "\ncaused by:"
-        "\n  Could not load module std"
-        "\n  caused by:"
-        "\n    inmanta.module.InvalidModuleException: could not locate module with name: std"
-        "\n",
+        "\n  Could not find module std. Please make sure to add any module v2 requirements with `inmanta module add --v2` and"
+        " to install all the project's dependencies with `inmanta project install`.",
     )

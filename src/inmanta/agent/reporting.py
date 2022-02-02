@@ -21,7 +21,7 @@ import platform
 from typing import TYPE_CHECKING, Callable, Dict, List, Union
 
 if TYPE_CHECKING:
-    from inmanta.agent import Agent
+    from inmanta.agent.agent import Agent
 
 try:
     import resource

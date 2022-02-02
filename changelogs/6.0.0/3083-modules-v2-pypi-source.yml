@@ -1,0 +1,5 @@
+description: Added package source for module v2 loading
+issue-nr: 3083
+change-type: major
+destination-branches:
+    - master

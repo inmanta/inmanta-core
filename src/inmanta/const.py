@@ -32,14 +32,13 @@ class ResourceState(str, Enum):
     cancelled = "cancelled"  # When a new version is pushed, in progress deploys are cancelled
     undefined = "undefined"  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
-    processing_events = "processing_events"
 
 
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
 # this resource action is not complete, resource is in transient state
-TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
 # not counting as done
 NOT_DONE_STATES = TRANSIENT_STATES
 # counts as done
@@ -65,7 +64,6 @@ VALID_STATES_ON_STATE_UPDATE = [
     ResourceState.cancelled,
     ResourceState.undefined,
     ResourceState.skipped_for_undefined,
-    ResourceState.processing_events,
 ]
 
 UNKNOWN_STRING = "<<undefined>>"
@@ -84,7 +82,6 @@ States set by agent
 4. unavailable
 5. cancelled
 6. deploying
-7. processing_events
 
 Each deploy sets the agent state again, all agent states can transition to all agent states
 
@@ -94,8 +91,6 @@ States that are in the action log, but not actual states
 
 
                                            +-----> deploying        -<--------+
-                                           |                                  |
-                                           +-----> processing_events-<--------+
                                            |                                  |
                                            +-----> skipped          -<--------+
                                            |                                  |
@@ -152,7 +147,7 @@ class AgentTriggerMethod(str, Enum):
     push_full_deploy = "push_full_deploy"
 
     @classmethod
-    def get_agent_trigger_method(cls, is_full_deploy):
+    def get_agent_trigger_method(cls, is_full_deploy: bool) -> "AgentTriggerMethod":
         if is_full_deploy:
             return cls.push_full_deploy
         else:
@@ -160,26 +155,63 @@ class AgentTriggerMethod(str, Enum):
 
 
 @stable_api
-class LogLevel(Enum):
+class LogLevel(str, Enum):
     """
     Log levels used for various parts of the inmanta orchestrator.
     """
 
-    CRITICAL = 50
-    ERROR = 40
-    WARNING = 30
-    INFO = 20
-    DEBUG = 10
-    TRACE = 3
-    NOTSET = 0
+    CRITICAL = "CRITICAL"
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    TRACE = "TRACE"
+
+    @property
+    def to_int(self) -> int:
+        return LOG_LEVEL_AS_INTEGER[self]
+
+    def from_int(level: int) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from an integer
+        """
+        return LogLevel(level)
+
+    def from_str(level: str) -> "LogLevel":
+        """
+        This methods is an example of construction of a LogLevel value from a string
+        """
+        return LogLevel(level)
+
+
+# Mapping each log level to its integer value
+LOG_LEVEL_AS_INTEGER = {
+    LogLevel.CRITICAL: 50,
+    LogLevel.ERROR: 40,
+    LogLevel.WARNING: 30,
+    LogLevel.INFO: 20,
+    LogLevel.DEBUG: 10,
+    LogLevel.TRACE: 3,
+}
+
+
+# The following code registers the integer log levels as values
+# in the LogLevel enum.  It allows to pass them in the constructor
+# as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
+for level, value in LOG_LEVEL_AS_INTEGER.items():
+    LogLevel._value2member_map_[value] = level
 
 
 INMANTA_URN = "urn:inmanta:"
 
 
-class Compilestate(Enum):
-    success = 1
-    failed = 2
+class Compilestate(str, Enum):
+    """
+    Compile state, whether the compile did succeed or not
+    """
+
+    success = "success"
+    failed = "failed"
 
 
 EXPORT_META_DATA = "export_metadata"
@@ -218,7 +250,7 @@ EXIT_START_FAILED = 4
 
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
-TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"
+TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
 
 PLUGINS_PACKAGE = "inmanta_plugins"
 
@@ -257,3 +289,10 @@ class ApiDocsFormat(str, Enum):
     # swagger: the api docs in html, using a Swagger-UI view
     openapi = "openapi"
     swagger = "swagger"
+
+
+class DesiredStateVersionStatus(str, Enum):
+    active = "active"
+    candidate = "candidate"
+    retired = "retired"
+    skipped_candidate = "skipped_candidate"

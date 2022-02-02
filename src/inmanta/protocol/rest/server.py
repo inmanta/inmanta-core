@@ -22,7 +22,7 @@ import uuid
 from asyncio import CancelledError
 from collections import defaultdict
 from json import JSONDecodeError
-from typing import Dict, List, MutableMapping, Optional, Union
+from typing import Dict, List, MutableMapping, Optional, Sequence, Union
 
 import tornado
 from pyformance import timer
@@ -257,11 +257,11 @@ class RESTServer(RESTBase):
         self.running = False
         self._http_server = None
 
-    def start_request(self):
+    def start_request(self) -> None:
         self.idle_event.clear()
         self.inflight_counter += 1
 
-    def end_request(self):
+    def end_request(self) -> None:
         self.inflight_counter -= 1
         if self.inflight_counter == 0:
             self.idle_event.set()
@@ -282,7 +282,7 @@ class RESTServer(RESTBase):
         return global_url_map
 
     async def start(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
     ) -> None:
         """
         Start the server on the current ioloop

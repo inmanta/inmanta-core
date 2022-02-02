@@ -1,0 +1,4 @@
+---
+description: Allow None as value of kwargs argument in log line
+change-type: patch
+destination-branches: [master]

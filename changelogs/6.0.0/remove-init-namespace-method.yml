@@ -1,0 +1,4 @@
+---
+description: Remove the init_namespace() method in favor of using the notify_change() method
+change-type: patch
+destination-branches: [master]

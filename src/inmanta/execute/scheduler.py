@@ -24,7 +24,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Sequence, Set, Tuple
 
 from inmanta import plugins
-from inmanta.ast import Anchor, CompilerException, CycleExcpetion, Location, MultiException, RuntimeException
+from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
@@ -118,12 +118,12 @@ class Scheduler(object):
             loopstack.add(name)
             for p in nexte.get_full_parent_names():
                 if p in loopstack:
-                    raise CycleExcpetion(nexte, p)
+                    raise CycleException(nexte, p)
                 if p in entity_map:
                     self.do_sort_entities(entity_map, p, acc, loopstack)
             loopstack.remove(name)
             acc.append(nexte)
-        except CycleExcpetion as ce:
+        except CycleException as ce:
             ce.add(nexte)
             raise
 

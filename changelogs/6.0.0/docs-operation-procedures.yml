@@ -1,0 +1,5 @@
+description: added operational procedures documentation
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"

@@ -1,0 +1,6 @@
+description: "Improved compiler exception message: added missing arguments"
+change-type: patch
+destination-branches:
+  - master
+  - iso4
+  - iso3

@@ -41,6 +41,7 @@ async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client:
 
 
 @pytest.mark.asyncio
+@pytest.mark.slowtest
 async def test_environment_update(migrate_v2_to_v3, async_finalizer, server_config):
     client = protocol.Client("client")
 

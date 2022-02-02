@@ -163,7 +163,7 @@ One more before we move on to entities:
 
 This model defines an assignment loop between ``x``, ``y`` and ``z``. Assignment to either of these variables
 will result in a flow of data to all of them. In other words, the variables are equivalent. The data trace
-shows this information at lines 2--5 along with the statements that casused the equivalence. The rest of the
+shows this information at lines 2--5 along with the statements that caused the equivalence. The rest of the
 trace is similar to before, except that the tree now shows all assignments to any of the three variables part
 of the equivalence. The tree now no longer shows just the data flow to ``x`` but to the equivalence as a whole,
 since any data that flows to the equivalence will also flow to ``x``.

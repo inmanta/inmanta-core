@@ -22,8 +22,10 @@ import shutil
 import sys
 from asyncio import subprocess
 
+import py
 import pytest
 
+from inmanta import env
 from inmanta.app import cmd_parser, compiler_features
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
@@ -47,6 +49,28 @@ def app(args):
         return
 
     options.func(options)
+
+
+async def install_project(python_env: env.PythonEnvironment, project_dir: py.path.local) -> None:
+    """
+    Install a project and its modules via the `inmanta project install` command.
+    """
+    args = [
+        python_env.python_path,
+        "-m",
+        "inmanta.app",
+        "project",
+        "install",
+    ]
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
+    )
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
 
 
 def test_help(inmanta_config, capsys):
@@ -113,8 +137,8 @@ def test_module_help(inmanta_config, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("add_types", [True, False])
-async def test_export_to_json(tmpdir, add_types):
+@pytest.mark.parametrize_any("add_types", [True, False])
+async def test_export_to_json(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, add_types):
     workspace = tmpdir.mkdir("tmp")
     path_main_file = workspace.join("main.cf")
     path_project_yml_file = workspace.join("project.yml")
@@ -135,6 +159,8 @@ vm1=std::Host(name="non-existing-machine", os=std::linux)
 std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
+
+    await install_project(tmpvenv_active_inherit, workspace)
 
     os.chdir(workspace)
 
@@ -157,11 +183,11 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert add_types == os.path.exists("dump.json.types")
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
-@pytest.mark.parametrize("set_server", [True, False])
-@pytest.mark.parametrize("set_port", [True, False])
+@pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
+@pytest.mark.parametrize_any("set_server", [True, False])
+@pytest.mark.parametrize_any("set_port", [True, False])
 @pytest.mark.asyncio
-async def test_export(tmpdir, server, client, push_method, set_server, set_port):
+async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
 
@@ -206,6 +232,8 @@ std::ConfigFile(host=vm1, path="/test", content="")
 """
     )
 
+    await install_project(tmpvenv_active_inherit, workspace)
+
     os.chdir(workspace)
 
     args = [
@@ -245,7 +273,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
 
 
 @pytest.mark.asyncio
-async def test_export_with_specific_export_plugin(tmpdir, client):
+async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
     result = await client.create_project("test")
@@ -319,10 +347,12 @@ def other_exporter(exporter: Exporter) -> None:
     init_cf_file = model_dir.join("_init.cf")
     init_cf_file.write("")
 
+    await install_project(tmpvenv_active_inherit, workspace)
+
     os.chdir(workspace)
 
     args = [
-        sys.executable,
+        tmpvenv_active_inherit.python_path,
         "-m",
         "inmanta.app",
         "export",
@@ -378,7 +408,7 @@ vm1.name = "other"
     shutil.rmtree(workspace)
 
 
-@pytest.mark.parametrize("push_method", [([]), (["-d"]), (["-d", "--full"])])
+@pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export_without_environment(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")

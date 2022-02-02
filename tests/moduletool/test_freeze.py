@@ -27,8 +27,9 @@ from moduletool.common import install_project
 from test_app_cli import app
 
 
-def test_freeze_basic(modules_dir, modules_repo):
-    install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_freeze_basic(git_modules_dir, modules_repo):
+    install_project(git_modules_dir, "projectA")
     modtool = ModuleTool()
     cmod = modtool.get_module("modC")
     assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
@@ -43,8 +44,9 @@ def test_freeze_basic(modules_dir, modules_repo):
     assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
 
 
-def test_project_freeze_basic(modules_dir, modules_repo):
-    install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_project_freeze_basic(git_modules_dir, modules_repo):
+    install_project(git_modules_dir, "projectA")
     modtool = ModuleTool()
     proj = modtool.get_project()
     assert proj.get_freeze(recursive=False, mode="==") == {
@@ -66,8 +68,9 @@ def test_project_freeze_basic(modules_dir, modules_repo):
     }
 
 
-def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
-    coroot = install_project(modules_dir, "baddep", config=False)
+@pytest.mark.slowtest
+def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
+    coroot = install_project(git_modules_dir, "baddep", config=False)
 
     with pytest.raises(CLIException) as e:
         app(["project", "freeze"])
@@ -79,13 +82,14 @@ def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
 
     assert len(err) == 0, err
     assert len(out) == 0, out
-    assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
+    assert "requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1" in caplog.text
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
 
 
-def test_project_freeze(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_project_freeze(git_modules_dir, modules_repo, capsys):
+    coroot = install_project(git_modules_dir, "projectA")
 
     app(["project", "freeze", "-o", "-"])
 
@@ -111,8 +115,9 @@ requires:
     )
 
 
-def test_project_freeze_disk(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_project_freeze_disk(git_modules_dir, modules_repo, capsys):
+    coroot = install_project(git_modules_dir, "projectA")
 
     app(["project", "freeze"])
 
@@ -140,8 +145,9 @@ requires:
         )
 
 
-def test_project_freeze_odd_opperator(modules_dir, modules_repo):
-    coroot = install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
+    coroot = install_project(git_modules_dir, "projectA")
 
     # Start a new subprocess, because inmanta-cli executes sys.exit() when an invalid argument is used.
     process = subprocess.Popen(
@@ -159,21 +165,22 @@ def test_project_freeze_odd_opperator(modules_dir, modules_repo):
     assert "argument --operator: invalid choice: 'xxx'" in err
 
 
-def test_project_options_in_config(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "projectA")
-    with open("project.yml", "w", encoding="utf-8") as fh:
-        fh.write(
-            """name: projectA
+@pytest.mark.slowtest
+def test_project_options_in_config(git_modules_dir, modules_repo, capsys):
+    coroot = install_project(
+        git_modules_dir,
+        "projectA",
+        config_content=f"""
+name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
 downloadpath: libs
-repo: %s
+repo: {modules_repo}
 freeze_recursive: true
 freeze_operator: ==
-"""
-            % modules_repo
-        )
+        """.strip(),
+    )
 
     def verify():
         out, err = capsys.readouterr()
@@ -212,8 +219,9 @@ requires:
     verify()
 
 
-def test_module_freeze(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_module_freeze(git_modules_dir, modules_repo, capsys):
+    coroot = install_project(git_modules_dir, "projectA")
 
     def verify():
         out, err = capsys.readouterr()
@@ -236,8 +244,9 @@ requires:
     verify()
 
 
-def test_module_freeze_self_disk(modules_dir, modules_repo, capsys):
-    coroot = install_project(modules_dir, "projectA")
+@pytest.mark.slowtest
+def test_module_freeze_self_disk(git_modules_dir, modules_repo, capsys):
+    coroot = install_project(git_modules_dir, "projectA")
 
     def verify():
         out, err = capsys.readouterr()
@@ -264,8 +273,7 @@ requires:
             )
 
     modp = os.path.join(coroot, "libs/modC")
-    app(["module", "install"])
+    app(["project", "install"])
     os.chdir(modp)
-    os.curdir = modp
     app(["module", "freeze"])
     verify()

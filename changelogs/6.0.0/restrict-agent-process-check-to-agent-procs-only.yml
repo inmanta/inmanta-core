@@ -1,0 +1,4 @@
+---
+description: Restrict check on number of agent processes to agent processes only
+change-type: patch
+destination-branches: [master, iso3, iso4]

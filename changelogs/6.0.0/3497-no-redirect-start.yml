@@ -1,0 +1,6 @@
+description: The dashboard should no longer register as the start. This commit removes the redirect
+issue-nr: 3497
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "Clear your browser cache after upgrading to remove the old redirection rule. If the cache is not cleared the '/' route will keep redirecting to '/dashboard'. "

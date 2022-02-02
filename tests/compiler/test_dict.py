@@ -40,15 +40,13 @@ b = { "a" : a, "b" : "b", "c" : 3}
 
 
 def test_dict_collide(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
+    with pytest.raises(DuplicateException):
+        snippetcompiler.setup_for_snippet(
+            """
 a = "a"
 b = { "a" : a, "a" : "b", "c" : 3}
-"""
-    )
-
-    with pytest.raises(DuplicateException):
-        compiler.do_compile()
+            """
+        )
 
 
 def test_dict_attr(snippetcompiler):

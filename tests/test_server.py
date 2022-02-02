@@ -27,10 +27,11 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data, loader, resources
+from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
+from inmanta.data.model import AttributeStateChange, LogLine
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -600,8 +601,6 @@ async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
     """Test uploading all code definitions at once"""
-    config.Config.set("compiler_rest_transport", "request_timeout", "1")
-
     snippetcompiler.setup_for_snippet(
         """
     h = std::Host(name="test", os=std::linux)
@@ -762,7 +761,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
     # Start the deploy
     action_id = uuid.uuid4()
-    now = datetime.now()
+    now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
         environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
     )
@@ -799,7 +798,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
 @pytest.mark.asyncio
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
-    """ Test querying resource actions via the API, including the pagination links."""
+    """Test querying resource actions via the API, including the pagination links."""
     project = data.Project(name="test")
     await project.insert()
 
@@ -924,3 +923,418 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     response = json.loads(response.body.decode("utf-8"))
     action_ids = [uuid.UUID(resource_action["action_id"]) for resource_action in response["data"]]
     assert action_ids == third_page_action_ids
+
+
+@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_start", "resource_action_update"])
+@pytest.mark.asyncio
+async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
+    """
+    Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
+    API endpoint when a new deployment is reported.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    rvid_r2_v1 = f"std::File[agent1,path=/etc/file2],v={model_version}"
+    rvid_r3_v1 = f"std::File[agent1,path=/etc/file3],v={model_version}"
+
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
+    ).insert()
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.deployed,
+        resource_version_id=rvid_r2_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.failed,
+        resource_version_id=rvid_r3_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+
+    if endpoint_to_use == "resource_deploy_start":
+        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
+        assert result.code == 200
+        resource_states_dependencies = result.result["data"]
+        assert len(resource_states_dependencies) == 2
+        assert resource_states_dependencies[rvid_r2_v1] == const.ResourceState.deployed
+        assert resource_states_dependencies[rvid_r3_v1] == const.ResourceState.failed
+    else:
+        await agent._client.resource_action_update(
+            tid=env_id,
+            resource_ids=[rvid_r1_v1],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=datetime.now().astimezone(),
+            status=const.ResourceState.deploying,
+        )
+
+    # Ensure that both API calls result in the same behavior
+    result = await client.get_resource_actions(tid=env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    resource_action = result.result["data"][0]
+    assert resource_action["environment"] == str(env_id)
+    assert resource_action["version"] == model_version
+    assert resource_action["resource_version_ids"] == [rvid_r1_v1]
+    assert resource_action["action_id"] == str(action_id)
+    assert resource_action["action"] == const.ResourceAction.deploy
+    assert resource_action["started"] is not None
+    assert resource_action["finished"] is None
+    assert resource_action["messages"] is None
+    assert resource_action["status"] == const.ResourceState.deploying
+    assert resource_action["changes"] is None
+    assert resource_action["change"] is None
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_start_error_handling(server, client, environment, agent):
+    """
+    Test the error handling of the `resource_deploy_start` API endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    # Version part missing from resource_version_id
+    result = await agent._client.resource_deploy_start(
+        tid=env_id, rvid="std::File[agent1,path=/etc/file1]", action_id=uuid.uuid4()
+    )
+    assert result.code == 400
+    assert "Invalid resource version id" in result.result["message"]
+
+    # Execute resource_deploy_start call for resource that doesn't exist
+    resource_id = "std::File[agent1,path=/etc/file1],v=1"
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource_id, action_id=uuid.uuid4())
+    assert result.code == 404
+    assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
+    """
+    Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    model_version = 1
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.skipped,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+
+    async def execute_resource_deploy_start(expected_return_code: int, resulting_nr_resource_actions: int) -> None:
+        result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
+        assert result.code == expected_return_code
+
+        result = await client.get_resource_actions(tid=env_id)
+        assert result.code == 200
+        assert len(result.result["data"]) == resulting_nr_resource_actions
+
+    await execute_resource_deploy_start(expected_return_code=200, resulting_nr_resource_actions=1)
+    await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
+
+
+@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
+@pytest.mark.asyncio
+async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
+    """
+    Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
+    when the finished field is not None.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "purged": True, "requires": []},
+    ).insert()
+
+    # Add parameter for resource
+    parameter_id = "test_param"
+    result = await client.set_param(
+        tid=env_id,
+        id=parameter_id,
+        source=const.ParameterSource.user,
+        value="val",
+        resource_id="std::File[agent1,path=/etc/file1]",
+    )
+    assert result.code == 200
+
+    action_id = uuid.uuid4()
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
+    assert result.code == 200, result.result
+
+    # Assert initial state
+    result = await client.get_resource_actions(tid=env_id)
+    assert result.code == 200, result.result
+    assert len(result.result["data"]) == 1
+    resource_action = result.result["data"][0]
+    assert resource_action["environment"] == str(env_id)
+    assert resource_action["version"] == model_version
+    assert resource_action["resource_version_ids"] == [rvid_r1_v1]
+    assert resource_action["action_id"] == str(action_id)
+    assert resource_action["action"] == const.ResourceAction.deploy
+    assert resource_action["started"] is not None
+    assert resource_action["finished"] is None
+    assert resource_action["messages"] is None
+    assert resource_action["status"] == const.ResourceState.deploying
+    assert resource_action["changes"] is None
+    assert resource_action["change"] is None
+
+    result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
+    assert result.code == 200, result.result
+    assert "last_deploy" not in result.result["resource"]
+    assert result.result["resource"]["status"] == const.ResourceState.deploying
+
+    result = await client.get_version(tid=env_id, id=1)
+    assert result.code == 200, result.result
+    assert not result.result["model"]["deployed"]
+
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        # Mark deployment as done
+        now = datetime.now()
+        if endpoint_to_use == "resource_deploy_done":
+            result = await agent._client.resource_deploy_done(
+                tid=env_id,
+                rvid=rvid_r1_v1,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[
+                    LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
+                    LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
+                ],
+                changes={"attr1": AttributeStateChange(current=None, desired="test")},
+                change=const.Change.purged,
+            )
+            assert result.code == 200, result.result
+        else:
+            result = await agent._client.resource_action_update(
+                tid=env_id,
+                resource_ids=[rvid_r1_v1],
+                action_id=action_id,
+                action=const.ResourceAction.deploy,
+                started=None,
+                finished=now,
+                status=const.ResourceState.deployed,
+                messages=[
+                    data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
+                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
+                ],
+                changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
+                change=const.Change.purged,
+                send_events=True,
+            )
+            assert result.code == 200, result.result
+
+    # Assert effect of resource_deploy_done call
+    assert f"{rvid_r1_v1}: message" in caplog.messages
+    assert f"{rvid_r1_v1}: test" in caplog.messages
+
+    result = await client.get_resource_actions(tid=env_id)
+    assert result.code == 200, result.result
+    assert len(result.result["data"]) == 1
+    resource_action = result.result["data"][0]
+    assert resource_action["environment"] == str(env_id)
+    assert resource_action["version"] == model_version
+    assert resource_action["resource_version_ids"] == [rvid_r1_v1]
+    assert resource_action["action_id"] == str(action_id)
+    assert resource_action["action"] == const.ResourceAction.deploy
+    assert resource_action["started"] is not None
+    assert resource_action["finished"] is not None
+    assert resource_action["messages"] == [
+        {
+            "level": const.LogLevel.DEBUG.name,
+            "msg": "message",
+            "args": [],
+            "kwargs": {"keyword": 123, "none": None},
+            "timestamp": now.isoformat(timespec="microseconds"),
+        },
+        {
+            "level": const.LogLevel.INFO.name,
+            "msg": "test",
+            "args": [],
+            "kwargs": {},
+            "timestamp": now.isoformat(timespec="microseconds"),
+        },
+    ]
+    assert resource_action["status"] == const.ResourceState.deployed
+    assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
+    assert resource_action["change"] == const.Change.purged.value
+
+    result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
+    assert result.code == 200, result.result
+    assert result.result["resource"]["last_deploy"] is not None
+    assert result.result["resource"]["status"] == const.ResourceState.deployed
+
+    result = await client.get_version(tid=env_id, id=1)
+    assert result.code == 200, result.result
+    assert result.result["model"]["deployed"]
+
+    # parameter was deleted due to purge operation
+    result = await client.list_params(tid=env_id)
+    assert result.code == 200
+    assert len(result.result["parameters"]) == 0
+
+    # A new resource_deploy_done call for the same action_id should result in a Conflict
+    result = await agent._client.resource_deploy_done(
+        tid=env_id,
+        rvid=rvid_r1_v1,
+        action_id=action_id,
+        status=const.ResourceState.deployed,
+        messages=[],
+        changes={"attr1": AttributeStateChange(current="test", desired="test2")},
+        change=const.Change.created,
+    )
+    assert result.code == 409, result.result
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_done_invalid_state(server, client, environment, agent, caplog):
+    """
+    Ensure proper error handling when a transient state is passed to the `resource_deploy_done` endpoint.
+    """
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    action_id = uuid.uuid4()
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=rvid_r1_v1, action_id=action_id)
+    assert result.code == 200, result.result
+
+    result = await agent._client.resource_deploy_done(
+        tid=env_id,
+        rvid=rvid_r1_v1,
+        action_id=action_id,
+        status=const.ResourceState.deploying,
+        messages=[],
+        changes={"attr1": AttributeStateChange(current=None, desired="test")},
+        change=const.Change.created,
+    )
+    assert result.code == 400, result.result
+    assert "No transient state can be used to mark a deployment as done" in result.result["message"]
+
+
+@pytest.mark.asyncio
+async def test_resource_deploy_done_error_handling(server, client, environment, agent):
+    env_id = uuid.UUID(environment)
+
+    model_version = 1
+    cm = data.ConfigurationModel(
+        environment=env_id,
+        version=model_version,
+        date=datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await cm.insert()
+
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
+
+    # Resource doesn't exist
+    result = await agent._client.resource_deploy_done(
+        tid=env_id,
+        rvid=rvid_r1_v1,
+        action_id=uuid.uuid4(),
+        status=const.ResourceState.deployed,
+        messages=[],
+        changes={},
+        change=const.Change.nochange,
+    )
+    assert result.code == 404, result.result
+
+    # Create resource
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "requires": []},
+    ).insert()
+
+    # Resource action doesn't exist
+    result = await agent._client.resource_deploy_done(
+        tid=env_id,
+        rvid=rvid_r1_v1,
+        action_id=uuid.uuid4(),
+        status=const.ResourceState.deployed,
+        messages=[],
+        changes={},
+        change=const.Change.nochange,
+    )
+    assert result.code == 404, result.result
+
+
+@pytest.mark.asyncio
+async def test_start_location_no_redirect(server):
+    """
+    Ensure that there is no redirection for the "start" location. (issue #3497)
+    """
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/" % (port,)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert base_url == response.effective_url

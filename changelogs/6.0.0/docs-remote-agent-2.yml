@@ -1,0 +1,3 @@
+description: remove bad link from remote agent setup docs
+change-type: patch
+destination-branches: [master, iso4]
