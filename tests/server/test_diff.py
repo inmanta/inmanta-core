@@ -127,12 +127,12 @@ async def test_list_attr_diff(client, environment, env_with_versions):
         "from_value": [1, 2],
         "to_value": None,
         "from_value_compare": "[\n    1,\n    2\n]",
-        "to_value_compare": None,
+        "to_value_compare": "",
     }
     assert result.result["data"][0]["attributes"]["list_attr_added"] == {
         "from_value": None,
         "to_value": [3, 4],
-        "from_value_compare": None,
+        "from_value_compare": "",
         "to_value_compare": "[\n    3,\n    4\n]",
     }
     # Make sure that the order of the list elements doesn't change during comparison (so the [5,4,3] list is not sorted)
@@ -217,12 +217,12 @@ async def test_dict_attr_diff(client, environment, env_with_versions):
         "from_value": {"a": "b"},
         "to_value": None,
         "from_value_compare": json.dumps({"a": "b"}, indent=4),
-        "to_value_compare": None,
+        "to_value_compare": "",
     }
     assert result.result["data"][0]["attributes"]["dict_attr_added"] == {
         "from_value": None,
         "to_value": {"x": "y"},
-        "from_value_compare": None,
+        "from_value_compare": "",
         "to_value_compare": json.dumps({"x": "y"}, indent=4),
     }
     assert result.result["data"][0]["attributes"]["dict_attr_modified"] == {
@@ -257,14 +257,14 @@ def assert_resource_deleted(resource):
     assert resource["status"] == "deleted"
     for name, attr in resource["attributes"].items():
         assert attr["to_value"] is None
-        assert attr["to_value_compare"] is None
+        assert attr["to_value_compare"] == ""
 
 
 def assert_resource_added(resource):
     assert resource["status"] == "added"
     for name, attr in resource["attributes"].items():
         assert attr["from_value"] is None
-        assert attr["from_value_compare"] is None
+        assert attr["from_value_compare"] == ""
 
 
 @pytest.mark.asyncio
@@ -359,7 +359,7 @@ async def test_resources_diff(client, environment, env_with_versions):
         "from_value": False,
         "to_value": None,
         "from_value_compare": "False",
-        "to_value_compare": None,
+        "to_value_compare": "",
     }
     assert result.result["data"][1]["resource_id"] == "std::File[internal,path=/tmp/file2]"
     assert_resource_added(result.result["data"][1])

@@ -51,7 +51,9 @@ class Attribute:
         if self._compare_value is not None:
             return
 
-        if isinstance(self.value, (dict, list)):
+        if self.value is None:
+            self._compare_value = ""
+        elif isinstance(self.value, (dict, list)):
             self._compare_value = json.dumps(self.value, indent=4, sort_keys=True)
         else:
             self._compare_value = str(self.value)
@@ -74,7 +76,7 @@ class Attribute:
         return AttributeDiff(
             from_value=None,
             to_value=self.value,
-            from_value_compare=None,
+            from_value_compare="",
             to_value_compare=self.compare_value,
         )
 
@@ -84,7 +86,7 @@ class Attribute:
             from_value=self.value,
             to_value=None,
             from_value_compare=self.compare_value,
-            to_value_compare=None,
+            to_value_compare="",
         )
 
 
