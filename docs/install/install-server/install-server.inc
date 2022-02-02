@@ -28,7 +28,7 @@ Install the software
           sudo dnf install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
 
         The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
-        files and systemd unit files. The dashboard is installed with the server package.
+        files and systemd unit files. The web-console is installed with the server package.
 
 
     .. tab:: Debian, Ubuntu and derivatives.
@@ -66,9 +66,9 @@ Install the software
             sudo wget -O /opt/inmanta/inmanta.d/extensions.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/extensions.cfg"
 
 
-        If you want to use the web-console and/or the dashboard you need to install it as well:
+        If you want to use the web-console you need to install it as well:
 
-        Get the pre-built package from our `web-console <https://github.com/inmanta/web-console/packages/>`_ and/or `dashboard <https://github.com/inmanta/inmanta-dashboard/packages/>`_ github page. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[dashboard]`` and/or ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from our `web-console github page<https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: ini
 
@@ -112,9 +112,9 @@ Install the software
             sudo wget -O /opt/inmanta/inmanta.d/extensions.cfg "https://raw.githubusercontent.com/inmanta/inmanta-core/master/misc/extensions.cfg"
 
 
-        If you want to use the web-console and/or the dashboard you need to install it as well:
+        If you want to use the web-console you need to install it as well:
 
-        Get the pre-built package from our `web-console <https://github.com/inmanta/web-console/packages/>`_ and/or `dashboard <https://github.com/inmanta/inmanta-dashboard/packages/>`_ github page. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[dashboard]`` and/or ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from our `web-console github page<https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: ini
 
