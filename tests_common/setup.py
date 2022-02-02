@@ -19,7 +19,7 @@ from os import path
 
 from setuptools import find_packages, setup
 
-version = "6.0.0"
+version = "6.0.1"
 
 requires = [
     "asyncpg",
