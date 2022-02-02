@@ -1,0 +1,7 @@
+---
+description: Added `resource_history` endpoint
+issue-nr: 3048
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+  feature: "{{description}}"

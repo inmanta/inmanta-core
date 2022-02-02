@@ -1,0 +1,5 @@
+description: Updated some test cases to use the snippetcompiler instead of custom project setup
+change-type: patch
+issue-nr: 3235
+destination-branches:
+  - master

@@ -58,7 +58,7 @@ Finally, have Docker Compose deploy the quickstart environment:
     docker-compose up
 
 Docker Compose will set up the Inmanta server, a postgres server and two VM-like containers to experiment on.
-When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888.
+When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888/dashboard.
 When you see the following output, the Inmanta server is ready to be used:
 
 .. code-block:: sh
@@ -143,7 +143,10 @@ Reusing existing modules
 
 We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically.
+When you use an import statement in your model, Inmanta downloads these modules and their dependencies when you run ``inmanta project install``.
+V2 modules (See :ref:`moddev-module-v2`) need to be declared as Python dependencies in addition
+to using them in an import statement. Some of our public modules are hosted in the v2 format on https://pypi.org/.
+
 
 .. _qsconfigmodel:
 
@@ -217,16 +220,20 @@ Then, create the inmanta project and environment:
 
     The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 
+Install all module dependencies into the project:
+
+.. code-block:: sh
+
+    inmanta project install
+
 Finally compile the project and deploy it:
 
 .. code-block:: sh
 
     inmanta -vvv  export -d
 
-The first time you run this command, it may take a while, as all dependencies are downloaded.
-
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_, select the `test` project and then the
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888/dashboard>`_, select the `test` project and then the
 `quickstart-env` environment. When the deployment fails for some reason, consult the
 :ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
 
@@ -311,7 +318,7 @@ Using the dashboard
 Inmanta can deploy from the server using only the dashboard. All changes have to go through the repository in this case.
 
 #. Clone the quickstart project on github (or to another repository location).
-#. Go to the `dashboard <http://127.0.0.1:8888>`_.
+#. Go to the `dashboard <http://127.0.0.1:8888/dashboard>`_.
 #. Create a new project with the name ``test`` by clicking *Add new project*.
 #. Go into the new project and create a new environment by clicking *Add new environment*:
 
@@ -347,6 +354,11 @@ ________________________
 Inmanta enables developers of a configuration model to make it modular and
 reusable. In this section we will create a configuration module that defines how to
 deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
+
+.. note::
+    This section describes how to create a v1 module. To create a v2 module instead see :ref:`module-creation-guide` and
+    :ref:`moddev-module-v2`. Note that a v2 module can only depend on other v2 modules.
+
 
 Module layout
 ==========================

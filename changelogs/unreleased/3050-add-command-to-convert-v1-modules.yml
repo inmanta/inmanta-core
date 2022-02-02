@@ -1,0 +1,7 @@
+---
+description: Added `inmanta module v1tov2` command.
+issue-nr: 3050
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

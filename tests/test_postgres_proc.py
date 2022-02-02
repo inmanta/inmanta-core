@@ -18,6 +18,17 @@
 
 import socket
 
+import pytest
+
+from inmanta import postgresproc
+
+
+@pytest.fixture
+def postgres_proc(unused_tcp_port_factory):
+    proc = postgresproc.PostgresProc(unused_tcp_port_factory())
+    yield proc
+    proc.stop()
+
 
 def test_basic_case(postgres_proc):
     assert_proc_state(postgres_proc, False)

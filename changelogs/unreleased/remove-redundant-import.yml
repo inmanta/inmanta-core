@@ -1,0 +1,4 @@
+description: removed redundant import of setuptools.find_namespace_packages
+change-type: patch
+destination-branches:
+  - master

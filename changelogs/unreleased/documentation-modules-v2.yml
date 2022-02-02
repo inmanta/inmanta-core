@@ -1,0 +1,7 @@
+---
+description: Added documentation regarding modules V2.
+issue-nr: 3023
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

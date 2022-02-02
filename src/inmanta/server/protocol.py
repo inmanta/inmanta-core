@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -35,7 +35,7 @@ from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
-from inmanta.types import TYPE_CHECKING, ArgumentTypes, JsonType
+from inmanta.types import ArgumentTypes, JsonType
 from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class SliceStartupException(ServerStartFailure):
         self.__cause__ = cause
         self.in_slice = slice_name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Slice {self.in_slice} failed to start because: {str(self.__cause__)}"
 
 
@@ -68,10 +68,15 @@ class ReturnClient(Client):
         super().__init__(name, with_rest_client=False)
         self.session = session
 
-    async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
+    async def _call(
+        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+    ) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
-            return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
+            if method_properties.timeout:
+                return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
+            else:
+                return_value = await self.session.put_call(call_spec)
         except asyncio.CancelledError:
             return common.Result(code=500, result={"message": "Call timed out"})
 
@@ -83,7 +88,7 @@ class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
         super().__init__("server")
         self._slices: Dict[str, ServerSlice] = {}
-        self._slice_sequence: List[ServerSlice] = None
+        self._slice_sequence: Optional[List[ServerSlice]] = None
         self._handlers: List[routing.Rule] = []
         self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
@@ -137,7 +142,7 @@ class Server(endpoints.Endpoint):
 
         return [s for s in (resolve(name) for name in order) if s is not None]
 
-    def _get_slice_sequence(self):
+    def _get_slice_sequence(self) -> Sequence["ServerSlice"]:
         if self._slice_sequence is not None:
             return self._slice_sequence
         self._slice_sequence = self._order_slices()
@@ -286,7 +291,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     name = property(lambda self: self._name)
 
     def get_handlers(self) -> List[routing.Rule]:
-        """Get the list of """
+        """Get the list of"""
         return self._handlers
 
     # utility methods for extensions developers
@@ -308,10 +313,12 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             options["default_filename"] = "index.html"
 
         self._handlers.append(routing.Rule(routing.PathMatches(r"%s(.*)" % location), web.StaticFileHandler, options))
-        self._handlers.append(routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location}))
+        self._handlers.append(
+            routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location[1:]})
+        )
 
         if start:
-            self._handlers.append((r"/", web.RedirectHandler, {"url": location}))
+            self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 
     def add_static_content(self, path: str, content: str, content_type: str = "application/javascript") -> None:
         self._handlers.append(
@@ -353,7 +360,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """
         return {}
 
-    def define_features(self) -> List["Feature"]:
+    def define_features(self) -> List["Feature[object]"]:
         """Return a list of feature that this slice offers"""
         return []
 
@@ -391,7 +398,7 @@ class Session(object):
         # Disable expiry in certain tests
         if not disable_expire_check:
             self.check_expire()
-        self._queue: queues.Queue[common.Request] = queues.Queue()
+        self._queue: queues.Queue[Optional[common.Request]] = queues.Queue()
 
         self.client = ReturnClient(str(sid), self)
 
@@ -497,7 +504,7 @@ class Session(object):
     def get_client(self) -> ReturnClient:
         return self.client
 
-    def abort(self):
+    def abort(self) -> None:
         "Send poison pill to signal termination."
         self._queue.put(None)
 
@@ -542,7 +549,7 @@ class SessionListener(object):
 class TransportSlice(ServerSlice):
     """Slice to manage the listening socket"""
 
-    def __init__(self, server: Server):
+    def __init__(self, server: Server) -> None:
         super(TransportSlice, self).__init__(SLICE_TRANSPORT)
         self.server = server
 
@@ -568,14 +575,18 @@ class TransportSlice(ServerSlice):
             sname = sock.getsockname()
             return f"{sname[0]}:{sname[1]}"
 
-        return {
-            "inflight": self.server._transport.inflight_counter,
-            "running": self.server._transport.running,
-            "sockets": [
+        sockets = []
+        if self.server._transport._http_server._sockets:
+            sockets = [
                 format_socket(s)
                 for s in self.server._transport._http_server._sockets.values()
                 if s.family in [socket.AF_INET, socket.AF_INET6]
-            ],
+            ]
+
+        return {
+            "inflight": self.server._transport.inflight_counter,
+            "running": self.server._transport.running,
+            "sockets": sockets,
         }
 
 

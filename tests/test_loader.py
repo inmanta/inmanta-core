@@ -20,7 +20,7 @@ import inspect
 import os
 import shutil
 import sys
-from typing import List, Optional, Set
+from typing import List, Set
 
 import py
 import pytest
@@ -29,18 +29,20 @@ from pytest import fixture
 from inmanta import loader
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
-from inmanta.moduletool import ModuleTool
 
 
-def test_code_manager():
+def test_code_manager(tmpdir: py.path.local):
     """Verify the code manager"""
-    project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
-    project: Project = Project(project_dir)
+    original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+    project_dir = os.path.join(tmpdir, "plugins_project")
+    shutil.copytree(original_project_dir, project_dir)
+    project: Project = Project(project_dir, venv_path=os.path.join(project_dir, ".env"))
     Project.set(project)
+    project.install_modules()
     project.load()
 
-    ModuleTool().install("single_plugin_file")
-    ModuleTool().install("multiple_plugin_files")
+    project.load_module("single_plugin_file", allow_v1=True)
+    project.load_module("multiple_plugin_files", allow_v1=True)
     import inmanta_plugins.multiple_plugin_files.handlers as multi
     import inmanta_plugins.single_plugin_file as single
 
@@ -203,39 +205,30 @@ def test():
 
 @fixture(scope="function")
 def module_path(tmpdir):
-    module_finder = loader.PluginModuleFinder([str(tmpdir)])
-    sys.meta_path.insert(0, module_finder)
+    """
+    Remark: Don't use this fixture in combination with instances of the Project class
+            or the CodeLoader class as it would reset the config of the PluginModuleFinder.
+    """
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
-    sys.meta_path.remove(module_finder)
+    loader.PluginModuleFinder.reset()
 
 
-def test_venv_path(tmpdir: py.path.local):
-    original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
+def test_venv_path(tmpdir: py.path.local, projects_dir: str):
+    original_project_dir: str = os.path.join(projects_dir, "plugins_project")
     project_dir = os.path.join(tmpdir, "plugins_project")
     shutil.copytree(original_project_dir, project_dir)
 
-    def load_project(venv_path: Optional[str]) -> None:
-        if venv_path is None:
-            project: Project = Project(project_dir)
-        else:
-            project: Project = Project(project_dir, venv_path=venv_path)
+    def load_project(venv_path: str) -> None:
+        project: Project = Project(project_dir, venv_path=venv_path)
         Project.set(project)
-        project.load()
-
-    # Use default venv dir
-    default_venv_dir = os.path.join(project_dir, ".env")
-    shutil.rmtree(default_venv_dir, ignore_errors=True)
-    assert not os.path.exists(default_venv_dir)
-    load_project(venv_path=None)
-    assert os.path.exists(default_venv_dir)
-    shutil.rmtree(default_venv_dir)
+        # don't load full project, only AST so we don't have to deal with module finder cleanup
+        project.load_module_recursive(install=True)
 
     # Use non-default venv dir
     non_default_venv_dir = os.path.join(project_dir, "non-default-venv-dir")
-    assert not os.path.exists(default_venv_dir)
     assert not os.path.exists(non_default_venv_dir)
     load_project(venv_path=non_default_venv_dir)
-    assert not os.path.exists(default_venv_dir)
     assert os.path.exists(non_default_venv_dir)
     shutil.rmtree(non_default_venv_dir)
 
@@ -253,12 +246,12 @@ def test_venv_path(tmpdir: py.path.local):
         assert os.path.exists(os.path.join(p, "bin", "python"))
 
 
-def test_module_loader(module_path, tmpdir, capsys):
+def test_module_loader(module_path: str, capsys, modules_dir: str):
     """
     Verify that the loader.PluginModuleFinder and loader.PluginModuleLoader load modules correctly.
     """
-    origin_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "submodule")
-    mod_dir = tmpdir.join(os.path.basename(origin_mod_dir))
+    origin_mod_dir = os.path.join(modules_dir, "submodule")
+    mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
     capsys.readouterr()  # Clear buffers
@@ -294,6 +287,43 @@ def test_module_loader(module_path, tmpdir, capsys):
         from inmanta_plugins.tests import doesnotexist  # NOQA
 
 
+def test_module_unload(module_path: str, modules_dir: str) -> None:
+    """
+    Verify that the unload_inmanta_plugins function correctly unloads modules.
+    """
+    for mod in ["submodule", "elaboratev1module"]:
+        origin_mod_dir = os.path.join(modules_dir, mod)
+        mod_dir = os.path.join(module_path, os.path.basename(origin_mod_dir))
+        shutil.copytree(origin_mod_dir, mod_dir)
+
+    import inmanta_plugins.elaboratev1module  # noqa: F401
+    import inmanta_plugins.submodule.submod  # noqa: F401
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+    assert "inmanta_plugins.submodule" in sys.modules
+    assert "inmanta_plugins.submodule.submod" in sys.modules
+
+    loader.unload_inmanta_plugins("submodule")
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+
+    assert "inmanta_plugins.submodule" not in sys.modules
+    assert "inmanta_plugins.submodule.submod" not in sys.modules
+
+    # make sure that it does not fail on a module with no plugins
+    loader.unload_inmanta_plugins("doesnotexist")
+
+    assert "inmanta_plugins" in sys.modules
+    assert "inmanta_plugins.elaboratev1module" in sys.modules
+
+    loader.unload_inmanta_plugins()
+
+    assert "inmanta_plugins" not in sys.modules
+    assert "inmanta_plugins.elaboratev1module" not in sys.modules
+
+
 def test_plugin_loading_on_project_load(tmpdir, capsys):
     """
     Load all plugins via the Project.load() method call and verify that no
@@ -318,7 +348,7 @@ install_mode: master
     mod_dir = tmpdir.join("libs", os.path.basename(origin_mod_dir))
     shutil.copytree(origin_mod_dir, mod_dir)
 
-    project = Project(tmpdir, autostd=False)
+    project = Project(tmpdir, autostd=False, venv_path=os.path.join(tmpdir, ".env"))
     Project.set(project)
     project.load()
 

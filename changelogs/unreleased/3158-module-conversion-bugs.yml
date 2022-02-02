@@ -1,0 +1,5 @@
+---
+description: Improve module conversion, avoid nulls and ensure plugins folder is always created
+issue-nr: 3158
+change-type: minor
+destination-branches: [master]

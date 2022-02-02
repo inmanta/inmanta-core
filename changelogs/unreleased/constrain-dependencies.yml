@@ -1,0 +1,5 @@
+change-type: patch
+description: Ensure known limitations are in setup.py
+destination-branches:
+- master
+sections: {}

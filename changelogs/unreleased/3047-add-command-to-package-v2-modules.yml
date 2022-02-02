@@ -1,0 +1,7 @@
+---
+description: Added support to build V2 modules into a Python package.
+issue-nr: 3047
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

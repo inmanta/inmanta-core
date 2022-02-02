@@ -17,11 +17,12 @@
 """
 # This file defines named type definition for the Inmanta code base
 
+import builtins
 import uuid
 from datetime import datetime
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
+import typing_inspect
 from pydantic import errors, types
 
 if TYPE_CHECKING:
@@ -59,8 +60,17 @@ class StrictNonIntBool(object):
         return f_schema
 
 
+def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
+    """
+    Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.
+    """
+    if typing_inspect.is_new_type(sub):
+        return issubclass(sub.__supertype__, super)
+    return builtins.issubclass(sub, super)
+
+
 PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
-SimpleTypes = Union["BaseModel", Enum, PrimitiveTypes]
+SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = Dict[str, Any]
 ReturnTupple = Tuple[int, Optional[JsonType]]

@@ -1,0 +1,5 @@
+description: Module install from source now loads data files regardless of depth and cleans up old installations
+issue-nr: 3322
+change-type: patch
+destination-branches:
+  - master

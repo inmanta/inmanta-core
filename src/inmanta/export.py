@@ -29,7 +29,7 @@ import inmanta.model as model
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
 from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
-from inmanta.ast.attribute import RelationAttribute
+from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
@@ -39,6 +39,7 @@ from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.execute.util import NoneValue, Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
+from inmanta.types import JsonType
 from inmanta.util import get_compiler_version, groupby, hash_file
 
 LOGGER = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ class Exporter(object):
         """
         cls.__dep_manager.append(function)
 
-    def __init__(self, options: argparse.Namespace = None) -> None:
+    def __init__(self, options: Optional[argparse.Namespace] = None) -> None:
         self.options = options
 
         self._resources: ResourceDict = {}
@@ -140,9 +141,9 @@ class Exporter(object):
 
         self._file_store: Dict[str, bytes] = {}
 
-    def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, ProxiedType]:
+    def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, Sequence[ProxiedType]]:
         """Returns a dict of instances for the given types"""
-        proxies: Dict[str, ProxiedType] = {}
+        proxies: Dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
@@ -295,7 +296,7 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self, no_commit=False):
+    def get_version(self, no_commit: bool = False) -> int:
         if no_commit:
             return 0
         tid = cfg_env.get()
@@ -318,7 +319,7 @@ class Exporter(object):
         include_status: bool = False,
         model_export: bool = False,
         export_plugin: Optional[str] = None,
-    ) -> None:
+    ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
         """
@@ -332,10 +333,10 @@ class Exporter(object):
 
             # call dependency managers
             self._call_dep_manager(types)
-            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
             self.failed = False
         else:
-            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed
             self.failed = True
             LOGGER.warning("Compilation of model failed.")
 
@@ -398,7 +399,9 @@ class Exporter(object):
             is_undefined = True
             value = getattr(resource, unknown)
             if value.source is not None and hasattr(value.source, "_type"):
-                self._unknown_objects.add(to_id(value.source))
+                resource_id = to_id(value.source)
+                if resource_id:
+                    self._unknown_objects.add(resource_id)
 
         if is_undefined:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.undefined
@@ -416,7 +419,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: int = None) -> None:
+    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: Optional[int] = None) -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())
@@ -563,22 +566,22 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
         os.mkdir(prefix)
 
     for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))
+        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))  # type: ignore
         with open(path, "w+", encoding="utf-8") as fd:
-            if isinstance(file.content, Unknown):
+            if isinstance(file.content, Unknown):  # type: ignore
                 fd.write("UNKNOWN -> error")
             else:
-                fd.write(file.content)
+                fd.write(file.content)  # type: ignore
 
     path = os.path.join(prefix, "services")
     with open(path, "w+", encoding="utf-8") as fd:
         for svc in types["std::Service"]:
-            fd.write("%s -> %s\n" % (svc.host.name, svc.name))
+            fd.write("%s -> %s\n" % (svc.host.name, svc.name))  # type: ignore
 
     path = os.path.join(prefix, "packages")
     with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
-            fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
+            fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))  # type: ignore
 
 
 def location(obj: Locatable) -> model.Location:
@@ -586,10 +589,10 @@ def location(obj: Locatable) -> model.Location:
     return model.Location(loc.file, loc.lnr)
 
 
-def relation_name(type: Entity, rel: RelationAttribute) -> str:
+def relation_name(type: Entity, rel: Optional[RelationAttribute]) -> str:
     if rel is None:
         return ""
-    return type.get_full_name() + "." + rel.name
+    return f"{type.get_full_name()}.{rel.name}"
 
 
 class ModelExporter(object):
@@ -602,13 +605,13 @@ class ModelExporter(object):
         Run after export_model!!
         """
 
-        def convert_comment(value):
+        def convert_comment(value: Optional[str]) -> str:
             if value is None:
                 return ""
             else:
                 return str(value)
 
-        def convert_value_for_type(value):
+        def convert_value_for_type(value) -> model.Value:
             if isinstance(value, Unknown):
                 raise Exception("annotations should not be unknown")
             if isinstance(value, Instance):
@@ -616,7 +619,7 @@ class ModelExporter(object):
             else:
                 return model.DirectValue(value)
 
-        def convert_attribute(attr):
+        def convert_attribute(attr: Attribute) -> model.Attribute:
             type_string: Optional[str] = attr.type.get_base_type().type_string()
             if type_string is None:
                 raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type.get_base_type())
@@ -624,7 +627,7 @@ class ModelExporter(object):
                 type_string, attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
             )
 
-        def convert_relation(relation: RelationAttribute):
+        def convert_relation(relation: RelationAttribute) -> model.Relation:
 
             return model.Relation(
                 relation.type.get_full_name(),
@@ -636,7 +639,7 @@ class ModelExporter(object):
                 [convert_value_for_type(x.get_value()) for x in relation.target_annotations],
             )
 
-        def convert_type(mytype):
+        def convert_type(mytype: Entity) -> model.Entity:
             return model.Entity(
                 [x.get_full_name() for x in mytype.parent_entities],
                 {
@@ -679,7 +682,7 @@ class ModelExporter(object):
                 rawvalue = [rawvalue]
             return {"values": [convert(v) for v in rawvalue]}
 
-        def convert_attribute(value: ResultVariable):
+        def convert_attribute(value: ResultVariable) -> JsonType:
             try:
                 rawvalue = value.get_value()
             except OptionalValueException:

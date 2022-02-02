@@ -1,0 +1,2 @@
+include inmanta_plugins/dependency_but_no_import/setup.cfg
+recursive-include inmanta_plugins/dependency_but_no_import/model *.cf

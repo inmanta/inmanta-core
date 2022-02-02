@@ -1,0 +1,5 @@
+description: Restructured module developer guide
+change-type: patch
+destination-branches: [master, iso4]
+sections:
+    feature: "{{description}}"

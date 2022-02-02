@@ -20,16 +20,25 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Set, Tuple, cast
 
 import asyncpg
 
 from inmanta import const, data
-from inmanta.data import APILIMIT, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.protocol import methods, methods_v2
-from inmanta.protocol.common import attach_warnings
-from inmanta.protocol.exceptions import BadRequest, ServerError
+from inmanta.data import (
+    APILIMIT,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PURGE_ON_DELETE,
+    DesiredStateVersionOrder,
+    InvalidSort,
+    QueryType,
+)
+from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
+from inmanta.protocol import handle, methods, methods_v2
+from inmanta.protocol.common import ReturnValue, attach_warnings
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -40,9 +49,10 @@ from inmanta.server import (
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import diff, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
+from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -94,7 +104,7 @@ class OrchestrationService(protocol.ServerSlice):
                 for v in delete_list:
                     await version_dict[v].delete_cascade()
 
-    @protocol.handle(methods.list_versions, env="tid")
+    @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
@@ -118,7 +128,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.get_version, version_id="id", env="tid")
+    @handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
         self,
         env: data.Environment,
@@ -165,8 +175,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, d
 
-    @protocol.handle(methods.delete_version, version_id="id", env="tid")
-    async def delete_version(self, env, version_id):
+    @handle(methods.delete_version, version_id="id", env="tid")
+    async def delete_version(self, env: data.Environment, version_id: int) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
@@ -174,11 +184,11 @@ class OrchestrationService(protocol.ServerSlice):
         await version.delete_cascade()
         return 200
 
-    @protocol.handle(methods_v2.reserve_version, env="tid")
+    @handle(methods_v2.reserve_version, env="tid")
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
-    @protocol.handle(methods.put_version, env="tid")
+    @handle(methods.put_version, env="tid")
     async def put_version(
         self,
         env: data.Environment,
@@ -187,7 +197,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        compiler_version: str = None,
+        compiler_version: Optional[str] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -213,11 +223,11 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
-        started = datetime.datetime.now()
+        started = datetime.datetime.now().astimezone()
 
         agents = set()
         # lookup for all RV's, lookup by resource id
-        rv_dict = {}
+        rv_dict: Dict[ResourceVersionIdStr, data.Resource] = {}
         # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
         provides_tree: Dict[str, List[str]] = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
@@ -267,16 +277,16 @@ class OrchestrationService(protocol.ServerSlice):
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input, key, default):
+        def safe_get(input: JsonType, key: str, default: object) -> object:
             if not isinstance(input, dict):
                 return default
             if key not in input:
                 return default
             return input[key]
 
-        metadata = safe_get(version_info, const.EXPORT_META_DATA, {})
+        metadata: JsonType = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
-        failed = compile_state == const.Compilestate.failed.name
+        failed = compile_state == const.Compilestate.failed
 
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
@@ -331,7 +341,7 @@ class OrchestrationService(protocol.ServerSlice):
             cm = data.ConfigurationModel(
                 environment=env.id,
                 version=version,
-                date=datetime.datetime.now(),
+                date=datetime.datetime.now().astimezone(),
                 total=len(resources),
                 version_info=version_info,
                 undeployable=undeployable_ids,
@@ -367,7 +377,7 @@ class OrchestrationService(protocol.ServerSlice):
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_version_ids:
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
             self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
             ra = data.ResourceAction(
@@ -389,14 +399,14 @@ class OrchestrationService(protocol.ServerSlice):
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy: bool = await env.get(data.PUSH_ON_AUTO_DEPLOY)
-            agent_trigger_method_on_autodeploy = await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
+            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
+            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
 
-    @protocol.handle(methods.release_version, version_id="id", env="tid")
+    @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
         self,
         env: data.Environment,
@@ -416,14 +426,14 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep = [rid + ",v=%s" % version_id for rid in undep]
+        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
 
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            undep,
+            undep_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,
@@ -436,11 +446,11 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         skippable = await model.get_skipped_for_undeployable()
-        skippable = [rid + ",v=%s" % version_id for rid in skippable]
+        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
         # not checking error conditions
         await self.resource_service.resource_action_update(
             env,
-            skippable,
+            skippable_ids,
             action_id=uuid.uuid4(),
             started=now,
             finished=now,
@@ -471,12 +481,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200, {"model": model}
 
-    @protocol.handle(methods.deploy, env="tid")
+    @handle(methods.deploy, env="tid")
     async def deploy(
         self,
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-        agents: List[str] = None,
+        agents: Optional[List[str]] = None,
     ) -> Apireturn:
         warnings = []
 
@@ -521,3 +531,119 @@ class OrchestrationService(protocol.ServerSlice):
             return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
 
         return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
+
+    @handle(methods_v2.list_desired_state_versions, env="tid")
+    async def desired_state_version_list(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "version.desc",
+    ) -> ReturnValue[List[DesiredStateVersion]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(DesiredStateVersionFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            resource_order = DesiredStateVersionOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+        try:
+            dtos = await data.ConfigurationModel.get_desired_state_versions(
+                database_order=resource_order,
+                limit=limit,
+                environment=env.id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = DesiredStateVersionPagingHandler(DesiredStateVersionPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            resource_order,
+            limit,
+            start=start,
+            end=end,
+            first_id=None,
+            last_id=None,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.promote_desired_state_version, env="tid")
+    async def promote_desired_state_version(
+        self,
+        env: data.Environment,
+        version: int,
+        trigger_method: Optional[PromoteTriggerMethod] = None,
+    ) -> None:
+        if trigger_method == PromoteTriggerMethod.push_incremental_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_incremental_deploy
+        elif trigger_method == PromoteTriggerMethod.push_full_deploy:
+            push = True
+            agent_trigger_method = const.AgentTriggerMethod.push_full_deploy
+        elif trigger_method == PromoteTriggerMethod.no_push:
+            push = False
+            agent_trigger_method = None
+        else:
+            push = True
+            agent_trigger_method = None
+
+        status_code, result = await self.release_version(
+            env, version_id=version, push=push, agent_trigger_method=agent_trigger_method
+        )
+        if status_code != 200:
+            raise BaseHttpException(status_code, result["message"])
+
+    @handle(methods_v2.get_diff_of_versions, env="tid")
+    async def get_diff_of_versions(
+        self,
+        env: data.Environment,
+        from_version: int,
+        to_version: int,
+    ) -> List[ResourceDiff]:
+        await self._validate_version_parameters(env.id, from_version, to_version)
+
+        from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
+        to_version_resources = await data.Resource.get_list(environment=env.id, model=to_version)
+
+        from_state = diff.Version(from_version, from_version_resources)
+        to_state = diff.Version(to_version, to_version_resources)
+
+        version_diff = to_state.generate_diff(from_state)
+
+        return version_diff
+
+    async def _validate_version_parameters(self, env: uuid.UUID, first_version: int, other_version: int) -> None:
+        if first_version >= other_version:
+            raise BadRequest(
+                f"Invalid version parameters: ({first_version}, {other_version}). "
+                "The second version number should be strictly greater than the first"
+            )
+        await self._check_version_exists(env, first_version)
+        await self._check_version_exists(env, other_version)
+
+    async def _check_version_exists(self, env: uuid.UUID, version: int) -> None:
+        version_object = await data.ConfigurationModel.get_version(env, version)
+        if not version_object:
+            raise NotFound(f"Version {version} not found")

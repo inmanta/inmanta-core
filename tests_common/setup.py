@@ -19,17 +19,18 @@ from os import path
 
 from setuptools import find_packages, setup
 
-version = "5.1.1"
+version = "6.0.0"
 
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core>={version}.dev",
+    f"inmanta-core~={version}.dev",
+    "pip2pi",
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
-    "pytest-postgresql",
-    "psycopg2",
+    "pytest-postgresql>=4",
+    "psycopg>=3",
     "tornado",
 ]
 

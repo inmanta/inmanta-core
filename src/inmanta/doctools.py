@@ -27,13 +27,13 @@ from inmanta.module import Project
 
 
 class CompilerFixture(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
         Config.load_config()
         Config.set("config", "environment", str(uuid.uuid4()))
 
-    def run_snippet(self, snippet):
+    def run_snippet(self, snippet: str) -> None:
         project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(project_dir, ".env"))
 
@@ -54,7 +54,7 @@ class CompilerFixture(object):
         Project.set(Project(project_dir))
         compiler.do_compile()
 
-    def run_project(self, root):
+    def run_project(self, root: str) -> None:
         project_dir = root
         env = os.path.join(project_dir, ".env")
         if os.path.exists(env):
@@ -79,12 +79,12 @@ class CompilerFixture(object):
         compiler.do_compile()
         os.remove(project)
 
-    def run_file(self, filename):
+    def run_file(self, filename: str) -> None:
         with open(filename, "r", encoding="utf-8") as f:
             self.run_snippet(f.read())
 
 
-def test_snippets():
+def test_snippets() -> bool:
     """Test all code snippets in *.snip files."""
     here = os.getcwd()
     fixture = CompilerFixture()

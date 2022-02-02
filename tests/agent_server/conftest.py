@@ -21,12 +21,14 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
+from typing import Dict
 
 from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
@@ -146,14 +148,6 @@ def resource_container():
 
         fields = ("key", "value", "purged")
 
-    @resource("test::WaitEvent", agent="agent", id_attribute="key")
-    class WaitER(Resource):
-        """
-        A file on a filesystem
-        """
-
-        fields = ("key", "value", "purged")
-
     @resource("test::Noprov", agent="agent", id_attribute="key")
     class NoProv(Resource):
         """
@@ -165,34 +159,34 @@ def resource_container():
     @resource("test::FailFast", agent="agent", id_attribute="key")
     class FailFastR(Resource):
         """
-        A file on a filesystem
+        Raise an exception in the check_resource() method.
         """
 
         fields = ("key", "value", "purged")
 
-    @resource("test::BadEvents", agent="agent", id_attribute="key")
-    class BadeEventR(Resource):
+    @resource("test::FailFastCRUD", agent="agent", id_attribute="key")
+    class FailFastPR(PurgeableResource):
         """
-        A file on a filesystem
-        """
-
-        fields = ("key", "value", "purged")
-
-    @resource("test::BadEventsStatus", agent="agent", id_attribute="key")
-    class BadEventS(Resource):
-        """
-        Set `ctx.set_status(const.ResourceState.failed)` in process_events().
+        Raise an exception at the beginning of the read_resource() method
         """
 
-        fields = ("key", "value", "purged")
+        fields = ("key", "value", "purged", "purge_on_delete")
 
     @resource("test::BadPost", agent="agent", id_attribute="key")
     class BadPostR(Resource):
         """
-        A file on a filesystem
+        Raise an exception in the post() method of the ResourceHandler.
         """
 
         fields = ("key", "value", "purged")
+
+    @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
+    class BadPostPR(PurgeableResource):
+        """
+        Raise an exception in the post() method of the CRUDHandler.
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
 
     @resource("test::BadLogging", agent="agent", id_attribute="key")
     class BadLoggingR(Resource):
@@ -201,6 +195,14 @@ def resource_container():
         """
 
         fields = ("key", "value", "purged")
+
+    @resource("test::Deploy", agent="agent", id_attribute="key")
+    class DeployR(Resource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "set_state_to_deployed", "purged")
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
@@ -244,13 +246,6 @@ def resource_container():
         def facts(self, ctx, resource):
             return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
 
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(events)
-            super(Provider, self).process_events(ctx, resource, events)
-
         def can_reload(self) -> bool:
             return True
 
@@ -263,8 +258,6 @@ def resource_container():
         _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
-
-        _EVENTS = defaultdict(lambda: defaultdict(lambda: []))
 
         @classmethod
         def set_skip(cls, agent, key, skip):
@@ -326,17 +319,12 @@ def resource_container():
             return cls._READ_COUNT[agent][key]
 
         @classmethod
-        def getevents(cls, agent, key):
-            return cls._EVENTS[agent][key]
-
-        @classmethod
         def reloadcount(cls, agent, key):
             return cls._RELOAD_COUNT[agent][key]
 
         @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
-            cls._EVENTS = defaultdict(lambda: defaultdict(lambda: []))
             cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
@@ -360,8 +348,13 @@ def resource_container():
 
     @provider("test::FailFast", name="test_failfast")
     class FailFast(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            raise Exception()
+        def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::FailFastCRUD", name="test_failfast_crud")
+    class FailFastCRUD(CRUDHandler):
+        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
     class Fact(ResourceHandler):
@@ -414,40 +407,15 @@ def resource_container():
         def _do_set_fact(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
 
-    @provider("test::BadEvents", name="test_bad_events")
-    class BadEvents(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            return current
-
-        def do_changes(self, ctx, resource, changes):
-            pass
-
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            raise Exception()
-
-    @provider("test::BadEventsStatus", name="test_bad_events_status")
-    class BadEventStatus(ResourceHandler):
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            return current
-
-        def do_changes(self, ctx, resource, changes):
-            pass
-
-        def can_process_events(self) -> bool:
-            return True
-
-        def process_events(self, ctx, resource, events):
-            ctx.set_status(const.ResourceState.failed)
-
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
-        def post(self, ctx, resource) -> None:
-            raise Exception()
+        def post(self, ctx: HandlerContext, resource: Resource) -> None:
+            raise Exception("An\nError\tMessage")
+
+    @provider("test::BadPostCRUD", name="test_bad_posts_crud")
+    class BadPostCRUD(CRUDHandler):
+        def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+            raise Exception("An\nError\tMessage")
 
     class Empty:
         pass
@@ -582,7 +550,7 @@ def resource_container():
             notified_before_timeout = waiter.wait(timeout=10)
             waiter.release()
             if not notified_before_timeout:
-                raise Exception("Timeout occured")
+                raise Exception("Timeout occurred")
             logger.info("Releasing waiter %s", self.traceid)
             if "purged" in changes:
                 if changes["purged"]["desired"]:
@@ -596,31 +564,20 @@ def resource_container():
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
 
-    @provider("test::WaitEvent", name="test_wait_Event")
-    class WaitE(Provider):
-        def __init__(self, agent, io=None):
-            super().__init__(agent, io)
-            self.traceid = uuid.uuid4()
-
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
-
-            if not current.purged:
-                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-            else:
-                current.value = None
-
-            return current
-
-        def process_events(self, ctx, resource, events):
-            logger.info("Hanging Event waiter %s", self.traceid)
-            waiter.acquire()
-            notified_before_timeout = waiter.wait(timeout=10)
-            waiter.release()
-            if not notified_before_timeout:
-                raise Exception("Timeout")
-            logger.info("Releasing Event waiter %s", self.traceid)
+    @provider("test::Deploy", name="test_wait")
+    class Deploy(Provider):
+        def deploy(
+            self,
+            ctx: HandlerContext,
+            resource: Resource,
+            requires: Dict[ResourceIdStr, const.ResourceState],
+        ) -> None:
+            if self.skip(resource.id.agent_name, resource.key):
+                raise SkipResource()
+            elif self.fail(resource.id.agent_name, resource.key):
+                raise Exception()
+            elif resource.set_state_to_deployed:
+                ctx.set_status(const.ResourceState.deployed)
 
     yield ResourceContainer(
         Provider=Provider,

@@ -21,7 +21,7 @@ import logging
 import os
 from typing import Iterable, List, cast
 
-from inmanta.protocol import methods
+from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_FILE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
@@ -51,7 +51,7 @@ class FileService(protocol.ServerSlice):
         await super().prestart(server)
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
 
-    @protocol.handle(methods.upload_file, file_hash="id")
+    @handle(methods.upload_file, file_hash="id")
     async def upload_file(self, file_hash: str, content: str) -> Apireturn:
         self.upload_file_internal(file_hash, base64.b64decode(content))
         return 200
@@ -68,7 +68,7 @@ class FileService(protocol.ServerSlice):
         with open(file_name, "wb+") as fd:
             fd.write(content)
 
-    @protocol.handle(methods.stat_file, file_hash="id")
+    @handle(methods.stat_file, file_hash="id")
     async def stat_file(self, file_hash: str) -> Apireturn:
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 
@@ -77,13 +77,13 @@ class FileService(protocol.ServerSlice):
         else:
             return 404
 
-    @protocol.handle(methods.get_file, file_hash="id")
+    @handle(methods.get_file, file_hash="id")
     async def get_file(self, file_hash: str) -> Apireturn:
         content = self.get_file_internal(file_hash)
         return 200, {"content": base64.b64encode(content).decode("ascii")}
 
     def get_file_internal(self, file_hash: str) -> bytes:
-        """get_file, but on return code 200, content is not encoded """
+        """get_file, but on return code 200, content is not encoded"""
 
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 
@@ -120,7 +120,7 @@ class FileService(protocol.ServerSlice):
                     f"File corrupt, expected hash {file_hash} but found {actualhash}, please contact the server administrator"
                 )
 
-    @protocol.handle(methods.stat_files)
+    @handle(methods.stat_files)
     async def stat_files(self, files: List[str]) -> Apireturn:
         """
         Return which files in the list exist on the server
@@ -139,7 +139,7 @@ class FileService(protocol.ServerSlice):
 
         return response
 
-    @protocol.handle(methods.diff)
+    @handle(methods.diff)
     async def file_diff(self, a: str, b: str) -> Apireturn:
         """
         Diff the two files identified with the two hashes

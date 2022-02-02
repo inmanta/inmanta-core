@@ -17,17 +17,30 @@
 """
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, cast
+import uuid
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
-from inmanta import data
+from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.protocol import methods
-from inmanta.protocol.common import attach_warnings
+from inmanta.data import APILIMIT, FactOrder, InvalidSort, ParameterOrder, QueryType
+from inmanta.data.model import Fact, Parameter, ResourceIdStr
+from inmanta.data.paging import (
+    FactPagingCountsProvider,
+    FactPagingHandler,
+    ParameterPagingCountsProvider,
+    ParameterPagingHandler,
+    QueryIdentifier,
+)
+from inmanta.protocol import handle, methods, methods_v2
+from inmanta.protocol.common import ReturnValue, attach_warnings
+from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
+from inmanta.server.validate_filter import FactsFilterValidator, InvalidFilter, ParameterFilterValidator
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -66,7 +79,7 @@ class ParameterService(protocol.ServerSlice):
         """
         LOGGER.info("Renewing expired parameters")
 
-        updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
+        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = await data.Parameter.get_updated_before(updated_before)
 
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
@@ -99,7 +112,7 @@ class ParameterService(protocol.ServerSlice):
 
         LOGGER.info("Done renewing expired parameters")
 
-    @protocol.handle(methods.get_param, param_id="id", env="tid")
+    @handle(methods.get_param, param_id="id", env="tid")
     async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
@@ -115,7 +128,7 @@ class ParameterService(protocol.ServerSlice):
         param = params[0]
 
         # check if it was expired
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
@@ -157,14 +170,14 @@ class ParameterService(protocol.ServerSlice):
                 resource_id=resource_id,
                 value=value,
                 source=source,
-                updated=datetime.datetime.now(),
+                updated=datetime.datetime.now().astimezone(),
                 metadata=metadata,
             )
             await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
+            await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(
@@ -181,7 +194,7 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @protocol.handle(methods.set_param, param_id="id", env="tid")
+    @handle(methods.set_param, param_id="id", env="tid")
     async def set_param(
         self,
         env: data.Environment,
@@ -209,25 +222,28 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 
-    @protocol.handle(methods.set_parameters, env="tid")
+    @handle(methods.set_parameters, env="tid")
     async def set_parameters(self, env: data.Environment, parameters: List[Dict[str, Any]]) -> Apireturn:
         recompile = False
-        compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
-            "type": "param",
-            "params": [],
-        }
+
+        params: List[Tuple[str, ResourceIdStr]] = []
         for param in parameters:
-            name = param["id"]
+            name: str = param["id"]
             source = param["source"]
             value = param["value"] if "value" in param else None
-            resource_id = param["resource_id"] if "resource_id" in param else None
+            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
 
             result = await self._update_param(env, name, value, source, resource_id, metadata)
             if result:
                 recompile = True
-                compile_metadata["params"].append((name, resource_id))
+                params.append((name, resource_id))
+
+        compile_metadata = {
+            "message": "Recompile model because one or more parameters were updated",
+            "type": "param",
+            "params": params,
+        }
 
         warnings = None
         if recompile:
@@ -235,7 +251,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
+    @handle(methods.delete_param, env="tid", parameter_name="id")
     async def delete_param(self, env: data.Environment, parameter_name: str, resource_id: str) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=parameter_name)
@@ -256,7 +272,7 @@ class ParameterService(protocol.ServerSlice):
 
         return attach_warnings(200, None, warnings)
 
-    @protocol.handle(methods.list_params, env="tid")
+    @handle(methods.list_params, env="tid")
     async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
         params = await data.Parameter.list_parameters(env.id, **query)
         return (
@@ -264,6 +280,150 @@ class ParameterService(protocol.ServerSlice):
             {
                 "parameters": params,
                 "expire": self._fact_expire,
-                "now": datetime.datetime.now().isoformat(timespec="microseconds"),
+                # Return datetime in UTC without explicit timezone offset
+                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
             },
         )
+
+    @handle(methods_v2.get_facts, env="tid")
+    async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> List[Fact]:
+        params = await data.Parameter.get_list(environment=env.id, resource_id=rid)
+        dtos = [param.as_fact() for param in params]
+        return dtos
+
+    @handle(methods_v2.get_fact, env="tid")
+    async def get_fact(self, env: data.Environment, rid: ResourceIdStr, id: uuid.UUID) -> Fact:
+        param = await data.Parameter.get_one(environment=env.id, resource_id=rid, id=id)
+        if not param:
+            raise NotFound(f"Fact with id {id} does not exist")
+        return param.as_fact()
+
+    @handle(methods_v2.get_parameters, env="tid")
+    async def get_parameters(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[Union[datetime.datetime, str]] = None,
+        end: Optional[Union[datetime.datetime, str]] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "name.asc",
+    ) -> ReturnValue[List[Parameter]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(ParameterFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            parameter_order = ParameterOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        typed_start, typed_end = None, None
+        if start is not None:
+            typed_start = parameter_order.ensure_boundary_type(start)
+        if end is not None:
+            typed_end = parameter_order.ensure_boundary_type(end)
+
+        try:
+            dtos = await data.Parameter.get_parameter_list(
+                database_order=parameter_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=typed_start,
+                end=typed_end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = ParameterPagingHandler(ParameterPagingCountsProvider())
+        paging_metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            parameter_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=typed_start,
+            end=typed_end,
+            has_next=paging_metadata.after > 0,
+            has_prev=paging_metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))
+
+    @handle(methods_v2.get_all_facts, env="tid")
+    async def get_all_facts(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "name.asc",
+    ) -> ReturnValue[List[Fact]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(FactsFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+        try:
+            parameter_order = FactOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Parameter.get_fact_list(
+                database_order=parameter_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = FactPagingHandler(FactPagingCountsProvider())
+        paging_metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            parameter_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=paging_metadata.after > 0,
+            has_prev=paging_metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))

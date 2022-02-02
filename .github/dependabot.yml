@@ -1,6 +1,7 @@
 version: 2
 updates:
 - package-ecosystem: pip
+  target-branch: master
   directory: "/"
   schedule:
     interval: daily
@@ -9,12 +10,9 @@ updates:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
   ignore:
-      # Breaking change
-    - dependency-name: "pyjwt"
-      versions: [">=2"]
-      # Breaking change, see #2729 
-    - dependency-name: "openapi-spec-validator"
-      versions: [">=0.3.0"]
-      # version 21.1 contains a bug: https://github.com/pypa/pip/issues/9878
-    - dependency-name: "pip"
-      versions: [">=21.1"]
+    # importlib-metadata>=4.9.0 requires Python>=3.7
+    - dependency-name: "importlib-metadata"
+      versions: [">=4.9.0"]
+    # setuptools>=59.7.0 requires Python>=3.7
+    - dependency-name: "setuptools"
+      versions: [">=59.7.0"]

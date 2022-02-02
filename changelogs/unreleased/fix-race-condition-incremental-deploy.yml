@@ -1,0 +1,4 @@
+---
+description: Fix race condition where the resource state of resources, which are not part of the incremental deploy, are not yet set + Check explicitly of unexpected states in the deploy handler method
+change-type: patch
+destination-branches: [master]

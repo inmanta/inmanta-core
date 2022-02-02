@@ -16,17 +16,22 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import base64
+import binascii
 import logging
 import os
+import re
 import shutil
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Pattern, Set, cast
+
+from asyncpg import StringDataRightTruncationError
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
 from inmanta.server import (
@@ -113,6 +118,7 @@ class EnvironmentService(protocol.ServerSlice):
     resource_service: ResourceService
     listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
     agent_state_lock: asyncio.Lock
+    icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
         super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
@@ -155,7 +161,7 @@ class EnvironmentService(protocol.ServerSlice):
         return warnings
 
     # v1 handlers
-    @protocol.handle(methods.create_environment)
+    @handle(methods.create_environment)
     async def create_environment(
         self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
     ) -> Apireturn:
@@ -164,11 +170,11 @@ class EnvironmentService(protocol.ServerSlice):
             {"environment": rename_fields(await self.environment_create(project_id, name, repository, branch, environment_id))},
         )
 
-    @protocol.handle(methods.modify_environment, environment_id="id")
+    @handle(methods.modify_environment, environment_id="id")
     async def modify_environment(self, environment_id: uuid.UUID, name: str, repository: str, branch: str) -> Apireturn:
         return 200, {"environment": rename_fields(await self.environment_modify(environment_id, name, repository, branch))}
 
-    @protocol.handle(methods.get_environment, environment_id="id", api_version=1)
+    @handle(methods.get_environment, environment_id="id", api_version=1)
     async def get_environment(
         self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
     ) -> Apireturn:
@@ -190,16 +196,16 @@ class EnvironmentService(protocol.ServerSlice):
 
         return 200, {"environment": env_dict}
 
-    @protocol.handle(methods.list_environments)
+    @handle(methods.list_environments)
     async def list_environments(self) -> Apireturn:
         return 200, {"environments": [rename_fields(env) for env in await self.environment_list()]}
 
-    @protocol.handle(methods.delete_environment, environment_id="id")
+    @handle(methods.delete_environment, environment_id="id")
     async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
         await self.environment_delete(environment_id)
         return 200
 
-    @protocol.handle(methods_v2.halt_environment, env="tid")
+    @handle(methods_v2.halt_environment, env="tid")
     async def halt(self, env: data.Environment) -> None:
         async with self.agent_state_lock:
             async with data.Environment.get_connection() as connection:
@@ -216,7 +222,7 @@ class EnvironmentService(protocol.ServerSlice):
                     await self.agent_manager.halt_agents(refreshed_env, connection=connection)
             await self.autostarted_agent_manager.stop_agents(refreshed_env)
 
-    @protocol.handle(methods_v2.resume_environment, env="tid")
+    @handle(methods_v2.resume_environment, env="tid")
     async def resume(self, env: data.Environment) -> None:
         async with self.agent_state_lock:
             async with data.Environment.get_connection() as connection:
@@ -234,7 +240,7 @@ class EnvironmentService(protocol.ServerSlice):
             await self.autostarted_agent_manager.restart_agents(refreshed_env)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
-    @protocol.handle(methods.decomission_environment, env="id")
+    @handle(methods.decomission_environment, env="id")
     async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
         data: Optional[model.ModelMetadata] = None
         if metadata:
@@ -243,23 +249,23 @@ class EnvironmentService(protocol.ServerSlice):
         version = await self.environment_decommission(env, data)
         return 200, {"version": version}
 
-    @protocol.handle(methods.clear_environment, env="id")
+    @handle(methods.clear_environment, env="id")
     async def clear_environment(self, env: data.Environment) -> Apireturn:
         await self.environment_clear(env)
         return 200
 
-    @protocol.handle(methods.create_token, env="tid")
+    @handle(methods.create_token, env="tid")
     async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
         """
         Create a new auth token for this environment
         """
         return 200, {"token": await self.environment_create_token(env, client_types, idempotent)}
 
-    @protocol.handle(methods.list_settings, env="tid")
+    @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
-    @protocol.handle(methods.set_setting, env="tid", key="id")
+    @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         try:
             original_env = env.to_dto()
@@ -272,12 +278,12 @@ class EnvironmentService(protocol.ServerSlice):
         except ValueError as e:
             raise ServerError(f"Invalid value. {e}")
 
-    @protocol.handle(methods.get_setting, env="tid", key="id")
+    @handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
         setting = await self.environment_setting_get(env, key)
         return 200, {"value": setting.settings[key], "metadata": data.Environment._settings}
 
-    @protocol.handle(methods.delete_setting, env="tid", key="id")
+    @handle(methods.delete_setting, env="tid", key="id")
     async def delete_setting(self, env: data.Environment, key: str) -> Apireturn:
         try:
             original_env = env.to_dto()
@@ -289,9 +295,16 @@ class EnvironmentService(protocol.ServerSlice):
             raise NotFound()
 
     # v2 handlers
-    @protocol.handle(methods_v2.environment_create)
+    @handle(methods_v2.environment_create)
     async def environment_create(
-        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
+        self,
+        project_id: uuid.UUID,
+        name: str,
+        repository: str,
+        branch: str,
+        environment_id: Optional[uuid.UUID],
+        description: str = "",
+        icon: str = "",
     ) -> model.Environment:
         if environment_id is None:
             environment_id = uuid.uuid4()
@@ -309,24 +322,60 @@ class EnvironmentService(protocol.ServerSlice):
         if len(envs) > 0:
             raise ServerError(f"Project {project.name} (id={project.id}) already has an environment with name {name}")
 
-        env = data.Environment(id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch)
-        await env.insert()
+        self.validate_icon(icon)
+
+        env = data.Environment(
+            id=environment_id,
+            name=name,
+            project=project_id,
+            repo_url=repository,
+            repo_branch=branch,
+            description=description,
+            icon=icon,
+        )
+        try:
+            await env.insert()
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
         return env.to_dto()
 
-    @protocol.handle(methods_v2.environment_modify, environment_id="id")
+    def validate_icon(self, icon: str) -> None:
+        """Check if the icon is in the supported format, raise an exception otherwise"""
+        if icon == "":
+            return
+        match = self.icon_regex.match(icon)
+        if match and len(match.groups()) == 3:
+            encoded_image = match.groups()[2]
+            try:
+                base64.b64decode(encoded_image, validate=True)
+            except binascii.Error:
+                raise BadRequest("The icon is not a valid base64 encoded string")
+        else:
+            raise BadRequest("The value supplied for the icon parameter is invalid")
+
+    @handle(methods_v2.environment_modify, environment_id="id")
     async def environment_modify(
-        self, environment_id: uuid.UUID, name: str, repository: Optional[str], branch: Optional[str]
+        self,
+        environment_id: uuid.UUID,
+        name: str,
+        repository: Optional[str],
+        branch: Optional[str],
+        project_id: Optional[uuid.UUID] = None,
+        description: Optional[str] = None,
+        icon: Optional[str] = None,
     ) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             raise NotFound("The environment id does not exist.")
         original_env = env.to_dto()
 
+        project = project_id or env.project
+
         # check if an environment with this name is already defined in this project
-        envs = await data.Environment.get_list(project=env.project, name=name)
+        envs = await data.Environment.get_list(project=project, name=name)
         if len(envs) > 0 and envs[0].id != environment_id:
-            raise ServerError(f"Project with id={env.project} already has an environment with name {name}")
+            raise BadRequest(f"Project with id={project} already has an environment with name {name}")
 
         fields = {"name": name}
         if repository is not None:
@@ -335,24 +384,42 @@ class EnvironmentService(protocol.ServerSlice):
         if branch is not None:
             fields["repo_branch"] = branch
 
-        await env.update_fields(**fields)
+        # Update the project field if requested and the project exists
+        if project_id is not None:
+            project_from_db = await data.Project.get_by_id(project_id)
+            if not project_from_db:
+                raise BadRequest(f"Project with id={project_id} doesn't exist")
+            fields["project"] = project_id
+
+        if description is not None:
+            fields["description"] = description
+
+        if icon is not None:
+            self.validate_icon(icon)
+            fields["icon"] = icon
+
+        try:
+            await env.update_fields(connection=None, **fields)
+        except StringDataRightTruncationError:
+            raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.updated, env.to_dto(), original_env)
         return env.to_dto()
 
-    @protocol.handle(methods_v2.environment_get, environment_id="id", api_version=2)
-    async def environment_get(self, environment_id: uuid.UUID) -> model.Environment:
-        env = await data.Environment.get_by_id(environment_id)
+    @handle(methods_v2.environment_get, environment_id="id", api_version=2)
+    async def environment_get(self, environment_id: uuid.UUID, details: bool = False) -> model.Environment:
+        env = await data.Environment.get_by_id(environment_id, details=details)
 
         if env is None:
             raise NotFound("The environment id does not exist.")
 
         return env.to_dto()
 
-    @protocol.handle(methods_v2.environment_list)
-    async def environment_list(self) -> List[model.Environment]:
-        return [env.to_dto() for env in await data.Environment.get_list()]
+    @handle(methods_v2.environment_list)
+    async def environment_list(self, details: bool = False) -> List[model.Environment]:
+        env_list = await data.Environment.get_list(details=details)
+        return [env.to_dto() for env in env_list]
 
-    @protocol.handle(methods_v2.environment_delete, environment_id="id")
+    @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
@@ -367,7 +434,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-    @protocol.handle(methods_v2.environment_decommission, env="id")
+    @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
         if is_protected_environment:
@@ -379,7 +446,7 @@ class EnvironmentService(protocol.ServerSlice):
         await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
         return version
 
-    @protocol.handle(methods_v2.environment_clear, env="id")
+    @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
         """
         Clear the environment
@@ -391,25 +458,29 @@ class EnvironmentService(protocol.ServerSlice):
         await self.autostarted_agent_manager.stop_agents(env)
         await env.delete_cascade(only_content=True)
 
-        project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
-        if os.path.exists(project_dir):
-            shutil.rmtree(project_dir)
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
 
-    @protocol.handle(methods_v2.environment_create_token, env="tid")
+        project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
+        if os.path.exists(project_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server. Execute rmtree() after
+            # notify_listeners() to ensure that the listeners are notified.
+            shutil.rmtree(project_dir)
+
+    @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
         """
         Create a new auth token for this environment
         """
         return encode_token(client_types, str(env.id), idempotent)
 
-    @protocol.handle(methods_v2.environment_settings_list, env="tid")
+    @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
         return model.EnvironmentSettingsReponse(
             settings=env.settings, definition={k: v.to_dto() for k, v in data.Environment._settings.items()}
         )
 
-    @protocol.handle(methods_v2.environment_settings_set, env="tid", key="id")
+    @handle(methods_v2.environment_settings_set, env="tid", key="id")
     async def environment_settings_set(self, env: data.Environment, key: str, value: model.EnvSettingType) -> ReturnValue[None]:
         try:
             original_env = env.to_dto()
@@ -425,7 +496,7 @@ class EnvironmentService(protocol.ServerSlice):
         except ValueError:
             raise ServerError("Invalid value")
 
-    @protocol.handle(methods_v2.environment_setting_get, env="tid", key="id")
+    @handle(methods_v2.environment_setting_get, env="tid", key="id")
     async def environment_setting_get(self, env: data.Environment, key: str) -> model.EnvironmentSettingsReponse:
         try:
             value = await env.get(key)
@@ -435,7 +506,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
-    @protocol.handle(methods_v2.environment_setting_delete, env="tid", key="id")
+    @handle(methods_v2.environment_setting_delete, env="tid", key="id")
     async def environment_setting_delete(self, env: data.Environment, key: str) -> ReturnValue[None]:
         try:
             original_env = env.to_dto()
@@ -449,7 +520,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
-    def register_listener_for_multiple_actions(self, listener, actions: Set[EnvironmentAction]) -> None:
+    def register_listener_for_multiple_actions(self, listener: EnvironmentListener, actions: Set[EnvironmentAction]) -> None:
         """
             Should only be called during pre-start
         :param listener: The listener to register
@@ -480,7 +551,7 @@ class EnvironmentService(protocol.ServerSlice):
                     await listener.environment_action_deleted(updated_env)
                 if action == EnvironmentAction.cleared:
                     await listener.environment_action_cleared(updated_env)
-                if action == EnvironmentAction.updated:
+                if action == EnvironmentAction.updated and original_env:
                     await listener.environment_action_updated(updated_env, original_env)
             except Exception:
                 LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)

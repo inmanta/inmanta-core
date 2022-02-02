@@ -313,3 +313,162 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     assert result.code == 200
 
     await agent.stop()
+
+
+@pytest.mark.asyncio(timeout=150)
+async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
+    """
+    Dryrun a configuration model with the v2 api, where applicable
+    """
+
+    await agent_factory(
+        hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False, agent_names=["agent1"]
+    )
+
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
+
+    clienthelper = ClientHelper(client, environment)
+
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": None,
+            "id": "test::Resource[agent1,key=key3],v=%d" % version,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+        {
+            "key": "key4",
+            "value": execute.util.Unknown(source=None),
+            "id": "test::Resource[agent2,key=key4],v=%d" % version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key5",
+            "value": "val",
+            "id": "test::Resource[agent2,key=key5],v=%d" % version,
+            "send_event": False,
+            "requires": ["test::Resource[agent2,key=key4],v=%d" % version],
+            "purged": False,
+        },
+        {
+            "key": "key6",
+            "value": "val",
+            "id": "test::Resource[agent2,key=key6],v=%d" % version,
+            "send_event": False,
+            "requires": ["test::Resource[agent2,key=key5],v=%d" % version],
+            "purged": False,
+        },
+    ]
+
+    status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=status,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
+    undep = await mod_db.get_undeployable()
+    assert undep == ["test::Resource[agent2,key=key4]"]
+
+    undep = await mod_db.get_skipped_for_undeployable()
+    assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
+
+    result = await client.dryrun_trigger(uuid.uuid4(), version)
+    assert result.code == 404
+    result = await client.dryrun_trigger(environment, 123456789)
+    assert result.code == 404
+
+    result = await client.list_dryruns(uuid.uuid4(), version)
+    assert result.code == 404
+
+    result = await client.list_dryruns(environment, 123456789)
+    assert result.code == 404
+
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    # request a dryrun with correct parameters
+    result = await client.dryrun_trigger(environment, version)
+    assert result.code == 200
+    dry_run_id = result.result["data"]
+
+    # get the dryrun results
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    async def dryrun_finished():
+        result = await client.list_dryruns(environment, version)
+        return result.result["data"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 10)
+
+    result = await client.dryrun_report(environment, dry_run_id)
+    assert result.code == 200
+    changes = result.result["dryrun"]["resources"]
+
+    assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
+    assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
+    assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
+    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
+
+    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
+    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
+
+    assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
+    assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
+
+    # Changes for undeployable resources are empty
+    for i in range(3, 6):
+        assert changes[resources[i]["id"]]["changes"] == {}
+
+    # Change a value for a new dryrun
+    res = await data.Resource.get(environment, "test::Resource[agent1,key=key1],v=%d" % version)
+    await res.update(attributes={**res.attributes, "value": "updated_value"})
+
+    result = await client.dryrun_trigger(environment, version)
+    assert result.code == 200
+    new_dry_run_id = result.result["data"]
+    result = await client.list_dryruns(environment, version)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    # Check if the dryruns are ordered correctly
+    assert result.result["data"][0]["id"] == new_dry_run_id
+    assert result.result["data"][0]["date"] > result.result["data"][1]["date"]
+
+    await retry_limited(dryrun_finished, 10)
+
+    # The new dryrun should have the updated value
+    result = await client.dryrun_report(environment, new_dry_run_id)
+    assert result.code == 200
+    assert result.result["dryrun"]["resources"][resources[0]["id"]]["changes"]["value"]["desired"] == "updated_value"

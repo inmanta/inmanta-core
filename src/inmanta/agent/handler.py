@@ -32,7 +32,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange
+from inmanta.data.model import AttributeStateChange, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -95,12 +95,13 @@ class InvalidOperation(Exception):
 
 @stable_api
 def cache(
-    func: T_FUNC = None,
+    func: Optional[T_FUNC] = None,
     ignore: typing.List[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
-    cacheNone: bool = True,  # noqa: N803
+    # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
+    cacheNone: Optional[bool] = None,  # noqa: N803
     call_on_delete: Optional[Callable[[Any], None]] = None,
 ) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
     """
@@ -125,21 +126,27 @@ def cache(
             with the value as argument.
     """
 
-    def actual(f) -> T_FUNC:
+    def actual(f: Callable) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
 
-        def wrapper(self, *args, **kwds):
+        def wrapper(self, *args: object, **kwds: object) -> object:
 
             kwds.update(dict(zip(myargs, args)))
 
             def bound(**kwds):
                 return f(self, **kwds)
 
-            cache_none = cacheNone
             return self.cache.get_or_else(
-                f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds, call_on_delete=call_on_delete
+                f.__name__,
+                bound,
+                for_version,
+                timeout,
+                myignore,
+                cacheNone if cacheNone is not None else cache_none,
+                **kwds,
+                call_on_delete=call_on_delete,
             )
 
         # Too much magic to type statically
@@ -162,7 +169,7 @@ class HandlerContext(object):
         resource: resources.Resource,
         dry_run: bool = False,
         action_id: Optional[uuid.UUID] = None,
-        logger: logging.Logger = None,
+        logger: Optional[logging.Logger] = None,
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
@@ -180,6 +187,7 @@ class HandlerContext(object):
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
         self._logs: List[data.LogLine] = []
+        self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
         else:
@@ -346,7 +354,7 @@ class HandlerContext(object):
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: Sequence, kwargs: dict) -> None:
+    def log_msg(self, level: int, msg: str, args: Sequence[object], kwargs: Dict[str, object]) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -362,7 +370,7 @@ class HandlerContext(object):
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
-    def debug(self, msg: str, *args, **kwargs) -> None:
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'DEBUG'.
 
@@ -375,7 +383,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.DEBUG, msg, args, kwargs)
 
-    def info(self, msg: str, *args, **kwargs) -> None:
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'INFO'.
 
@@ -388,7 +396,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.INFO, msg, args, kwargs)
 
-    def warning(self, msg: str, *args, **kwargs) -> None:
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'WARNING'.
 
@@ -401,7 +409,7 @@ class HandlerContext(object):
         """
         self.log_msg(logging.WARNING, msg, args, kwargs)
 
-    def error(self, msg: str, *args, **kwargs) -> None:
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'ERROR'.
 
@@ -412,13 +420,13 @@ class HandlerContext(object):
         """
         self.log_msg(logging.ERROR, msg, args, kwargs)
 
-    def exception(self, msg: str, *args, exc_info=True, **kwargs) -> None:
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         """
         Convenience method for logging an ERROR with exception information.
         """
         self.error(msg, *args, exc_info=exc_info, **kwargs)
 
-    def critical(self, msg: str, *args, **kwargs) -> None:
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
         """
         Log 'msg % args' with severity 'CRITICAL'.
 
@@ -444,7 +452,7 @@ class ResourceHandler(object):
     :param io: The io object to use.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: "IOBase" = None) -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
 
         if io is None:
@@ -456,7 +464,7 @@ class ResourceHandler(object):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def run_sync(self, func: typing.Callable[[], T]) -> T:
+    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
         resolves.
@@ -467,7 +475,7 @@ class ResourceHandler(object):
         f: Future[T] = Future()
 
         # This function is not typed because of generics, the used methods and currying
-        def run():
+        def run() -> None:
             try:
                 result = func()
                 if result is not None:
@@ -494,67 +502,6 @@ class ResourceHandler(object):
         if self._client is None:
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
-
-    def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict) -> None:
-        """
-        Process events generated by changes to required resources. Override this method to process events in a handler.
-
-        The default implementation provides the reload mechanism. It will call do_reload when the handler can_reload() and
-        if at least one of the dependents have successfully deployed and there were changes. Make sure to call this method
-        from a subclass if the reload behaviour is required.
-
-        This method is called for all dependents of the given resource (inverse of the requires relationship)
-        that have send_event set to true and for which a deploy was started. These are the only conditions, even if all
-        dependents have failed or no changes were deployed. It is up to the handler to filter out irrelevant events.
-
-        In case of partial deployments (e.g. incremental deploy), only those resources that are being deployed will produce
-        an event. I.e. it is possible to receive less events then expected.
-
-        In case of failure of agent, server or the system being managed, delivery of events can not be guaranteed.
-        Update events can be lost unrecoverably in case the agent or server fails after the update was performed, but before
-        the event was emitted. In the current implementation, start of a new deploy while another is in progress can also
-        causes updates to be lost.
-
-        However, while event delivery can not be guaranteed, convergence to the desired state can be reliably detected.
-        If the record of the convergence is lost, it will be retried until it is recorded.
-        For strong behavioral guarantees, it is better to rely on desired state than on events.
-
-        Events are best used to accelerate convergence.
-        For example, cross agent dependencies primarily make use of the deployment log on the server to determine if their
-        dependencies are in their desired state. To speed up convergence, events are sent to notify other agents of relevant
-        changes to resources they depend on.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to process the events for.
-        :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
-                     Each value is a dict with the items status (const.ResourceState), changes (dict) and
-                     change (const.Change). The value is also defined by inmanta.data.model.Event
-        """
-
-        # ctx.status == const.ResourceState.deployed is only true if
-        # 1- this resource was deployed (i.e. this is not a run to process events of failed dependencies)
-        # 2- this resource was deployed successfully
-
-        if self.can_reload() and ctx.status == const.ResourceState.deployed:
-            reload = False
-            for res, result in events.items():
-                ctx.debug("Processing changes of %(res)s", res=res, result=result)
-                if result["status"] == const.ResourceState.deployed and len(result["changes"]) > 0:
-                    reload = True
-                    break
-
-            if reload:
-                self.do_reload(ctx, resource)
-
-    def can_process_events(self) -> bool:
-        """
-        Can this handler process events? This is a more generic version of the reload mechanism.
-
-        See the :py:func:`ResourceHandler.process_events` for more details about this mechanism.
-
-        :return: Return true if this handler processes events.
-        """
-        return self.can_reload()
 
     def can_reload(self) -> bool:
         """
@@ -637,7 +584,7 @@ class ResourceHandler(object):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: dict) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
@@ -647,6 +594,77 @@ class ResourceHandler(object):
                         :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
         """
         raise NotImplementedError()
+
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: Dict[ResourceIdStr, ResourceState],
+    ) -> None:
+        """
+        This method is always be called by the agent, even when one of the requires of the given resource
+        failed to deploy. The default implementation of this method will deploy the given resource when all its
+        requires were deployed successfully. Override this method if a different condition determines whether the
+        resource should deploy.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
+        """
+
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
+            )
+
+        def _should_reload() -> bool:
+            if not self.can_reload():
+                return False
+            result = self.run_sync(_call_resource_did_dependency_change)
+            if not result.result:
+                raise Exception("Failed to determine whether resource should reload")
+
+            if result.code != 200:
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+            return result.result["data"]
+
+        def filter_resources_in_unexpected_state(
+            reqs: Dict[ResourceIdStr, ResourceState]
+        ) -> Dict[ResourceIdStr, ResourceState]:
+            """
+            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            """
+            unexpected_states = {
+                const.ResourceState.available,
+                const.ResourceState.dry,
+                const.ResourceState.undefined,
+                const.ResourceState.skipped_for_undefined,
+            }
+            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
+
+        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
+        if resources_in_unexpected_state:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
+                resource=resource.id.resource_version_str(),
+                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+            )
+            return
+
+        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
+        if not any(failed_dependencies):
+            self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+        else:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.info(
+                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
+                resource=resource.id.resource_version_str(),
+                failed=str(failed_dependencies),
+            )
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
@@ -668,10 +686,8 @@ class ResourceHandler(object):
             if not dry_run:
                 self.do_changes(ctx, resource, changes)
                 ctx.set_status(const.ResourceState.deployed)
-
             else:
                 ctx.set_status(const.ResourceState.dry)
-
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
@@ -681,7 +697,7 @@ class ResourceHandler(object):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
             try:
@@ -690,10 +706,10 @@ class ResourceHandler(object):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
@@ -706,7 +722,7 @@ class ResourceHandler(object):
         """
         return {}
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
         and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
@@ -726,7 +742,7 @@ class ResourceHandler(object):
                 ctx.exception(
                     "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
         return facts
@@ -749,13 +765,13 @@ class ResourceHandler(object):
         :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
         if result.code == 404:
             return None
-        elif result.code == 200:
+        elif result.result and result.code == 200:
             file_contents = base64.b64decode(result.result["content"])
             actual_hash_of_file = hash_file(file_contents)
             if hash_id != actual_hash_of_file:
@@ -772,7 +788,7 @@ class ResourceHandler(object):
         :return: True if the file is available on the server.
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().stat_file(hash_id)
 
         result = self.run_sync(call)
@@ -786,7 +802,7 @@ class ResourceHandler(object):
         :param content: A byte string with the content
         """
 
-        def call() -> Result:
+        def call() -> typing.Awaitable[Result]:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
@@ -834,7 +850,9 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
+    def update_resource(
+        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
+    ) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -862,7 +880,7 @@ class CRUDHandler(ResourceHandler):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
         """
         Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -918,7 +936,7 @@ class CRUDHandler(ResourceHandler):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
                 traceback=traceback.format_exc(),
             )
         finally:
@@ -928,7 +946,7 @@ class CRUDHandler(ResourceHandler):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
 

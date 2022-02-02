@@ -1,0 +1,4 @@
+description: Added tests for module source methods
+change-type: patch
+destination-branches:
+  - master

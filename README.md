@@ -1,6 +1,5 @@
 # Inmanta
-[![Build Status](https://travis-ci.org/inmanta/inmanta.svg?branch=master)](https://travis-ci.org/inmanta/inmanta)
-[![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta/)
+[![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta-core/)
 
 
 Inmanta is an automation and orchestration tool to efficiently deploy and manage your software
@@ -34,3 +33,15 @@ Currently, the Inmanta project is mainly developed and maintained by Inmanta NV.
 ## Install
 
 * [Install Guide](https://docs.inmanta.com/community/latest/install.html)
+
+## Running the tests using tox
+
+```
+$ python3 -m venv env
+$ source env/bin/activate
+$ pip install -U pip tox
+$ tox
+```
+
+Additional pytest arguments can be passed to tox via the `INMANTA_EXTRA_PYTEST_ARGS` environment variable.
+In order to run the test suite in fast mode, set `INMANTA_EXTRA_PYTEST_ARGS='--fast'`.

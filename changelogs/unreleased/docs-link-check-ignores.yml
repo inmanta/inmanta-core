@@ -1,0 +1,4 @@
+description: Added inmanta-ui links to docs link check ignore list
+change-type: patch
+destination-branches:
+  - master

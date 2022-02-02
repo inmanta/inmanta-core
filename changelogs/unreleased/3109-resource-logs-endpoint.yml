@@ -1,0 +1,7 @@
+---
+description: Added `resource_logs` endpoint
+issue-nr: 3109
+change-type: minor
+destination-branches: [master, iso4]
+sections:
+  feature: "{{description}}"

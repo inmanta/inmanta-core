@@ -1,0 +1,9 @@
+entity Printer:
+    string message
+end
+
+implement Printer using printer
+
+implementation printer for Printer:
+    elaboratev2module::print_message(message)
+end

@@ -44,19 +44,19 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 
 
 class TableNotFound(Exception):
-    """ Raised when a table is not found in the database """
+    """Raised when a table is not found in the database"""
 
     pass
 
 
 class ColumnNotFound(Exception):
-    """ Raised when a column is not found in the database """
+    """Raised when a column is not found in the database"""
 
     pass
 
 
 class Version(object):
-    """ Internal representation of a version """
+    """Internal representation of a version"""
 
     def __init__(self, name: str, function: Callable[[Connection], Coroutine[Any, Any, None]]):
         self.name = name
@@ -208,6 +208,8 @@ class DBSchema(object):
                     update_function = version.function
                     await update_function(self.connection)
                     await self.set_installed_version(version.version)
+                    # inform asyncpg of the type change so it knows to refresh its caches
+                    await self.connection.reload_schema_state()
                 except Exception:
                     self.logger.exception(
                         "Database schema update for version %d failed. Rolling back all updates.",

@@ -32,7 +32,8 @@ from pkg_resources import iter_entry_points
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod, ResourceAction
-from inmanta.resources import Id, ResourceVersionIdStr
+from inmanta.data.model import ResourceVersionIdStr
+from inmanta.resources import Id
 from inmanta.types import JsonType
 
 
@@ -41,13 +42,13 @@ class Client(object):
 
     def __init__(self, host: Optional[str], port: Optional[int]) -> None:
         if host is None:
-            self.host = cast(str, cmdline_rest_transport.host.get())
+            self.host = cmdline_rest_transport.host.get()
         else:
             self.host = host
             Config.set("cmdline_rest_transport", "host", host)
 
         if port is None:
-            self.port = cast(int, cmdline_rest_transport.port.get())
+            self.port = cmdline_rest_transport.port.get()
         else:
             self.port = port
             Config.set("cmdline_rest_transport", "port", str(port))
@@ -77,7 +78,7 @@ class Client(object):
             if key_name is None:
                 return result.result
 
-            if key_name in result.result:
+            if result.result and key_name in result.result:
                 return result.result[key_name]
 
             raise Exception("Expected %s in the response of %s." % (key_name, method_name))
@@ -113,9 +114,9 @@ class Client(object):
             project_id = uuid.UUID(ref)
         except ValueError:
             # try to resolve the id as project name
-            projects = self.get_list("list_projects", "projects")
+            projects: List[Dict[str, str]] = self.get_list("list_projects", "projects")
 
-            id_list = []
+            id_list: List[str] = []
             for project in projects:
                 if ref == project["name"]:
                     id_list.append(project["id"])
@@ -131,7 +132,7 @@ class Client(object):
 
         return project_id
 
-    def to_environment_id(self, ref: str, project_id: uuid.UUID = None) -> uuid.UUID:
+    def to_environment_id(self, ref: str, project_id: Optional[uuid.UUID] = None) -> uuid.UUID:
         """
         Convert ref to an env uuid, optionally scoped to a project
         """
@@ -139,9 +140,9 @@ class Client(object):
             env_id = uuid.UUID(ref)
         except ValueError:
             # try to resolve the id as project name
-            envs = self.get_list("list_environments", "environments")
+            envs: List[Dict[str, str]] = self.get_list("list_environments", "environments")
 
-            id_list = []
+            id_list: List[str] = []
             for env in envs:
                 if ref == env["name"]:
                     if project_id is None or project_id == env["project_id"]:
@@ -159,7 +160,7 @@ class Client(object):
         return env_id
 
 
-def print_table(header: List[str], rows: List[List[str]], data_type: List[str] = None) -> None:
+def print_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> None:
     width, _ = click.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
@@ -218,7 +219,7 @@ def project_show(client: Client, project: str) -> None:
 @click.option("--name", "-n", help="The name of the new project", required=True)
 @click.pass_obj
 def project_create(client: Client, name: str) -> None:
-    """ Create a new project on the server """
+    """Create a new project on the server"""
     project = client.get_dict("create_project", "project", {"name": name})
     print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
 
@@ -295,7 +296,7 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     )
 
 
-def save_config(client: Client, env: Dict[str, str]):
+def save_config(client: Client, env: Dict[str, str]) -> None:
     cfg = """
 [config]
 fact-expire = 1800
@@ -482,7 +483,7 @@ def agent(ctx: click.Context) -> None:
 def agent_list(client: Client, environment: str) -> None:
     env_id = client.to_environment_id(environment)
     agents = client.get_list("list_agents", key_name="agents", arguments=dict(tid=env_id))
-    data = []
+    data: List[List[str]] = []
     for agent in agents:
         data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
 
@@ -658,7 +659,7 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
 @click.option("--name", help="The name of the parameter", required=True)
 @click.option("--resource", help="The resource id of the parameter")
 @click.pass_obj
-def param_get(client: Client, environment: str, name: str, resource: str) -> None:
+def param_get(client: Client, environment: str, name: str, resource: Optional[str]) -> None:
     tid = client.to_environment_id(environment)
 
     if resource is None:
@@ -679,6 +680,9 @@ def version_report(client: Client, environment: str, version: str, show_detailed
     tid = client.to_environment_id(environment)
     result = client.do_request("get_version", arguments=dict(tid=tid, id=version, include_logs=True))
 
+    if not result:
+        return
+
     agents: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(lambda: []))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or show_detailed_report:
@@ -689,7 +693,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            parsed_resource_version_id = Id.parse_id(agents[agent][t][0]["resource_version_id"])
+            parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
             click.echo(
                 click.style("Resource type:", bold=True)
                 + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute)
@@ -815,11 +819,11 @@ def resource_action_log(ctx: click.Context) -> None:
 
 
 def validate_resource_version_id(
-    ctx: click.Context, option: Union[click.Option, click.Parameter], value: Any
+    ctx: click.Context, option: Union[click.Option, click.Parameter], value: str
 ) -> ResourceVersionIdStr:
     if not Id.is_resource_version_id(value):
         raise click.BadParameter(value)
-    return value
+    return ResourceVersionIdStr(value)
 
 
 @resource_action_log.command(name="list")

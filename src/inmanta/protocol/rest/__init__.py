@@ -83,7 +83,7 @@ class CallArguments(object):
     """
 
     def __init__(
-        self, properties: common.MethodProperties, message: Dict[str, Optional[Any]], request_headers: Mapping[str, str]
+        self, properties: common.MethodProperties, message: Dict[str, Optional[object]], request_headers: Mapping[str, str]
     ) -> None:
         """
         :param method_config: The method configuration that contains the metadata and functions to call
@@ -93,16 +93,16 @@ class CallArguments(object):
         self._properties = properties
         self._message = message
         self._request_headers = request_headers
-        self._argspec = inspect.getfullargspec(self._properties.function)
+        self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
         self._headers: Dict[str, str] = {}
-        self._metadata: Dict[str, Any] = {}
+        self._metadata: Dict[str, object] = {}
 
         self._processed: bool = False
 
     @property
-    def call_args(self) -> Dict[str, Any]:
+    def call_args(self) -> Dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
@@ -116,7 +116,7 @@ class CallArguments(object):
         return self._headers
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> Dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
@@ -133,7 +133,7 @@ class CallArguments(object):
 
         return True
 
-    def _map_headers(self, arg: str) -> Optional[Any]:
+    def _map_headers(self, arg: str) -> Optional[object]:
         if not self._is_header_param(arg):
             return None
 
@@ -146,18 +146,18 @@ class CallArguments(object):
 
         return value
 
-    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[Any]:
+    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[object]:
         """
         Get a default value for an argument
         """
-        if default_start >= 0 and 0 <= (arg_position - default_start) < len(self._argspec.defaults):
+        if self._argspec.defaults and default_start >= 0 and 0 <= (arg_position - default_start) < len(self._argspec.defaults):
             return self._argspec.defaults[arg_position - default_start]
         else:
             raise exceptions.BadRequest("Field '%s' is required." % arg_name)
 
-    async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
+    async def _run_getters(self, arg: str, value: Optional[object]) -> Optional[object]:
         """
-        Run ant available getters on value
+        Run any available getters on value
         """
         if arg not in self._properties.arg_options or self._properties.arg_options[arg].getter is None:
             return value
@@ -195,7 +195,7 @@ class CallArguments(object):
                         value = self._message[arg]
                         all_fields.remove(arg)
                     # Pre-process dict params for GET
-                    elif self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
+                    elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
                         dict_prefix = f"{arg}."
                         dict_with_prefixed_names = {
                             param_name: param_value
@@ -239,8 +239,8 @@ class CallArguments(object):
         self._processed = True
 
     async def _get_dict_value_from_message(
-        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, object]
+    ) -> Dict[str, object]:
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
         type_args = self._argspec.annotations.get(arg)
@@ -256,13 +256,15 @@ class CallArguments(object):
             value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 
-    def _is_dict_or_optional_dict(self, arg_type: Type) -> bool:
+    def _is_dict_or_optional_dict(self, arg_type: Type[object]) -> bool:
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
         arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
+        if typing_inspect.is_new_type(arg_type):
+            arg_type = type(arg_type)
         return issubclass(arg_type, dict)
 
-    def _validate_union_return(self, arg_type: Type, value: Any) -> None:
+    def _validate_union_return(self, arg_type: Type[object], value: object) -> None:
         """Validate a return with a union type
         :see: protocol.common.MethodProperties._validate_function_types
         """
@@ -288,7 +290,7 @@ class CallArguments(object):
         if typing_inspect.is_generic_type(matching_type):
             self._validate_generic_return(arg_type, matching_type)
 
-    def _validate_generic_return(self, arg_type: Type, value: Any) -> None:
+    def _validate_generic_return(self, arg_type: Type[object], value: object) -> None:
         """Validate List or Dict types.
 
         :note: we return any here because the calling function also returns any.
@@ -323,6 +325,8 @@ class CallArguments(object):
 
                 if typing_inspect.is_union_type(el_type):
                     self._validate_union_return(el_type, v)
+                if typing_inspect.is_generic_type(el_type):
+                    self._validate_generic_return(el_type, v)
                 elif not isinstance(v, el_type):
                     raise exceptions.ServerError(f"Element {v} of returned list is not of type {el_type}.")
 
@@ -446,7 +450,7 @@ class RESTBase(util.TaskHandler):
         kwargs: Dict[str, str],
         http_method: str,
         config: common.UrlMethod,
-        message: Dict[str, Any],
+        message: Dict[str, object],
         request_headers: Mapping[str, str],
         auth: Optional[MutableMapping[str, str]] = None,
     ) -> common.Response:
@@ -461,7 +465,8 @@ class RESTBase(util.TaskHandler):
                 if "sid" not in message:
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                elif not self.validate_sid(uuid.UUID(message["sid"])):
+                sid = uuid.UUID(message["sid"])
+                if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             arguments = CallArguments(config.properties, message, request_headers)

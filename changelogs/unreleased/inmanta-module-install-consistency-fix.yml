@@ -1,0 +1,4 @@
+description: Modified behavior of inmanta module install to be consistent with build behavior
+change-type: patch
+destination-branches:
+  - master

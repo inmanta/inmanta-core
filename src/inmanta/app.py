@@ -40,11 +40,11 @@ import sys
 import threading
 import time
 import traceback
-from argparse import ArgumentParser
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
-from typing import Any, Callable, Coroutine, Dict
+from types import FrameType
+from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
 import yaml
@@ -54,7 +54,8 @@ from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol
-from inmanta.ast import CompilerException
+from inmanta.ast import CompilerException, Namespace
+from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
@@ -108,7 +109,7 @@ def start_server(options: argparse.Namespace) -> None:
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
-    from inmanta import agent
+    from inmanta.agent import agent
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -121,7 +122,8 @@ def dump_threads() -> None:
     print("----- Thread Dump ----")
     for th in threading.enumerate():
         print("---", th)
-        traceback.print_stack(sys._current_frames()[th.ident], file=sys.stdout)
+        if th.ident:
+            traceback.print_stack(sys._current_frames()[th.ident], file=sys.stdout)
         print()
     sys.stdout.flush()
 
@@ -157,7 +159,7 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
         # ensure shutdown when the ioloop is stuck
         os._exit(const.EXIT_HARD)
 
-    def handle_signal(signum, frame):
+    def handle_signal(signum: signal.Signals, frame: Optional[FrameType]) -> None:
         # force shutdown, even when the ioloop is stuck
         # schedule off the loop
         t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
@@ -165,7 +167,7 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
         t.start()
         ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
 
-    def handle_signal_dump(signum, frame):
+    def handle_signal_dump(signum: signal.Signals, frame: Optional[FrameType]) -> None:
         context_dump(ioloop)
 
     signal.signal(signal.SIGTERM, handle_signal)
@@ -212,18 +214,18 @@ class ExperimentalFeatureFlags:
     Class to expose feature flag configs as options in a uniform matter
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.metavar_to_option: Dict[str, Option[bool]] = {}
 
     def _get_name(self, option: Option[bool]) -> str:
         return f"flag_{option.name}"
 
-    def add(self, option: Option) -> None:
-        """ Add an option to the set of feature flags """
+    def add(self, option: Option[bool]) -> None:
+        """Add an option to the set of feature flags"""
         self.metavar_to_option[self._get_name(option)] = option
 
-    def add_arguments(self, parser: ArgumentParser):
-        """ Add all feature flag options to the argument parser """
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """Add all feature flag options to the argument parser"""
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",
@@ -233,7 +235,7 @@ class ExperimentalFeatureFlags:
                 default=False,
             )
 
-    def read_options_to_config(self, options: argparse.Namespace):
+    def read_options_to_config(self, options: argparse.Namespace) -> None:
         """
         This method takes input from the commandline parser
         and sets the appropriate feature flag config based
@@ -251,7 +253,7 @@ compiler_features = ExperimentalFeatureFlags()
 compiler_features.add(compiler.config.feature_compiler_cache)
 
 
-def compiler_config(parser: ArgumentParser) -> None:
+def compiler_config(parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
     """
@@ -303,7 +305,7 @@ def compiler_config(parser: ArgumentParser) -> None:
 @command(
     "compile", help_msg="Compile the project to a configuration model", parser_config=compiler_config, require_project=True
 )
-def compile_project(options: argparse.Namespace):
+def compile_project(options: argparse.Namespace) -> None:
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -345,14 +347,13 @@ def compile_project(options: argparse.Namespace):
         import cProfile
         import pstats
 
-        result = cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+        cProfile.runctx("do_compile()", globals(), {}, "run.profile")
         p = pstats.Stats("run.profile")
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
         t1 = time.time()
-        result = do_compile()
+        do_compile()
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
-    return result
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
@@ -362,12 +363,12 @@ def list_commands(options: argparse.Namespace) -> None:
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: ArgumentParser) -> None:
+def help_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
 @command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
-def help_command(options: argparse.Namespace):
+def help_command(options: argparse.Namespace) -> None:
     if options.subcommand is None:
         cmd_parser().print_help()
     else:
@@ -394,7 +395,7 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: ArgumentParser) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
@@ -410,9 +411,9 @@ def deploy_parser_config(parser: ArgumentParser) -> None:
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
 def deploy(options: argparse.Namespace) -> None:
     module.Project.get(options.main_file)
-    from inmanta import deploy
+    from inmanta import deploy as deploy_module
 
-    run = deploy.Deploy(options)
+    run = deploy_module.Deploy(options)
     try:
         if not run.setup():
             LOGGER.error("Failed to setup the orchestrator.")
@@ -422,7 +423,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: ArgumentParser) -> None:
+def export_parser_config(parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
     """
@@ -545,6 +546,8 @@ def export(options: argparse.Namespace) -> None:
     from inmanta.export import Exporter  # noqa: H307
 
     exp = None
+    types: Optional[Dict[str, inmanta_type.Type]]
+    scopes: Optional[Namespace]
     try:
         (types, scopes) = do_compile()
     except Exception as e:
@@ -555,9 +558,10 @@ def export(options: argparse.Namespace) -> None:
     # continue the export
 
     export = Exporter(options)
-    version, _ = export.run(
+    results = export.run(
         types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
     )
+    version = results[0]
 
     if exp is not None:
         raise exp
@@ -579,9 +583,9 @@ def export(options: argparse.Namespace) -> None:
 log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
 
 
-def cmd_parser() -> ArgumentParser:
+def cmd_parser() -> argparse.ArgumentParser:
     # create the argument compiler
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
     parser.add_argument(
@@ -636,7 +640,7 @@ def cmd_parser() -> ArgumentParser:
     return parser
 
 
-def print_versions_installed_components_and_exit():
+def print_versions_installed_components_and_exit() -> None:
     bootloader = InmantaBootloader()
     app_context = bootloader.load_slices()
     product_metadata = app_context.get_product_metadata()
@@ -669,7 +673,7 @@ def _get_default_stream_handler() -> logging.StreamHandler:
     return stream_handler
 
 
-def _get_watched_file_handler(options) -> logging.handlers.WatchedFileHandler:
+def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
     if not options.log_file:
         raise Exception("No logfile was provided.")
     level = _convert_to_log_level(options.log_file_level)
@@ -681,7 +685,7 @@ def _get_watched_file_handler(options) -> logging.handlers.WatchedFileHandler:
     return file_handler
 
 
-def _convert_to_log_level(level):
+def _convert_to_log_level(level: int) -> int:
     if level >= len(log_levels):
         level = len(log_levels) - 1
     return log_levels[level]
@@ -755,7 +759,7 @@ def app() -> None:
         parser.print_usage()
         return
 
-    def report(e: Exception) -> None:
+    def report(e: BaseException) -> None:
         minus_x_set_top_level_command = options.errors
         minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
         if not minus_x_set_top_level_command and not minus_x_set_subcommand:

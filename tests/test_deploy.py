@@ -64,7 +64,7 @@ async def test_fork(server):
 
 @pytest.mark.timeout(30)
 def test_embedded_inmanta_server(tmpdir, postgres_db):
-    """ Test starting an embedded server """
+    """Test starting an embedded server"""
     project_dir = tmpdir.mkdir("project")
     os.chdir(project_dir)
     main_cf_file = project_dir.join("main.cf")

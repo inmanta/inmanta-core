@@ -22,16 +22,15 @@ import logging
 import os
 import pathlib
 import sys
-import traceback
 import types
+from collections.abc import KeysView
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
-
-import more_itertools
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import const
+from inmanta.stable_api import stable_api
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -101,7 +100,7 @@ class SourceInfo(object):
         from inmanta.module import Project
 
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+            self._requires = Project.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
         return self._requires
 
 
@@ -186,7 +185,7 @@ class CodeLoader(object):
         self.__check_dir()
 
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        configure_module_finder([mod_dir])
+        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir])
 
     def __check_dir(self) -> None:
         """
@@ -211,7 +210,7 @@ class CodeLoader(object):
                 mod = importlib.import_module(mod_name)
             self.__modules[mod_name] = (hv, mod)
             LOGGER.info("Loaded module %s" % mod_name)
-        except (ImportError, PluginModuleLoadException):
+        except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
@@ -260,55 +259,23 @@ class CodeLoader(object):
                 self._load_module(module_source.name, module_source.hash_value)
 
 
-class PluginModuleLoadException(Exception):
-    """
-    Wrapper exception raised when an exception occurs during plugin module loading.
-    """
-
-    def __init__(self, cause: Exception, module: str, path: str, lineno: Optional[int]) -> None:
-        self.cause: Exception = cause
-        self.module: str = module
-        self.path: str = path
-        self.lineno: Optional[int] = lineno
-        lineno_suffix = f":{self.lineno}" if self.lineno is not None else ""
-        super().__init__(
-            "%s while loading plugin module %s at %s: %s"
-            % (
-                self.get_cause_type_name(),
-                self.module,
-                f"{self.path}{lineno_suffix}",
-                self.cause,
-            )
-        )
-
-    def get_cause_type_name(self) -> str:
-        module: Optional[str] = type(self.cause).__module__
-        name: str = type(self.cause).__qualname__
-        return name if module is None or module == "builtins" else "%s.%s" % (module, name)
-
-
 class PluginModuleLoader(FileLoader):
     """
-    A custom module loader which imports the modules in the inmanta_plugins package.
+    A custom module loader which imports the V1 modules in the inmanta_plugins namespace package.
+    V2 modules are loaded using the standard Python loader.
     """
 
-    def __init__(self, modulepaths: List[str], fullname: str) -> None:
-        self._modulepaths = modulepaths
-        path_to_module = self._get_path_to_module(fullname)
+    def __init__(self, fullname: str, path_to_module: str) -> None:
+        """
+        :param fullname: A fully qualified import path to the module or package to be imported
+        :param path_to_module: Path to the file on disk that belongs to the import `fullname`. This should be an empty
+                               string when the top-level package inmanta_plugins is imported.
+        """
         super(PluginModuleLoader, self).__init__(fullname, path_to_module)
         self.path: str
 
     def exec_module(self, module: types.ModuleType) -> None:
-        try:
-            return super().exec_module(module)
-        except Exception as e:
-            # attach module, file name and line number
-            tb: Optional[types.TracebackType] = sys.exc_info()[2]
-            stack: traceback.StackSummary = traceback.extract_tb(tb)
-            lineno: Optional[int] = more_itertools.first(
-                (frame.lineno for frame in reversed(stack) if frame.filename == self.path), None
-            )
-            raise PluginModuleLoadException(e, self.name, self.path, lineno)
+        return super().exec_module(module)
 
     def get_source(self, fullname: str) -> bytes:
         # No __init__.py exists for top level package
@@ -378,6 +345,7 @@ class PluginModuleLoader(FileLoader):
         """
         Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
         For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
+        An empty string is returned when `full_mod_name` equals `inmanta_plugins`.
         """
         full_module_parts = full_mod_name.split(".")
         if full_module_parts[0] != const.PLUGINS_PACKAGE:
@@ -397,8 +365,85 @@ class PluginModuleLoader(FileLoader):
 
         return os.path.join(*module_parts)
 
-    def _get_path_to_module(self, fullname: str) -> str:
-        relative_path: str = self.convert_module_to_relative_path(fullname)
+    def _loading_top_level_package(self) -> bool:
+        return self.path == ""
+
+
+@stable_api
+class PluginModuleFinder(Finder):
+    """
+    Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder. This
+    finder is stored as the last entry in `meta_path`, as such that the default Python Finders detect V2 modules first.
+    """
+
+    MODULE_FINDER: "PluginModuleFinder" = None
+
+    def __init__(self, modulepaths: List[str]) -> None:
+        """
+        :param modulepaths: The module paths for the inmanta project.
+        """
+        self._modulepaths = list(modulepaths)
+
+    @classmethod
+    def get_module_finder(cls) -> "PluginModuleFinder":
+        if cls.MODULE_FINDER is not None:
+            return cls.MODULE_FINDER
+        raise Exception("No PluginModuleFinder configured. Call configure_module_finder() first.")
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Remove the PluginModuleFinder from sys.meta_path.
+        """
+        if cls.MODULE_FINDER is not None and cls.MODULE_FINDER in sys.meta_path:
+            sys.meta_path.remove(cls.MODULE_FINDER)
+        cls.MODULE_FINDER = None
+
+    @classmethod
+    def configure_module_finder(cls, modulepaths: List[str]) -> None:
+        """
+        Setup a custom module loader to handle imports in .py files of the modules. This finder will be stored
+        as the last finder in sys.meta_path.
+
+        :param modulepaths: The directories where the module finder should look for modules.
+        """
+        if cls.MODULE_FINDER is not None:
+            # PluginModuleFinder already present in sys.meta_path
+            cls.MODULE_FINDER._modulepaths = list(modulepaths)
+            return
+
+        # PluginModuleFinder not yet present in sys.meta_path.
+        module_finder = PluginModuleFinder(modulepaths)
+        sys.meta_path.append(module_finder)
+        cls.MODULE_FINDER = module_finder
+
+    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
+        """
+        :param fullname: A fully qualified import path to the module or package to be imported.
+        """
+        if self._should_handle_import(fullname):
+            LOGGER.debug("Loading module: %s", fullname)
+            path_to_module = self._get_path_to_module(fullname)
+            if path_to_module is not None:
+                return PluginModuleLoader(fullname, path_to_module)
+            else:
+                # The given module is not present in self.modulepath.
+                return None
+        return None
+
+    def _should_handle_import(self, fq_import_path: str) -> bool:
+        if fq_import_path == const.PLUGINS_PACKAGE:
+            return False
+        return fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}.")
+
+    def _get_path_to_module(self, fullname: str) -> Optional[str]:
+        """
+        Return the path to the file in the module path that belongs to the module given by `fullname`.
+        None is returned when the given module is not present in the module path.
+
+        :param fullname: A fully-qualified import path to a module.
+        """
+        relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":
             return ""
@@ -411,52 +456,23 @@ class PluginModuleLoader(FileLoader):
                 if os.path.exists(path_to_module):
                     return path_to_module
 
-        raise ImportError(f"Cannot find module {fullname} in {self._modulepaths}")
-
-    def _loading_top_level_package(self):
-        return self.path == ""
-
-
-class PluginModuleFinder(Finder):
-    """
-    Custom module finder which handles all the imports for the package inmanta_plugins.
-    """
-
-    def __init__(self, modulepaths: List[str]) -> None:
-        self._modulepaths = modulepaths
-
-    def add_module_paths(self, paths: List[str]) -> None:
-        for p in paths:
-            if p not in self._modulepaths:
-                self._modulepaths.append(p)
-
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
-        if fullname == const.PLUGINS_PACKAGE or fullname.startswith(f"{const.PLUGINS_PACKAGE}."):
-            LOGGER.debug("Loading module: %s", fullname)
-            return PluginModuleLoader(self._modulepaths, fullname)
         return None
 
 
-def configure_module_finder(modulepaths: List[str]) -> None:
+@stable_api
+def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     """
-    Setup a custom module loader to handle imports in .py files of the modules.
-    """
-    for finder in sys.meta_path:
-        # PluginModuleFinder already present in sys.meta_path.
-        if isinstance(finder, PluginModuleFinder):
-            finder.add_module_paths(modulepaths)
-            return
+    Unloads Python modules associated with inmanta modules (`inmanta_plugins` submodules).
 
-    # PluginModuleFinder not yet present in sys.meta_path.
-    module_finder = PluginModuleFinder(modulepaths)
-    sys.meta_path.insert(0, module_finder)
-
-
-def unload_inmanta_plugins():
+    :param inmanta_module: Unload the Python modules for a specific inmanta module. If omitted, unloads the Python modules for
+        all inmanta modules.
     """
-    Unload the inmanta_plugins package.
-    """
-    loaded_modules = sys.modules.keys()
-    modules_to_unload = [k for k in loaded_modules if k == const.PLUGINS_PACKAGE or k.startswith(f"{const.PLUGINS_PACKAGE}.")]
+    top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
+    loaded_modules: KeysView[str] = sys.modules.keys()
+    modules_to_unload: Sequence[str] = [
+        fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
+    ]
     for k in modules_to_unload:
         del sys.modules[k]
+    if modules_to_unload:
+        importlib.invalidate_caches()

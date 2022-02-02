@@ -1,0 +1,4 @@
+description: pin core dependency with ~= instead of >= for pytest-inmanta-extensions
+change-type: patch
+destination-branches:
+  - master

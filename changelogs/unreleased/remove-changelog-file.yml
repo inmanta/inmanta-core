@@ -1,0 +1,4 @@
+---
+description: Move the CHANGELOG.md file to the product repository
+change-type: patch
+destination-branches: [master]

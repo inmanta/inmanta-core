@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2021 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,23 +16,33 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import configparser
 import inspect
 import json
 import logging
+import os
+import shutil
 import time
 import uuid
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Sequence, Union
 
 import pytest
-from pkg_resources import parse_version
+import yaml
+from pkg_resources import Requirement, parse_version
 from pydantic.tools import lru_cache
 
+import build
+import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import data
+from inmanta import const, data, env, module
+from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
+from libpip2pi.commands import dir2pi
+from packaging import version
 
 
 async def retry_limited(fun, timeout, *args, **kwargs):
@@ -264,11 +274,11 @@ async def wait_for_version(client, environment, cnt):
     return versions.result
 
 
-async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
-    async def is_deployment_finished():
+async def _wait_until_deployment_finishes(client: Client, environment: str, version: int, timeout: int = 10) -> None:
+    async def is_deployment_finished() -> bool:
         result = await client.get_version(environment, version)
         print(version, result.result)
-        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+        return result.result["model"]["deployed"]
 
     await retry_limited(is_deployment_finished, timeout)
 
@@ -278,12 +288,12 @@ class ClientHelper(object):
         self.client = client
         self.environment = environment
 
-    async def get_version(self):
+    async def get_version(self) -> int:
         res = await self.client.reserve_version(self.environment)
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources, version):
+    async def put_version_simple(self, resources: Dict[str, Any], version: int) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -324,3 +334,235 @@ def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":
         product_version_lower_or_equal_than(version),
         reason=f"This test is only intended for version larger than {version} currently at {current}",
     )
+
+
+@dataclass
+class PipIndex:
+    """
+    Local pip index that makes use of dir2pi to publish its artifacts.
+    """
+
+    artifact_dir: str
+
+    @property
+    def url(self) -> str:
+        return f"{self.artifact_dir}/simple"
+
+    def publish(self) -> None:
+        dir2pi(argv=["dir2pi", self.artifact_dir])
+
+
+def create_python_package(
+    name: str,
+    pkg_version: version.Version,
+    path: str,
+    *,
+    requirements: Optional[Sequence[Requirement]] = None,
+    install: bool = False,
+    editable: bool = False,
+    publish_index: Optional[PipIndex] = None,
+) -> None:
+    """
+    Creates an empty Python package.
+
+    :param name: The name of the package.
+    :param pkg_version: The version of the package.
+    :param path: The path to an empty or non-existant directory to create the package in.
+    :param requirements: The requirements for the package, if any.
+    :param install: Install the newly created package in the active Python environment. Requires virtualenv to be installed in
+        the Python environment unless editable is True.
+    :param editable: Whether to install the package in editable mode, ignored if install is False.
+    :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
+    """
+    if os.path.exists(path):
+        if not os.path.isdir(path):
+            raise Exception(f"{path} is not a directory.")
+        if os.listdir(path):
+            raise Exception(f"{path} is not an empty directory.")
+    else:
+        os.makedirs(path)
+
+    with open(os.path.join(path, "pyproject.toml"), "w") as fd:
+        fd.write(
+            """
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools"]
+            """.strip()
+        )
+    with open(os.path.join(path, "setup.cfg"), "w") as fd:
+        egg_info: str = (
+            f"""
+[egg_info]
+tag_build = .dev{pkg_version.dev}
+            """.strip()
+            if pkg_version.is_devrelease
+            else ""
+        )
+        fd.write(
+            f"""
+[metadata]
+name = {name}
+version = {pkg_version.base_version}
+description = An empty package for testing purposes
+license = Apache 2.0
+author = Inmanta <code@inmanta.com>
+
+{egg_info}
+
+[options]
+install_requires =%s
+            """.strip()
+            % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+        )
+
+    if install:
+        env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
+    if publish_index is not None:
+        with build.env.IsolatedEnvBuilder() as build_env:
+            builder = build.ProjectBuilder(
+                srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
+            )
+            build_env.install(builder.build_system_requires)
+            build_env.install(builder.get_requires_for_build(distribution="wheel"))
+            builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
+        publish_index.publish()
+
+
+def module_from_template(
+    source_dir: str,
+    dest_dir: Optional[str] = None,
+    *,
+    new_version: Optional[version.Version] = None,
+    new_name: Optional[str] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    install: bool = False,
+    editable: bool = False,
+    publish_index: Optional[PipIndex] = None,
+    new_content_init_cf: Optional[str] = None,
+    new_content_init_py: Optional[str] = None,
+    in_place: bool = False,
+) -> module.ModuleV2Metadata:
+    """
+    Creates a v2 module from a template.
+
+    :param source_dir: The directory where the original module lives.
+    :param dest_dir: The directory to use to copy the original to and to stage any changes in.
+    :param new_version: The new version for the module, if any.
+    :param new_name: The new name of the inmanta module, if any.
+    :param new_requirements: The new requirements for the module, if any.
+    :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
+        python environment unless editable is True.
+    :param editable: Whether to install the module in editable mode, ignored if install is False.
+    :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
+    :param new_content_init_cf: The new content of the _init.cf file.
+    :param new_content_init_py: The new content of the __init__.py file.
+    :param in_place: Modify the module in-place instead of copying it.
+    """
+    if (dest_dir is None) != in_place:
+        raise ValueError("Either dest_dir or in_place must be set, never both.")
+    if dest_dir is None:
+        dest_dir = source_dir
+    else:
+        shutil.copytree(source_dir, dest_dir)
+    config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
+    config: configparser.ConfigParser = configparser.ConfigParser()
+    config.read(config_file)
+    if new_version is not None:
+        config["metadata"]["version"] = new_version.base_version
+        if new_version.is_devrelease:
+            config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
+    if new_name is not None:
+        old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
+        os.rename(
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
+            os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
+        )
+        config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
+        manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
+        manifest_content: str
+        with open(manifest_file, "r") as fd:
+            manifest_content: str = fd.read()
+        with open(manifest_file, "w", encoding="utf-8") as fd:
+            fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
+    if new_requirements:
+        config["options"]["install_requires"] = "\n    ".join(
+            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+            for req in new_requirements
+        )
+    if new_content_init_cf is not None:
+        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+        with open(init_cf_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_cf)
+    if new_content_init_py is not None:
+        init_py_file: str = os.path.join(
+            dest_dir,
+            const.PLUGINS_PACKAGE,
+            module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
+            "__init__.py",
+        )
+        with open(init_py_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_py)
+    with open(config_file, "w") as fh:
+        config.write(fh)
+    if install:
+        ModuleTool().install(editable=editable, path=dest_dir)
+    if publish_index is not None:
+        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+        publish_index.publish()
+    with open(config_file, "r") as fh:
+        return module.ModuleV2Metadata.parse(fh)
+
+
+def v1_module_from_template(
+    source_dir: str,
+    dest_dir: str,
+    *,
+    new_version: Optional[version.Version] = None,
+    new_name: Optional[str] = None,
+    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    new_content_init_cf: Optional[str] = None,
+    new_content_init_py: Optional[str] = None,
+) -> module.ModuleV2Metadata:
+    """
+    Creates a v1 module from a template.
+
+    :param source_dir: The directory where the original module lives.
+    :param dest_dir: The directory to use to copy the original to and to stage any changes in.
+    :param new_version: The new version for the module, if any.
+    :param new_name: The new name of the inmanta module, if any.
+    :param new_requirements: The new Python requirements for the module, if any.
+    :param new_content_init_cf: The new content of the _init.cf file.
+    :param new_content_init_py: The new content of the __init__.py file.
+    """
+    shutil.copytree(source_dir, dest_dir)
+    config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
+    config: Dict[str, object] = configparser.ConfigParser()
+    with open(config_file, "r") as fd:
+        config = yaml.safe_load(fd)
+    if new_version is not None:
+        config["version"] = str(new_version)
+    if new_name is not None:
+        config["name"] = new_name
+    if new_content_init_cf is not None:
+        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+        with open(init_cf_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_cf)
+    if new_content_init_py is not None:
+        plugins_dir: str = os.path.join(dest_dir, "plugins")
+        os.makedirs(plugins_dir, exist_ok=True)
+        init_py_file: str = os.path.join(plugins_dir, "__init__.py")
+        with open(init_py_file, "w", encoding="utf-8") as fd:
+            fd.write(new_content_init_py)
+    with open(config_file, "w") as fd:
+        yaml.dump(config, fd)
+    if new_requirements:
+        with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
+            fd.write(
+                "\n".join(
+                    str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+                    for req in new_requirements
+                )
+            )
+    with open(config_file, "r") as fd:
+        return module.ModuleV1Metadata.parse(fd)

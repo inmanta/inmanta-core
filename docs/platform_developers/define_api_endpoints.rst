@@ -31,7 +31,7 @@ An example is shown in the code snippet below.
         """
 
 This API method defines an HTTP GET operation at the path ``/project/<id>`` which can be used by a client of type api (cli,
-dashboard and 3rd party service). The id parameter in the path will be passed to the associate API handle. A docstring can be
+web-console and 3rd party service). The id parameter in the path will be passed to the associate API handle. A docstring can be
 associated with the API method. This information will be included in the OpenAPI documentation, available
 via the ``/docs`` endpoint of the Inmanta server.
 

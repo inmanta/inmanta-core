@@ -231,12 +231,12 @@ implement A using std::none
 
 
 def test_2030_type_overwrite_warning(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-typedef string as number matching self > 0
-        """,
-    )
     with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+typedef string as number matching self > 0
+            """,
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerRuntimeWarning)

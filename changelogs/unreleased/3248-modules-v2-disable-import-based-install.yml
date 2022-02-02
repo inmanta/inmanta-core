@@ -1,0 +1,4 @@
+description: Disable import-based install for v2 modules for security reasons
+change-type: major
+destination-branches:
+  - master

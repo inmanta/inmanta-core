@@ -1,0 +1,4 @@
+description: Modified pth file to skip already loaded paths
+change-type: patch
+destination-branches:
+  - master

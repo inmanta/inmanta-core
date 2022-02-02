@@ -27,7 +27,7 @@ import uuid
 import warnings
 from collections import defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast
+from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
@@ -63,7 +63,10 @@ class Config(object):
 
     @classmethod
     def load_config(
-        cls, min_c_config_file: str = None, config_dir: str = None, main_cfg_file: str = "/etc/inmanta/inmanta.cfg"
+        cls,
+        min_c_config_file: Optional[str] = None,
+        config_dir: Optional[str] = None,
+        main_cfg_file: str = "/etc/inmanta/inmanta.cfg",
     ) -> None:
         """
         Load the configuration file
@@ -100,6 +103,16 @@ class Config(object):
     @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
+
+    @overload
+    @classmethod
+    def get(cls) -> ConfigParser:
+        ...
+
+    @overload
+    @classmethod
+    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[str]:
+        ...
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
@@ -269,7 +282,7 @@ class Option(Generic[T]):
         default: Union[T, None, Callable[[], T]],
         documentation: str,
         validator: Callable[[str], T] = is_str,
-        predecessor_option: "Option" = None,
+        predecessor_option: Optional["Option"] = None,
     ) -> None:
         self.section = section
         self.name = _normalize_name(name)
@@ -316,7 +329,7 @@ class Option(Generic[T]):
             return defa
 
     def set(self, value: str) -> None:
-        """ Only for tests"""
+        """Only for tests"""
         Config.set(self.section, self.name, value)
 
 
@@ -325,7 +338,7 @@ def option_as_default(opt: Option[T]) -> Callable[[], T]:
     Wrap an option to be used as default value
     """
 
-    def default_func():
+    def default_func() -> T:
         return opt.get()
 
     default_func.__doc__ = f""":inmanta.config:option:`{opt.section}.{opt.name}`"""

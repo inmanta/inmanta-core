@@ -1356,8 +1356,8 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     assert result.result["agents"][0]["name"] == "agent1"
 
 
-def ps_diff(original, current_process, diff=0):
-    current = current_process.children(recursive=True)
+def ps_diff_inmanta_agent_processes(original: List[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
+    current = _get_inmanta_agent_child_processes(current_process)
 
     def is_terminated(proc):
         try:
@@ -1552,7 +1552,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
@@ -1594,13 +1594,13 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     # clear environment
     await client.clear_environment(environment)
 
     # Autostarted agent should be terminated after clearing the environment
-    ps_diff(children, current_process, 0)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
@@ -1651,7 +1651,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
 async def setup_environment_with_agent(client, project_name):
@@ -1716,40 +1716,44 @@ async def setup_environment_with_agent(client, project_name):
     return project_id, env_id
 
 
+def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
+    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in p.cmdline() and "agent" in p.cmdline()]
+
+
 @pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     result = await client.delete_environment(id=env_id)
     assert result.code == 200
 
     # The autostarted agent should be terminated when its environment is deleted.
-    ps_diff(children, current_process, 0)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
 
 
 @pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
     await setup_environment_with_agent(client, "proj2")
 
     # Two autostarted agents should be running (one in proj1 and one in proj2).
-    ps_diff(children, current_process, 2)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
 
     result = await client.delete_project(id=project1_id)
     assert result.code == 200
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
-    ps_diff(children, current_process, 1)
+    ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
 @pytest.mark.asyncio
@@ -1856,16 +1860,6 @@ succ    n    n    y    n
     lambda x: x == "y",
 )
 
-doevents = make_matrix(
-    """
-        skip    fail    success    undef
-skip    2    2    2    0
-fail    2    2    2    0
-succ    2    2    2    0
-""",
-    lambda x: int(x),
-)
-
 
 @pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
@@ -1930,74 +1924,6 @@ async def test_deploy_and_events(
     # verify against result matrices
     assert dorun[dep_state.index][self_state.index] == (resource_container.Provider.readcount("agent1", "key3") > 0)
     assert dochange[dep_state.index][self_state.index] == (resource_container.Provider.changecount("agent1", "key3") > 0)
-
-    events = resource_container.Provider.getevents("agent1", "key3")
-    expected_events = doevents[dep_state.index][self_state.index]
-    if expected_events == 0:
-        assert len(events) == 0
-    else:
-        assert len(events) == 1
-        assert len(events[0]) == expected_events
-
-
-@pytest.mark.asyncio
-async def test_deploy_and_events_failed(server, client, clienthelper, environment, resource_container, no_agent_backoff):
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    await agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    version = await clienthelper.get_version()
-
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": True,
-            "purged": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "value": "value1",
-            "id": "test::BadEvents[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
-        },
-    ]
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert result.code == 200
-
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 2
-    assert result.result["model"]["result"] == "deploying"
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-
-    await _wait_until_deployment_finishes(client, environment, version)
-
-    result = await client.get_version(environment, version)
-    assert result.result["model"]["done"] == len(resources)
-    await agent.stop()
 
 
 dep_states_reload = [
@@ -2633,10 +2559,12 @@ async def test_bad_post_get_facts(
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+
+    async def has_at_least_three_parameters() -> bool:
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(has_at_least_three_parameters, timeout=10)
 
     result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
@@ -2644,58 +2572,6 @@ async def test_bad_post_get_facts(
     assert "An error occurred after getting facts about test::BadPost" in caplog.text
 
     await agent.stop()
-
-
-@pytest.mark.asyncio
-async def test_bad_post_events(resource_container, environment, server, agent, client, clienthelper, caplog, no_agent_backoff):
-    """
-    Send and receive events within one agent
-    """
-    caplog.set_level(logging.ERROR)
-
-    version = await clienthelper.get_version()
-
-    res_id_1 = "test::BadPost[agent1,key=key1],v=%d" % version
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": res_id_1,
-            "send_event": False,
-            "purged": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "requires": [],
-            "purged": False,
-        },
-    ]
-
-    await clienthelper.put_version_simple(resources, version)
-
-    caplog.clear()
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    await _wait_until_deployment_finishes(client, environment, version)
-
-    events = resource_container.Provider.getevents("agent1", "key1")
-    assert len(events) == 1
-    for res_id, res in events[0].items():
-        assert res_id.agent_name == "agent1"
-        assert res_id.attribute_value == "key2"
-        assert res["status"] == const.ResourceState.deployed
-        assert res["change"] == const.Change.created
-
-    assert "An error occurred after deployment of test::BadPost[agent1,key=key1]" in caplog.text
-    caplog.clear()
-
-    # Nothing is reported as events don't have pre and post
 
 
 @pytest.mark.asyncio
@@ -2734,56 +2610,6 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     await agent.stop()
-
-
-@pytest.mark.asyncio
-async def test_eventprocessing(resource_container, server, client, clienthelper, environment, agent, no_agent_backoff):
-    """
-    Test retrieving facts from the agent
-    """
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
-
-    resource_container.Provider.set("agent1", "key", "value")
-
-    version = await clienthelper.get_version()
-
-    resource_id_wov = "test::WaitEvent[agent1,key=key]"
-    resource_id = "%s,v=%d" % (resource_id_wov, version)
-
-    resources = [
-        {
-            "key": "key",
-            "value": "value",
-            "id": resource_id,
-            "purged": False,
-            "send_event": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "send_event": True,
-            "requires": [],
-            "purged": False,
-        },
-    ]
-
-    await clienthelper.put_version_simple(resources, version)
-
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    async def in_progress():
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        status = sorted([res["status"] for res in result.result["resources"]])
-        return status == ["deployed", "processing_events"]
-
-    await retry_limited(in_progress, 1)
-
-    await resource_container.wait_for_done_with_waiters(client, environment, version)
 
 
 @pytest.mark.parametrize("use_agent_trigger_method_setting", [(True,), (False)])
@@ -3553,3 +3379,50 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
+
+
+@pytest.mark.asyncio
+async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+    """
+    Test whether the resource states are set correctly when the deploy() method is overridden.
+    """
+
+    async def deploy_resource(set_state_to_deployed_in_handler: bool = False) -> const.ResourceState:
+        version = await clienthelper.get_version()
+        rvid = f"test::Deploy[agent1,key=key1],v={version}"
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "set_state_to_deployed": set_state_to_deployed_in_handler,
+                "id": rvid,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+        await _deploy_resources(client, environment, resources, version, push=True)
+        await _wait_until_deployment_finishes(client, environment, version=version)
+
+        result = await client.get_resource(
+            tid=environment,
+            id=rvid,
+            status=True,
+        )
+        assert result.code == 200
+        return result.result["status"]
+
+    # No exception raise + no state set explicitly via Handler Context -> deployed state
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=False)
+
+    # State is set explicitly via HandlerContext to deployed
+    assert const.ResourceState.deployed == await deploy_resource(set_state_to_deployed_in_handler=True)
+
+    # SkipResource exception is raised by handler
+    resource_container.Provider.set_skip("agent1", "key1", 1)
+    assert const.ResourceState.skipped == await deploy_resource()
+
+    # Exception is raised by handler
+    resource_container.Provider.set_fail("agent1", "key1", 1)
+    assert const.ResourceState.failed == await deploy_resource()

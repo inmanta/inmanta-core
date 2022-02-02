@@ -1,0 +1,7 @@
+---
+description: Added `resource_deploy_start` endpoint
+issue-nr: 2928
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

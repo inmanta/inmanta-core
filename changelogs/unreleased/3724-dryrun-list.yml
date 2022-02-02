@@ -1,0 +1,4 @@
+description: Added v2 endpoint to list dryruns
+issue-nr: 3724
+change-type: minor
+destination-branches: [master, iso5]
