@@ -482,8 +482,8 @@ class AttributeDiff(BaseModel):
 
     from_value: Optional[object] = None
     to_value: Optional[object] = None
-    from_value_compare: Optional[str] = None
-    to_value_compare: Optional[str] = None
+    from_value_compare: str
+    to_value_compare: str
 
 
 class ResourceDiff(BaseModel):

@@ -40,7 +40,7 @@ class Attribute:
         return self._value
 
     @property
-    def compare_value(self) -> Optional[str]:
+    def compare_value(self) -> str:
         """The string representation of the value, which can be used for comparison"""
         self._generate_compare_value()
 
