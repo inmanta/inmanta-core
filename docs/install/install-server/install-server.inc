@@ -125,7 +125,7 @@ Install the software
 
         .. code-block:: bash
 
-            /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
+            sudo /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
 
 
     .. tab:: Windows
