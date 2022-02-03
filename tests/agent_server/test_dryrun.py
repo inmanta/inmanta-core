@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import json
 import logging
 import uuid
 
@@ -326,6 +327,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     )
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key_mod", {"first_level": {"nested": [5, 3, 2, 1, 1]}})
     resource_container.Provider.set("agent1", "key3", "value")
 
     clienthelper = ClientHelper(client, environment)
@@ -356,6 +358,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
             "send_event": False,
             "requires": [],
             "purged": True,
+        },
+        {
+            "key": "key_mod",
+            "value": {"first_level": {"nested": {"one_more_level": [5, 3, 2, 1, 1]}}},
+            "id": "test::Resource[agent1,key=key_mod],v=%d" % version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
         },
         {
             "key": "key4",
@@ -433,24 +443,42 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
 
     await retry_limited(dryrun_finished, 10)
 
-    result = await client.dryrun_report(environment, dry_run_id)
+    result = await client.get_dryrun_diff(uuid.uuid4(), dry_run_id)
+    assert result.code == 404
+    result = await client.get_dryrun_diff(environment, uuid.uuid4())
+    assert result.code == 404
+    result = await client.get_dryrun_diff(environment, dry_run_id)
     assert result.code == 200
-    changes = result.result["dryrun"]["resources"]
+    assert len(result.result["data"]["diff"]) == len(resources)
+    changes = result.result["data"]["diff"]
 
-    assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
-    assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
-    assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
-    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
+    assert changes[0]["status"] == "added"
+    assert changes[0]["attributes"]["value"] == {
+        "from_value": None,
+        "from_value_compare": "",
+        "to_value": resources[0]["value"],
+        "to_value_compare": resources[0]["value"],
+    }
 
-    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
-    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
-
-    assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
-    assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
-
+    assert changes[1]["status"] == "modified"
+    assert changes[1]["attributes"]["value"] == {
+        "from_value": "incorrect_value",
+        "from_value_compare": "incorrect_value",
+        "to_value": resources[1]["value"],
+        "to_value_compare": resources[1]["value"],
+    }
+    assert changes[2]["status"] == "deleted"
+    assert changes[3]["status"] == "modified"
+    assert changes[3]["attributes"]["value"] == {
+        "from_value": {"first_level": {"nested": [5, 3, 2, 1, 1]}},
+        "from_value_compare": json.dumps({"first_level": {"nested": [5, 3, 2, 1, 1]}}, indent=4, sort_keys=True),
+        "to_value": resources[3]["value"],
+        "to_value_compare": json.dumps(resources[3]["value"], indent=4, sort_keys=True),
+    }
     # Changes for undeployable resources are empty
-    for i in range(3, 6):
-        assert changes[resources[i]["id"]]["changes"] == {}
+    for i in range(4, 7):
+        assert changes[i]["status"] == "unmodified"
+        assert changes[i]["attributes"] == {}
 
     # Change a value for a new dryrun
     res = await data.Resource.get(environment, "test::Resource[agent1,key=key1],v=%d" % version)
@@ -469,6 +497,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     await retry_limited(dryrun_finished, 10)
 
     # The new dryrun should have the updated value
-    result = await client.dryrun_report(environment, new_dry_run_id)
+    result = await client.get_dryrun_diff(environment, new_dry_run_id)
     assert result.code == 200
-    assert result.result["dryrun"]["resources"][resources[0]["id"]]["changes"]["value"]["desired"] == "updated_value"
+    assert result.result["data"]["diff"][0]["attributes"]["value"]["to_value"] == "updated_value"
