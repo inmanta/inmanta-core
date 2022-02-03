@@ -1093,3 +1093,16 @@ def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The list of dryruns for the specified version in descending order by date
     """
+
+
+@typedmethod(path="/dryrun/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+def get_dryrun_diff(tid: uuid.UUID, id: uuid.UUID) -> model.DryRunReport:
+    """
+    Get the report of a dryrun, describing the changes a deployment would make,
+    with the difference between the current and target states provided in a form similar to the desired state diff endpoint.
+
+    :param tid: The id of the environment
+    :param id: The dryrun id to calculate the diff for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The dryrun report, with a summary and the list of differences.
+    """

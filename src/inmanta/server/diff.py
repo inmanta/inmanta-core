@@ -19,7 +19,7 @@
 import json
 from typing import Dict, List, Optional, Set
 
-from inmanta import data, resources
+from inmanta import resources
 from inmanta.data.model import AttributeDiff, ResourceDiff, ResourceDiffStatus, ResourceIdStr
 
 
@@ -135,19 +135,24 @@ class Resource:
             status=ResourceDiffStatus.deleted,
         )
 
+    def unmodified(self) -> ResourceDiff:
+        """Return a diff as if this resource is not modified"""
+        return ResourceDiff(
+            resource_id=self.resource_id,
+            attributes={},
+            status=ResourceDiffStatus.unmodified,
+        )
+
 
 class Version:
-    def __init__(self, version: int, resources: List[data.Resource]) -> None:
-        self._version = version
-        self._resources = {
-            res.resource_id: Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources
-        }
+    def __init__(self, resources: Dict[ResourceIdStr, Resource]) -> None:
+        self._resources = resources
 
-    def get_resource_set(self) -> Set[str]:
+    def get_resource_set(self) -> Set[ResourceIdStr]:
         """The names of the resources in this version"""
         return set(self._resources.keys())
 
-    def generate_diff(self, other: "Version") -> List[ResourceDiff]:
+    def generate_diff(self, other: "Version", include_unmodified: bool = False) -> List[ResourceDiff]:
         """Compare this version with another: check which resources are added, removed and modified.
         The other version is considered to be the original."""
         our_set = self.get_resource_set()
@@ -165,5 +170,25 @@ class Version:
             cmp = self._resources[res].compare(other._resources[res])
             if cmp:
                 result.append(cmp)
+            elif include_unmodified:
+                result.append(self._resources[res].unmodified())
 
         return sorted(result, key=lambda r: r.resource_id)
+
+
+def generate_diff(
+    from_version_resources: Dict[ResourceIdStr, Resource],
+    to_version_resources: Dict[ResourceIdStr, Resource],
+    include_unmodified: bool = False,
+) -> List[ResourceDiff]:
+    """Generate a diff of two sets of resources, describing what has changed between them
+
+    :param from_version_resources: The resources that are considered the starting point for comparison
+    :param to_version_resources: The resources that are considered the target for comparison
+    :param include_unmodified: If set to true,
+    resources that haven't changed between the versions will be included in the results
+    """
+    from_state = Version(from_version_resources)
+    to_state = Version(to_version_resources)
+
+    return to_state.generate_diff(from_state, include_unmodified)

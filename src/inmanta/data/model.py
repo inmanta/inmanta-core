@@ -470,6 +470,7 @@ class ResourceDiffStatus(str, Enum):
     added = "added"
     modified = "modified"
     deleted = "deleted"
+    unmodified = "unmodified"
 
 
 class AttributeDiff(BaseModel):
@@ -573,3 +574,8 @@ class DryRun(BaseModel):
     date: Optional[datetime.datetime]
     total: int = 0
     todo: int = 0
+
+
+class DryRunReport(BaseModel):
+    summary: DryRun
+    diff: List[ResourceDiff]
