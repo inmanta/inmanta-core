@@ -634,7 +634,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return version_diff
 
-    def convert_resources(self, resources: List[data.Resource]):
+    def convert_resources(self, resources: List[data.Resource]) -> Dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}
 
     async def _validate_version_parameters(self, env: uuid.UUID, first_version: int, other_version: int) -> None:
