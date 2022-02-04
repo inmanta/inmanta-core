@@ -1072,7 +1072,7 @@ def get_all_facts(
 
 
 @typedmethod(
-    path="/dryruns/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/dryrun/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
     """
@@ -1086,7 +1086,7 @@ def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
 
 
 @typedmethod(
-    path="/dryruns/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
     """
@@ -1100,7 +1100,7 @@ def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
 
 
 @typedmethod(
-    path="/dryruns/<version>/<report_id>",
+    path="/dryrun/<version>/<report_id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
