@@ -1071,19 +1071,23 @@ def get_all_facts(
 # Dryrun related methods
 
 
-@typedmethod(path="/dryrun/<id>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
-def dryrun_trigger(tid: uuid.UUID, id: int) -> uuid.UUID:
+@typedmethod(
+    path="/dryruns/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
     """
     Trigger a new dryrun
 
     :param tid: The id of the environment
-    :param id: The version of the configuration model to execute the dryrun for
+    :param version: The version of the configuration model to execute the dryrun for
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The id of the new dryrun
     """
 
 
-@typedmethod(path="/dryrun", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
+@typedmethod(
+    path="/dryruns/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
 def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
     """
     Query a list of dry runs for a specific version
@@ -1095,14 +1099,21 @@ def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
     """
 
 
-@typedmethod(path="/dryrun/<id>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
-def get_dryrun_diff(tid: uuid.UUID, id: uuid.UUID) -> model.DryRunReport:
+@typedmethod(
+    path="/dryruns/<version>/<report_id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model.DryRunReport:
     """
     Get the report of a dryrun, describing the changes a deployment would make,
     with the difference between the current and target states provided in a form similar to the desired state diff endpoint.
 
     :param tid: The id of the environment
-    :param id: The dryrun id to calculate the diff for
+    :param version: The version of the configuration model the dryrun belongs to
+    :param report_id: The dryrun id to calculate the diff for
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The dryrun report, with a summary and the list of differences.
     """
