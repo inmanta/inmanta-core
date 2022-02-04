@@ -176,8 +176,8 @@ class DyrunService(protocol.ServerSlice):
         return 200, {"dryrun": dryrun}
 
     @handle(methods_v2.get_dryrun_diff, env="tid")
-    async def dryrun_diff(self, env: data.Environment, report_id: uuid.UUID) -> DryRunReport:
-        dryrun = await data.DryRun.get_one(environment=env.id, id=report_id)
+    async def dryrun_diff(self, env: data.Environment, version: int, report_id: uuid.UUID) -> DryRunReport:
+        dryrun = await data.DryRun.get_one(environment=env.id, model=version, id=report_id)
         if dryrun is None:
             raise NotFound("The given dryrun does not exist!")
         resources = dryrun.to_dict()["resources"]
