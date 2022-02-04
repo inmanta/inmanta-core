@@ -55,6 +55,7 @@ class LenientConfigParser(ConfigParser):
 
 class Config(object):
     __instance: Optional[ConfigParser] = None
+    _config_dir: Optional[str] = None  # The directory this config was loaded from
     __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
     @classmethod
@@ -92,6 +93,7 @@ class Config(object):
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
         cls.__instance = config
+        cls._config_dir = config_dir
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
