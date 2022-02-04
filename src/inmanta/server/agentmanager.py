@@ -1053,7 +1053,19 @@ class AutostartedAgentManager(ServerSlice):
         proc: Optional[subprocess.Process] = None
         try:
             proc = await self._fork_inmanta(
-                ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
+                [
+                    "-vvvv",
+                    "--timed-logs",
+                    "--config",
+                    config_path,
+                    "--config-dir",
+                    Config._config_dir if Config._config_dir is not None else "",
+                    "--log-file",
+                    agent_log,
+                    "agent",
+                ],
+                out,
+                err,
             )
 
             if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
