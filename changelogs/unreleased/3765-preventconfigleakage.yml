@@ -1,0 +1,9 @@
+change-type: patch
+issue-nr: 3765
+description: Ensure processes forked by Inmanta commands load the same config folder as their parent process
+destination-branches:
+- master
+- iso5
+- iso4
+sections:
+    feature: "{{description}}"
