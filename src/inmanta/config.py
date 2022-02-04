@@ -105,6 +105,7 @@ class Config(object):
     @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
+        cls._config_dir = None
 
     @overload
     @classmethod
