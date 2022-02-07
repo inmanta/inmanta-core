@@ -294,7 +294,7 @@ def test_module_add_preinstalled_v1(snippetcompiler_clean, caplog) -> None:
             f"Currently installed {module_name}-2.0.0 does not match constraint ~=2.1.0: updating to compatible version."
             in caplog.messages
         )
-    assert ModuleTool().get_module(module_name).version == Version("2.1.10")
+    assert Version("2.1.11") <= ModuleTool().get_module(module_name).version < Version("2.2")
 
 
 def test_module_add_v2_wrong_name_error(tmpdir: py.path.local, monkeypatch, modules_v2_dir: str) -> None:
