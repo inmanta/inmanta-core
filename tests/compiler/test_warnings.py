@@ -253,7 +253,10 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
     end
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming Entity-a. (reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming Entity-a. "
+            f"(reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -269,7 +272,10 @@ def test_deprecation_minus_in_attribute_name(snippetcompiler):
     end
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming attribute-a. (reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming attribute-a. "
+            f"(reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -289,7 +295,10 @@ implementation vw-polo for Car:
 end
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming vw-polo. (reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming vw-polo. "
+            f"(reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -303,7 +312,10 @@ def test_deprecation_minus_in_typedef_name(snippetcompiler):
 typedef tcp-port as int matching self > 0 and self < 65535
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming tcp-port. (reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming tcp-port. "
+            f"(reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -321,7 +333,10 @@ end
 typedef Corsa-opel as Car(brand="opel")
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming Corsa-opel. (reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming Corsa-opel. "
+            f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
+        )
         compiler.do_compile()
         assert len(w) == 2
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -335,7 +350,10 @@ def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
 var-hello = "hello"
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming var-hello. ({snippetcompiler.project_dir}/main.cf:2)"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming var-hello. "
+            f"({snippetcompiler.project_dir}/main.cf:2)"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -349,7 +367,10 @@ def test_deprecation_minus_import_as(snippetcompiler):
 import std as std-std
             """
         )
-        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming std-std. (reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
+        message: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming std-std. "
+            f"(reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
+        )
         compiler.do_compile()
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
@@ -371,8 +392,14 @@ end
 Host.files-hehe [0:] -- File.host-hoho [1]
             """
         )
-        message1: str = f"The use of '-' in identifiers will be deprecated. Consider renaming files-hehe. (reported in __config__::Host.files-hehe ({snippetcompiler.project_dir}/main.cf:10:6))"
-        message2: str = f"The use of '-' in identifiers will be deprecated. Consider renaming host-hoho. (reported in __config__::File.host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
+        message1: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming files-hehe. "
+            f"(reported in __config__::Host.files-hehe ({snippetcompiler.project_dir}/main.cf:10:6))"
+        )
+        message2: str = (
+            f"The use of '-' in identifiers will be deprecated. Consider renaming host-hoho. "
+            f"(reported in __config__::File.host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
+        )
         compiler.do_compile()
         assert len(w) == 2
         assert issubclass(w[0].category, CompilerDeprecationWarning)
