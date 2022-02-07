@@ -20,11 +20,12 @@
 
 import typing
 from itertools import chain
-import inmanta.warnings as inmanta_warnings
+
 import inmanta.execute.dataflow as dataflow
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
-    CompilerDeprecationWarning,
     AttributeException,
+    CompilerDeprecationWarning,
     DuplicateException,
     KeyException,
     LocatableString,
