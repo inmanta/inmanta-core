@@ -1,0 +1,3 @@
+description: Fix testcase for the release for std 2.1.11
+change-type: patch
+destination-branches: [master, iso5]

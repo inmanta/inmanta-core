@@ -130,13 +130,13 @@ class DyrunService(protocol.ServerSlice):
 
         return dryrun
 
-    @handle(methods_v2.dryrun_trigger, version_id="id", env="tid")
-    async def dryrun_trigger(self, env: data.Environment, version_id: int) -> uuid.UUID:
-        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+    @handle(methods_v2.dryrun_trigger, env="tid")
+    async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
         if model is None:
             raise NotFound("The requested version does not exist.")
 
-        dryrun = await self.create_dryrun(env, version_id, model)
+        dryrun = await self.create_dryrun(env, version, model)
 
         return dryrun.id
 
@@ -175,9 +175,9 @@ class DyrunService(protocol.ServerSlice):
 
         return 200, {"dryrun": dryrun}
 
-    @handle(methods_v2.get_dryrun_diff, dryrun_id="id", env="tid")
-    async def dryrun_diff(self, env: data.Environment, dryrun_id: uuid.UUID) -> DryRunReport:
-        dryrun = await data.DryRun.get_one(environment=env.id, id=dryrun_id)
+    @handle(methods_v2.get_dryrun_diff, env="tid")
+    async def dryrun_diff(self, env: data.Environment, version: int, report_id: uuid.UUID) -> DryRunReport:
+        dryrun = await data.DryRun.get_one(environment=env.id, model=version, id=report_id)
         if dryrun is None:
             raise NotFound("The given dryrun does not exist!")
         resources = dryrun.to_dict()["resources"]

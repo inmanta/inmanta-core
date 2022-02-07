@@ -443,11 +443,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
 
     await retry_limited(dryrun_finished, 10)
 
-    result = await client.get_dryrun_diff(uuid.uuid4(), dry_run_id)
+    result = await client.get_dryrun_diff(uuid.uuid4(), version, dry_run_id)
     assert result.code == 404
-    result = await client.get_dryrun_diff(environment, uuid.uuid4())
+    result = await client.get_dryrun_diff(environment, version, uuid.uuid4())
     assert result.code == 404
-    result = await client.get_dryrun_diff(environment, dry_run_id)
+    result = await client.get_dryrun_diff(environment, version, dry_run_id)
     assert result.code == 200
     assert len(result.result["data"]["diff"]) == len(resources)
     changes = result.result["data"]["diff"]
@@ -497,6 +497,6 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     await retry_limited(dryrun_finished, 10)
 
     # The new dryrun should have the updated value
-    result = await client.get_dryrun_diff(environment, new_dry_run_id)
+    result = await client.get_dryrun_diff(environment, version, new_dry_run_id)
     assert result.code == 200
     assert result.result["data"]["diff"][0]["attributes"]["value"]["to_value"] == "updated_value"
