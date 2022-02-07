@@ -243,3 +243,100 @@ typedef string as number matching self > 0
         assert str(w[0].message) == (
             f"Trying to override a built-in type: string (reported in Type(string) ({snippetcompiler.project_dir}/main.cf:2:9))"
         )
+
+
+def test_deprecation_minus_in_entity_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity-a:
+    end
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming Entity-a. (reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_attribute_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity:
+        string attribute-a
+    end
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming attribute-a. (reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_implementation_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+implementation vw-polo for Car:
+    brand = "vw"
+end
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming vw-polo. (reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_typedef_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+typedef tcp-port as int matching self > 0 and self < 65535
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming tcp-port. (reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+typedef Corsa-opel as Car(brand="opel")
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming Corsa-opel. (reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
+        compiler.do_compile()
+        assert len(w) == 2
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+var-hello = "hello"
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming var-hello. ({snippetcompiler.project_dir}/main.cf:2)"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message

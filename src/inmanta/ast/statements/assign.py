@@ -20,9 +20,10 @@
 
 import typing
 from itertools import chain
-
+import inmanta.warnings as inmanta_warnings
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
+    CompilerDeprecationWarning,
     AttributeException,
     DuplicateException,
     KeyException,
@@ -274,6 +275,15 @@ class Assign(AssignStatement):
         AssignStatement.__init__(self, None, value)
         self.name = name
         self.value = value
+        # import pudb
+        # pu.db
+        if "-" in self.name:
+            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
+                None,
+                "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.name),
+            )
+            warning.set_location(self.value.get_location())
+            inmanta_warnings.warn(warning)
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
