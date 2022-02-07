@@ -276,8 +276,6 @@ class Assign(AssignStatement):
         AssignStatement.__init__(self, None, value)
         self.name = name
         self.value = value
-        # import pudb
-        # pu.db
         if "-" in self.name:
             warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
                 None,
