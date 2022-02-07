@@ -340,3 +340,17 @@ var-hello = "hello"
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
         assert str(w[0].message) == message
+
+
+def test_deprecation_minus_import_as(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+import std as std-std
+            """
+        )
+        message: str = f"The use of '-' in identifiers will be deprecated. Consider renaming std-std. (reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message

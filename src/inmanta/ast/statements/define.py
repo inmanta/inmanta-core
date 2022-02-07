@@ -750,6 +750,12 @@ class DefineImport(TypeDefinitionStatement, Import):
         DefinitionStatement.__init__(self)
         self.name = str(name)
         self.toname = str(toname)
+        if "-" in self.toname:
+            inmanta_warnings.warn(
+                CompilerDeprecationWarning(
+                    toname, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.toname)
+                )
+            )
 
     def register_types(self) -> None:
         self.target = self.namespace.get_ns_from_string(self.name)
