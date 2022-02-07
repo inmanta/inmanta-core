@@ -279,7 +279,7 @@ class Assign(AssignStatement):
         if "-" in self.name:
             warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
                 None,
-                "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.name),
+                "The use of '-' in identifiers is deprecated. Consider renaming %s." % (self.name),
             )
             warning.set_location(self.value.get_location())
             inmanta_warnings.warn(warning)

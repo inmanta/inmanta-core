@@ -147,7 +147,7 @@ def p_empty(p: YaccProduction) -> None:
 
 def p_import(p: YaccProduction) -> None:
     """import : IMPORT ns_ref"""
-    p[0] = DefineImport(str(p[2]), str(p[2]))
+    p[0] = DefineImport(str(p[2]), p[2])
     attach_lnr(p, 1)
 
 

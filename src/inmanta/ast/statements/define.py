@@ -27,6 +27,7 @@ from inmanta.ast import (
     CompilerDeprecationWarning,
     CompilerRuntimeWarning,
     DuplicateException,
+    HyphenDeprecationWarning,
     Import,
     IndexException,
     LocatableString,
@@ -104,11 +105,7 @@ class DefineAttribute(Statement):
         """
         super(DefineAttribute, self).__init__()
         if "-" in name.value:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    name, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (name.value)
-                )
-            )
+            inmanta_warnings.warn(HyphenDeprecationWarning(name))
         self.type = attr_type
         self.name = name
         self.default = default_value
@@ -135,13 +132,9 @@ class DefineEntity(TypeDefinitionStatement):
         attributes: List[DefineAttribute],
     ) -> None:
         name = str(lname)
-        if "-" in name:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    lname, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (name)
-                )
-            )
         TypeDefinitionStatement.__init__(self, namespace, name)
+        if "-" in name:
+            inmanta_warnings.warn(HyphenDeprecationWarning(lname))
 
         self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
 
@@ -276,11 +269,8 @@ class DefineImplementation(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         if "-" in self.name:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    name, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.name)
-                )
-            )
+            inmanta_warnings.warn(HyphenDeprecationWarning(name))
+
         self.block = statements
         self.entity = target_type
 
@@ -443,11 +433,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         if self.name in TYPES:
             inmanta_warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
         if "-" in self.name:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    name, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.name)
-                )
-            )
+            inmanta_warnings.warn(HyphenDeprecationWarning(name))
 
     def get_expression(self) -> ExpressionStatement:
         """
@@ -516,11 +502,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
         if "-" in self.name:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    name, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.name)
-                )
-            )
+            inmanta_warnings.warn(HyphenDeprecationWarning(name))
 
     def pretty_print(self) -> str:
         return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
@@ -565,6 +547,11 @@ class DefineRelation(BiStatement):
 
     def __init__(self, left: Relationside, right: Relationside, annotations: List[ExpressionStatement] = []) -> None:
         DefinitionStatement.__init__(self)
+        if "-" in str(right[1]):
+            inmanta_warnings.warn(HyphenDeprecationWarning(right[1]))
+
+        if "-" in str(left[1]):
+            inmanta_warnings.warn(HyphenDeprecationWarning(left[1]))
         # for later evaluation
         self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
         # for access to results
@@ -658,18 +645,6 @@ class DefineRelation(BiStatement):
         if left_end is not None and right_end is not None:
             left_end.end = right_end
             right_end.end = left_end
-            if "-" in right_end.name:
-                inmanta_warnings.warn(
-                    CompilerDeprecationWarning(
-                        right_end, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (right_end.name)
-                    )
-                )
-            if "-" in left_end.name:
-                inmanta_warnings.warn(
-                    CompilerDeprecationWarning(
-                        left_end, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (left_end.name)
-                    )
-                )
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for rv, exp in self.annotation_expression:
@@ -763,11 +738,7 @@ class DefineImport(TypeDefinitionStatement, Import):
         self.name = str(name)
         self.toname = str(toname)
         if "-" in self.toname:
-            inmanta_warnings.warn(
-                CompilerDeprecationWarning(
-                    toname, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (self.toname)
-                )
-            )
+            inmanta_warnings.warn(HyphenDeprecationWarning(toname))
 
     def register_types(self) -> None:
         self.target = self.namespace.get_ns_from_string(self.name)
