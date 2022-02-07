@@ -658,6 +658,18 @@ class DefineRelation(BiStatement):
         if left_end is not None and right_end is not None:
             left_end.end = right_end
             right_end.end = left_end
+            if "-" in right_end.name:
+                inmanta_warnings.warn(
+                    CompilerDeprecationWarning(
+                        right_end, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (right_end.name)
+                    )
+                )
+            if "-" in left_end.name:
+                inmanta_warnings.warn(
+                    CompilerDeprecationWarning(
+                        left_end, "The use of '-' in identifiers will be deprecated. Consider renaming %s." % (left_end.name)
+                    )
+                )
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for rv, exp in self.annotation_expression:

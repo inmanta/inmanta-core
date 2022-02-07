@@ -354,3 +354,27 @@ import std as std-std
         assert len(w) == 1
         assert issubclass(w[0].category, CompilerDeprecationWarning)
         assert str(w[0].message) == message
+
+
+def test_deprecation_minus_relation(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Host:
+    string  name
+end
+
+entity File:
+    string path
+end
+
+Host.files-hehe [0:] -- File.host-hoho [1]
+            """
+        )
+        message1: str = f"The use of '-' in identifiers will be deprecated. Consider renaming files-hehe. (reported in __config__::Host.files-hehe ({snippetcompiler.project_dir}/main.cf:10:6))"
+        message2: str = f"The use of '-' in identifiers will be deprecated. Consider renaming host-hoho. (reported in __config__::File.host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
+        compiler.do_compile()
+        assert len(w) == 2
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message1
+        assert str(w[1].message) == message2
