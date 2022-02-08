@@ -370,7 +370,7 @@ class Client(Endpoint):
 
         return None
 
-    def __getattr__(self, name: str) -> Callable:
+    def __getattr__(self, name: str) -> Callable[..., Coroutine[Any, Any, common.Result]]:
         """
         Return a function that will call self._call with the correct method properties associated
         """
@@ -397,11 +397,11 @@ class SyncClient(object):
         self.timeout = timeout
         self._client = Client(self.name, self.timeout)
 
-    def __getattr__(self, name: str) -> Callable[..., object]:
-        def async_call(*args: List[object], **kwargs: Dict[str, object]) -> object:
-            method = getattr(self._client, name)
+    def __getattr__(self, name: str) -> Callable[..., common.Result]:
+        def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
+            method: Callable[..., Coroutine[Any, Any, common.Result]] = getattr(self._client, name)
 
-            def method_call() -> object:
+            def method_call() -> Coroutine[Any, Any, common.Result]:
                 return method(*args, **kwargs)
 
             try:
