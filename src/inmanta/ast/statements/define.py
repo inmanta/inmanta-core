@@ -739,7 +739,8 @@ class DefineImport(TypeDefinitionStatement, Import):
         self.name = str(name)
         if "-" in self.name:
             raise CompilerException(
-                "%s is not a valid module name: hyphens are not allowed, please use underscores instead." % (self.name))
+                "%s is not a valid module name: hyphens are not allowed, please use underscores instead." % (self.name)
+            )
         self.toname = str(toname)
         if "-" in self.toname:
             inmanta_warnings.warn(HyphenDeprecationWarning(toname))
