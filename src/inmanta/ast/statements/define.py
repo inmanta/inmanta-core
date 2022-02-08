@@ -25,6 +25,7 @@ import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
+    CompilerException,
     CompilerRuntimeWarning,
     DuplicateException,
     HyphenDeprecationWarning,
@@ -736,6 +737,9 @@ class DefineImport(TypeDefinitionStatement, Import):
     def __init__(self, name: LocatableString, toname: LocatableString) -> None:
         DefinitionStatement.__init__(self)
         self.name = str(name)
+        if "-" in self.name:
+            raise CompilerException(
+                "%s is not a valid module name: hyphens are not allowed, please use underscores instead." % (self.name))
         self.toname = str(toname)
         if "-" in self.toname:
             inmanta_warnings.warn(HyphenDeprecationWarning(toname))

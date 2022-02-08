@@ -24,7 +24,7 @@ import pytest
 
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import InmantaWarning, WarningsManager
 
 
@@ -405,3 +405,14 @@ Host.files-hehe [0:] -- File.host-hoho [1]
         assert issubclass(w[0].category, CompilerDeprecationWarning)
         assert str(w[0].message) == message1
         assert str(w[1].message) == message2
+
+
+def test_import_hypen_in_name(snippetcompiler):
+    with pytest.raises(CompilerException) as e:
+        snippetcompiler.setup_for_snippet(
+            """
+import st-d
+            """
+        )
+        compiler.do_compile()
+    assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
