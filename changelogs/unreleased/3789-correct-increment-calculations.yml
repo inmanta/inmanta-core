@@ -1,0 +1,7 @@
+---
+description: Fix bug in incremental deploy where event processing can be delayed
+issue-nr: 3789
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+    bugfix: "{{description}}"
