@@ -25,7 +25,6 @@ import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
-    CompilerDeprecationWarning,
     DuplicateException,
     HyphenDeprecationWarning,
     KeyException,
