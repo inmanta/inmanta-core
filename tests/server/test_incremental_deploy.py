@@ -194,6 +194,13 @@ class MultiVersionSetup(object):
             )
             assert result == 200
 
+        # increments are disjoint
+        pos, neg = await data.ConfigurationModel.get_increment(env.id, version)
+        assert set(pos).isdisjoint(set(neg)), set(pos).intersection(set(neg))
+
+        # increments are complements, without the undeployables
+        assert {resource["id"] for resource in self.versions[version] if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]} == set(pos).union(set(neg))
+
         allresources = {}
 
         for agent, results in self.results.items():
