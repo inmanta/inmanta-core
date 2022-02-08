@@ -352,7 +352,7 @@ var-hello = "hello"
         )
         message: str = (
             f"The use of '-' in identifiers is deprecated. Consider renaming var-hello. "
-            f"({snippetcompiler.project_dir}/main.cf:2)"
+            f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
         )
         compiler.do_compile()
         assert len(w) == 1
