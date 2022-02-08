@@ -814,7 +814,7 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=2.0"),
+            module.InmantaModuleRequirement.parse("std~=2.0,<2.1.11"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
