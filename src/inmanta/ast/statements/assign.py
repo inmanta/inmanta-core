@@ -27,6 +27,7 @@ from inmanta.ast import (
     AttributeException,
     CompilerDeprecationWarning,
     DuplicateException,
+    HyphenDeprecationWarning,
     KeyException,
     LocatableString,
     RuntimeException,
@@ -272,17 +273,12 @@ class Assign(AssignStatement):
     provides:      variable
     """
 
-    def __init__(self, name: str, value: ExpressionStatement) -> None:
+    def __init__(self, variable: LocatableString, value: ExpressionStatement) -> None:
         AssignStatement.__init__(self, None, value)
-        self.name = name
+        self.name = variable.name
         self.value = value
         if "-" in self.name:
-            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
-                None,
-                "The use of '-' in identifiers is deprecated. Consider renaming %s." % (self.name),
-            )
-            warning.set_location(self.value.get_location())
-            inmanta_warnings.warn(warning)
+            inmanta_warnings.warn(HyphenDeprecationWarning(variable))
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:

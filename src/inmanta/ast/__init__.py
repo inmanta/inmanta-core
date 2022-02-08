@@ -598,7 +598,8 @@ class CompilerDeprecationWarning(CompilerRuntimeWarning):
 
 class HyphenDeprecationWarning(CompilerDeprecationWarning):
     def __init__(self, stmt: Optional["Locatable"]) -> None:
-        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
+        identifier_name: str = stmt.value if hasattr(object, 'value') else stmt.name
+        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (identifier_name)
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
