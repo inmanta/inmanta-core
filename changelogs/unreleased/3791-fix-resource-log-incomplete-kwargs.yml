@@ -1,0 +1,4 @@
+description: Fix incomplete kwargs of resource logs
+issue-nr: 3791
+change-type: patch
+destination-branches: [master, iso5, iso4]
