@@ -1,0 +1,4 @@
+description: The log message is now consistent with what is happening
+change-type: patch
+destination-branches: [master, iso5]
+sections: {}
