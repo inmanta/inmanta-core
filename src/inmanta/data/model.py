@@ -363,7 +363,7 @@ class LogLine(BaseModel):
     level: const.LogLevel
     msg: str
     args: List[Optional[ArgumentTypes]] = []
-    kwargs: Dict[str, Optional[ArgumentTypes]] = {}
+    kwargs: JsonType = {}
     timestamp: datetime.datetime
 
 
