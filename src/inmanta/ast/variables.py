@@ -20,7 +20,7 @@ import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
@@ -233,9 +233,9 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        print(instance.full_name, attribute)
+        range: Range = Range(instance.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
         reference: LocatableString = LocatableString("%s.%s" % (
-            instance.full_name, attribute), instance.location, instance.name.lexpos, instance.namespace)
+            instance.full_name, attribute), range, instance.name.lexpos, instance.namespace)
         Reference.__init__(self, reference)
         self.attribute = str(attribute)
 
