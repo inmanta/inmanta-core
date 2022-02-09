@@ -233,7 +233,10 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
+        print(instance.full_name, attribute)
+        reference: LocatableString = LocatableString("%s.%s" % (
+            instance.full_name, attribute), instance.location, instance.name.lexpos, instance.namespace)
+        Reference.__init__(self, reference)
         self.attribute = str(attribute)
 
         # a reference to the instance
