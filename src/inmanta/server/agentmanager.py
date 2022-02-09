@@ -350,7 +350,7 @@ class AgentManager(ServerSlice, SessionListener):
             endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
             LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
             endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
-            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_add, session.id, session.nodename)
+            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_remove, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add)
