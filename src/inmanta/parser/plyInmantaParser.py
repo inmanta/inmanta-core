@@ -140,6 +140,11 @@ def p_empty(p: YaccProduction) -> None:
     pass
 
 
+def p_eager_match(p: YaccProduction) -> None:
+    "eager_match : empty"
+    pass
+
+
 #######################
 # IMPORT
 #######################
@@ -631,10 +636,42 @@ def p_constructor(p: YaccProduction) -> None:
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
+# TODO: try this for class_ref instead of constructor?
+# TODO: double check eager matching reasoning
+# TODO: test both a.Entity, a.b.Entity
+def p_constructor_err_dot(p: YaccProduction) -> None:
+    "constructor : var_ref '.' CID '(' eager_match"
+    raise ParserException(
+        Range(file, p[1].name.lnr, p[1].name.start, p[3].elnr, p[3].end),
+        "%s.%s" % (p[1].name, p[3]),
+        (
+            "`%s` looks like an entity but was accessed with '.' (`%s.%s`)."
+            " To access an entity in a namespace, use '::' instead: `%s::%s`"
+        ) % (p[3], p[1].name, p[3], str(p[1].name).replace(".", "::"), p[3]),
+    )
+
+
+# TODO: try this for ns_ref instead of function_call? Perhaps with eager_match?
 def p_function_call(p: YaccProduction) -> None:
     "function_call : ns_ref '(' function_param_list ')'"
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
+
+
+# TODO: test
+def p_function_call_err_dot(p: YaccProduction) -> None:
+    "function_call : attr_ref '(' function_param_list ')'"
+    raise ParserException(
+        p[1].location,
+        str(p[1]),
+        (
+            "can only call plugins but %s looks like an attribute."
+            " To access a plugin in a namespace, use '::' instead: `%s`"
+        ) % (p[1], str(p[1]).replace(".", "::")),
+    )
+
+
+# TODO: similar exception for constructor
 
 
 def p_list_def(p: YaccProduction) -> None:
