@@ -636,6 +636,7 @@ def p_constructor(p: YaccProduction) -> None:
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
+# TODO: include error for Entity(1) (args instead of kwargs)
 # TODO: try this for class_ref instead of constructor?
 # TODO: double check eager matching reasoning
 # TODO: test both a.Entity, a.b.Entity
