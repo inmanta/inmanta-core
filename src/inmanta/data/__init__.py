@@ -4967,7 +4967,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[m.ResourceVersionIdStr], List[m.ResourceVersionIdStr]]:
+    ) -> Tuple[Set[m.ResourceVersionIdStr], Set[m.ResourceVersionIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5047,13 +5047,13 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = [res["resource_version_id"] for res in not_increment]
+        negative = {res["resource_version_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
+        outset = {res["resource_version_id"] for res in increment}  # type: Set[str]
         original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
         send_events = []  # type: List[str]
 
@@ -5080,8 +5080,9 @@ class ConfigurationModel(BaseDocument):
             provides = original_provides[current]
             work.extend(provides)
             outset.update(provides)
+            negative.difference_update(provides)
 
-        return set(outset), negative
+        return outset, negative
 
     @classmethod
     def active_version_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
