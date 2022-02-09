@@ -272,34 +272,34 @@ class Assign(AssignStatement):
     provides:      variable
     """
 
-    def __init__(self, variable: LocatableString, value: ExpressionStatement) -> None:
+    def __init__(self, name: LocatableString, value: ExpressionStatement) -> None:
         AssignStatement.__init__(self, None, value)
-        self.name = variable.name
+        self.name = name
         self.value = value
-        if "-" in self.name:
-            inmanta_warnings.warn(HyphenDeprecationWarning(variable))
+        if "-" in str(self.name):
+            inmanta_warnings.warn(HyphenDeprecationWarning(self.name))
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
             return
-        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(self.name)
+        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(str(self.name))
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
-        target = resolver.lookup(self.name)
+        target = resolver.lookup(str(self.name))
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
     def declared_variables(self) -> typing.Iterator[str]:
-        yield self.name
+        yield str(self.name)
 
     def pretty_print(self) -> str:
         return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
-        return "Assign(%s, %s)" % (self.name, self.value)
+        return "Assign(%s, %s)" % (str(self.name), self.value)
 
     def __str__(self) -> str:
         return f"{self.name} = {self.value}"

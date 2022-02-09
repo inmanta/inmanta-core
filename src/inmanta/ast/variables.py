@@ -38,7 +38,7 @@ class Reference(ExpressionStatement):
 
     def __init__(self, name: LocatableString) -> None:
         ExpressionStatement.__init__(self)
-        self.name = str(name)
+        self.name = name
         self.full_name = str(name)
 
     def normalize(self) -> None:
@@ -49,7 +49,7 @@ class Reference(ExpressionStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # FIXME: may be done more efficient?
-        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
+        out = {str(self.name): resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
     def requires_emit_gradual(
@@ -57,24 +57,24 @@ class Reference(ExpressionStatement):
     ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out = {self.name: var}  # type : Dict[object, ResultVariable]
+        out = {str(self.name): var}  # type : Dict[object, ResultVariable]
         return out
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        return requires[self.name]
+        return requires[str(self.name)]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
-        if self.name not in requires:
-            raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
-        return requires[self.name]
+        if str(self.name) not in requires:
+            raise NotFoundException(self, "Could not resolve the value %s in this static context" % str(self.name))
+        return requires[str(self.name)]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
-            raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
-        return Assign(self, value)
+            raise ParserException(self.location, "+=", "Can not perform += on variable %s" % str(self.name))
+        return Assign(self.name, value)
 
     def root_in_self(self) -> "Reference":
-        if self.name == "self":
+        if str(self.name) == "self":
             return self
         else:
             ref = Reference("self")
@@ -84,13 +84,13 @@ class Reference(ExpressionStatement):
             return attr_ref
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
-        return graph.resolver.get_dataflow_node(self.name)
+        return graph.resolver.get_dataflow_node(str(self.name))
 
     def __str__(self) -> str:
-        return self.name
+        return str(self.name)
 
     def __repr__(self) -> str:
-        return self.name
+        return str(self.name)
 
 
 T = TypeVar("T")
