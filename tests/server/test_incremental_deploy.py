@@ -199,7 +199,11 @@ class MultiVersionSetup(object):
         assert set(pos).isdisjoint(set(neg)), set(pos).intersection(set(neg))
 
         # increments are complements, without the undeployables
-        assert {resource["id"] for resource in self.versions[version] if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]} == set(pos).union(set(neg))
+        assert {
+            resource["id"]
+            for resource in self.versions[version]
+            if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
+        } == set(pos).union(set(neg))
 
         allresources = {}
 
