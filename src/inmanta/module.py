@@ -99,6 +99,7 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
+@stable_api
 class InmantaModuleRequirement:
     """
     Represents a requirement on an inmanta module. This is a wrapper around Requirement. This class is provided for the
@@ -466,6 +467,7 @@ class ModuleSource(Generic[TModule]):
         return module_name
 
 
+@stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
@@ -2090,6 +2092,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return any(True for repo in self._metadata.repo if repo.type == ModuleRepoType.package)
 
 
+@stable_api
 class DummyProject(Project):
     """Placeholder project that does nothing"""
 
