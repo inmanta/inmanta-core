@@ -840,48 +840,17 @@ async def old_compile_report(server_with_frequent_cleanups, environment_for_clea
 async def test_compileservice_cleanup(
     server_with_frequent_cleanups, client_for_cleanup, environment_for_cleanup, old_compile_report
 ):
-    # There is a new and an older report in the database
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 2
+    """
+    Ensure that the process to cleanup old compile reports works correctly.
+    """
 
-    result = await client_for_cleanup.get_report(old_compile_report)
-    assert result.code == 200
-    assert len(result.result["report"]["reports"]) > 0
+    async def report_cleanup_finished_successfully() -> bool:
+        result = await client_for_cleanup.get_reports(environment_for_cleanup)
+        assert result.code == 200
+        return len(result.result["reports"]) == 0
 
-    compilerslice: CompilerService = server_with_frequent_cleanups.get_slice(SLICE_COMPILER)
-    await compilerslice._cleanup()
-
-    # The old report is deleted after cleanup
-    result = await client_for_cleanup.get_report(old_compile_report)
-    assert result.code == 404
-    reports_after_cleanup = await Report.get_list(compile=old_compile_report)
-    assert len(reports_after_cleanup) == 0
-
-    # The new report is still there
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 1
-
-
-@pytest.mark.slowtest
-@pytest.mark.asyncio
-async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment_for_cleanup, old_compile_report):
-    # Two reports are in the table
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 2
-
-    result = await client_for_cleanup.get_report(old_compile_report)
-    assert result.code == 200
-    assert len(result.result["report"]["reports"]) > 0
-
-    await asyncio.sleep(3)
-
-    # Both reports should be deleted after the triggered cleanup
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 0
+    # retention time == 2 seconds and cleanup interval == 1 second
+    await retry_limited(report_cleanup_finished_successfully, timeout=5)
 
 
 @pytest.mark.asyncio
