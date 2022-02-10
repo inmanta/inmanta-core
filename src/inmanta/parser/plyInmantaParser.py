@@ -741,6 +741,9 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
     match_obj = format_regex_compiled.findall(str(string))
+    test = [[m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
+    import pudb
+    pu.db
     if len(match_obj) == 0:
         return Literal(str(string))
     return create_string_format(string, match_obj, location)
@@ -751,7 +754,6 @@ def create_string_format(format_string: LocatableString, variables: List[List[st
     Create a string interpolation statement
     """
     _vars = []
-
     for var_str in variables:
         var_parts = var_str[1].split(".")
         ref = Reference(var_parts[0])

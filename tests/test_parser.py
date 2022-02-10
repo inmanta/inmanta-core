@@ -270,8 +270,8 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
-    assert rel.annotation_expression[0][1].name == "foo"
-    assert rel.annotation_expression[1][1].name == "bar"
+    assert str(rel.annotation_expression[0][1].name) == "foo"
+    assert str(rel.annotation_expression[1][1].name) == "bar"
 
 
 def test_new_relation_unidir():
@@ -321,8 +321,8 @@ Test.bar [1] foo,bar Foo
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
-    assert rel.annotation_expression[0][1].name == "foo"
-    assert rel.annotation_expression[1][1].name == "bar"
+    assert str(rel.annotation_expression[0][1].name) == "foo"
+    assert str(rel.annotation_expression[1][1].name) == "bar"
 
 
 def test_implementation():
@@ -399,7 +399,7 @@ implement Test using test, blah when (self > 5)
     assert str(stmt.entity) == "Test"
     assert [str(p) for p in stmt.implementations] == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
-    assert stmt.select.children[0].name == "self"
+    assert str(stmt.select.children[0].name) == "self"
     assert stmt.select.children[1].value == 5
 
 
@@ -1365,7 +1365,7 @@ implement Test1 using tt when self.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
+    assert str(stmt.select.attr.name) == "self"
     assert str(stmt.select.name) == "other"
 
 
@@ -1390,7 +1390,7 @@ z.a+=b
     assert isinstance(stmt, SetAttribute)
     assert stmt.list_only is True
     assert isinstance(stmt.value, Reference)
-    assert stmt.value.name == "b"
+    assert str(stmt.value.name) == "b"
 
 
 def test_mapref():
@@ -1425,7 +1425,7 @@ a = c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, Reference)
-    assert stmt.value.themap.name == "c"
+    assert str(stmt.value.themap.name) == "c"
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1744,7 +1744,7 @@ __x__ = {expression}
         if isinstance(expression, Literal):
             assert expression.value == expected_tree[1]
         elif isinstance(expression, Reference):
-            assert expression.name == expected_tree[1]
+            assert str(expression.name) == expected_tree[1]
         elif isinstance(expression, ReferenceStatement):
             assert len(expression.children) == len(expected_tree[1])
             for child, child_expected in zip(expression.children, expected_tree[1]):

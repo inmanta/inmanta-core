@@ -233,9 +233,12 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
+        import pudb
+        pu.db
         range: Range = Range(instance.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
-        reference: LocatableString = LocatableString("%s.%s" % (
-            instance.full_name, attribute), range, instance.name.lexpos, instance.namespace)
+        reference: LocatableString = LocatableString(
+            "%s.%s" % (instance.full_name, attribute), range, instance.name.lexpos, instance.namespace
+        )
         Reference.__init__(self, reference)
         self.attribute = str(attribute)
 
