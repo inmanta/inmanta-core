@@ -577,9 +577,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
         raise InvalidModuleException(
-            f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
-            " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
-            " respectively install and build modules from source. Make sure to uninstall the broken package first."
+            f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
+            "This occurs when you install or build modules from source incorrectly. "
+            "Always use the `inmanta module install` and `inmanta module build` commands to "
+            "respectively install and build modules from source. Make sure to uninstall the broken package first."
         )
 
     @classmethod
