@@ -811,7 +811,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
 
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
@@ -919,7 +919,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
