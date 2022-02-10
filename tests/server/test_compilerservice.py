@@ -852,6 +852,14 @@ async def test_compileservice_cleanup(
     # retention time == 2 seconds and cleanup interval == 1 second
     await retry_limited(report_cleanup_finished_successfully, timeout=5)
 
+    result = await client_for_cleanup.get_report(old_compile_report)
+    assert result.code == 404
+    reports_after_cleanup = await Report.get_list(compile=old_compile_report)
+    assert len(reports_after_cleanup) == 0
+    result = await client_for_cleanup.get_reports(environment_for_cleanup)
+    assert result.code == 200
+    assert len(result.result["reports"]) == 0
+
 
 @pytest.mark.asyncio
 async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
