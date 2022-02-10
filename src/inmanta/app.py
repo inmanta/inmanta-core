@@ -778,6 +778,8 @@ def app() -> None:
                 print(helpmsg)
 
     try:
+        import pudb
+        pu.db
         options.func(options)
     except ShowUsageException as e:
         print(e.args[0], file=sys.stderr)

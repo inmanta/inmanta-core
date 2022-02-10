@@ -233,9 +233,7 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        import pudb
-        pu.db
-        range: Range = Range(instance.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
+        range: Range = Range(instance.name.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
         reference: LocatableString = LocatableString(
             "%s.%s" % (instance.full_name, attribute), range, instance.name.lexpos, instance.namespace
         )
@@ -244,12 +242,13 @@ class AttributeReference(Reference):
 
         # a reference to the instance
         self.instance = instance
+        self.location = range
 
     def requires(self) -> List[str]:
         return self.instance.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.requires_emit_gradual(resolver, queue, None)
+        return self.requires_emit_gradual(resolver, queue, None)  # <---issue?
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -262,7 +261,7 @@ class AttributeReference(Reference):
 
         # construct waiter
         resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
-        self.copy_location(resumer)
+        self.copy_location(resumer)  # <---issue?
 
         # wait for the instance
         RawUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)

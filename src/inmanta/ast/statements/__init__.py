@@ -48,7 +48,9 @@ class Statement(Namespaced):
         """
         Copy the location of this statement in the given statement
         """
-        statement.set_location(self.location)
+        import pudb
+        pu.db
+        statement.set_location(self.location)  # location is none
 
     def get_namespace(self) -> "Namespace":
         return self.namespace

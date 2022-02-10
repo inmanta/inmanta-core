@@ -286,6 +286,8 @@ class Assign(AssignStatement):
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        import pudb
+        pu.db
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         target = resolver.lookup(str(self.name))
         assert isinstance(target, ResultVariable)
