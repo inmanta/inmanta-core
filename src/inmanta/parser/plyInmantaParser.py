@@ -16,13 +16,13 @@
     Contact: code@inmanta.com
 """
 
-from xmlrpc.client import boolean
-from more_itertools import pairwise
 import logging
 import re
-from typing import List, Optional, Union, Any
+from typing import Any, List, Optional, Union
+from xmlrpc.client import boolean
 
 import ply.yacc as yacc
+from more_itertools import pairwise
 from ply.yacc import YaccProduction
 
 import inmanta.warnings as inmanta_warnings
@@ -742,8 +742,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal, StringFormat]:
-    matches = [[str(string)[m.start():m.end()], m.start(), m.end()]
-               for m in format_regex_compiled.finditer(str(string))]
+    matches = [[str(string)[m.start() : m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
     if len(matches) == 0:
         return Literal(str(string))
 
@@ -758,9 +757,10 @@ def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal,
         start_char: int = len(init[-1]) + offset + string.start if len(init) == 1 else len(init[-1]) + 1
         end_char: int = start_char + obj[2] - obj[1] - 1
         range: Range = Range(string.location.file, start_line, start_char, end_line, end_char)
-        locatable_string = LocatableString(''.join(match), range, string.lexpos, string.namespace)
+        locatable_string = LocatableString("".join(match), range, string.lexpos, string.namespace)
         locatable_matches.append(locatable_string)
     return create_string_format(string, locatable_matches)
+
 
 # variables: [('{{my_object.my_attribute.test}}', 'my_object.my_attribute.test'), ('{{my1.attribute1}}', 'my1.attribute1'), ('{{my2.attribute2}}', 'my2.attribute2'), ('{{my3.attribute3}}', 'my3.attribute3')]
 # var_parts: ['my_object', 'my_attribute', 'test']
@@ -784,22 +784,13 @@ def create_string_format(format_string: LocatableString, variables: List[Locatab
     Create a string interpolation statement
     """
     _vars = []
-    print("variables: " + str(variables))
     for var in variables:
-        print("----------------------------------")
-        print("var: " + str(var))
         var_parts: List[str] = str(var)[2:-2].split(".")
-        print("var_parts :" + str(var_parts))
         ref_locatable_string = LocatableString(var_parts[0], var.location, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         if len(var_parts) > 1:
-            print("================")
-            print(var_parts[1:])
             for attr in var_parts[1:]:
-                print("attr: " + str(attr))
-                print("ref: " + str(ref))
                 attr_locatable_string: LocatableString = LocatableString(attr, var.location, var.lexpos, var.namespace)
-                print("attr_locatable_string: " + str(attr_locatable_string))
                 ref = AttributeReference(ref, attr_locatable_string)
             _vars.append((ref, str(var)))
         else:
