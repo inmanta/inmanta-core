@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, List, Optional, Tuple
 
 import pytest
 from pytest import approx
@@ -759,7 +759,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
-    config.Config.set("server", "compiler-report-retention", "2")
+    config.Config.set("server", "compiler-report-retention", "20")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
     ibl = InmantaBootloader()
     await ibl.start()
@@ -791,17 +791,24 @@ async def environment_for_cleanup(client_for_cleanup, server_with_frequent_clean
 
 
 @pytest.fixture
-async def old_compile_report(server_with_frequent_cleanups, environment_for_cleanup):
+async def old_and_new_compile_report(server_with_frequent_cleanups, environment_for_cleanup) -> Tuple[uuid.UUID, uuid.UUID]:
+    """
+    This fixture creates two compile reports. One for a compile that started
+    and finished 30 seconds ago and one that started and finished now.
+
+    This fixture return a tuple containing the id of the old and the new compile report
+    respectively.
+    """
     now = datetime.datetime.now()
-    time_of_compile = now - datetime.timedelta(days=30)
-    compile_id = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
+    time_of_old_compile = now - datetime.timedelta(days=30)
+    compile_id_old = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
     old_compile = {
-        "id": compile_id,
+        "id": compile_id_old,
         "remote_id": uuid.UUID("c9a10da1-9bf6-4152-8461-98adc02c4cee"),
         "environment": uuid.UUID(environment_for_cleanup),
-        "requested": time_of_compile,
-        "started": time_of_compile,
-        "completed": time_of_compile,
+        "requested": time_of_old_compile,
+        "started": time_of_old_compile,
+        "completed": time_of_old_compile,
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
@@ -811,54 +818,65 @@ async def old_compile_report(server_with_frequent_cleanups, environment_for_clea
         "version": 1,
     }
     await Compile(**old_compile).insert()
-    new_compile = {**old_compile, "id": uuid.uuid4(), "requested": now, "started": now, "completed": now}
+    compile_id_new = uuid.uuid4()
+    new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
     await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
-        "started": time_of_compile,
-        "completed": time_of_compile,
+        "started": time_of_old_compile,
+        "completed": time_of_old_compile,
         "command": "",
         "name": "Init",
         "errstream": "",
         "outstream": "Using extra environment variables during compile \n",
         "returncode": 0,
-        "compile": compile_id,
+        "compile": compile_id_old,
     }
     report2 = {
         **report1,
         "id": uuid.UUID("2a86d2a0-666f-4cca-b0a8-13e0379128d5"),
         "command": "python -m inmanta.app -vvv export -X",
         "name": "Recompiling configuration model",
+        "compile": compile_id_new,
     }
     await Report(**report1).insert()
     await Report(**report2).insert()
-    yield compile_id
+    yield compile_id_old, compile_id_new
 
 
 @pytest.mark.asyncio
 async def test_compileservice_cleanup(
-    server_with_frequent_cleanups, client_for_cleanup, environment_for_cleanup, old_compile_report
+    server_with_frequent_cleanups,
+    client_for_cleanup,
+    environment_for_cleanup,
+    old_and_new_compile_report: Tuple[uuid.UUID, uuid.UUID],
 ):
     """
     Ensure that the process to cleanup old compile reports works correctly.
+
+    The `old_and_new_compile_report` fixture creates a compile report for a compile that is 30 seconds
+    old and one for a compile that happened now. The `server_with_frequent_cleanups` fixture
+    sets the `compiler-report-retention` config option to 20 seconds. This test case verifies
+    that one old report is cleaned up and the new one is retained.
     """
+    compile_id_old, compile_id_new = old_and_new_compile_report
 
     async def report_cleanup_finished_successfully() -> bool:
         result = await client_for_cleanup.get_reports(environment_for_cleanup)
         assert result.code == 200
-        return len(result.result["reports"]) == 0
+        return len(result.result["reports"]) == 1
 
-    # retention time == 2 seconds and cleanup interval == 1 second
-    await retry_limited(report_cleanup_finished_successfully, timeout=5)
+    # Cleanup happens every second. A timeout of four seconds should be sufficient
+    await retry_limited(report_cleanup_finished_successfully, timeout=4)
 
-    result = await client_for_cleanup.get_report(old_compile_report)
+    result = await client_for_cleanup.get_report(compile_id_old)
     assert result.code == 404
-    reports_after_cleanup = await Report.get_list(compile=old_compile_report)
-    assert len(reports_after_cleanup) == 0
+    result = await client_for_cleanup.get_report(compile_id_new)
+    assert result.code == 200
     result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
-    assert len(result.result["reports"]) == 0
+    assert len(result.result["reports"]) == 1
 
 
 @pytest.mark.asyncio
