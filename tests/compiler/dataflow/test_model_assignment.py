@@ -52,7 +52,7 @@ x = 42
     assert len(x.node.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = x.node.value_assignments[0]
     assert isinstance(assignment.responsible, Assign)
-    assert assignment.responsible.name == "x"
+    assert str(assignment.responsible.name) == "x"
     assert isinstance(assignment.responsible.value, Literal)
     assert assignment.responsible.value.value == 42
     assert assignment.context == graph
@@ -76,7 +76,7 @@ x = 0
         value: int = 0 if i == zero_index else 42
         assert assignment.context == graph
         assert isinstance(assignment.responsible, Assign)
-        assert assignment.responsible.name == "x"
+        assert str(assignment.responsible.name) == "x"
         assert isinstance(assignment.responsible.value, Literal)
         assert assignment.responsible.value.value == value
 
@@ -94,9 +94,9 @@ y = 42
     assert len(x.node.assignable_assignments) == 1
     assignment: Assignment[AssignableNodeReference] = x.node.assignable_assignments[0]
     assert isinstance(assignment.responsible, Assign)
-    assert assignment.responsible.name == "x"
+    assert str(assignment.responsible.name) == "x"
     assert isinstance(assignment.responsible.value, Reference)
-    assert assignment.responsible.value.name == "y"
+    assert str(assignment.responsible.value.name) == "y"
     assert assignment.context == graph
 
 
@@ -121,7 +121,7 @@ x.n = 42
     assert len(n.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = n.value_assignments[0]
     assert isinstance(assignment.responsible, SetAttribute)
-    assert assignment.responsible.instance.name == "x"
+    assert str(assignment.responsible.instance.name) == "x"
     assert assignment.responsible.attribute_name == "n"
     assert isinstance(assignment.responsible.value, Literal)
     assert assignment.responsible.value.value == 42

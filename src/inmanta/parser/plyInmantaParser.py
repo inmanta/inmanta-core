@@ -742,7 +742,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal, StringFormat]:
-    matches = [[str(string)[m.start() : m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
+    matches = [[str(string)[m.start(): m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
     if len(matches) == 0:
         return Literal(str(string))
 
@@ -762,30 +762,13 @@ def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal,
     return create_string_format(string, locatable_matches)
 
 
-# variables: [('{{my_object.my_attribute.test}}', 'my_object.my_attribute.test'), ('{{my1.attribute1}}', 'my1.attribute1'), ('{{my2.attribute2}}', 'my2.attribute2'), ('{{my3.attribute3}}', 'my3.attribute3')]
-# var_parts: ['my_object', 'my_attribute', 'test']
-# ref: my_object
-# attr: my_attribute
-# ref: my_object.my_attribute
-# attr: test
-# var_parts: ['my1', 'attribute1']
-# ref: my1
-# attr: attribute1
-# var_parts: ['my2', 'attribute2']
-# ref: my2
-# attr: attribute2
-# var_parts: ['my3', 'attribute3']
-# ref: my3
-# attr: attribute3
-
-
 def create_string_format(format_string: LocatableString, variables: List[LocatableString]) -> StringFormat:
     """
     Create a string interpolation statement
     """
     _vars = []
     for var in variables:
-        var_parts: List[str] = str(var)[2:-2].split(".")
+        var_parts: List[str] = str(var)[2:-2].strip().split(".")
         ref_locatable_string = LocatableString(var_parts[0], var.location, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         if len(var_parts) > 1:

@@ -718,7 +718,7 @@ a = vm.files[path="/etc/motd"]
     stmt = statements[0].value
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
-    assert stmt.rootobject.name == "vm"
+    assert str(stmt.rootobject.name) == "vm"
     assert stmt.relation == "files"
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
 
@@ -735,7 +735,7 @@ a = vm.files[**dct]
     stmt = statements[1].value
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
-    assert stmt.rootobject.name == "vm"
+    assert str(stmt.rootobject.name) == "vm"
     assert stmt.relation == "files"
     assert stmt.querypart == []
     assert len(stmt.wrapped_querypart) == 1
@@ -998,7 +998,7 @@ a="j{{o}}s"
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, StringFormat)
     assert isinstance(stmt.value._variables[0][0], Reference)
-    assert [x[0].name for x in stmt.value._variables] == ["o"]
+    assert [str(x[0].name) for x in stmt.value._variables] == ["o"]
 
 
 def test_string_format_2():
@@ -1015,7 +1015,7 @@ a="j{{c.d}}s"
     assert len(stmt.value._variables) == 1
     assert len(stmt.value._variables[0]) == 2
     assert isinstance(stmt.value._variables[0][0], AttributeReference)
-    assert stmt.value._variables[0][0].instance.name == "c"
+    assert str(stmt.value._variables[0][0].instance.name) == "c"
     assert stmt.value._variables[0][0].attribute == "d"
 
 
@@ -1046,8 +1046,8 @@ implement Test1 using tt when self.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
-    assert stmt.select.name == "other"
+    assert str(stmt.select.attr.name) == "self"
+    assert str(stmt.select.name) == "other"
 
 
 def test_is_defined_implicit_self():
@@ -1077,8 +1077,8 @@ implement Test1 using tt when a.other is defined
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
     assert isinstance(stmt.select.attr, Reference)
-    assert stmt.select.attr.name == "a"
-    assert stmt.select.name == "other"
+    assert str(stmt.select.attr.name) == "a"
+    assert str(stmt.select.name) == "other"
 
 
 def assert_is_non_value(x):
@@ -1406,7 +1406,7 @@ a = b.c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, AttributeReference)
-    assert stmt.value.themap.instance.name == "b"
+    assert str(stmt.value.themap.instance.name) == "b"
     assert stmt.value.themap.attribute == "c"
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
@@ -1444,7 +1444,7 @@ a = c["test"]["xx"]
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, MapLookup)
     assert isinstance(stmt.value.themap.themap, Reference)
-    assert stmt.value.themap.themap.name == "c"
+    assert str(stmt.value.themap.themap.name) == "c"
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
