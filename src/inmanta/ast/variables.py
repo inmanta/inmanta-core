@@ -248,7 +248,7 @@ class AttributeReference(Reference):
         return self.instance.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.requires_emit_gradual(resolver, queue, None)  # <---issue?
+        return self.requires_emit_gradual(resolver, queue, None)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -261,7 +261,7 @@ class AttributeReference(Reference):
 
         # construct waiter
         resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
-        self.copy_location(resumer)  # <---issue?
+        self.copy_location(resumer)
 
         # wait for the instance
         RawUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)

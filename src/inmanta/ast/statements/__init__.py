@@ -48,7 +48,7 @@ class Statement(Namespaced):
         """
         Copy the location of this statement in the given statement
         """
-        statement.set_location(self.location)  # location is none
+        statement.set_location(self.location)
 
     def get_namespace(self) -> "Namespace":
         return self.namespace

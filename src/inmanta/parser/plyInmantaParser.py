@@ -742,7 +742,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal, StringFormat]:
-    matches = [[str(string)[m.start() : m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
+    matches = [[str(string)[m.start(): m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
     if len(matches) == 0:
         return Literal(str(string))
 
@@ -751,12 +751,12 @@ def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal,
     match: List[str]
     locatable_matches: List(LocatableString) = []
     for obj in matches:
-        init, match, _ = (str(string)[start:end].splitlines() for start, end in pairwise((0, obj[1], obj[2], -1)))
+        init, match, _ = (str(string)[start:end].splitlines() for start, end in pairwise((0, obj[1], obj[2], len(obj))))
         start_line: int = string.lnr + len(init) - 1
         end_line: int = start_line + len(match) - 1
-        len_last_init: int = len(init[-1]) if init else 0
-        start_char: int = len(init[-1]) + offset + string.start if len(init) == 1 else len_last_init + 1
-        end_char: int = start_char + obj[2] - obj[1] - 1
+        len_last_init_line: int = len(init[-1]) if init else 0
+        start_char: int = len(init[-1]) + offset + string.start if len(init) == 1 else len_last_init_line + 1
+        end_char: int = len(match[-1]) + start_char - 1 if len(match) == 1 else len(match[-1])
         range: Range = Range(string.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString("".join(match), range, string.lexpos, string.namespace)
         locatable_matches.append(locatable_string)

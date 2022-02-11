@@ -138,6 +138,7 @@ class Range(Location):
 
 
 class Locatable(object):
+
     _location: Location
 
     def __init__(self) -> None:
