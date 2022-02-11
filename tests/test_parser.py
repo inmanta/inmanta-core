@@ -22,7 +22,7 @@ from typing import List
 
 import pytest
 
-from inmanta.ast import LocatableString, Namespace
+from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
 from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, define
@@ -270,8 +270,13 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
+
+    range1: Range = Range("test", 2, 14, 2, 17)
+    range2: Range = Range("test", 2, 18, 2, 21)
     assert str(rel.annotation_expression[0][1].name) == "foo"
     assert str(rel.annotation_expression[1][1].name) == "bar"
+    assert rel.annotation_expression[0][1].location == range1
+    assert rel.annotation_expression[1][1].location == range2
 
 
 def test_new_relation_unidir():
@@ -321,8 +326,12 @@ Test.bar [1] foo,bar Foo
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
+    range1: Range = Range("test", 2, 18, 2, 21)
+    range2: Range = Range("test", 2, 18, 2, 21)
     assert str(rel.annotation_expression[0][1].name) == "foo"
     assert str(rel.annotation_expression[1][1].name) == "bar"
+    assert rel.annotation_expression[0][1].location == range1
+    assert rel.annotation_expression[1][1].location == range2
 
 
 def test_implementation():
@@ -400,6 +409,8 @@ implement Test using test, blah when (self > 5)
     assert [str(p) for p in stmt.implementations] == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
     assert str(stmt.select.children[0].name) == "self"
+    range: Range = Range("test", 2, 39, 2, 43)
+    assert stmt.select.children[0].location == range
     assert stmt.select.children[1].value == 5
 
 
@@ -719,6 +730,8 @@ a = vm.files[path="/etc/motd"]
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
     assert str(stmt.rootobject.name) == "vm"
+    range: Range = Range("test", 2, 5, 2, 7)
+    assert stmt.rootobject.location == range
     assert stmt.relation == "files"
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
 
@@ -735,6 +748,8 @@ a = vm.files[**dct]
     stmt = statements[1].value
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
+    range: Range = Range("test", 3, 5, 3, 7)
+    assert stmt.rootobject.location == range
     assert str(stmt.rootobject.name) == "vm"
     assert stmt.relation == "files"
     assert stmt.querypart == []
@@ -999,6 +1014,8 @@ a="j{{o}}s"
     assert isinstance(stmt.value, StringFormat)
     assert isinstance(stmt.value._variables[0][0], Reference)
     assert [str(x[0].name) for x in stmt.value._variables] == ["o"]
+    range: Range = Range("test", 2, 5, 2, 9)
+    assert [(x[0].name.location) for x in stmt.value._variables] == [range]
 
 
 def test_string_format_2():
@@ -1017,6 +1034,9 @@ a="j{{c.d}}s"
     assert isinstance(stmt.value._variables[0][0], AttributeReference)
     assert str(stmt.value._variables[0][0].instance.name) == "c"
     assert stmt.value._variables[0][0].attribute == "d"
+    range: Range = Range("test", 2, 5, 2, 11)
+    assert stmt.value._variables[0][0].instance.name.location == range
+    assert stmt.value._variables[0][0].location == range
 
 
 def test_attribute_reference():
@@ -1047,7 +1067,9 @@ implement Test1 using tt when self.other is defined
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
     assert str(stmt.select.attr.name) == "self"
-    assert str(stmt.select.name) == "other"
+    assert stmt.select.name == "other"
+    range: Range = Range("test", 2, 31, 2, 35)
+    assert stmt.select.attr.location == range
 
 
 def test_is_defined_implicit_self():
@@ -1078,7 +1100,9 @@ implement Test1 using tt when a.other is defined
     assert isinstance(stmt.select, IsDefined)
     assert isinstance(stmt.select.attr, Reference)
     assert str(stmt.select.attr.name) == "a"
-    assert str(stmt.select.name) == "other"
+    assert stmt.select.name == "other"
+    range: Range = Range("test", 2, 31, 2, 32)
+    assert stmt.select.attr.location == range
 
 
 def assert_is_non_value(x):
@@ -1366,6 +1390,7 @@ implement Test1 using tt when self.other is defined
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
     assert str(stmt.select.attr.name) == "self"
+    assert stmt.select.attr.location == Range("test", 2, 31, 2, 35)
     assert str(stmt.select.name) == "other"
 
 
@@ -1391,6 +1416,7 @@ z.a+=b
     assert stmt.list_only is True
     assert isinstance(stmt.value, Reference)
     assert str(stmt.value.name) == "b"
+    assert stmt.value.name.location == Range("test", 2, 6, 2, 6)
 
 
 def test_mapref():
@@ -1407,7 +1433,9 @@ a = b.c["test"]
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, AttributeReference)
     assert str(stmt.value.themap.instance.name) == "b"
+    assert stmt.value.themap.instance.name.location == Range("test", 2, 5, 2, 8)
     assert stmt.value.themap.attribute == "c"
+    assert stmt.value.themap.location == Range("test", 2, 5, 2, 8)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1426,6 +1454,7 @@ a = c["test"]
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, Reference)
     assert str(stmt.value.themap.name) == "c"
+    assert stmt.value.themap.name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1445,6 +1474,7 @@ a = c["test"]["xx"]
     assert isinstance(stmt.value.themap, MapLookup)
     assert isinstance(stmt.value.themap.themap, Reference)
     assert str(stmt.value.themap.themap.name) == "c"
+    assert stmt.value.themap.themap.name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
@@ -1819,11 +1849,87 @@ b=r"{{a}}\n"
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
     assert isinstance(assign_stmt.value, StringFormat)
 
     assign_stmt_2 = statements[1]
     assert isinstance(assign_stmt_2, Assign)
     assert str(assign_stmt_2.name) == "b"
+    assert assign_stmt_2.name.location == Range("test", 3, 1, 3, 2)
     literal = assign_stmt_2.value
     assert isinstance(literal, Literal)
     assert literal.value == r"{{a}}\n"
+
+
+def test_string_attribute_reference_1():
+    statements = parse_code(
+        r"""
+a="test{{hello.world.bye}}test"
+"""
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert attribute_ref.attribute == "bye"
+    assert attribute_ref.location == Range("test", 2, 8, 2, 26)
+    instance1 = attribute_ref.instance
+    assert instance1.attribute == "world"
+    assert instance1.location == Range("test", 2, 8, 2, 26)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 2, 8, 2, 26)
+
+
+def test_string_attribute_reference_2():
+    statements = parse_code(
+        """
+
+a=\"""test{{hello.world.bye}}test\"""
+
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 3, 1, 3, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert attribute_ref.attribute == "bye"
+    assert attribute_ref.location == Range("test", 3, 11, 3, 29)
+    instance1 = attribute_ref.instance
+    assert instance1.attribute == "world"
+    assert instance1.location == Range("test", 3, 11, 3, 29)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 3, 11, 3, 29)
+
+
+def test_string_attribute_reference_3():
+    statements = parse_code(
+        """
+a=\"""test
+   test{{hello.world.bye}}test
+   test
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert attribute_ref.attribute == "bye"
+    assert attribute_ref.location == Range("test", 3, 8, 3, 26)
+    instance1 = attribute_ref.instance
+    assert instance1.attribute == "world"
+    assert instance1.location == Range("test", 3, 8, 3, 26)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 8, 11, 3, 26)
