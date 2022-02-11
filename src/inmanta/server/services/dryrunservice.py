@@ -18,10 +18,10 @@
 import asyncio
 import logging
 import uuid
-from typing import List, Optional, cast
+from typing import Dict, List, Optional, cast
 
 from inmanta import data
-from inmanta.data.model import DryRun, ResourceVersionIdStr
+from inmanta.data.model import DryRun, DryRunReport, ResourceVersionIdStr
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
@@ -31,6 +31,7 @@ from inmanta.server import (
     SLICE_DATABASE,
     SLICE_DRYRUN,
     SLICE_TRANSPORT,
+    diff,
     protocol,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
@@ -129,13 +130,13 @@ class DyrunService(protocol.ServerSlice):
 
         return dryrun
 
-    @handle(methods_v2.dryrun_trigger, version_id="id", env="tid")
-    async def dryrun_trigger(self, env: data.Environment, version_id: int) -> uuid.UUID:
-        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+    @handle(methods_v2.dryrun_trigger, env="tid")
+    async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
         if model is None:
             raise NotFound("The requested version does not exist.")
 
-        dryrun = await self.create_dryrun(env, version_id, model)
+        dryrun = await self.create_dryrun(env, version, model)
 
         return dryrun.id
 
@@ -173,6 +174,42 @@ class DyrunService(protocol.ServerSlice):
             raise NotFound("The given dryrun does not exist!")
 
         return 200, {"dryrun": dryrun}
+
+    @handle(methods_v2.get_dryrun_diff, env="tid")
+    async def dryrun_diff(self, env: data.Environment, version: int, report_id: uuid.UUID) -> DryRunReport:
+        dryrun = await data.DryRun.get_one(environment=env.id, model=version, id=report_id)
+        if dryrun is None:
+            raise NotFound("The given dryrun does not exist!")
+        resources = dryrun.to_dict()["resources"]
+        from_resources = {}
+        to_resources = {}
+        for resource_version_id, resource in resources.items():
+            resource_id = Id.parse_id(resource_version_id).resource_str()
+
+            from_attributes = self.get_attributes_from_changes(resource["changes"], "current")
+            to_attributes = self.get_attributes_from_changes(resource["changes"], "desired")
+            from_resources[resource_id] = diff.Resource(resource_id, from_attributes)
+            to_resources[resource_id] = diff.Resource(resource_id, to_attributes)
+
+            if "purged" in resource["changes"]:
+                if self.resource_will_be_unpurged(from_attributes, to_attributes):
+                    from_resources.pop(resource_id)
+                if self.resource_will_be_purged(from_attributes, to_attributes):
+                    to_resources.pop(resource_id)
+
+        version_diff = diff.generate_diff(from_resources, to_resources, include_unmodified=True)
+        dto = DryRunReport(summary=dryrun.to_dto(), diff=version_diff)
+
+        return dto
+
+    def get_attributes_from_changes(self, changes: Dict[str, Dict[str, object]], key: str) -> Dict[str, object]:
+        return {attr_name: values[key] for attr_name, values in changes.items() if attr_name != "requires"}
+
+    def resource_will_be_unpurged(self, from_attributes: Dict[str, object], to_attributes: Dict[str, object]) -> bool:
+        return from_attributes.get("purged") is True and to_attributes.get("purged") is False
+
+    def resource_will_be_purged(self, from_attributes: Dict[str, object], to_attributes: Dict[str, object]) -> bool:
+        return from_attributes.get("purged") is False and to_attributes.get("purged") is True
 
     @handle(methods.dryrun_update, dryrun_id="id", env="tid")
     async def dryrun_update(

@@ -353,7 +353,7 @@ class LogLine(BaseModel):
     level: const.LogLevel
     msg: str
     args: List[Optional[ArgumentTypes]] = []
-    kwargs: Dict[str, Optional[ArgumentTypes]] = {}
+    kwargs: JsonType = {}
     timestamp: datetime.datetime
 
 
@@ -470,6 +470,7 @@ class ResourceDiffStatus(str, Enum):
     added = "added"
     modified = "modified"
     deleted = "deleted"
+    unmodified = "unmodified"
 
 
 class AttributeDiff(BaseModel):
@@ -482,8 +483,8 @@ class AttributeDiff(BaseModel):
 
     from_value: Optional[object] = None
     to_value: Optional[object] = None
-    from_value_compare: Optional[str] = None
-    to_value_compare: Optional[str] = None
+    from_value_compare: str
+    to_value_compare: str
 
 
 class ResourceDiff(BaseModel):
@@ -573,3 +574,8 @@ class DryRun(BaseModel):
     date: Optional[datetime.datetime]
     total: int = 0
     todo: int = 0
+
+
+class DryRunReport(BaseModel):
+    summary: DryRun
+    diff: List[ResourceDiff]
