@@ -759,7 +759,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
-    config.Config.set("server", "compiler-report-retention", "20")
+    config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
     ibl = InmantaBootloader()
     await ibl.start()
@@ -794,7 +794,7 @@ async def environment_for_cleanup(client_for_cleanup, server_with_frequent_clean
 async def old_and_new_compile_report(server_with_frequent_cleanups, environment_for_cleanup) -> Tuple[uuid.UUID, uuid.UUID]:
     """
     This fixture creates two compile reports. One for a compile that started
-    and finished 30 seconds ago and one that started and finished now.
+    and finished 30 days ago and one that started and finished now.
 
     This fixture return a tuple containing the id of the old and the new compile report
     respectively.
@@ -855,9 +855,9 @@ async def test_compileservice_cleanup(
     """
     Ensure that the process to cleanup old compile reports works correctly.
 
-    The `old_and_new_compile_report` fixture creates a compile report for a compile that is 30 seconds
+    The `old_and_new_compile_report` fixture creates a compile report for a compile that is 30 days
     old and one for a compile that happened now. The `server_with_frequent_cleanups` fixture
-    sets the `compiler-report-retention` config option to 20 seconds. This test case verifies
+    sets the `compiler-report-retention` config option to 60 seconds. This test case verifies
     that one old report is cleaned up and the new one is retained.
     """
     compile_id_old, compile_id_new = old_and_new_compile_report
