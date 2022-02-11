@@ -774,13 +774,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
 
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
         Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
+        # Make pypi happy
+        assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
     @classmethod
@@ -882,7 +884,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
@@ -960,12 +962,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
     async def _fetchrow(cls, query: str, *values: object) -> Record:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
@@ -973,7 +975,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> List[Record]:
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await con.fetch(query, *values)
         return await connection.fetch(query, *values)
 
@@ -983,7 +985,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     ) -> str:
         if connection:
             return await connection.execute(query, *values)
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1003,7 +1005,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -1581,7 +1583,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 return result
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await perform_query(con)
         return await perform_query(connection)
 
@@ -3228,7 +3230,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3248,7 +3250,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3510,7 +3512,7 @@ class ResourceAction(BaseDocument):
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3645,7 +3647,7 @@ class Resource(BaseDocument):
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -3692,7 +3694,7 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
@@ -3720,7 +3722,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -3946,7 +3948,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4000,7 +4002,7 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
@@ -4568,7 +4570,7 @@ class ConfigurationModel(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
@@ -4585,7 +4587,7 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self) -> None:
-        async with self._connection_pool.acquire() as con:
+        async with self.get_connection() as con:
             async with con.transaction():
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
@@ -4694,7 +4696,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 await do_query_exclusive(con)
         else:
             await do_query_exclusive(connection)
