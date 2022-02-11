@@ -82,18 +82,17 @@ def merge_lnr_to_string(p: YaccProduction, starttoken: int = 1, endtoken: int = 
     v = p[0]
 
     et = p[endtoken]
-    endline = et.elnr
-    endchar = et.end
-
     st = p[starttoken]
-    if isinstance(st, LocatableString):
-        startline = st.lnr
-        startchar = st.start
-    else:
-        startline = et.lnr
-        startchar = et.start
 
-    p[0] = LocatableString(v, Range(file, startline, startchar, endline, endchar), endchar, namespace)
+    expanded_range: Range = expand_range(st.location, et.location) if isinstance(st, LocatableString) else et.location
+    p[0] = LocatableString(v, expanded_range, p.lexpos(endtoken), namespace)
+
+
+def expand_range(start: Range, end: Range) -> Range:
+    """
+    Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
+    """
+    return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
 
 def attach_from_string(p: YaccProduction, token: int = 1) -> None:
@@ -137,11 +136,6 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 def p_empty(p: YaccProduction) -> None:
     "empty :"
-    pass
-
-
-def p_eager_match(p: YaccProduction) -> None:
-    "eager_match : empty"
     pass
 
 
@@ -637,31 +631,39 @@ def p_constructor(p: YaccProduction) -> None:
 
 
 # TODO: include error for Entity(1) (args instead of kwargs)
-# TODO: try this for class_ref instead of constructor?
-# TODO: double check eager matching reasoning
-# TODO: test both a.Entity, a.b.Entity
-def p_constructor_err_dot(p: YaccProduction) -> None:
-    "constructor : var_ref '.' CID '(' eager_match"
+# TODO: move
+# TODO: write tests
+def p_class_ref_err(p: YaccProduction) -> None:
+    "class_ref : var_ref '.' CID"
+    var: Union[LocatableString, Reference] = p[1]
+    var_str: LocatableString = var if isinstance(var, LocatableString) else var.name
+    cid: LocatableString = p[3]
+    full_string: LocatableString = LocatableString(
+        "%s.%s" % (var_str, cid),
+        expand_range(var_str.location, cid.location),
+        var_str.lexpos,
+        namespace,
+    )
     raise ParserException(
-        Range(file, p[1].name.lnr, p[1].name.start, p[3].elnr, p[3].end),
-        "%s.%s" % (p[1].name, p[3]),
+        full_string.location,
+        str(full_string),
         (
-            "`%s` looks like an entity but was accessed with '.' (`%s.%s`)."
-            " To access an entity in a namespace, use '::' instead: `%s::%s`"
-        ) % (p[3], p[1].name, p[3], str(p[1].name).replace(".", "::"), p[3]),
+            "`%s` looks like an entity but was accessed with '.' (`%s`)."
+            " To access an entity in a namespace, use '::' instead: `%s`"
+        ) % (cid, full_string, str(full_string).replace(".", "::")),
     )
 
 
-# TODO: try this for ns_ref instead of function_call? Perhaps with eager_match?
 def p_function_call(p: YaccProduction) -> None:
     "function_call : ns_ref '(' function_param_list ')'"
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
+# TODO: try this for ns_ref instead of function_call?
 # TODO: test
 def p_function_call_err_dot(p: YaccProduction) -> None:
-    "function_call : attr_ref '(' function_param_list ')'"
+    "function_call : attr_ref '('"
     raise ParserException(
         p[1].location,
         str(p[1]),
@@ -670,9 +672,6 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
             " To access a plugin in a namespace, use '::' instead: `%s`"
         ) % (p[1], str(p[1]).replace(".", "::")),
     )
-
-
-# TODO: similar exception for constructor
 
 
 def p_list_def(p: YaccProduction) -> None:
