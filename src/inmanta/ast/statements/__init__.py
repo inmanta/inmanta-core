@@ -48,8 +48,6 @@ class Statement(Namespaced):
         """
         Copy the location of this statement in the given statement
         """
-        import pudb
-        pu.db
         statement.set_location(self.location)  # location is none
 
     def get_namespace(self) -> "Namespace":
