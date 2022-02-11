@@ -1818,12 +1818,12 @@ b=r"{{a}}\n"
 
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
-    assert assign_stmt.name == "a"
+    assert str(assign_stmt.name) == "a"
     assert isinstance(assign_stmt.value, StringFormat)
 
     assign_stmt_2 = statements[1]
     assert isinstance(assign_stmt_2, Assign)
-    assert assign_stmt_2.name == "b"
+    assert str(assign_stmt_2.name) == "b"
     literal = assign_stmt_2.value
     assert isinstance(literal, Literal)
     assert literal.value == r"{{a}}\n"

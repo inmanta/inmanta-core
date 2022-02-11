@@ -754,7 +754,8 @@ def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal,
         init, match, _ = (str(string)[start:end].splitlines() for start, end in pairwise((0, obj[1], obj[2], -1)))
         start_line: int = string.lnr + len(init) - 1
         end_line: int = start_line + len(match) - 1
-        start_char: int = len(init[-1]) + offset + string.start if len(init) == 1 else len(init[-1]) + 1
+        len_last_init: int = len(init[-1]) if init else 0
+        start_char: int = len(init[-1]) + offset + string.start if len(init) == 1 else len_last_init + 1
         end_char: int = start_char + obj[2] - obj[1] - 1
         range: Range = Range(string.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString("".join(match), range, string.lexpos, string.namespace)
