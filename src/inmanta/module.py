@@ -61,7 +61,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, validator, constr
 
 import inmanta.warnings
 from inmanta import const, env, loader, plugins
@@ -1131,6 +1131,11 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
+    type_hints: List[
+        constr(
+            strip_whitespace=True,
+            regex=r'^[a-zA-z0-9_]?\.[a-zA-z0-9_]? before [a-zA-z0-9_]?\.[a-zA-z0-9_]?$'),
+    ] = []
 
     _raw_parser: Type[YamlParser] = YamlParser
 

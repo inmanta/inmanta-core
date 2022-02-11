@@ -21,7 +21,7 @@ import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Sequence, Set, Tuple, Optional
 
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
@@ -47,6 +47,7 @@ from inmanta.execute.runtime import (
     Resolver,
     Waiter,
 )
+from inmanta.module import Project
 from inmanta.execute.tracking import ModuleTracker
 
 if TYPE_CHECKING:
@@ -269,6 +270,8 @@ class Scheduler(object):
         """
         prev = time.time()
         start = prev
+        project = Project.get()
+        type_hints: List[str] = project.metadata.type_hints
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
@@ -430,3 +433,36 @@ class Scheduler(object):
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
 
         return True
+
+
+class TypePrecedenceGraph:
+
+    def __init__(self) -> None:
+        # The root node of the graph
+        self.root_node = TypeNode("dummy")
+        # Dict of all nodes
+        self.type_to_node: Dict[str, TypeNode] = {}
+
+    def add_precedence_rule(self, first_type: str, then_type: str) -> None:
+        """
+        Add a rule that `first_type` should be frozen before `then_type`.
+        """
+        if first_type not in self.type_to_node:
+            type_node_first = TypeNode(first_type)
+            self.root_node.add_before(type_node_first)
+        else:
+            type_node_first = self.type_to_node[first_type]
+
+
+
+class TypeNode:
+    """
+    A node in the TypePrecedenceGraph that represents an Inmanta entity type
+    """
+
+    def __init__(self, type_name: str) -> None:
+        self.type_name = type_name
+        self.befores: List["TypeNode"] = []
+
+    def add_dependent(self, before: "TypeNode") -> None:
+        self.befores.append(before)
