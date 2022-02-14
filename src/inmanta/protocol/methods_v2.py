@@ -936,6 +936,37 @@ def get_resources_in_version(
 
 
 @typedmethod(
+    path="/desiredstate/diff/<from_version>/<to_version>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_diff_of_versions(
+    tid: uuid.UUID,
+    from_version: int,
+    to_version: int,
+) -> List[model.ResourceDiff]:
+    """
+    Compare two versions of desired states, and provide the difference between them,
+    with regard to their resources and the attributes of these resources.
+    Resources that are the same in both versions are not mentioned in the results.
+
+    A resource diff describes whether the resource was 'added', 'modified' or 'deleted',
+    and what the values of their attributes were in the versions.
+    The values are also returned in a stringified, easy to compare way,
+    which can be used to calculate a `git diff`-like summary of the changes.
+
+    :param tid: The id of the environment
+    :param from_version: The (lower) version number to compare
+    :param to_version: The other (higher) version number to compare
+    :return: The resource diffs between from_version and to_version
+    :raise NotFound: This exception is raised when the referenced environment or versions are not found
+    :raise BadRequest: When the version parameters are not valid
+    """
+
+
+@typedmethod(
     path="/desiredstate/<version>/resource/<rid>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
@@ -1034,4 +1065,55 @@ def get_all_facts(
     :return: A list of all matching facts
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+# Dryrun related methods
+
+
+@typedmethod(
+    path="/dryrun/<version>", operation="POST", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
+    """
+    Trigger a new dryrun
+
+    :param tid: The id of the environment
+    :param version: The version of the configuration model to execute the dryrun for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The id of the new dryrun
+    """
+
+
+@typedmethod(
+    path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
+    """
+    Query a list of dry runs for a specific version
+
+    :param tid: The id of the environment
+    :param version: The configuration model version to return dryruns for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The list of dryruns for the specified version in descending order by date
+    """
+
+
+@typedmethod(
+    path="/dryrun/<version>/<report_id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model.DryRunReport:
+    """
+    Get the report of a dryrun, describing the changes a deployment would make,
+    with the difference between the current and target states provided in a form similar to the desired state diff endpoint.
+
+    :param tid: The id of the environment
+    :param version: The version of the configuration model the dryrun belongs to
+    :param report_id: The dryrun id to calculate the diff for
+    :raise NotFound: This exception is raised when the referenced environment or version is not found
+    :return: The dryrun report, with a summary and the list of differences.
     """

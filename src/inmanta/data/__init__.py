@@ -168,12 +168,12 @@ class DatabaseOrder:
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {}
 
     @classmethod
     def validator_dataclass(cls) -> Type["BaseDocument"]:
-        """ The class used for checking whether the ordering is valid for a table"""
+        """The class used for checking whether the ordering is valid for a table"""
         return BaseDocument
 
     @classmethod
@@ -207,7 +207,7 @@ class DatabaseOrder:
         return self.order_by_column
 
     def get_order(self) -> PagingOrder:
-        """ The order string representing the direction the results should be sorted by"""
+        """The order string representing the direction the results should be sorted by"""
         return self.order
 
     def is_nullable_column(self) -> bool:
@@ -234,11 +234,11 @@ class DatabaseOrder:
         return f"{self.order_by_column}.{self.order}"
 
     def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
-        """ The type of the order by column"""
+        """The type of the order by column"""
         return self.get_valid_sort_columns()[self.order_by_column]
 
     def get_order_by_column_api_name(self) -> str:
-        """ The name of the column that the results should be ordered by """
+        """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
     def get_min_time(self) -> Optional[datetime.datetime]:
@@ -280,7 +280,7 @@ class DatabaseOrder:
         id_value: Optional[Union[uuid.UUID, str]] = None,
         start: Optional[bool] = True,
     ) -> Tuple[List[str], List[object]]:
-        """ Get the column and id values as filters"""
+        """Get the column and id values as filters"""
         filter_statements = []
         values: List[object] = []
         relation = ">" if start else "<"
@@ -302,7 +302,7 @@ class DatabaseOrder:
         start: Optional[object] = None,
         first_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
-        """ Get the start and first_id values as start filters"""
+        """Get the start and first_id values as start filters"""
         return self.as_filter(offset, column_value=start, id_value=first_id, start=True)
 
     def as_end_filter(
@@ -311,7 +311,7 @@ class DatabaseOrder:
         end: Optional[object] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
-        """ Get the end and last_id values as end filters"""
+        """Get the end and last_id values as end filters"""
         return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
 
 
@@ -320,7 +320,7 @@ class VersionedResourceOrder(DatabaseOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {"resource_type": str, "agent": str, "resource_id_value": str}
 
     @classmethod
@@ -338,7 +338,7 @@ class ResourceOrder(VersionedResourceOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {**super().get_valid_sort_columns(), "status": str}
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
@@ -352,11 +352,11 @@ class ResourceOrder(VersionedResourceOrder):
 
 
 class ResourceHistoryOrder(DatabaseOrder):
-    """Represents the ordering by which resource history should be sorted """
+    """Represents the ordering by which resource history should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {"date": datetime.datetime}
 
     @classmethod
@@ -366,11 +366,11 @@ class ResourceHistoryOrder(DatabaseOrder):
 
 
 class ResourceLogOrder(DatabaseOrder):
-    """Represents the ordering by which resource logs should be sorted """
+    """Represents the ordering by which resource logs should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {"timestamp": datetime.datetime}
 
     @classmethod
@@ -379,11 +379,11 @@ class ResourceLogOrder(DatabaseOrder):
 
 
 class CompileReportOrder(DatabaseOrder):
-    """Represents the ordering by which compile reports should be sorted """
+    """Represents the ordering by which compile reports should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {"requested": datetime.datetime}
 
     @classmethod
@@ -396,7 +396,7 @@ class AgentOrder(DatabaseOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             "name": str,
             "process_name": Optional[str],
@@ -424,7 +424,7 @@ class DesiredStateVersionOrder(DatabaseOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             "version": int,
         }
@@ -444,7 +444,7 @@ class ParameterOrder(DatabaseOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             "name": str,
             "source": str,
@@ -465,7 +465,7 @@ class FactOrder(DatabaseOrder):
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder """
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
             "name": str,
             "resource_id": str,
@@ -502,34 +502,34 @@ class BaseQueryBuilder(ABC):
         self.values = values or []
 
     def _join_filter_statements(self, filter_statements: List[str]) -> str:
-        """ Join multiple filter statements """
+        """Join multiple filter statements"""
         if filter_statements:
             return "WHERE " + " AND ".join(filter_statements)
         return ""
 
     @abstractmethod
     def from_clause(self, from_clause: str) -> "BaseQueryBuilder":
-        """ Set the from clause of the query"""
+        """Set the from clause of the query"""
         raise NotImplementedError()
 
     @property
     def offset(self) -> int:
-        """ The current offset of the values to be used for filter statements"""
+        """The current offset of the values to be used for filter statements"""
         return len(self.values) + 1
 
     @abstractmethod
     def filter(self, filter_statements: List[str], values: List[object]) -> "BaseQueryBuilder":
-        """ Add filters to the query """
+        """Add filters to the query"""
         raise NotImplementedError()
 
     @abstractmethod
     def build(self) -> Tuple[str, List[object]]:
-        """ Builds up the full query string, and the parametrized value list, ready to be executed """
+        """Builds up the full query string, and the parametrized value list, ready to be executed"""
         raise NotImplementedError()
 
 
 class SimpleQueryBuilder(BaseQueryBuilder):
-    """ A query builder suitable for most queries """
+    """A query builder suitable for most queries"""
 
     def __init__(
         self,
@@ -557,7 +557,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         self.backward_paging = backward_paging
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
-        """ Set the select clause of the query """
+        """Set the select clause of the query"""
         return SimpleQueryBuilder(
             select_clause,
             self._from_clause,
@@ -569,7 +569,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
-        """ Set the from clause of the query"""
+        """Set the from clause of the query"""
         return SimpleQueryBuilder(
             self.select_clause,
             from_clause,
@@ -583,7 +583,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
     def order_and_limit(
         self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
     ) -> "SimpleQueryBuilder":
-        """ Set the order and limit of the query """
+        """Set the order and limit of the query"""
         return SimpleQueryBuilder(
             self.select_clause, self._from_clause, self.filter_statements, self.values, db_order, limit, backward_paging
         )
@@ -657,7 +657,7 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         start: Optional[object] = None,
         end: Optional[object] = None,
     ) -> "PageCountQueryBuilder":
-        """ Determine the filters and select clause for a page count query"""
+        """Determine the filters and select clause for a page count query"""
         order = db_order.get_order()
         values = []
         if "ASC" in order:
@@ -681,7 +681,7 @@ class PageCountQueryBuilder(BaseQueryBuilder):
         return PageCountQueryBuilder(select_clause, self._from_clause, self.filter_statements, self.values + values)
 
     def from_clause(self, from_clause: str) -> "PageCountQueryBuilder":
-        """ Set the from clause of the query"""
+        """Set the from clause of the query"""
         return PageCountQueryBuilder(self.select_clause, from_clause, self.filter_statements, self.values)
 
     def filter(self, filter_statements: List[str], values: List[object]) -> "PageCountQueryBuilder":
@@ -811,13 +811,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
 
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
         Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
+        # Make pypi happy
+        assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
     @classmethod
@@ -919,7 +921,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
@@ -997,12 +999,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
     async def _fetchrow(cls, query: str, *values: object) -> Record:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
@@ -1010,7 +1012,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> List[Record]:
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await con.fetch(query, *values)
         return await connection.fetch(query, *values)
 
@@ -1020,7 +1022,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     ) -> str:
         if connection:
             return await connection.execute(query, *values)
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1040,7 +1042,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -1618,7 +1620,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 return result
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await perform_query(con)
         return await perform_query(connection)
 
@@ -3436,7 +3438,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3456,7 +3458,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3749,7 +3751,7 @@ class ResourceAction(BaseDocument):
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3909,7 +3911,7 @@ class Resource(BaseDocument):
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -3956,7 +3958,7 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
@@ -3984,7 +3986,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -4210,7 +4212,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4264,7 +4266,7 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
@@ -4833,7 +4835,7 @@ class ConfigurationModel(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
@@ -4850,7 +4852,7 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self) -> None:
-        async with self._connection_pool.acquire() as con:
+        async with self.get_connection() as con:
             async with con.transaction():
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
@@ -4893,7 +4895,7 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     async def mark_done(self) -> None:
-        """ mark this deploy as done """
+        """mark this deploy as done"""
         subquery = f"""(EXISTS(
                     SELECT 1
                     FROM {Resource.table_name()}
@@ -4959,7 +4961,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 await do_query_exclusive(con)
         else:
             await do_query_exclusive(connection)
@@ -4967,7 +4969,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[m.ResourceVersionIdStr], List[m.ResourceVersionIdStr]]:
+    ) -> Tuple[Set[m.ResourceVersionIdStr], Set[m.ResourceVersionIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5047,13 +5049,13 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = [res["resource_version_id"] for res in not_increment]
+        negative = {res["resource_version_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
+        outset = {res["resource_version_id"] for res in increment}  # type: Set[str]
         original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
         send_events = []  # type: List[str]
 
@@ -5080,8 +5082,9 @@ class ConfigurationModel(BaseDocument):
             provides = original_provides[current]
             work.extend(provides)
             outset.update(provides)
+            negative.difference_update(provides)
 
-        return set(outset), negative
+        return outset, negative
 
     @classmethod
     def active_version_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
@@ -5279,11 +5282,46 @@ class DryRun(BaseDocument):
         await obj.insert()
         return obj
 
+    @classmethod
+    async def list_dryruns(
+        cls,
+        order_by_column: Optional[str] = None,
+        order: str = "ASC",
+        **query: object,
+    ) -> List[m.DryRun]:
+        records = await cls.get_list_with_columns(
+            order_by_column=order_by_column,
+            order=order,
+            columns=["id", "environment", "model", "date", "total", "todo"],
+            **query,
+        )
+        return [
+            m.DryRun(
+                id=record.id,
+                environment=record.environment,
+                model=record.model,
+                date=record.date,
+                total=record.total,
+                todo=record.todo,
+            )
+            for record in records
+        ]
+
     def to_dict(self) -> JsonType:
         dict_result = BaseDocument.to_dict(self)
         resources = {r["id"]: r for r in dict_result["resources"].values()}
         dict_result["resources"] = resources
         return dict_result
+
+    def to_dto(self) -> m.DryRun:
+        return m.DryRun(
+            id=self.id,
+            environment=self.environment,
+            model=self.model,
+            date=self.date,
+            total=self.total,
+            todo=self.todo,
+        )
 
 
 _classes = [

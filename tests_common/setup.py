@@ -19,7 +19,7 @@ from os import path
 
 from setuptools import find_packages, setup
 
-version = "6.0.0"
+version = "6.0.2"
 
 requires = [
     "asyncpg",
@@ -29,8 +29,8 @@ requires = [
     "pyformance",
     "pytest-asyncio",
     "pytest-env",
-    "pytest-postgresql",
-    "psycopg2",
+    "pytest-postgresql>=4",
+    "psycopg>=3",
     "tornado",
 ]
 

@@ -33,11 +33,11 @@ from inmanta.data import (
     InvalidSort,
     QueryType,
 )
-from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
@@ -49,7 +49,7 @@ from inmanta.server import (
     SLICE_TRANSPORT,
 )
 from inmanta.server import config as opt
-from inmanta.server import protocol
+from inmanta.server import diff, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, InvalidFilter
@@ -614,3 +614,39 @@ class OrchestrationService(protocol.ServerSlice):
         )
         if status_code != 200:
             raise BaseHttpException(status_code, result["message"])
+
+    @handle(methods_v2.get_diff_of_versions, env="tid")
+    async def get_diff_of_versions(
+        self,
+        env: data.Environment,
+        from_version: int,
+        to_version: int,
+    ) -> List[ResourceDiff]:
+        await self._validate_version_parameters(env.id, from_version, to_version)
+
+        from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
+        to_version_resources = await data.Resource.get_list(environment=env.id, model=to_version)
+
+        from_state = diff.Version(self.convert_resources(from_version_resources))
+        to_state = diff.Version(self.convert_resources(to_version_resources))
+
+        version_diff = to_state.generate_diff(from_state)
+
+        return version_diff
+
+    def convert_resources(self, resources: List[data.Resource]) -> Dict[ResourceIdStr, diff.Resource]:
+        return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}
+
+    async def _validate_version_parameters(self, env: uuid.UUID, first_version: int, other_version: int) -> None:
+        if first_version >= other_version:
+            raise BadRequest(
+                f"Invalid version parameters: ({first_version}, {other_version}). "
+                "The second version number should be strictly greater than the first"
+            )
+        await self._check_version_exists(env, first_version)
+        await self._check_version_exists(env, other_version)
+
+    async def _check_version_exists(self, env: uuid.UUID, version: int) -> None:
+        version_object = await data.ConfigurationModel.get_version(env, version)
+        if not version_object:
+            raise NotFound(f"Version {version} not found")

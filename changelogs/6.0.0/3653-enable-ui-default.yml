@@ -1,0 +1,8 @@
+description: "Enable the UI extension by default"
+issue-nr: 3653
+change-type: minor
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - master
+  - iso5

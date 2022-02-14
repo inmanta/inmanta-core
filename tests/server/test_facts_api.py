@@ -178,7 +178,7 @@ def fact_ids(fact_objects):
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 @pytest.mark.asyncio
 async def test_facts_paging(server, client, order_by_column, order, env_with_facts):
-    """ Test querying facts with paging, using different sorting parameters."""
+    """Test querying facts with paging, using different sorting parameters."""
     env, _, _ = env_with_facts
     result = await client.get_all_facts(
         env,

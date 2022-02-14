@@ -170,7 +170,7 @@ def log_messages(resource_log_objects):
 )
 @pytest.mark.asyncio
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs):
-    """ Test querying resource logs with paging, using different sorting parameters."""
+    """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
     result = await client.resource_logs(
@@ -331,3 +331,47 @@ async def test_log_without_kwargs(server, client, environment):
     await resource_action.save()
     result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
     assert result.code == 200
+
+
+@pytest.mark.asyncio
+async def test_log_nested_kwargs(server, client, environment):
+
+    await data.ConfigurationModel(
+        environment=uuid.UUID(environment),
+        version=1,
+        date=datetime.datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+    ).insert()
+
+    resource_action = data.ResourceAction(
+        environment=uuid.UUID(environment),
+        version=1,
+        resource_version_ids=[
+            "std::File[agent1,path=/tmp/file1.txt],v=1",
+            "std::Directory[agent1,path=/tmp/dir2],v=1",
+        ],
+        action_id=uuid.uuid4(),
+        action=const.ResourceAction.deploy,
+        started=datetime.datetime.now(),
+    )
+    await resource_action.insert()
+
+    resource_action.add_logs(
+        [
+            data.LogLine.log(
+                logging.INFO,
+                "Calling update_resource ",
+                timestamp=datetime.datetime.now(),
+                changes={"characteristics": {"current": {"Status": "Planned"}, "desired": {"Status": "In Service"}}},
+            ),
+        ]
+    )
+    await resource_action.save()
+    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
+    assert result.code == 200
+    assert result.result["data"][0]["kwargs"]["changes"]["characteristics"] == {
+        "current": {"Status": "Planned"},
+        "desired": {"Status": "In Service"},
+    }

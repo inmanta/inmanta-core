@@ -395,7 +395,7 @@ def attribute_hashes(resource_objects):
 )
 @pytest.mark.asyncio
 async def test_resource_history_paging(server, client, order_by_column, order, env_with_resources):
-    """ Test querying resource history with paging, using different sorting parameters."""
+    """Test querying resource history with paging, using different sorting parameters."""
     env, cm_times, ids, resources = env_with_resources
     resource_with_long_history = ids["long_history"]
 

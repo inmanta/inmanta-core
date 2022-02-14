@@ -100,7 +100,7 @@ class PostgresProc(object):
                 os.chdir(old_wc)
 
     def _create_db_path(self) -> None:
-        """ Create the data directory to store the postgres data in """
+        """Create the data directory to store the postgres data in"""
         if self.db_path:
             if not os.path.exists(self.db_path):
                 os.mkdir(self.db_path)
@@ -116,7 +116,7 @@ class PostgresProc(object):
         return sockets_dir
 
     def _init_db(self) -> None:
-        """ Init the database if it is not a valid postgres data directory """
+        """Init the database if it is not a valid postgres data directory"""
         assert self.db_path
         if os.path.exists(os.path.join(self.db_path, "PG_VERSION")):
             return

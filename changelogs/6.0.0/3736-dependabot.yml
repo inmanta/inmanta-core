@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump cython from 0.29.26 to 0.29.27
+destination-branches:
+- master
+- iso5
+sections: {}

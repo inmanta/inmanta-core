@@ -798,7 +798,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
 @pytest.mark.asyncio
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
-    """ Test querying resource actions via the API, including the pagination links."""
+    """Test querying resource actions via the API, including the pagination links."""
     project = data.Project(name="test")
     await project.insert()
 

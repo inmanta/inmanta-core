@@ -1,0 +1,6 @@
+description: Fixed dangling link in docs
+issue-nr: 3717
+change-type: patch
+destination-branches:
+  - master
+  - iso5

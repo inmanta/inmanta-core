@@ -61,6 +61,7 @@ from inmanta.module import (
     Project,
     gitprovider,
 )
+from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -101,7 +102,7 @@ class ModuleVersionException(CLIException):
 
 
 class ModuleLikeTool(object):
-    """Shared code for modules and projects """
+    """Shared code for modules and projects"""
 
     def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
         """
@@ -390,6 +391,7 @@ compatible with the dependencies specified by the updated modules.
             raise last_failure
 
 
+@stable_api
 class ModuleTool(ModuleLikeTool):
     """
     A tool to manage configuration modules
@@ -613,7 +615,7 @@ mode.
             return DummyProject()
 
     def construct_module(self, project: Optional[Project], path: str) -> Module:
-        """ Construct a V1 or V2 module from a folder"""
+        """Construct a V1 or V2 module from a folder"""
         try:
             return ModuleV2(project, path)
         except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
@@ -654,7 +656,6 @@ mode.
                 raise Exception(f"Directory {module_dir} already exists")
             cookiecutter(
                 "https://github.com/inmanta/inmanta-module-template.git",
-                checkout="v2",
                 no_input=no_input,
                 extra_context={"module_name": name},
             )
@@ -1027,6 +1028,7 @@ class V2ModuleBuilder:
             raise ModuleBuildFailedError(msg="Module build failed")
 
 
+@stable_api
 class ModuleConverter:
     def __init__(self, module: ModuleV1) -> None:
         self._module = module
