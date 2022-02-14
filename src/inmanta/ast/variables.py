@@ -70,7 +70,7 @@ class Reference(ExpressionStatement):
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
-            raise ParserException(self.location, "+=", "Can not perform += on variable %s" % str(self.name))
+            raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
         return Assign(self.name, value)
 
     def root_in_self(self) -> "Reference":
