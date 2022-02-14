@@ -19,7 +19,6 @@
 import logging
 import re
 from typing import List, Optional, Union
-from xmlrpc.client import boolean
 
 import ply.yacc as yacc
 from more_itertools import pairwise
@@ -741,7 +740,7 @@ format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def get_string_ast_node(string: LocatableString, mls: boolean) -> Union[Literal, StringFormat]:
+def get_string_ast_node(string: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
     matches = [[str(string)[m.start() : m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
     if len(matches) == 0:
         return Literal(str(string))
