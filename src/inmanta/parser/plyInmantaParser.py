@@ -741,7 +741,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches = [[str(string)[m.start() : m.end()], m.start(), m.end()] for m in format_regex_compiled.finditer(str(string))]
+    matches: Sequence[Tuple[str, int, int]] = [(str(string)[m.start() : m.end()), m.start(), m.end()) for m in format_regex_compiled.finditer(str(string))]
     if len(matches) == 0:
         return Literal(str(string))
 
