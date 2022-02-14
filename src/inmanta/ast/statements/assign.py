@@ -299,7 +299,7 @@ class Assign(AssignStatement):
         return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
-        return "Assign(%s, %s)" % (str(self.name), self.value)
+        return "Assign(%s, %s)" % (self.name, self.value)
 
     def __str__(self) -> str:
         return f"{self.name} = {self.value}"
