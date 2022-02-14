@@ -748,7 +748,7 @@ def get_string_ast_node(string: LocatableString, mls: bool) -> Union[Literal, St
     offset = 3 if mls else 1  # len(""")  or len(') or len(")
     init: List[str]  # lines before the match
     match: List[str]  # lines matching the string format
-    locatable_matches: List(LocatableString) = []
+    locatable_matches: List[LocatableString] = []
     for obj in matches:
         init, match, _ = (str(string)[start:end].splitlines() for start, end in pairwise((0, obj[1], obj[2], len(obj))))
         start_line: int = string.lnr + len(init) - 1
