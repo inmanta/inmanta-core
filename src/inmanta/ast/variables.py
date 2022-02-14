@@ -65,7 +65,7 @@ class Reference(ExpressionStatement):
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
         if str(self.name) not in requires:
-            raise NotFoundException(self, "Could not resolve the value %s in this static context" % str(self.name))
+            raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[str(self.name)]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
