@@ -1932,4 +1932,4 @@ a=\"""test
     assert instance1.location == Range("test", 3, 8, 3, 26)
     instance2 = instance1.instance
     assert str(instance2.name) == "hello"
-    assert instance2.name.location == Range("test", 8, 11, 3, 26)
+    assert instance2.name.location == Range("test", 3, 8, 3, 26)
