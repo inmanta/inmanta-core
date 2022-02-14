@@ -1,0 +1,4 @@
+---
+description: Fix race condition in `test_compileservice_cleanup` test case.
+change-type: patch
+destination-branches: [master, iso5, iso4]
