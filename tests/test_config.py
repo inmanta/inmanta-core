@@ -27,6 +27,7 @@ from tornado import netutil
 import inmanta.agent.config as cfg
 from inmanta import protocol
 from inmanta.config import Config, Option, option_as_default
+from inmanta.const import ClientType
 from inmanta.server.protocol import Server, ServerSlice
 from utils import LogSequence
 
@@ -189,7 +190,7 @@ client-id=test456
 
 
 @pytest.mark.asyncio
-async def test_bind_address_ipv4(async_finalizer, client):
+async def test_bind_address_ipv4(async_finalizer):
     """This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
     to 127.0.0.1. Procedure:
         1) Get free port on all interfaces.
@@ -197,7 +198,7 @@ async def test_bind_address_ipv4(async_finalizer, client):
         3) Start the Inmanta server with bind-address 127.0.0.1. and execute an API call
     """
 
-    @protocol.method(path="/test", operation="POST", client_types=["api"])
+    @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
 
@@ -232,6 +233,7 @@ async def test_bind_address_ipv4(async_finalizer, client):
         async_finalizer(rs.stop)
 
         # Check if server is reachable on loopback interface
+        client = protocol.Client("client")
         result = await client.test_endpoint()
         assert result.code == 200
     finally:
@@ -239,8 +241,8 @@ async def test_bind_address_ipv4(async_finalizer, client):
 
 
 @pytest.mark.asyncio
-async def test_bind_address_ipv6(async_finalizer, client):
-    @protocol.method(path="/test", operation="POST", client_types=["api"])
+async def test_bind_address_ipv6(async_finalizer) -> None:
+    @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
 
@@ -267,14 +269,15 @@ async def test_bind_address_ipv6(async_finalizer, client):
     await rs.start()
     async_finalizer(rs.stop)
 
+    client = protocol.Client("client")
     # Check if server is reachable on loopback interface
     result = await client.test_endpoint()
     assert result.code == 200
 
 
 @pytest.mark.asyncio
-async def test_bind_port(unused_tcp_port, async_finalizer, client, caplog):
-    @protocol.method(path="/test", operation="POST", client_types=["api"])
+async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
+    @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
         pass
 
@@ -291,6 +294,7 @@ async def test_bind_port(unused_tcp_port, async_finalizer, client, caplog):
         async_finalizer(rs.stop)
 
         # Check if server is reachable on loopback interface
+        client = protocol.Client("client")
         result = await client.test_endpoint()
         assert result.code == 200
         await rs.stop()

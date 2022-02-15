@@ -99,6 +99,7 @@ TProject = TypeVar("TProject", bound="Project")
 TInmantaModuleRequirement = TypeVar("TInmantaModuleRequirement", bound="InmantaModuleRequirement")
 
 
+@stable_api
 class InmantaModuleRequirement:
     """
     Represents a requirement on an inmanta module. This is a wrapper around Requirement. This class is provided for the
@@ -466,6 +467,7 @@ class ModuleSource(Generic[TModule]):
         return module_name
 
 
+@stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
@@ -575,9 +577,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             if os.path.exists(os.path.join(module_root_dir, ModuleV2.MODULE_FILE)):
                 return module_root_dir
         raise InvalidModuleException(
-            f"Invalid module: found module package but it has no {ModuleV2.MODULE_FILE}. This occurs when you install or build"
-            " modules from source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to"
-            " respectively install and build modules from source. Make sure to uninstall the broken package first."
+            f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
+            "This occurs when you install or build modules from source incorrectly. "
+            "Always use the `inmanta module install` and `inmanta module build` commands to "
+            "respectively install and build modules from source. Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -2090,6 +2093,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return any(True for repo in self._metadata.repo if repo.type == ModuleRepoType.package)
 
 
+@stable_api
 class DummyProject(Project):
     """Placeholder project that does nothing"""
 

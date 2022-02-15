@@ -61,6 +61,7 @@ from inmanta.module import (
     Project,
     gitprovider,
 )
+from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -390,6 +391,7 @@ compatible with the dependencies specified by the updated modules.
             raise last_failure
 
 
+@stable_api
 class ModuleTool(ModuleLikeTool):
     """
     A tool to manage configuration modules
@@ -1026,6 +1028,7 @@ class V2ModuleBuilder:
             raise ModuleBuildFailedError(msg="Module build failed")
 
 
+@stable_api
 class ModuleConverter:
     def __init__(self, module: ModuleV1) -> None:
         self._module = module
