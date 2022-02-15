@@ -1932,7 +1932,7 @@ a=\"""test
     assert instance2.name.location == Range("test", 3, 8, 3, 26)
 
 
-def test_string_attribute_reference_3():
+def test_string_attribute_reference_4():
     statements = parse_code(
         """
 a=\"""

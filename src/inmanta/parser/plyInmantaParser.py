@@ -22,7 +22,6 @@ from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
-from more_itertools import pairwise
 from ply.yacc import YaccProduction
 
 import inmanta.warnings as inmanta_warnings
