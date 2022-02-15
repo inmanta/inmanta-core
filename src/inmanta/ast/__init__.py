@@ -172,7 +172,7 @@ class LocatableString(object):
     A string with an attached source location.
 
     It is not a subtype of str, as str is not a normal class
-    As such, it is very important to unwrap strings ad this object is not an actual string.
+    As such, it is very important to unwrap strings as this object is not an actual string.
 
     All identifiers produced by the parser are of this type.
 
@@ -181,7 +181,7 @@ class LocatableString(object):
     2. in the constructors of other statements
     """
 
-    def __init__(self, value: str, location: Range, lexpos: "int", namespace: "Namespace") -> None:
+    def __init__(self, value: str, location: Range, lexpos: int, namespace: "Namespace") -> None:
         self.value = value
         self.location = location
 

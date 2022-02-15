@@ -19,7 +19,7 @@
 import logging
 import re
 from itertools import accumulate
-from typing import Iterator, List, Match, Optional, Sequence, Tuple, Union
+from typing import Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from more_itertools import pairwise
@@ -742,7 +742,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches: List[Match] = list(format_regex_compiled.finditer(str(string_ast)))
+    matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
 
@@ -771,7 +771,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
 
 def get_offset(match_lines: List[str], name: str) -> Tuple[int, int]:
     for line_index in range(len(match_lines)):
-        match = re.search(name, match_lines[line_index])
+        match: Optional[re.Match[str]] = re.search(name, match_lines[line_index])
         if match:
             return line_index, match.start() + 1
     else:
@@ -790,7 +790,6 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         start_char = var.location.start_char
         end_char = start_char + len(var_parts[0])
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
-        print(range.debugstr())
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         if len(var_parts) > 1:
@@ -798,11 +797,10 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
                 var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
             )
             for attr, char_offset in zip(var_parts[1:], attribute_offsets):
-                range: Range = Range(
+                range_attr: Range = Range(
                     var.location.file, var.location.lnr, char_offset, var.location.lnr, char_offset + len(attr)
                 )
-                print(range.debugstr())
-                attr_locatable_string: LocatableString = LocatableString(attr, range, var.lexpos, var.namespace)
+                attr_locatable_string: LocatableString = LocatableString(attr, range_attr, var.lexpos, var.namespace)
                 ref = AttributeReference(ref, attr_locatable_string)
 
             _vars.append((ref, match))
