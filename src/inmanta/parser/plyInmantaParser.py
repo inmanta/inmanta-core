@@ -630,8 +630,15 @@ def p_constructor(p: YaccProduction) -> None:
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
-# TODO: include error for Entity(1) (args instead of kwargs)
+# TODO: test
+# TODO: rename?
+def p_constructor_err(p: YaccProduction) -> None:
+    "constructor : class_ref '(' operand_list ')'"
+    # TODO: complete exception
+    raise Exception("TEST")
+
 # TODO: move
+# TODO: rename?
 # TODO: write tests
 def p_class_ref_err(p: YaccProduction) -> None:
     "class_ref : var_ref '.' CID"
@@ -660,10 +667,10 @@ def p_function_call(p: YaccProduction) -> None:
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
-# TODO: try this for ns_ref instead of function_call?
+# TODO: rename?
 # TODO: test
 def p_function_call_err_dot(p: YaccProduction) -> None:
-    "function_call : attr_ref '('"
+    "function_call : attr_ref '(' function_param_list ')'"
     raise ParserException(
         p[1].location,
         str(p[1]),
