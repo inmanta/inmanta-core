@@ -133,24 +133,18 @@ class Range(Location):
         result.range = export.Range(start=range_start, end=range_end)
         return result
 
-    def debugstr(self) -> str:
-        return "%s:%d:%d/%d:%d" % (self.file, self.lnr, self.start_char, self.end_lnr, self.end_char)
-
     def __str__(self) -> str:
         return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Range):
-            result = (
+            return (
                 self.file == other.file
                 and self.lnr == other.lnr
                 and self.start_char == other.start_char
                 and self.end_lnr == other.end_lnr
                 and self.end_char == other.end_char
             )
-            if not result:
-                print(self.debugstr() + " vs " + other.debugstr())
-            return result
 
         return False
 
