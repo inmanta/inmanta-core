@@ -1875,7 +1875,7 @@ a="test{{hello.world.bye}}test"
     assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert attribute_ref.attribute == "bye"
-    assert attribute_ref.location == Range("test", 2, 8, 2, 26)
+    assert attribute_ref.location == Range("test", 2, 19, 2, 23)
     instance1 = attribute_ref.instance
     assert instance1.attribute == "world"
     assert instance1.location == Range("test", 2, 8, 2, 26)
@@ -1933,3 +1933,26 @@ a=\"""test
     instance2 = instance1.instance
     assert str(instance2.name) == "hello"
     assert instance2.name.location == Range("test", 3, 8, 3, 26)
+
+
+def test_string_attribute_reference_3():
+    statements = parse_code(
+        """
+a=\"""
+format string starts as first char on new line
+{{x.n}}
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert attribute_ref.attribute == "n"
+    assert attribute_ref.location == Range("test", 3, 5, 3, 6)
+    instance1 = attribute_ref.instance
+    assert str(instance1.name) == "x"
+    assert instance1.name.location == Range("test", 3, 8, 3, 26)

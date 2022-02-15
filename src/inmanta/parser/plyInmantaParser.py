@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from itertools import accumulate
 import logging
 import re
-from typing import List, Optional, Union
+from typing import Iterator, List, Match, Optional, Sequence, Tuple, Union
 
 import ply.yacc as yacc
 from more_itertools import pairwise
@@ -740,46 +741,68 @@ format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def get_string_ast_node(string: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches: Sequence[Tuple[str, int, int]] = [(str(string)[m.start() : m.end()), m.start(), m.end()) for m in format_regex_compiled.finditer(str(string))]
+def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
+    matches: List[Match] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
-        return Literal(str(string))
-
+        return Literal(str(string_ast))
+    import pudb
+    pu.db
     offset = 3 if mls else 1  # len(""")  or len(') or len(")
-    init: List[str]  # lines before the match
-    match: List[str]  # lines matching the string format
     locatable_matches: List[LocatableString] = []
     for obj in matches:
-        init, match = (str(string)[start:end].splitlines() for start, end in pairwise((0, obj[1], obj[2])))
-        start_line: int = string.lnr + len(init) - 1
+        init_string, match_string = (str(string_ast)[start:end] for start, end in pairwise((0, obj.start(), obj.end())))
+        init: List[str] = (init_string + "\n").splitlines()     # lines before the match
+        match: List[str] = match_string.splitlines()            # lines matching the string format
+        start_line: int = string_ast.lnr + len(init) - 1
         end_line: int = start_line + len(match) - 1
         len_last_init_line: int = len(init[-1]) if init else 0
-        start_char: int = len_last_init_line + offset + string.start if len(init) == 1 else len_last_init_line + 1
+        start_char: int = len_last_init_line + offset + string_ast.start if len(init) == 1 else len_last_init_line + 1
         end_char: int = len(match[-1]) + start_char if len(match) == 1 else len(match[-1]) + 1
-        range: Range = Range(string.location.file, start_line, start_char, end_line, end_char)
-        locatable_string = LocatableString("".join(match), range, string.lexpos, string.namespace)
+        range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
+        locatable_string = LocatableString(match_string, range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append(locatable_string)
-    return create_string_format(string, locatable_matches)
+    return create_string_format(string_ast, locatable_matches)
 
 
 def create_string_format(format_string: LocatableString, variables: List[LocatableString]) -> StringFormat:
     """
     Create a string interpolation statement
+    'variables' expects the interpolation strings to include {{ and }}
     """
     _vars = []
     for var in variables:
-        var_parts: List[str] = str(var)[2:-2].strip().split(".")
-        ref_locatable_string = LocatableString(var_parts[0], var.location, var.lexpos, var.namespace)
+        name: str = str(var)[2:-2].strip()
+        var_parts: List[str] = name.split(".")
+        match_lines: List[str] = str(var)[2:-2].splitlines()
+        line_offset, char_offset = get_offset(match_lines, name)
+        start_char = var.location.start_char + 2 if len(match_lines) == 1 else char_offset + 1
+        end_char = start_char + len(var_parts[0])
+        range: Range = Range(var.location.file, var.location.lnr + line_offset, start_char,
+                             var.location.lnr + line_offset, end_char)
+        ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         if len(var_parts) > 1:
-            for attr in var_parts[1:]:
-                attr_locatable_string: LocatableString = LocatableString(attr, var.location, var.lexpos, var.namespace)
+            attribute_offsets: Iterator[int] = accumulate(
+                var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1)
+            for attr, char_offset in zip(var_parts[1:], attribute_offsets):
+                range: Range = Range(var.location.file, var.location.lnr + line_offset, char_offset,
+                                     var.location.lnr + line_offset, char_offset + len(attr))
+                attr_locatable_string: LocatableString = LocatableString(attr, range, var.lexpos, var.namespace)
                 ref = AttributeReference(ref, attr_locatable_string)
+
             _vars.append((ref, str(var)))
         else:
             _vars.append((ref, str(var)))
-
     return StringFormat(str(format_string), _vars)
+
+
+def get_offset(match_lines: List[str], name: str):
+    for line_index in range(len(match_lines)):
+        match = re.search(name, match_lines[line_index])
+        if match:
+            return line_index, match.start()
+    else:
+        print("error")
 
 
 def p_constant_list(p: YaccProduction) -> None:

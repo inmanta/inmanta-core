@@ -242,7 +242,7 @@ class AttributeReference(Reference):
 
         # a reference to the instance
         self.instance = instance
-        self.location = range
+        self.location = attribute.location
 
     def requires(self) -> List[str]:
         return self.instance.requires()
