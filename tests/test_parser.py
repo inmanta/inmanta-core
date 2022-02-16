@@ -1923,13 +1923,13 @@ a=\"""test
     assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert attribute_ref.attribute == "bye"
-    assert attribute_ref.location == Range("test", 3, 8, 3, 26)
+    assert attribute_ref.location == Range("test", 3, 22, 3, 25)
     instance1 = attribute_ref.instance
     assert instance1.attribute == "world"
-    assert instance1.location == Range("test", 3, 8, 3, 26)
+    assert instance1.location == Range("test", 3, 16, 3, 21)
     instance2 = instance1.instance
     assert str(instance2.name) == "hello"
-    assert instance2.name.location == Range("test", 3, 8, 3, 26)
+    assert instance2.name.location == Range("test", 3, 10, 3, 15)
 
 
 def test_string_attribute_reference_4():
