@@ -748,7 +748,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
     locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in matches:
-        init_string: str = str(string_ast)[0: match.start() + 2]  # +2 for len('{{')
+        init_string: str = str(string_ast)[0 : match.start() + 2]  # +2 for len('{{')
         match_string: str = match[2]
         init_lines: List[str] = (init_string + "\n").splitlines()  # lines before the match
         match_lines: List[str] = match_string.splitlines()  # lines betwwen the {{}} of the string
@@ -790,6 +790,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
+        ref.namespace = namespace
         if len(var_parts) > 1:
             attribute_offsets: Iterator[int] = accumulate(
                 var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
@@ -800,7 +801,8 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
                 )
                 attr_locatable_string: LocatableString = LocatableString(attr, range_attr, var.lexpos, var.namespace)
                 ref = AttributeReference(ref, attr_locatable_string)
-
+                ref.location = range_attr
+                ref.namespace = namespace
             _vars.append((ref, match))
         else:
             _vars.append((ref, match))
