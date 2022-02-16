@@ -366,3 +366,41 @@ z = c.tests[n = 42, **dct]
     x: Instance = scope.lookup("x").get_value()
     z: Instance = scope.lookup("z").get_value()
     assert x is z
+
+
+def test_printable_chars_key_identifier(snippetcompiler):
+    """
+        Testing the printable chars in string.printable (from the python string module). They all work except for '\r' that gets replaced internally by '\n'
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+dict_1 = {'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\()*+,-./:;<=>?@[\\]^_`|~ \t\n\x0b\x0c':0}
+dict_2 = {'\r': 0}
+    """)
+
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    def lookup(str):
+        return scope.lookup(str).get_value()
+
+    vars_to_lookup = [
+        "dict_1",
+        "dict_2",
+    ]
+    expected_values = [
+        {'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\()*+,-./:;<=>?@[\\]^_`|~ \t\n\x0b\x0c': 0},
+        {"\n": 0},  # weird
+    ]
+
+    for var, exp_val in zip(vars_to_lookup, expected_values):
+        assert lookup(var) == exp_val
+
+def test_string_interpolation_in_key(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+v = "key"
+dict_1 = {'{v}':0}
+        """,
+        "Syntax error: Invalid character in key. Dictionary keys cannot be interpolated strings ({dir}/main.cf:3:11)",
+    )
