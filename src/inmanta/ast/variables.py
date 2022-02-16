@@ -238,11 +238,10 @@ class AttributeReference(Reference):
             "%s.%s" % (instance.full_name, attribute), range, instance.name.lexpos, instance.namespace
         )
         Reference.__init__(self, reference)
-        self.attribute = str(attribute)
+        self.attribute = attribute
 
         # a reference to the instance
         self.instance = instance
-        self.location = attribute.location
 
     def requires(self) -> List[str]:
         return self.instance.requires()
@@ -260,7 +259,7 @@ class AttributeReference(Reference):
         temp.set_provider(self)
 
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
+        resumer = AttributeReferenceHelper(temp, self.instance, str(self.attribute), resultcollector)
         self.copy_location(resumer)
 
         # wait for the instance
@@ -272,16 +271,16 @@ class AttributeReference(Reference):
         return requires[self]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
-        return SetAttribute(self.instance, self.attribute, value, list_only)
+        return SetAttribute(self.instance, str(self.attribute), value, list_only)
 
     def root_in_self(self) -> Reference:
-        out = AttributeReference(self.instance.root_in_self(), self.attribute)
+        out = AttributeReference(self.instance.root_in_self(), str(self.attribute))
         self.copy_location(out)
         return out
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AttributeNodeReference:
         assert self.instance is not None
-        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
+        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance), self.attribute)
+        return "%s.%s" % (repr(self.instance), str(self.attribute))

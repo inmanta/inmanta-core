@@ -748,18 +748,18 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
     locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in matches:
-        init_string: str = str(string_ast)[0 : match.start() + 2]
+        init_string: str = str(string_ast)[0: match.start() + 2]  # +2 for len('{{')
         match_string: str = match[2]
         init_lines: List[str] = (init_string + "\n").splitlines()  # lines before the match
-        match_lines: List[str] = match_string.splitlines()  # lines matching the string format
+        match_lines: List[str] = match_string.splitlines()  # lines betwwen the {{}} of the string
         line_offset, char_offset = get_offset(match_lines, match[3])
         line: int = string_ast.lnr + len(init_lines) + line_offset - 1
         start_char: int = (
             char_offset
-            if len(match_lines) > 1
+            if len(match_lines) > 1 and line_offset > 0  # the match starts on a new line
             else string_ast.start + len(init_lines[-1]) + mls_offset + char_offset - 1
-            if len(init_lines) == 1
-            else len(init_lines[-1]) + char_offset
+            if len(init_lines) == 1  # the match is on the sameline as the start of the init string
+            else len(init_lines[-1]) + char_offset  # the match is on the sameline as the end of the init string
         )
         end_char: int = start_char + len(match[3])
         range: Range = Range(string_ast.location.file, line, start_char, line, end_char)
