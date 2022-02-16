@@ -1,0 +1,6 @@
+description: An exception is now raised whenever a curly bracket is used in a string used as a key in a dictionary
+change-type: patch
+destination-branches: [master, iso4, iso5]
+sections: {
+  feat: "{{description}}"
+}
