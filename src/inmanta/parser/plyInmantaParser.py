@@ -167,7 +167,8 @@ def p_stmt(p: YaccProduction) -> None:
     | constructor
     | function_call
     | for
-    | if"""
+    | if
+    | elif"""
     p[0] = p[1]
 
 
@@ -212,6 +213,12 @@ def p_for(p: YaccProduction) -> None:
 
 def p_if(p: YaccProduction) -> None:
     "if : IF expression ':' block"
+    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
+    attach_lnr(p, 1)
+
+
+def p_elif(p: YaccProduction) -> None:
+    "elif: ELIF expression ':' block"
     p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
     attach_lnr(p, 1)
 
