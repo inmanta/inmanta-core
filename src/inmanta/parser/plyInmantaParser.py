@@ -646,7 +646,19 @@ def p_list_def(p: YaccProduction) -> None:
 def p_pair_list_collect(p: YaccProduction) -> None:
     """pair_list : STRING ':' operand ',' pair_list
     | STRING ':' operand empty pair_list_empty"""
-    p[5].insert(0, (str(p[1]), p[3]))
+
+    key, val = str(p[1]), p[3]
+    invalid_chars = ["{", "}"]
+
+    for char in invalid_chars:
+        if char in key:
+            raise ParserException(
+                p[1].location,
+                str(p[1]),
+                f"Invalid character in key. Dictionary keys cannot be interpolated strings",
+            )
+
+    p[5].insert(0, (key, val))
     p[0] = p[5]
 
 
