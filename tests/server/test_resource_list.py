@@ -147,13 +147,13 @@ async def env_with_resources(server, client):
     await env.insert()
 
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 5):
+    for i in range(1, 4):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
             date=datetime.now(),
             total=1,
-            released=i != 1 and i != 5,
+            released=i != 1,
             version_info={},
         )
         await cm.insert()
@@ -171,12 +171,12 @@ async def env_with_resources(server, client):
             )
             await res.insert()
 
-    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3, 4])
+    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
     await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
     await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])  # Orphaned
-    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3, 4])
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3, 4])
-    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3, 4])
+    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
+    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
+    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
