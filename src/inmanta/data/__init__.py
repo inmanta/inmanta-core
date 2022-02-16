@@ -4035,22 +4035,48 @@ class Resource(BaseDocument):
         environment_db_value = cls._get_value(environment)
         return (
             f"""
-            {select_clause}
-            FROM (
-                SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.environment,
-                    (CASE WHEN
-                            (SELECT r.model < MAX(public.configurationmodel.version)
-                            FROM public.configurationmodel
-                            WHERE public.configurationmodel.released=TRUE
-                            AND environment=${offset})
+            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+            WITH RECURSIVE cm_version AS (
+                  SELECT
+                    MAX(public.configurationmodel.version) as max_version
+                    FROM public.configurationmodel
+                WHERE public.configurationmodel.released=TRUE
+                AND environment=${offset}
+                ), -- the latest released version number in the environment is calculated once, before the others
+            /* emulate a loose (or skip) index scan */
+            cte AS (
+               ( -- specify the necessary columns
+               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
+                        THEN 'orphaned' -- use the CTE to check the status
+                    ELSE r.status::text END) as status
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment AND cm.released = TRUE
+               WHERE  r.environment = ${offset}
+               ORDER  BY resource_id, model DESC
+               LIMIT  1
+               )
+               UNION ALL
+               SELECT r.*
+               FROM   cte c
+               CROSS JOIN LATERAL
+               /* specify the same columns in the recursive part */
+                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
-                FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.environment=${offset}
-                    ORDER BY r.resource_id, r.model DESC)
-            as res
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment AND cm.released = TRUE
+               /* One result from the recursive call is the latest released version of one specific resource.
+                  We always start looking for this based on the previous resource_id. */
+               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset}
+               ORDER  BY r.resource_id, r.model DESC
+               LIMIT  1) r
+               )
+            {select_clause}
+            FROM   cte
             """,
             environment_db_value,
         )

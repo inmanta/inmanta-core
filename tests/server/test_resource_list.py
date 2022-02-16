@@ -74,13 +74,13 @@ async def test_has_only_one_version_from_resource(server, client):
     await env.insert()
 
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 4):
+    for i in range(1, 5):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
             date=datetime.now(),
             total=1,
-            released=i != 1,
+            released=i != 1 and i != 4,
             version_info={},
         )
         await cm.insert()
@@ -106,6 +106,14 @@ async def test_has_only_one_version_from_resource(server, client):
         status=ResourceState.deployed,
     )
     await res1_v3.insert()
+    version = 4
+    res1_v4 = data.Resource.new(
+        environment=env.id,
+        resource_version_id=key + ",v=%d" % version,
+        attributes={"path": path, "new_attr": 123, "requires": ["abc"]},
+        status=ResourceState.deployed,
+    )
+    await res1_v4.insert()
 
     version = 1
     path = "/etc/file" + str(2)
@@ -125,6 +133,7 @@ async def test_has_only_one_version_from_resource(server, client):
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert result.result["data"][0]["status"] == "deployed"
+    assert result.result["data"][0]["requires"] == []
     # Orphaned, since there is already a version 3 released
     assert result.result["data"][1]["status"] == "orphaned"
 
@@ -138,13 +147,13 @@ async def env_with_resources(server, client):
     await env.insert()
 
     # Add multiple versions of model, with 2 of them released
-    for i in range(1, 4):
+    for i in range(1, 5):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
             date=datetime.now(),
             total=1,
-            released=i != 1,
+            released=i != 1 and i != 5,
             version_info={},
         )
         await cm.insert()
@@ -162,12 +171,12 @@ async def env_with_resources(server, client):
             )
             await res.insert()
 
-    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
+    await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3, 4])
     await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned
     await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [2])  # Orphaned
-    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3])
-    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3])
-    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3])
+    await create_resource("agent2", "/tmp/file4", "std::File", ResourceState.unavailable, [3, 4])
+    await create_resource("agent2", "/tmp/dir5", "std::Directory", ResourceState.skipped, [3, 4])
+    await create_resource("agent3", "/tmp/dir6", "std::Directory", ResourceState.deployed, [3, 4])
 
     env2 = data.Environment(name="dev-test2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
