@@ -145,7 +145,6 @@ class Range(Location):
                 and self.end_lnr == other.end_lnr
                 and self.end_char == other.end_char
             )
-
         return False
 
 

@@ -780,7 +780,6 @@ def get_offset(match_lines: List[str], name: str) -> Tuple[int, int]:
 def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]]) -> StringFormat:
     """
     Create a string interpolation statement
-    'variables' expects the interpolation strings to include {{ and }}
     """
     _vars = []
     for match, var in variables:
