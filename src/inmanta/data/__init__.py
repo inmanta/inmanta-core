@@ -4039,7 +4039,8 @@ class Resource(BaseDocument):
         # btree index efficiently; rather than scanning all equal values of a key,
         # as soon as a new value is found, restart the search by looking for a larger value"
         # In this case we don't scan all equal values of a resource_id
-        # just one, (in descending order according to the version number) and move on to the next resource_id
+        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
+        # and move on to the next resource_id
         return (
             f"""
             /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
