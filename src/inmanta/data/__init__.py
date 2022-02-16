@@ -4033,27 +4033,37 @@ class Resource(BaseDocument):
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
+        # Emulate a loose index scan with a recursive common table expression (CTE),
+        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
+        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
+        # btree index efficiently; rather than scanning all equal values of a key,
+        # as soon as a new value is found, restart the search by looking for a larger value"
+        # In this case we don't scan all equal values of a resource_id
+        # just one, (in descending order according to the version number) and move on to the next resource_id
         return (
             f"""
             /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+            /* The cm_version CTE finds the maximum released version number in the environment  */
             WITH RECURSIVE cm_version AS (
                   SELECT
                     MAX(public.configurationmodel.version) as max_version
                     FROM public.configurationmodel
                 WHERE public.configurationmodel.released=TRUE
                 AND environment=${offset}
-                ), -- the latest released version number in the environment is calculated once, before the others
+                ),
             /* emulate a loose (or skip) index scan */
             cte AS (
-               ( -- specify the necessary columns
+               (
+               /* specify the necessary columns */
                SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
                     r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
                             (SELECT r.model < cm_version.max_version
                             FROM cm_version)
                         THEN 'orphaned' -- use the CTE to check the status
                     ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment AND cm.released = TRUE
-               WHERE  r.environment = ${offset}
+               FROM   resource r
+               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+               WHERE  r.environment = ${offset} AND cm.released = TRUE
                ORDER  BY resource_id, model DESC
                LIMIT  1
                )
@@ -4068,10 +4078,10 @@ class Resource(BaseDocument):
                             FROM cm_version)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment AND cm.released = TRUE
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
                /* One result from the recursive call is the latest released version of one specific resource.
                   We always start looking for this based on the previous resource_id. */
-               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset}
+               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
                ORDER  BY r.resource_id, r.model DESC
                LIMIT  1) r
                )
