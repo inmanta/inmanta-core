@@ -405,7 +405,56 @@ def test_string_interpolation_in_key(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 v = "key"
-dict_1 = {'{v}':0}
+dict_1 = {'{{v}}':0}
         """,
         "Syntax error: Invalid character in key. Dictionary keys cannot be interpolated strings ({dir}/main.cf:3:11)",
     )
+
+def test_interpolation_in_dict_keys(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+dict_0 = {'itpl':'0'}
+dict_1 = {'{itpl}}':"1"}
+dict_2 = {'{{itpl}':2}
+
+dict_3 = {"§": 3}
+dict_3_bis = {"\\u00A7":3}
+
+dict_4 = {"ə": 4}
+dict_4_bis = {"\\u0259":41}
+
+value = "itp"
+dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
+    """
+    )
+
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    def lookup(str):
+        return scope.lookup(str).get_value()
+
+    vars_to_lookup = [
+        "dict_0",
+        "dict_1",
+        "dict_2",
+        "dict_3",
+        "dict_3_bis",
+        "dict_4",
+        "dict_4_bis",
+        "dict_5",
+    ]
+    expected_values = [
+        {"itpl": '0'},
+        {"{itpl}}": "1"},
+        {"{{itpl}": 2},
+        {"Â§": 3},
+        {"§": 3},
+        {"É\x99": 4},
+        {"ə": 41},
+        {r"\{\{not interpolation\}\}": "interpolation itp"}
+
+    ]
+
+    for var, exp_val in zip(vars_to_lookup, expected_values):
+        assert lookup(var) == exp_val
