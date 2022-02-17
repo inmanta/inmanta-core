@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.warnings as inmanta_warnings
@@ -173,7 +173,7 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         return self._node
 
 
-class RelationAttributeVariable(ABC):
+class RelationAttributeVariable:
     """
     Abstract base class for variables associated with a relation attribute.
     """
