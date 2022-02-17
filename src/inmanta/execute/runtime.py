@@ -178,10 +178,6 @@ class RelationAttributeVariable:
     Abstract base class for variables associated with a relation attribute.
     """
 
-    def __init__(self, attribute: "RelationAttribute", instance: "Instance") -> None:
-        self.attribute: "RelationAttribute" = attribute
-        self.myself = instance
-
 
 class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
@@ -193,7 +189,8 @@ class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance"):
-        RelationAttributeVariable.__init__(self, attribute, instance)
+        self.attribute: "RelationAttribute" = attribute
+        self.myself: "Instance" = instance
         ResultVariable.__init__(self)
 
     def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
@@ -430,7 +427,8 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
     __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        RelationAttributeVariable.__init__(self, attribute, instance)
+        self.attribute: "RelationAttribute" = attribute
+        self.myself: "Instance" = instance
         BaseListVariable.__init__(self, queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
@@ -484,9 +482,10 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
     __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        RelationAttributeVariable.__init__(self, attribute, instance)
         DelayedResultVariable.__init__(self, queue)
         self.value = None
+        self.attribute: "RelationAttribute" = attribute
+        self.myself: "Instance" = instance
         self.location = None
 
     def _get_null_value(self) -> object:
