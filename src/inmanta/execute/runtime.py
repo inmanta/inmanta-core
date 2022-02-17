@@ -392,18 +392,31 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return "BaseListVariable %s" % (self.value)
 
 
-class TempListVariable(BaseListVariable):
+class ListLiteral(BaseListVariable):
+    """
+    Transient variable to represent a list (of either constants or instances) literal (not a variable).
+    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
+    tracking and freezing. Instances of this class should never require forceful freezing.
+    """
 
     __slots__ = ()
 
     def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
+        """
+        Set a promised value with 100% accurate promise tracking. Because of this class' invariant that all promises are
+        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
+        """
         super().set_promised_value(promis, value, location, recur)
-        # 100% accurate promisse tracking
         if len(self.promisses) == len(self.done_promisses):
             self.freeze()
 
 
+# TODO: create ABC for resultvariables associated with a relation?
+
 class ListVariable(BaseListVariable):
+    """
+    ResultVariable that represents a list of instances associated with a relation attribute.
+    """
 
     value: "List[Instance]"
 

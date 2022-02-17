@@ -42,7 +42,7 @@ from inmanta.execute.runtime import (
     Resolver,
     ResultCollector,
     ResultVariable,
-    TempListVariable,
+    ListLiteral,
 )
 from inmanta.execute.util import Unknown
 
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 class CreateList(ReferenceStatement):
     """
-    Create list of values
+    Represents a list literal statement which might contain any type of value (constants and/or instances).
     """
 
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
@@ -79,10 +79,12 @@ class CreateList(ReferenceStatement):
         # to get more accurate gradual execution
         # temp variable is required get all heuristics right
 
-        # ListVariable to hold all the stuff
-        temp = TempListVariable(queue)
+        # ListVariable to hold all the stuff. Used as a proxy for gradual execution and to track promises.
+        # Freezes itself once all promises have been fulfilled, at which point it represents the full list literal created by
+        # this statement.
+        temp = ListLiteral(queue)
 
-        # add listener
+        # add listener for gradual execution
         temp.listener(resultcollector, self.location)
 
         # Assignments, wired for gradual
