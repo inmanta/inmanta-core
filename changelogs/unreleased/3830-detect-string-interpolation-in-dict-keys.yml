@@ -1,6 +1,6 @@
-description: An exception is now raised whenever a curly bracket is used in a string used as a key in a dictionary
+description: An exception is now raised when trying to interpolate a string in a dictionary key
 change-type: patch
-destination-branches: [master, iso4, iso5]
+destination-branches: [master]
 sections: {
-  feat: "{{description}}"
+  deprecation-note: "{{description}}"
 }
