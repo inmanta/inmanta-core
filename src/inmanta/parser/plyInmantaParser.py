@@ -736,7 +736,7 @@ def p_constant_mls(p: YaccProduction) -> None:
     attach_from_string(p)
 
 
-format_regex = r"""({{(\s*([\.A-Za-z0-9_-]+)\s*)}})"""
+format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
@@ -745,37 +745,28 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     if len(matches) == 0:
         return Literal(str(string_ast))
 
+    start_lnr = string_ast.location.lnr
+    start_char_pos = string_ast.location.start_char
+    whole_string = str(string_ast)
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
+
+    def char_count_to_lnr_char(position):
+        # convert in-string position to lnr/charcount
+        before = whole_string[0:position]
+        lines = before.count("\n")
+        if lines == 0:
+            return start_lnr, start_char_pos + position + mls_offset
+        else:
+            return start_lnr + lines, position - before.rindex("\n")
+
     locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in matches:
-        init_string: str = str(string_ast)[0 : match.start() + 2]  # +2 for len('{{')
-        match_string: str = match[2]
-        # lines before the match: a newline is added to init_string as a terminal line break does not result in an extra line with splitlines()
-        init_lines: List[str] = (init_string + "\n").splitlines()
-        match_lines: List[str] = match_string.splitlines()  # lines between the {{}} of the string
-        line_offset, char_offset = get_offset(match_lines, match[3])
-        line: int = string_ast.lnr + len(init_lines) + line_offset - 1
-        start_char: int = (
-            char_offset
-            if len(match_lines) > 1 and line_offset > 0  # the match starts on a new line
-            else string_ast.start + len(init_lines[-1]) + mls_offset + char_offset - 1
-            if len(init_lines) == 1  # the match is on the same line as the start of the init string
-            else len(init_lines[-1]) + char_offset  # the match is on the same line as the end of the init string
-        )
-        end_char: int = start_char + len(match[3])
-        range: Range = Range(string_ast.location.file, line, start_char, line, end_char)
-        locatable_string = LocatableString(match[3], range, string_ast.lexpos, string_ast.namespace)
+        start_line, start_char = char_count_to_lnr_char(match.start(2))
+        end_line, end_char = char_count_to_lnr_char(match.end(2))
+        range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
+        locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append((match[1], locatable_string))
     return create_string_format(string_ast, locatable_matches)
-
-
-def get_offset(match_lines: List[str], name: str) -> Tuple[int, int]:
-    for line_index in range(len(match_lines)):
-        match: Optional[re.Match[str]] = re.search(name, match_lines[line_index])
-        if match:
-            return line_index, match.start() + 1
-    else:
-        raise Exception("Match not found")
 
 
 def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]]) -> StringFormat:
