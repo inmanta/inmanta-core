@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.warnings as inmanta_warnings
@@ -173,18 +173,29 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         return self._node
 
 
-class AttributeVariable(ResultVariable["Instance"]):
+class RelationAttributeVariable(ABC):
+    """
+    Abstract base class for variables associated with a relation attribute.
+    """
+
+    __slots__ = ("attribute", "myself")
+
+    def __init__(self, attribute: "RelationAttribute", instance: "Instance") -> None:
+        self.attribute: "RelationAttribute" = attribute
+        self.myself = instance
+
+
+class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
     a result variable for a relation with arity 1
 
     when assigned a value, it will also assign a value to its inverse relation
     """
 
-    __slots__ = ("attribute", "myself")
+    __slots__ = ()
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance"):
-        self.attribute: "RelationAttribute" = attribute
-        self.myself: "Instance" = instance
+        RelationAttributeVariable.__init__(self, attribute, instance)
         ResultVariable.__init__(self)
 
     def set_value(self, value: "Instance", location: Location, recur: bool = True) -> None:
@@ -411,21 +422,18 @@ class ListLiteral(BaseListVariable):
             self.freeze()
 
 
-# TODO: create ABC for resultvariables associated with a relation?
-
-class ListVariable(BaseListVariable):
+class ListVariable(BaseListVariable, RelationAttributeVariable):
     """
     ResultVariable that represents a list of instances associated with a relation attribute.
     """
 
     value: "List[Instance]"
 
-    __slots__ = ("attribute", "myself")
+    __slots__ = ()
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute: "RelationAttribute" = attribute
-        self.myself = instance
-        super().__init__(queue)
+        RelationAttributeVariable.__init__(self, attribute, instance)
+        BaseListVariable.__init__(self, queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if isinstance(value, NoneValue):
@@ -473,15 +481,14 @@ class ListVariable(BaseListVariable):
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
 
-class OptionVariable(DelayedResultVariable["Instance"]):
+class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
 
-    __slots__ = ("attribute", "myself", "location")
+    __slots__ = ("location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
+        RelationAttributeVariable.__init__(self, attribute, instance)
         DelayedResultVariable.__init__(self, queue)
         self.value = None
-        self.attribute = attribute
-        self.myself = instance
         self.location = None
 
     def _get_null_value(self) -> object:
