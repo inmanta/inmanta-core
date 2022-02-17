@@ -655,7 +655,7 @@ def p_pair_list_collect(p: YaccProduction) -> None:
             raise ParserException(
                 p[1].location,
                 str(p[1]),
-                f"Invalid character in key. Dictionary keys cannot be interpolated strings",
+                "Invalid character in key. Dictionary keys cannot be interpolated strings",
             )
 
     p[5].insert(0, (key, val))

@@ -370,13 +370,15 @@ z = c.tests[n = 42, **dct]
 
 def test_printable_chars_key_identifier(snippetcompiler):
     """
-        Testing the printable chars in string.printable (from the python string module). They all work except for '\r' that gets replaced internally by '\n'
+    Testing the printable chars in string.printable (from the python string module).
+    They all work except for '\r' that gets replaced internally by '\n'
     """
     snippetcompiler.setup_for_snippet(
         """
 dict_1 = {'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\()*+,-./:;<=>?@[\\]^_`|~ \t\n\x0b\x0c':0}
 dict_2 = {'\r': 0}
-    """)
+    """  # NOQA W605
+    )
 
     (_, root) = compiler.do_compile()
     scope = root.get_child("__config__").scope
@@ -389,12 +391,15 @@ dict_2 = {'\r': 0}
         "dict_2",
     ]
     expected_values = [
-        {'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\()*+,-./:;<=>?@[\\]^_`|~ \t\n\x0b\x0c': 0},
+        {
+            '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\()*+,-./:;<=>?@[\\]^_`|~ \t\n\x0b\x0c': 0  # NOQA W605
+        },
         {"\n": 0},  # weird
     ]
 
     for var, exp_val in zip(vars_to_lookup, expected_values):
         assert lookup(var) == exp_val
+
 
 def test_string_interpolation_in_key(snippetcompiler):
     snippetcompiler.setup_for_error(
