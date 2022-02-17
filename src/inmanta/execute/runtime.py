@@ -178,8 +178,6 @@ class RelationAttributeVariable:
     Abstract base class for variables associated with a relation attribute.
     """
 
-    __slots__ = ("attribute", "myself")
-
     def __init__(self, attribute: "RelationAttribute", instance: "Instance") -> None:
         self.attribute: "RelationAttribute" = attribute
         self.myself = instance
@@ -192,7 +190,7 @@ class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     when assigned a value, it will also assign a value to its inverse relation
     """
 
-    __slots__ = ()
+    __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance"):
         RelationAttributeVariable.__init__(self, attribute, instance)
@@ -429,7 +427,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
 
     value: "List[Instance]"
 
-    __slots__ = ()
+    __slots__ = ("attribute", "myself")
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         RelationAttributeVariable.__init__(self, attribute, instance)
@@ -483,7 +481,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
 
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
 
-    __slots__ = ("location")
+    __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         RelationAttributeVariable.__init__(self, attribute, instance)
