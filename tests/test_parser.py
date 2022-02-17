@@ -1953,3 +1953,28 @@ format string starts as first char on new line
     instance1 = attribute_ref.instance
     assert str(instance1.name) == "x"
     assert instance1.name.location == Range("test", 4, 3, 4, 4)
+
+
+def test_string_attribute_reference_5():
+    statements = parse_code(
+        """
+a=\"""
+format string starts as first char on new line
+{{
+x.n
+}}
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "n"
+    assert attribute_ref.attribute.location == Range("test", 5, 3, 5, 4)
+    instance1 = attribute_ref.instance
+    assert str(instance1.name) == "x"
+    assert instance1.name.location == Range("test", 5, 1, 5, 2)

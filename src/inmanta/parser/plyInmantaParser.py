@@ -750,16 +750,17 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     for match in matches:
         init_string: str = str(string_ast)[0 : match.start() + 2]  # +2 for len('{{')
         match_string: str = match[2]
-        init_lines: List[str] = (init_string + "\n").splitlines()  # lines before the match
-        match_lines: List[str] = match_string.splitlines()  # lines betwwen the {{}} of the string
+        # lines before the match: a newline is added to init_string as a terminal line break does not result in an extra line with splitlines()
+        init_lines: List[str] = (init_string + "\n").splitlines()
+        match_lines: List[str] = match_string.splitlines()  # lines between the {{}} of the string
         line_offset, char_offset = get_offset(match_lines, match[3])
         line: int = string_ast.lnr + len(init_lines) + line_offset - 1
         start_char: int = (
             char_offset
             if len(match_lines) > 1 and line_offset > 0  # the match starts on a new line
             else string_ast.start + len(init_lines[-1]) + mls_offset + char_offset - 1
-            if len(init_lines) == 1  # the match is on the sameline as the start of the init string
-            else len(init_lines[-1]) + char_offset  # the match is on the sameline as the end of the init string
+            if len(init_lines) == 1  # the match is on the same line as the start of the init string
+            else len(init_lines[-1]) + char_offset  # the match is on the same line as the end of the init string
         )
         end_char: int = start_char + len(match[3])
         range: Range = Range(string_ast.location.file, line, start_char, line, end_char)
@@ -779,7 +780,12 @@ def get_offset(match_lines: List[str], name: str) -> Tuple[int, int]:
 
 def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]]) -> StringFormat:
     """
-    Create a string interpolation statement
+    Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
+
+    :param format_string: the LocatableString as it was received by get_string_ast_node
+    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
+                        The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
+                        just the variables and the range for those variables.(ex. LocatableString("a.b", range(a.b), lexpos, namespace))
     """
     _vars = []
     for match, var in variables:
