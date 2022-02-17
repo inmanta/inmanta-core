@@ -773,10 +773,11 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
     """
     Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
 
-    :param format_string: the LocatableString as it was received by get_string_ast_node
+    :param format_string: the LocatableString as it was received by get_string_ast_node()
     :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
                         The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
-                        just the variables and the range for those variables.(ex. LocatableString("a.b", range(a.b), lexpos, namespace))
+                        just the variables and the range for those variables.
+                        (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
     """
     _vars = []
     for match, var in variables:
