@@ -644,13 +644,12 @@ def p_list_def(p: YaccProduction) -> None:
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:
-    """dict_key : RSTRING
-    """
+    """dict_key : RSTRING"""
     p[0] = p[1]
 
+
 def p_string_dict_key(p: YaccProduction) -> None:
-    """dict_key : STRING
-    """
+    """dict_key : STRING"""
 
     key = str(p[1])
     match_obj = format_regex_compiled.findall(key)
@@ -658,7 +657,7 @@ def p_string_dict_key(p: YaccProduction) -> None:
         raise ParserException(
             p[1].location,
             str(p[1]),
-            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",
+            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",  # NOQA E501
         )
     p[0] = p[1]
 
@@ -668,7 +667,6 @@ def p_pair_list_collect(p: YaccProduction) -> None:
     | dict_key ':' operand empty pair_list_empty"""
 
     key, val = str(p[1]), p[3]
-
 
     p[5].insert(0, (key, val))
     p[0] = p[5]

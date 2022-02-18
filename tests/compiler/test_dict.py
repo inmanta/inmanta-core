@@ -407,7 +407,7 @@ def test_string_interpolation_in_key(snippetcompiler):
 v = "key"
 dict_1 = {'{{v}}':0}
         """,
-        "Syntax error: String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets ({dir}/main.cf:3:11)",
+        "Syntax error: String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets ({dir}/main.cf:3:11)",  # NOQA E501
     )
 
 
