@@ -1,9 +1,9 @@
 Overwrite default server configuration
 ######################################
 
-By default the server will use this [configuration file](resources/server.cfg).  
+By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.  
 If you want to change it, you can copy this file, edit it, then mount it in the container, 
-where the default file is currently located: ``/etc/inmanta/inmanta.cfg``.
+where the original file was located.
 
 If you use docker-compose, you can simply update this section of the example above:
 
