@@ -20,7 +20,7 @@ import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
@@ -38,7 +38,7 @@ class Reference(ExpressionStatement):
 
     def __init__(self, name: LocatableString) -> None:
         ExpressionStatement.__init__(self)
-        self.name = str(name)
+        self.name = name
         self.full_name = str(name)
 
     def normalize(self) -> None:
@@ -49,7 +49,7 @@ class Reference(ExpressionStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # FIXME: may be done more efficient?
-        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
+        out = {str(self.name): resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
     def requires_emit_gradual(
@@ -57,16 +57,16 @@ class Reference(ExpressionStatement):
     ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out = {self.name: var}  # type : Dict[object, ResultVariable]
+        out = {str(self.name): var}  # type : Dict[object, ResultVariable]
         return out
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        return requires[self.name]
+        return requires[str(self.name)]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
-        if self.name not in requires:
+        if str(self.name) not in requires:
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
-        return requires[self.name]
+        return requires[str(self.name)]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
@@ -74,7 +74,7 @@ class Reference(ExpressionStatement):
         return Assign(self.name, value)
 
     def root_in_self(self) -> "Reference":
-        if self.name == "self":
+        if str(self.name) == "self":
             return self
         else:
             ref = Reference("self")
@@ -84,13 +84,13 @@ class Reference(ExpressionStatement):
             return attr_ref
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
-        return graph.resolver.get_dataflow_node(self.name)
+        return graph.resolver.get_dataflow_node(str(self.name))
 
     def __str__(self) -> str:
-        return self.name
+        return str(self.name)
 
     def __repr__(self) -> str:
-        return self.name
+        return str(self.name)
 
 
 T = TypeVar("T")
@@ -233,8 +233,12 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
-        self.attribute = str(attribute)
+        range: Range = Range(instance.name.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
+        reference: LocatableString = LocatableString(
+            "%s.%s" % (instance.full_name, attribute), range, instance.name.lexpos, instance.namespace
+        )
+        Reference.__init__(self, reference)
+        self.attribute = attribute
 
         # a reference to the instance
         self.instance = instance
@@ -255,7 +259,7 @@ class AttributeReference(Reference):
         temp.set_provider(self)
 
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
+        resumer = AttributeReferenceHelper(temp, self.instance, str(self.attribute), resultcollector)
         self.copy_location(resumer)
 
         # wait for the instance
@@ -267,16 +271,16 @@ class AttributeReference(Reference):
         return requires[self]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
-        return SetAttribute(self.instance, self.attribute, value, list_only)
+        return SetAttribute(self.instance, str(self.attribute), value, list_only)
 
     def root_in_self(self) -> Reference:
-        out = AttributeReference(self.instance.root_in_self(), self.attribute)
+        out = AttributeReference(self.instance.root_in_self(), str(self.attribute))
         self.copy_location(out)
         return out
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AttributeNodeReference:
         assert self.instance is not None
-        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
+        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance), self.attribute)
+        return "%s.%s" % (repr(self.instance), str(self.attribute))
