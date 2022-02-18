@@ -1827,3 +1827,23 @@ b=r"{{a}}\n"
     literal = assign_stmt_2.value
     assert isinstance(literal, Literal)
     assert literal.value == r"{{a}}\n"
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "mymod.MyEntity()",
+        "mymod.submod.MyEntity()",
+        "entity Child extends mymod.MyEntity: end",
+        "SomeEntity.my [1] -- mymod.MyEntity",
+    ],
+)
+def test_entity_ref_err_dot(snippet: str):
+    """
+    Verify that an attempt to access an entity in a qualified manner with '.' instead of '::' results in an appropriate
+    exception.
+
+    :param snippet: Snippet that is expected to produce this error for an entity named `MyEntity`.
+    """
+    with pytest.raises(ParserException, match="`MyEntity` looks like an entity but was accessed with '.'"):
+        parse_code(snippet)
