@@ -178,6 +178,8 @@ class RelationAttributeVariable:
     Abstract base class for variables associated with a relation attribute.
     """
 
+    __slots__ = ()
+
 
 class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
