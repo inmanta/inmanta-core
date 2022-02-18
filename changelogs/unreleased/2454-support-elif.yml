@@ -1,0 +1,5 @@
+description: Add support for the elif keyword to the compiler
+change-type: minor
+destination-branches: [master]
+sections:
+    feature: "{{description}}"
