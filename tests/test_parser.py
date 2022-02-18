@@ -1524,6 +1524,103 @@ end
     assert len(stmt.else_branch.get_stmts()) == (0 if empty else 1)
 
 
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif(empty: bool):
+    """Test for the if statement followed by an elif"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+end
+        """
+        % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement, If)
+    assert isinstance(embedded_if_statement.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement.else_branch, BasicBlock)
+    assert len(embedded_if_statement.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement.else_branch.get_stmts()) == 0
+
+
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif_elif(empty: bool):
+    """Test for the elif statement followed by an elif"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+elif test.field == "value3":
+    %s
+end
+        """
+        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement1 = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement1, If)
+    assert isinstance(embedded_if_statement1.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement1.else_branch, BasicBlock)
+    assert len(embedded_if_statement1.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement1.else_branch.get_stmts()) == 1
+    embedded_if_statement2 = embedded_if_statement1.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement2, If)
+    assert isinstance(embedded_if_statement2.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement2.else_branch, BasicBlock)
+    assert len(embedded_if_statement2.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement2.else_branch.get_stmts()) == 0
+
+
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif_else(empty: bool):
+    """Test for the elif statement followed by an else"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+else:
+    %s
+end
+        """
+        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement, If)
+    assert isinstance(embedded_if_statement.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement.else_branch, BasicBlock)
+    assert len(embedded_if_statement.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement.else_branch.get_stmts()) == (0 if empty else 1)
+
+
 def test_bool_str():
     """Test to string of bool literal renders inmanta true/false and not python"""
     statements = parse_code(
