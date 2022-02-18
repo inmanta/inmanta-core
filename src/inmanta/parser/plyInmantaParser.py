@@ -167,8 +167,7 @@ def p_stmt(p: YaccProduction) -> None:
     | constructor
     | function_call
     | for
-    | if
-    | elif"""
+    | if"""
     p[0] = p[1]
 
 
@@ -211,21 +210,31 @@ def p_for(p: YaccProduction) -> None:
     attach_lnr(p, 1)
 
 
-def p_if(p: YaccProduction) -> None:
-    "if : IF expression ':' block"
-    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
+def p_if_start(p: YaccProduction) -> None:
+    "if : IF if_body END"
+    p[0] = p[2]
     attach_lnr(p, 1)
 
 
-def p_elif(p: YaccProduction) -> None:
-    "elif: ELIF expression ':' block"
-    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
-    attach_lnr(p, 1)
+def p_if_body(p: YaccProduction) -> None:
+    "if_body : expression ':' stmt_list if_next"
+    p[0] = If(p[1], BasicBlock(namespace, p[3]), p[4])
+    attach_lnr(p, 2)
+
+
+def p_if_end(p: YaccProduction) -> None:
+    "if_next : empty"
+    p[0] = BasicBlock(namespace, [])
 
 
 def p_if_else(p: YaccProduction) -> None:
-    "if : IF expression ':' stmt_list ELSE ':' block"
-    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
+    "if_next : ELSE ':' stmt_list"
+    p[0] = BasicBlock(namespace, p[3])
+
+
+def p_if_elif(p: YaccProduction) -> None:
+    "if_next : ELIF if_body"
+    p[0] = BasicBlock(namespace, [p[2]])
     attach_lnr(p, 1)
 
 
