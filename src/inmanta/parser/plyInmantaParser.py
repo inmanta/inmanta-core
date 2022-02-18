@@ -750,7 +750,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     whole_string = str(string_ast)
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
 
-    def char_count_to_lnr_char(position):
+    def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
         # convert in-string position to lnr/charcount
         before = whole_string[0:position]
         lines = before.count("\n")
