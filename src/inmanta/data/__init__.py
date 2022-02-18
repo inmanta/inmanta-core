@@ -811,13 +811,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
 
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
         Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
+        # Make pypi happy
+        assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
     @classmethod
@@ -919,7 +921,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
@@ -997,12 +999,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
     async def _fetchrow(cls, query: str, *values: object) -> Record:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
@@ -1010,7 +1012,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> List[Record]:
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await con.fetch(query, *values)
         return await connection.fetch(query, *values)
 
@@ -1020,7 +1022,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     ) -> str:
         if connection:
             return await connection.execute(query, *values)
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1040,7 +1042,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -1618,7 +1620,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 return result
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await perform_query(con)
         return await perform_query(connection)
 
@@ -3436,7 +3438,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3456,7 +3458,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3749,7 +3751,7 @@ class ResourceAction(BaseDocument):
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3909,7 +3911,7 @@ class Resource(BaseDocument):
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -3956,7 +3958,7 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
@@ -3984,7 +3986,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -4031,24 +4033,61 @@ class Resource(BaseDocument):
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
+        # Emulate a loose index scan with a recursive common table expression (CTE),
+        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
+        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
+        # btree index efficiently; rather than scanning all equal values of a key,
+        # as soon as a new value is found, restart the search by looking for a larger value"
+        # In this case we don't scan all equal values of a resource_id
+        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
+        # and move on to the next resource_id
         return (
             f"""
-            {select_clause}
-            FROM (
-                SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.environment,
-                    (CASE WHEN
-                            (SELECT r.model < MAX(public.configurationmodel.version)
-                            FROM public.configurationmodel
-                            WHERE public.configurationmodel.released=TRUE
-                            AND environment=${offset})
+            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+            /* The cm_version CTE finds the maximum released version number in the environment  */
+            WITH RECURSIVE cm_version AS (
+                  SELECT
+                    MAX(public.configurationmodel.version) as max_version
+                    FROM public.configurationmodel
+                WHERE public.configurationmodel.released=TRUE
+                AND environment=${offset}
+                ),
+            /* emulate a loose (or skip) index scan */
+            cte AS (
+               (
+               /* specify the necessary columns */
+               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
+                        THEN 'orphaned' -- use the CTE to check the status
+                    ELSE r.status::text END) as status
+               FROM   resource r
+               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+               WHERE  r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY resource_id, model DESC
+               LIMIT  1
+               )
+               UNION ALL
+               SELECT r.*
+               FROM   cte c
+               CROSS JOIN LATERAL
+               /* specify the same columns in the recursive part */
+                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
-                FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.environment=${offset}
-                    ORDER BY r.resource_id, r.model DESC)
-            as res
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
+               /* One result from the recursive call is the latest released version of one specific resource.
+                  We always start looking for this based on the previous resource_id. */
+               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY r.resource_id, r.model DESC
+               LIMIT  1) r
+               )
+            {select_clause}
+            FROM   cte
             """,
             environment_db_value,
         )
@@ -4210,7 +4249,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4264,7 +4303,7 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
@@ -4833,7 +4872,7 @@ class ConfigurationModel(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
@@ -4850,7 +4889,7 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self) -> None:
-        async with self._connection_pool.acquire() as con:
+        async with self.get_connection() as con:
             async with con.transaction():
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
@@ -4959,7 +4998,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 await do_query_exclusive(con)
         else:
             await do_query_exclusive(connection)

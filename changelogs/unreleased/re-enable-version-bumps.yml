@@ -1,0 +1,6 @@
+---
+description: Re-enable version bumps for importlib-metadata and setuptools
+issue-nr: 917
+issue-repo: irt
+change-type: patch
+destination-branches: [master, iso5]

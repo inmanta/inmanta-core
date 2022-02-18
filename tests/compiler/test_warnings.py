@@ -24,7 +24,7 @@ import pytest
 
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import InmantaWarning, WarningsManager
 
 
@@ -243,3 +243,176 @@ typedef string as number matching self > 0
         assert str(w[0].message) == (
             f"Trying to override a built-in type: string (reported in Type(string) ({snippetcompiler.project_dir}/main.cf:2:9))"
         )
+
+
+def test_deprecation_minus_in_entity_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity-a:
+    end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming Entity-a. "
+            f"(reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_attribute_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity:
+        string attribute-a
+    end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming attribute-a. "
+            f"(reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_implementation_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+implementation vw-polo for Car:
+    brand = "vw"
+end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming vw-polo. "
+            f"(reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_typedef_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+typedef tcp-port as int matching self > 0 and self < 65535
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming tcp-port. "
+            f"(reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+typedef Corsa-opel as Car(brand="opel")
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming Corsa-opel. "
+            f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
+        )
+        compiler.do_compile()
+        assert len(w) == 2
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+var-hello = "hello"
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming var-hello. "
+            f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_import_as(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+import std as std-std
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming std-std. "
+            f"(reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
+        )
+        compiler.do_compile()
+        assert len(w) == 1
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message
+
+
+def test_deprecation_minus_relation(snippetcompiler):
+    with warnings.catch_warnings(record=True) as w:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Host:
+    string  name
+end
+
+entity File:
+    string path
+end
+
+Host.files-hehe [0:] -- File.host-hoho [1]
+            """
+        )
+        message1: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming files-hehe. "
+            f"(reported in files-hehe ({snippetcompiler.project_dir}/main.cf:10:6))"
+        )
+        message2: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming host-hoho. "
+            f"(reported in host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
+        )
+        compiler.do_compile()
+        assert len(w) == 2
+        assert issubclass(w[0].category, CompilerDeprecationWarning)
+        assert str(w[0].message) == message1
+        assert str(w[1].message) == message2
+
+
+def test_import_hypen_in_name(snippetcompiler):
+    with pytest.raises(CompilerException) as e:
+        snippetcompiler.setup_for_snippet(
+            """
+import st-d
+            """
+        )
+        compiler.do_compile()
+    assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg

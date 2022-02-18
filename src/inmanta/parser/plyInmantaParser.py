@@ -18,7 +18,8 @@
 
 import logging
 import re
-from typing import List, Optional, Union
+from itertools import accumulate
+from typing import Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -146,7 +147,7 @@ def p_empty(p: YaccProduction) -> None:
 
 def p_import(p: YaccProduction) -> None:
     """import : IMPORT ns_ref"""
-    p[0] = DefineImport(str(p[2]), str(p[2]))
+    p[0] = DefineImport(str(p[2]), p[2])
     attach_lnr(p, 1)
 
 
@@ -209,15 +210,31 @@ def p_for(p: YaccProduction) -> None:
     attach_lnr(p, 1)
 
 
-def p_if(p: YaccProduction) -> None:
-    "if : IF expression ':' block"
-    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, []))
+def p_if_start(p: YaccProduction) -> None:
+    "if : IF if_body END"
+    p[0] = p[2]
     attach_lnr(p, 1)
 
 
+def p_if_body(p: YaccProduction) -> None:
+    "if_body : expression ':' stmt_list if_next"
+    p[0] = If(p[1], BasicBlock(namespace, p[3]), p[4])
+    attach_lnr(p, 2)
+
+
+def p_if_end(p: YaccProduction) -> None:
+    "if_next : empty"
+    p[0] = BasicBlock(namespace, [])
+
+
 def p_if_else(p: YaccProduction) -> None:
-    "if : IF expression ':' stmt_list ELSE ':' block"
-    p[0] = If(p[2], BasicBlock(namespace, p[4]), BasicBlock(namespace, p[7]))
+    "if_next : ELSE ':' stmt_list"
+    p[0] = BasicBlock(namespace, p[3])
+
+
+def p_if_elif(p: YaccProduction) -> None:
+    "if_next : ELIF if_body"
+    p[0] = BasicBlock(namespace, [p[2]])
     attach_lnr(p, 1)
 
 
@@ -743,7 +760,7 @@ def p_constant_false(p: YaccProduction) -> None:
 
 def p_constant_string(p: YaccProduction) -> None:
     "constant : STRING"
-    p[0] = get_string_ast_node(p[1], Location(file, p.lineno(1)))
+    p[0] = get_string_ast_node(p[1], False)
     attach_lnr(p)
 
 
@@ -755,7 +772,7 @@ def p_constant_rstring(p: YaccProduction) -> None:
 
 def p_constant_mls(p: YaccProduction) -> None:
     "constant : mls"
-    p[0] = get_string_ast_node(p[1], p[1].location)
+    p[0] = get_string_ast_node(p[1], True)
     attach_from_string(p)
 
 
@@ -763,33 +780,70 @@ format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def get_string_ast_node(string: LocatableString, location: Location) -> Union[Literal, StringFormat]:
-    match_obj = format_regex_compiled.findall(str(string))
-    if len(match_obj) == 0:
-        return Literal(str(string))
-    return create_string_format(string, match_obj, location)
+def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
+    matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
+    if len(matches) == 0:
+        return Literal(str(string_ast))
+
+    start_lnr = string_ast.location.lnr
+    start_char_pos = string_ast.location.start_char
+    whole_string = str(string_ast)
+    mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
+
+    def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
+        # convert in-string position to lnr/charcount
+        before = whole_string[0:position]
+        lines = before.count("\n")
+        if lines == 0:
+            return start_lnr, start_char_pos + position + mls_offset
+        else:
+            return start_lnr + lines, position - before.rindex("\n")
+
+    locatable_matches: List[Tuple[str, LocatableString]] = []
+    for match in matches:
+        start_line, start_char = char_count_to_lnr_char(match.start(2))
+        end_line, end_char = char_count_to_lnr_char(match.end(2))
+        range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
+        locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
+        locatable_matches.append((match[1], locatable_string))
+    return create_string_format(string_ast, locatable_matches)
 
 
-def create_string_format(format_string: LocatableString, variables: List[List[str]], location: Location) -> StringFormat:
+def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]]) -> StringFormat:
     """
-    Create a string interpolation statement
+    Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
+
+    :param format_string: the LocatableString as it was received by get_string_ast_node()
+    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
+                        The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
+                        just the variables and the range for those variables.
+                        (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
     """
     _vars = []
-
-    for var_str in variables:
-        var_parts = var_str[1].split(".")
-        ref = Reference(var_parts[0])
+    for match, var in variables:
+        var_name: str = str(var)
+        var_parts: List[str] = var_name.split(".")
+        start_char = var.location.start_char
+        end_char = start_char + len(var_parts[0])
+        range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
+        ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
+        ref = Reference(ref_locatable_string)
         ref.namespace = namespace
-
         if len(var_parts) > 1:
-            for attr in var_parts[1:]:
-                ref = AttributeReference(ref, attr)
-                ref.location = location
+            attribute_offsets: Iterator[int] = accumulate(
+                var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
+            )
+            for attr, char_offset in zip(var_parts[1:], attribute_offsets):
+                range_attr: Range = Range(
+                    var.location.file, var.location.lnr, char_offset, var.location.lnr, char_offset + len(attr)
+                )
+                attr_locatable_string: LocatableString = LocatableString(attr, range_attr, var.lexpos, var.namespace)
+                ref = AttributeReference(ref, attr_locatable_string)
+                ref.location = range_attr
                 ref.namespace = namespace
-            _vars.append((ref, var_str[0]))
+            _vars.append((ref, match))
         else:
-            _vars.append((ref, var_str[0]))
-
+            _vars.append((ref, match))
     return StringFormat(str(format_string), _vars)
 
 

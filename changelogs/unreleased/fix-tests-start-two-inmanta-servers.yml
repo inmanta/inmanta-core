@@ -1,0 +1,4 @@
+---
+description: Fix test cases that accidentally start two Inmanta servers side-by-side.
+change-type: patch
+destination-branches: [master, iso5, iso4]
