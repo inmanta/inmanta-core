@@ -407,7 +407,7 @@ def test_string_interpolation_in_key(snippetcompiler):
 v = "key"
 dict_1 = {'{{v}}':0}
         """,
-        "Syntax error: Invalid character in key. Dictionary keys cannot be interpolated strings ({dir}/main.cf:3:11)",
+        "Syntax error: String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets ({dir}/main.cf:3:11)",
     )
 
 
@@ -426,6 +426,7 @@ dict_4_bis = {"\\u0259":41}
 
 value = "itp"
 dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
+dict_6 = {r'{{value}}': "not interpolation"}
     """  # NOQA W605
     )
 
@@ -444,6 +445,7 @@ dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
         "dict_4",
         "dict_4_bis",
         "dict_5",
+        "dict_6",
     ]
     expected_values = [
         {"itpl": "0"},
@@ -454,6 +456,7 @@ dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
         {"É\x99": 4},
         {"ə": 41},
         {r"\{\{not interpolation\}\}": "interpolation itp"},
+        {"{{value}}": "not interpolation"},
     ]
 
     for var, exp_val in zip(vars_to_lookup, expected_values):
