@@ -652,11 +652,10 @@ def p_pair_list_collect(p: YaccProduction) -> None:
     match_obj = format_regex_compiled.findall(str(key))
     if len(match_obj) != 0:
         raise ParserException(
-                p[1].location,
-                str(p[1]),
-                "Invalid character in key. Dictionary keys cannot be interpolated strings",
-            )
-
+            p[1].location,
+            str(p[1]),
+            "Invalid character in key. Dictionary keys cannot be interpolated strings",
+        )
 
     p[5].insert(0, (key, val))
     p[0] = p[5]

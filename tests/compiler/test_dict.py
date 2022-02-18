@@ -410,6 +410,7 @@ dict_1 = {'{{v}}':0}
         "Syntax error: Invalid character in key. Dictionary keys cannot be interpolated strings ({dir}/main.cf:3:11)",
     )
 
+
 def test_interpolation_in_dict_keys(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -425,7 +426,7 @@ dict_4_bis = {"\\u0259":41}
 
 value = "itp"
 dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
-    """
+    """  # NOQA W605
     )
 
     (_, root) = compiler.do_compile()
@@ -445,15 +446,14 @@ dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
         "dict_5",
     ]
     expected_values = [
-        {"itpl": '0'},
+        {"itpl": "0"},
         {"{itpl}}": "1"},
         {"{{itpl}": 2},
         {"Â§": 3},
         {"§": 3},
         {"É\x99": 4},
         {"ə": 41},
-        {r"\{\{not interpolation\}\}": "interpolation itp"}
-
+        {r"\{\{not interpolation\}\}": "interpolation itp"},
     ]
 
     for var, exp_val in zip(vars_to_lookup, expected_values):
