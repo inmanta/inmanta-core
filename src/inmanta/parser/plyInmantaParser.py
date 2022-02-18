@@ -630,34 +630,15 @@ def p_constructor(p: YaccProduction) -> None:
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
-# TODO: test
-# TODO: rename?
-def p_constructor_err(p: YaccProduction) -> None:
-    "constructor : class_ref '(' operand_list ')'"
-    # TODO: complete exception
-    raise Exception("TEST")
-
-# TODO: move
-# TODO: rename?
 # TODO: write tests
-def p_class_ref_err(p: YaccProduction) -> None:
-    "class_ref : var_ref '.' CID"
-    var: Union[LocatableString, Reference] = p[1]
-    var_str: LocatableString = var if isinstance(var, LocatableString) else var.name
-    cid: LocatableString = p[3]
-    full_string: LocatableString = LocatableString(
-        "%s.%s" % (var_str, cid),
-        expand_range(var_str.location, cid.location),
-        var_str.lexpos,
-        namespace,
-    )
+def p_constructor_err_args(p: YaccProduction) -> None:
+    "constructor : class_ref '(' operand_list ')'"
     raise ParserException(
-        full_string.location,
-        str(full_string),
+        p[1].location,
+        str(p[1]),
         (
-            "`%s` looks like an entity but was accessed with '.' (`%s`)."
-            " To access an entity in a namespace, use '::' instead: `%s`"
-        ) % (cid, full_string, str(full_string).replace(".", "::")),
+            "Found positional arguments (%s) for Entity constructor %s, requires named arguments."
+        ) % (", ".join(str(operand) for operand in p[3]), p[1]),
     )
 
 
@@ -667,8 +648,7 @@ def p_function_call(p: YaccProduction) -> None:
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
-# TODO: rename?
-# TODO: test
+# TODO: write tests
 def p_function_call_err_dot(p: YaccProduction) -> None:
     "function_call : attr_ref '(' function_param_list ')'"
     raise ParserException(
@@ -970,10 +950,26 @@ def p_class_ref(p: YaccProduction) -> None:
     merge_lnr_to_string(p, 1, 3)
 
 
-# def p_class_ref_err(p):
-#     "class_ref : ns_ref SEP ID"
-#     raise ParserException(
-#         file, p.lineno(3), p.lexpos(3), p[3], "Invalid identifier: Entity names must start with a capital")
+# TODO: write tests
+def p_class_ref_err_dot(p: YaccProduction) -> None:
+    "class_ref : var_ref '.' CID"
+    var: Union[LocatableString, Reference] = p[1]
+    var_str: LocatableString = var if isinstance(var, LocatableString) else var.name
+    cid: LocatableString = p[3]
+    full_string: LocatableString = LocatableString(
+        "%s.%s" % (var_str, cid),
+        expand_range(var_str.location, cid.location),
+        var_str.lexpos,
+        namespace,
+    )
+    raise ParserException(
+        full_string.location,
+        str(full_string),
+        (
+            "`%s` looks like an entity but was accessed with '.' (`%s`)."
+            " To access an entity in a namespace, use '::' instead: `%s`"
+        ) % (cid, full_string, str(full_string).replace(".", "::")),
+    )
 
 
 def p_class_ref_list_collect(p: YaccProduction) -> None:
