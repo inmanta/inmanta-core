@@ -144,7 +144,7 @@ testdata = [
 
 @pytest.mark.parametrize("if_value,elif1_value,elif2_value,result", testdata)
 def test_if_elif_elif_else(if_value, elif1_value, elif2_value, result, snippetcompiler):
-    snippet = ("""
+    snippet = """
 entity Test:
     string field
 end
@@ -159,8 +159,11 @@ elif %s:
 else:
     test.field = "else_branche"
 end
-            """
-               % (if_value, elif1_value, elif2_value))
+            """ % (
+        if_value,
+        elif1_value,
+        elif2_value,
+    )
     snippetcompiler.setup_for_snippet(snippet)
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -168,7 +171,7 @@ end
 
 
 def test_if_elif_true(snippetcompiler):
-    snippet = ("""
+    snippet = """
 entity Test:
     string field
 end
@@ -180,7 +183,7 @@ if a == 2:
 elif a == 3:
     test.field = "elif1_branche"
 end
-            """)
+            """
     snippetcompiler.setup_for_snippet(snippet)
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -188,7 +191,7 @@ end
 
 
 def test_if_elif_false(snippetcompiler):
-    snippet = ("""
+    snippet = """
 entity Test:
     string field
 end
@@ -200,7 +203,7 @@ if a == 2:
 elif a == 3:
     test.field = "elif1_branche"
 end
-            """)
+            """
     snippetcompiler.setup_for_error(
         snippet,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: "
