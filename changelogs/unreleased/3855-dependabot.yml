@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump setuptools from 60.9.2 to 60.9.3
+destination-branches:
+- master
+- iso5
+sections: {}
