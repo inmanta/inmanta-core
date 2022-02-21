@@ -35,7 +35,6 @@ from typing import (
     Union,
     cast,
 )
-from inmanta.ast import attribute
 
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
@@ -332,12 +331,15 @@ class Resource(metaclass=ResourceMeta):
 
         # map all fields
         try:
-            fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object)
-                      for field in resource_cls.fields}
+            fields = {
+                field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields
+            }
         except KeyError as e:
             key, attribute = e.args
-            raise KeyError("Key %s does not exist for attribure '%s' of entity %s[%s=%s]" %
-                           (key, attribute, obj_id.entity_type, obj_id.attribute, obj_id.attribute_value))
+            raise KeyError(
+                "Key %s does not exist for attribure '%s' of entity %s[%s=%s]"
+                % (key, attribute, obj_id.entity_type, obj_id.attribute, obj_id.attribute_value)
+            )
         obj = resource_cls(obj_id)
         obj.populate(fields)
         obj.model = model_object
