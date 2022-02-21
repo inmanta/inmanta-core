@@ -601,7 +601,7 @@ class PrioritisedDelayedResultVariableQueue:
         self._freeze_order_working_list = self._freeze_order.copy()
 
 
-class CycleInTypeHintsError(Exception):
+class CycleInTypeHintsError(CompilerException):
     """
     Raised when a cycle exists in the type hints provided to the compiler.
     """
