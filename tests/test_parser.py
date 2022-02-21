@@ -22,7 +22,7 @@ from typing import List
 
 import pytest
 
-from inmanta.ast import LocatableString, Namespace
+from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
 from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, define
@@ -270,8 +270,13 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
-    assert rel.annotation_expression[0][1].name == "foo"
-    assert rel.annotation_expression[1][1].name == "bar"
+
+    range1: Range = Range("test", 2, 14, 2, 17)
+    range2: Range = Range("test", 2, 18, 2, 21)
+    assert str(rel.annotation_expression[0][1].name) == "foo"
+    assert str(rel.annotation_expression[1][1].name) == "bar"
+    assert rel.annotation_expression[0][1].location == range1
+    assert rel.annotation_expression[1][1].location == range2
 
 
 def test_new_relation_unidir():
@@ -321,8 +326,12 @@ Test.bar [1] foo,bar Foo
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
     assert len(rel.annotations) == 2
-    assert rel.annotation_expression[0][1].name == "foo"
-    assert rel.annotation_expression[1][1].name == "bar"
+    range1: Range = Range("test", 2, 14, 2, 17)
+    range2: Range = Range("test", 2, 18, 2, 21)
+    assert str(rel.annotation_expression[0][1].name) == "foo"
+    assert str(rel.annotation_expression[1][1].name) == "bar"
+    assert rel.annotation_expression[0][1].location == range1
+    assert rel.annotation_expression[1][1].location == range2
 
 
 def test_implementation():
@@ -399,7 +408,9 @@ implement Test using test, blah when (self > 5)
     assert str(stmt.entity) == "Test"
     assert [str(p) for p in stmt.implementations] == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
-    assert stmt.select.children[0].name == "self"
+    assert str(stmt.select.children[0].name) == "self"
+    range: Range = Range("test", 2, 39, 2, 43)
+    assert stmt.select.children[0].location == range
     assert stmt.select.children[1].value == 5
 
 
@@ -718,7 +729,9 @@ a = vm.files[path="/etc/motd"]
     stmt = statements[0].value
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
-    assert stmt.rootobject.name == "vm"
+    assert str(stmt.rootobject.name) == "vm"
+    range: Range = Range("test", 2, 5, 2, 7)
+    assert stmt.rootobject.location == range
     assert stmt.relation == "files"
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
 
@@ -735,7 +748,9 @@ a = vm.files[**dct]
     stmt = statements[1].value
     assert isinstance(stmt, ShortIndexLookup)
     assert isinstance(stmt.rootobject, Reference)
-    assert stmt.rootobject.name == "vm"
+    range: Range = Range("test", 3, 5, 3, 7)
+    assert stmt.rootobject.location == range
+    assert str(stmt.rootobject.name) == "vm"
     assert stmt.relation == "files"
     assert stmt.querypart == []
     assert len(stmt.wrapped_querypart) == 1
@@ -998,7 +1013,9 @@ a="j{{o}}s"
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, StringFormat)
     assert isinstance(stmt.value._variables[0][0], Reference)
-    assert [x[0].name for x in stmt.value._variables] == ["o"]
+    assert [str(x[0].name) for x in stmt.value._variables] == ["o"]
+    range: Range = Range("test", 2, 7, 2, 8)
+    assert [(x[0].name.location) for x in stmt.value._variables] == [range]
 
 
 def test_string_format_2():
@@ -1015,8 +1032,10 @@ a="j{{c.d}}s"
     assert len(stmt.value._variables) == 1
     assert len(stmt.value._variables[0]) == 2
     assert isinstance(stmt.value._variables[0][0], AttributeReference)
-    assert stmt.value._variables[0][0].instance.name == "c"
-    assert stmt.value._variables[0][0].attribute == "d"
+    assert str(stmt.value._variables[0][0].instance.name) == "c"
+    assert str(stmt.value._variables[0][0].attribute) == "d"
+    assert stmt.value._variables[0][0].instance.name.location == Range("test", 2, 7, 2, 8)
+    assert stmt.value._variables[0][0].attribute.location == Range("test", 2, 9, 2, 10)
 
 
 def test_attribute_reference():
@@ -1032,7 +1051,7 @@ a=a::b::c.d
     assert isinstance(stmt.value, AttributeReference)
     assert isinstance(stmt.value.instance, Reference)
     assert stmt.value.instance.full_name == "a::b::c"
-    assert stmt.value.attribute == "d"
+    assert str(stmt.value.attribute) == "d"
 
 
 def test_is_defined():
@@ -1046,8 +1065,10 @@ implement Test1 using tt when self.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
+    assert str(stmt.select.attr.name) == "self"
     assert stmt.select.name == "other"
+    range: Range = Range("test", 2, 31, 2, 35)
+    assert stmt.select.attr.location == range
 
 
 def test_is_defined_implicit_self():
@@ -1077,8 +1098,10 @@ implement Test1 using tt when a.other is defined
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
     assert isinstance(stmt.select.attr, Reference)
-    assert stmt.select.attr.name == "a"
+    assert str(stmt.select.attr.name) == "a"
     assert stmt.select.name == "other"
+    range: Range = Range("test", 2, 31, 2, 32)
+    assert stmt.select.attr.location == range
 
 
 def assert_is_non_value(x):
@@ -1365,7 +1388,8 @@ implement Test1 using tt when self.other is defined
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
     assert isinstance(stmt.select, IsDefined)
-    assert stmt.select.attr.name == "self"
+    assert str(stmt.select.attr.name) == "self"
+    assert stmt.select.attr.location == Range("test", 2, 31, 2, 35)
     assert str(stmt.select.name) == "other"
 
 
@@ -1390,7 +1414,8 @@ z.a+=b
     assert isinstance(stmt, SetAttribute)
     assert stmt.list_only is True
     assert isinstance(stmt.value, Reference)
-    assert stmt.value.name == "b"
+    assert str(stmt.value.name) == "b"
+    assert stmt.value.name.location == Range("test", 2, 6, 2, 7)
 
 
 def test_mapref():
@@ -1406,8 +1431,10 @@ a = b.c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, AttributeReference)
-    assert stmt.value.themap.instance.name == "b"
-    assert stmt.value.themap.attribute == "c"
+    assert str(stmt.value.themap.instance.name) == "b"
+    assert str(stmt.value.themap.attribute) == "c"
+    assert stmt.value.themap.name.location == Range("test", 2, 5, 2, 8)
+    assert stmt.value.themap.instance.name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1425,7 +1452,8 @@ a = c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, Reference)
-    assert stmt.value.themap.name == "c"
+    assert str(stmt.value.themap.name) == "c"
+    assert stmt.value.themap.name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1444,7 +1472,8 @@ a = c["test"]["xx"]
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, MapLookup)
     assert isinstance(stmt.value.themap.themap, Reference)
-    assert stmt.value.themap.themap.name == "c"
+    assert str(stmt.value.themap.themap.name) == "c"
+    assert stmt.value.themap.themap.name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
@@ -1493,6 +1522,103 @@ end
     assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
     assert isinstance(stmt.else_branch, BasicBlock)
     assert len(stmt.else_branch.get_stmts()) == (0 if empty else 1)
+
+
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif(empty: bool):
+    """Test for the if statement followed by an elif"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+end
+        """
+        % (("", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement, If)
+    assert isinstance(embedded_if_statement.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement.else_branch, BasicBlock)
+    assert len(embedded_if_statement.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement.else_branch.get_stmts()) == 0
+
+
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif_elif(empty: bool):
+    """Test for the elif statement followed by an elif"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+elif test.field == "value3":
+    %s
+end
+        """
+        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement1 = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement1, If)
+    assert isinstance(embedded_if_statement1.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement1.else_branch, BasicBlock)
+    assert len(embedded_if_statement1.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement1.else_branch.get_stmts()) == 1
+    embedded_if_statement2 = embedded_if_statement1.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement2, If)
+    assert isinstance(embedded_if_statement2.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement2.else_branch, BasicBlock)
+    assert len(embedded_if_statement2.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement2.else_branch.get_stmts()) == 0
+
+
+@pytest.mark.parametrize("empty", [True, False])
+def test_if_elif_else(empty: bool):
+    """Test for the elif statement followed by an else"""
+    statements = parse_code(
+        """
+if test.field == "value":
+    %s
+elif test.field == "value2":
+    %s
+else:
+    %s
+end
+        """
+        % (("", "", "") if empty else ('test.other = "otherValue"', 'test.other = "altValue"', 'test.other = "theValue"'))
+    )
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, ExpressionStatement)
+    assert isinstance(stmt.if_branch, BasicBlock)
+    assert len(stmt.if_branch.get_stmts()) == (0 if empty else 1)
+    assert isinstance(stmt.else_branch, BasicBlock)
+    assert len(stmt.else_branch.get_stmts()) == 1
+    embedded_if_statement = stmt.else_branch.get_stmts()[0]
+    assert isinstance(embedded_if_statement, If)
+    assert isinstance(embedded_if_statement.if_branch, BasicBlock)
+    assert isinstance(embedded_if_statement.else_branch, BasicBlock)
+    assert len(embedded_if_statement.if_branch.get_stmts()) == (0 if empty else 1)
+    assert len(embedded_if_statement.else_branch.get_stmts()) == (0 if empty else 1)
 
 
 def test_bool_str():
@@ -1744,7 +1870,7 @@ __x__ = {expression}
         if isinstance(expression, Literal):
             assert expression.value == expected_tree[1]
         elif isinstance(expression, Reference):
-            assert expression.name == expected_tree[1]
+            assert str(expression.name) == expected_tree[1]
         elif isinstance(expression, ReferenceStatement):
             assert len(expression.children) == len(expected_tree[1])
             for child, child_expected in zip(expression.children, expected_tree[1]):
@@ -1818,12 +1944,134 @@ b=r"{{a}}\n"
 
     assign_stmt = statements[0]
     assert isinstance(assign_stmt, Assign)
-    assert assign_stmt.name == "a"
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
     assert isinstance(assign_stmt.value, StringFormat)
 
     assign_stmt_2 = statements[1]
     assert isinstance(assign_stmt_2, Assign)
-    assert assign_stmt_2.name == "b"
+    assert str(assign_stmt_2.name) == "b"
+    assert assign_stmt_2.name.location == Range("test", 3, 1, 3, 2)
     literal = assign_stmt_2.value
     assert isinstance(literal, Literal)
     assert literal.value == r"{{a}}\n"
+
+
+def test_string_attribute_reference_1():
+    statements = parse_code(
+        r"""
+a="test{{hello.world.bye}}test"
+"""
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "bye"
+    assert attribute_ref.attribute.location == Range("test", 2, 22, 2, 25)
+    instance1 = attribute_ref.instance
+    assert str(instance1.attribute) == "world"
+    assert instance1.attribute.location == Range("test", 2, 16, 2, 21)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 2, 10, 2, 15)
+
+
+def test_string_attribute_reference_2():
+    statements = parse_code(
+        """
+a=\"""test{{hello.world.bye}}test\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "bye"
+    assert attribute_ref.attribute.location == Range("test", 2, 24, 2, 27)
+    instance1 = attribute_ref.instance
+    assert str(instance1.attribute) == "world"
+    assert instance1.attribute.location == Range("test", 2, 18, 2, 23)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 2, 12, 2, 17)
+
+
+def test_string_attribute_reference_3():
+    statements = parse_code(
+        """
+a=\"""test
+   test{{hello.world.bye}}test
+   test
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "bye"
+    assert attribute_ref.attribute.location == Range("test", 3, 22, 3, 25)
+    instance1 = attribute_ref.instance
+    assert str(instance1.attribute) == "world"
+    assert instance1.attribute.location == Range("test", 3, 16, 3, 21)
+    instance2 = instance1.instance
+    assert str(instance2.name) == "hello"
+    assert instance2.name.location == Range("test", 3, 10, 3, 15)
+
+
+def test_string_attribute_reference_4():
+    statements = parse_code(
+        """
+a=\"""
+format string starts as first char on new line
+{{x.n}}
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "n"
+    assert attribute_ref.attribute.location == Range("test", 4, 5, 4, 6)
+    instance1 = attribute_ref.instance
+    assert str(instance1.name) == "x"
+    assert instance1.name.location == Range("test", 4, 3, 4, 4)
+
+
+def test_string_attribute_reference_5():
+    statements = parse_code(
+        """
+a=\"""
+format string starts as first char on new line
+{{
+x.n
+}}
+\"""
+    """
+    )
+    assert len(statements) == 1
+    assign_stmt = statements[0]
+    assert isinstance(assign_stmt, Assign)
+    assert str(assign_stmt.name) == "a"
+    assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
+    assert isinstance(assign_stmt.value, StringFormat)
+    attribute_ref = assign_stmt.value.children[0]
+    assert str(attribute_ref.attribute) == "n"
+    assert attribute_ref.attribute.location == Range("test", 5, 3, 5, 4)
+    instance1 = attribute_ref.instance
+    assert str(instance1.name) == "x"
+    assert instance1.name.location == Range("test", 5, 1, 5, 2)
