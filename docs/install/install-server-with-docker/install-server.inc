@@ -35,8 +35,6 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
             image: ghcr.io/inmanta/oss:2022
             ports:
                 - 8888:8888
-            volumes:
-                - ./default-server-config.cfg:/etc/inmanta/inmanta.cfg
             depends_on:
                 - postgres
             networks:
@@ -49,11 +47,6 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
                 driver: default
                 config:
                     - subnet: 172.30.0.0/16
-
-This docker-compose file uses the following config file to overwrite the default config that came with the rpm:
-
-.. include:: install-server-with-docker/default-server-config.cfg
-    :literal:
 
 Then bring the containers up by running the following command:
 
