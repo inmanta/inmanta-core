@@ -38,11 +38,11 @@ from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
     Instance,
+    ListLiteral,
     QueueScheduler,
     Resolver,
     ResultCollector,
     ResultVariable,
-    ListLiteral,
 )
 from inmanta.execute.util import Unknown
 
