@@ -55,3 +55,10 @@ Then bring the containers up by running the following command:
     docker-compose up
 
 You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
+
+The default server config included in the container images assumes that the orchestrator will have a database 
+with hostname ``iso_postgres`` reachable and that it can authenticate to it using the username ``inmanta`` 
+and password ``inmanta``.  
+When using a different setup than the one mentioned above, you should overwrite the server config with one
+matching your needs.  You can find more instructions for overwriting the config in a following section, 
+:ref:`here<docker_overwrite_server_conf>`.
