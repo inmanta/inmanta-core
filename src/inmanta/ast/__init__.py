@@ -136,6 +136,17 @@ class Range(Location):
     def __str__(self) -> str:
         return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Range):
+            return (
+                self.file == other.file
+                and self.lnr == other.lnr
+                and self.start_char == other.start_char
+                and self.end_lnr == other.end_lnr
+                and self.end_char == other.end_char
+            )
+        return False
+
 
 class Locatable(object):
 
@@ -160,7 +171,7 @@ class LocatableString(object):
     A string with an attached source location.
 
     It is not a subtype of str, as str is not a normal class
-    As such, it is very important to unwrap strings ad this object is not an actual string.
+    As such, it is very important to unwrap strings as this object is not an actual string.
 
     All identifiers produced by the parser are of this type.
 
@@ -169,7 +180,7 @@ class LocatableString(object):
     2. in the constructors of other statements
     """
 
-    def __init__(self, value: str, location: Range, lexpos: "int", namespace: "Namespace") -> None:
+    def __init__(self, value: str, location: Range, lexpos: int, namespace: "Namespace") -> None:
         self.value = value
         self.location = location
 
@@ -593,6 +604,12 @@ class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
+
+
+class HyphenDeprecationWarning(CompilerDeprecationWarning):
+    def __init__(self, stmt: LocatableString) -> None:
+        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
