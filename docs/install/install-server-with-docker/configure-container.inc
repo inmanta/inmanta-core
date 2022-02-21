@@ -23,7 +23,7 @@ Starting the ssh server
 
 By default, no ssh server is running in the container.  You don't need it to have a functional 
 orchestrator.  
-If you want to enable ssh anyway, for testing make it easier to access the orchestrator, 
+If you want to enable ssh anyway, for easy access to the orchestrator, 
 you can overwrite the startup command of the container with the following:
 
 .. code-block:: sh
@@ -78,7 +78,7 @@ There are two ways you can achieve this:
  1. Set the environment variables with docker, either using the ``--env`` argument or in your 
     docker-compose file.  Those variables will be accessible to the inmanta server and any 
     agent it starts, but not to any other process running in the container (if you for example 
-    login via ssh to the container and tries to install a project again).
+    login via ssh to the container and try to install a project again).
  2. (Recommended) Set the environment variables in a file and mount it to the following path in the 
     container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for 
     every session that the inmanta user starts in the container.
