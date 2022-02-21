@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import abc
 import asyncio
 import datetime
 import logging
@@ -67,22 +67,21 @@ else:
     ResourceActionResultFuture = asyncio.Future
 
 
-class ResourceAction(object):
-
+class ResourceActionBase(abc.ABC):
+    """ Base class for Local and Remote resource actions
+    """
     resource_id: Id
     future: ResourceActionResultFuture
-    dependencies: List["ResourceAction"]
+    dependencies: List["ResourceActionBase"]
     # resourceid -> attribute -> {current: , desired:}
     changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]]
 
-    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
-        self.resource: Resource = resource
-        if self.resource is not None:
-            self.resource_id: Id = self.resource.id
+        self.resource_id: Id = resource_id
         self.future: ResourceActionResultFuture = Future()
         self.running: bool = False
         self.gid: uuid.UUID = gid
@@ -92,6 +91,11 @@ class ResourceAction(object):
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
 
+    async def execute(
+        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
+    ) -> None:
+        return
+
     def is_running(self) -> bool:
         return self.running
 
@@ -100,8 +104,35 @@ class ResourceAction(object):
 
     def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
-            LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
+            LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource_id)
             self.future.set_result(ResourceActionResult(cancel=True))
+
+    def long_string(self) -> str:
+        return "%s awaits %s" % (self.resource_id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
+
+    def __str__(self) -> str:
+        status = ""
+        if self.is_done():
+            status = " Done"
+        elif self.is_running():
+            status = " Running"
+
+        return self.resource_id.resource_str() + status
+
+
+class DummyResourceAction(ResourceActionBase):
+    def __init__(self, scheduler: "ResourceScheduler", gid: uuid.UUID, reason: str) -> None:
+        dummy_id = Id("agent::Dummy", scheduler.name, "type", "dummy")
+        super(DummyResourceAction, self).__init__(scheduler, dummy_id, gid, reason)
+
+
+class ResourceAction(ResourceActionBase):
+    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
+        """
+        :param gid: A unique identifier to identify a deploy. This is local to this agent.
+        """
+        super(ResourceAction, self).__init__(scheduler, resource.id, gid, reason)
+        self.resource: Resource = resource
 
     async def send_in_progress(self, action_id: uuid.UUID) -> Dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -109,7 +140,7 @@ class ResourceAction(object):
             rvid=self.resource.id.resource_version_str(),
             action_id=action_id,
         )
-        if result.code != 200:
+        if result.code != 200 or result.result is None:
             raise Exception("Failed to report the start of the deployment to the server")
         return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
@@ -162,7 +193,7 @@ class ResourceAction(object):
                 provider.close()
 
     async def execute(
-        self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
+        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
         with cache.manager(self.resource.id.get_version()):
@@ -246,29 +277,13 @@ class ResourceAction(object):
                 self.future.set_result(ResourceActionResult(cancel=False))
                 self.running = False
 
-    def __str__(self) -> str:
-        if self.resource is None:
-            return "DUMMY"
 
-        status = ""
-        if self.is_done():
-            status = " Done"
-        elif self.is_running():
-            status = " Running"
-
-        return self.resource.id.resource_str() + status
-
-    def long_string(self) -> str:
-        return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
-
-
-class RemoteResourceAction(ResourceAction):
+class RemoteResourceAction(ResourceActionBase):
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
-        super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
-        self.resource_id = resource_id
+        super(RemoteResourceAction, self).__init__(scheduler, resource_id, gid, reason)
 
     async def execute(
-        self, dummy: "ResourceAction", generation: "Dict[ResourceIdStr, ResourceAction]", cache: AgentCache
+        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
         await dummy.future
         try:
@@ -279,8 +294,9 @@ class RemoteResourceAction(ResourceAction):
                 log_action=const.ResourceAction.deploy,
                 log_limit=1,
             )
-            if result.code != 200:
+            if result.code != 200 or result.result is None:
                 LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
+                return
 
             status = const.ResourceState[result.result["resource"]["status"]]
             if status in const.TRANSIENT_STATES or self.future.done():
@@ -333,7 +349,7 @@ class ResourceScheduler(object):
     def __init__(
         self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
     ) -> None:
-        self.generation: Dict[ResourceIdStr, ResourceAction] = {}
+        self.generation: Dict[ResourceIdStr, ResourceActionBase] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
@@ -350,7 +366,7 @@ class ResourceScheduler(object):
         self._resume_reason: Optional[str] = None
         self.logger: Logger = agent.logger
 
-    def get_scheduled_resource_actions(self) -> List[ResourceAction]:
+    def get_scheduled_resource_actions(self) -> List[ResourceActionBase]:
         return list(self.generation.values())
 
     def finished(self) -> bool:
@@ -424,7 +440,7 @@ class ResourceScheduler(object):
 
         # mark undeployable
         for key, res in self.generation.items():
-            vid = res.resource.id.resource_version_str()
+            vid = res.resource_id.resource_version_str()
             if vid in undeployable:
                 self.generation[key].undeployable = undeployable[vid]
 
@@ -436,7 +452,7 @@ class ResourceScheduler(object):
             self.generation[cad.resource_str()] = ra
 
         # Create dummy to give start signal
-        dummy = ResourceAction(self, None, gid, reason)
+        dummy = DummyResourceAction(self, gid, reason)
         # Dispatch all actions
         # Will block on dependencies and dummy
         for r in self.generation.values():
@@ -448,7 +464,7 @@ class ResourceScheduler(object):
         # Start running
         dummy.future.set_result(ResourceActionResult(cancel=False))
 
-    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
+    async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
         await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
         async with self.agent.critical_ratelimiter:
             if not self.finished():
@@ -691,7 +707,7 @@ class AgentInstance(object):
                 self.logger.info("No released configuration model version available for %s", reason)
             elif result.code == 409:
                 self.logger.warning("We are not currently primary during %s: %s", reason, result.result)
-            elif result.code != 200:
+            elif result.code != 200 or result.result is None:
                 self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
 
             else:
@@ -715,7 +731,7 @@ class AgentInstance(object):
                     self.logger.warning("Version %s does not exist, can not run dryrun", version)
                     return
 
-                elif response.code != 200:
+                elif response.code != 200 or response.result is None:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
@@ -981,8 +997,8 @@ class Agent(SessionEndpoint):
             env_id = self.get_environment()
             assert env_id is not None
             result = await self._client.environment_setting_get(env_id, data.AUTOSTART_AGENT_MAP)
-            if result.code != 200:
-                error_msg = result.result["message"]
+            if result.code != 200 or result.result is None:
+                error_msg = result.result["message"] if result.result else ""
                 LOGGER.error("Failed to retrieve the autostart_agent_map setting from the server. %s", error_msg)
                 raise CouldNotConnectToServer()
             self.agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
@@ -1130,14 +1146,14 @@ class Agent(SessionEndpoint):
             # about updates to the autostart_agent_map environment setting. On reconnect the autostart_agent_map
             # is fetched from the server to resolve this inconsistency.
             result = await self._client.environment_setting_get(tid=self.get_environment(), id=data.AUTOSTART_AGENT_MAP)
-            if result.code == 200:
+            if result.code == 200 and result.result is not None:
                 agent_map = result.result["data"]["settings"][data.AUTOSTART_AGENT_MAP]
                 await self._update_agent_map(agent_map=agent_map)
             else:
                 LOGGER.warning("Could not get environment setting %s from server", data.AUTOSTART_AGENT_MAP)
         for name in self._instances.keys():
             result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
-            if result.code == 200:
+            if result.code == 200 and result.result is not None:
                 state = result.result
                 if "enabled" in state and isinstance(state["enabled"], bool):
                     await self.set_state(name, state["enabled"])
@@ -1167,7 +1183,7 @@ class Agent(SessionEndpoint):
         for rt in set(resource_types):
             result: protocol.Result = await self._client.get_code(environment, version, rt)
 
-            if result.code == 200:
+            if result.code == 200 and result.result is not None:
                 try:
                     LOGGER.debug("Installing handler %s", rt)
                     await self._install(
