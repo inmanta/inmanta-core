@@ -468,7 +468,7 @@ a2.b += b
 def test_type_hints(snippetcompiler) -> None:
     """
     End-to-end test that verifies whether type hints set on a project
-    are correctly handled by using a non-deterministic model.
+    are correctly handled.
     """
     non_deterministic_model = """
     entity A:

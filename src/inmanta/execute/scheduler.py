@@ -289,7 +289,7 @@ class Scheduler(object):
                 LOGGER.info("Loaded type hint: %s", hint)
                 for (entity_type_name, relationship_name) in hint.iterate_types():
                     if entity_type_name not in self.types:
-                        LOGGER.warning("A type hint defined for entity %s, but no such type was defined", entity_type_name)
+                        LOGGER.warning("A type hint was defined for %s, but no such type was defined", entity_type_name)
                         continue
                     current_type: Type = self.types[entity_type_name]
                     if not isinstance(current_type, Entity):
@@ -497,9 +497,9 @@ class EntityRelationship:
 
 class PrioritisedDelayedResultVariableQueue:
     """
-    A queue for DelayedResultVariable that is prioritized based on the
-    type hint precedence hints passed to the Compiler. This queue will
-    return elements in the following order:
+    A queue for DelayedResultVariables that is prioritized based on the
+    type hints passed to the Compiler. This queue will return elements
+    in the following order:
 
     * First return the DelayedResultVariables, which are not an instance of
       TempListVariable and that do not have an order constraint.
@@ -509,8 +509,8 @@ class PrioritisedDelayedResultVariableQueue:
     * Finally, all TempListVariables are returned.
 
     TempListVariables is subclass of DelayedResultVariables that is not
-    associated with an entity. That way it's not possible to set version
-    type hints on them. As such, they are always frozen last.
+    associated with an entity. That way it's not possible to set
+    type hints on them.
     """
 
     def __init__(self, type_hints: List["TypeHint"]) -> None:
@@ -526,9 +526,7 @@ class PrioritisedDelayedResultVariableQueue:
 
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
         # This queue is never modified.
-        self._freeze_order: Deque[EntityRelationship] = deque(
-            TypePrecedenceGraph.from_type_hints(type_hints).get_freeze_order()
-        )
+        self._freeze_order: Deque[EntityRelationship] = deque(TypePrecedenceGraph(type_hints).get_freeze_order())
         # Copy of self._freeze_order. At all times the first element of this queue
         # points to the next type that should be returned from self._constraint_variables
         self._freeze_order_working_list: Deque[EntityRelationship] = self._freeze_order.copy()
@@ -616,11 +614,15 @@ class TypePrecedenceGraph:
     A graph representation of the type hints provided to the compiler.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, type_hints: List["TypeHint"] = []) -> None:
         # The root nodes of the graph, where all other nodes attach to.
         self.root_nodes: Set[TypePrecedenceGraphNode] = set()
         # Dict of all nodes in the graph
         self.type_to_node: Dict[EntityRelationship, TypePrecedenceGraphNode] = {}
+        # Creates nodes in graph
+        for hint in type_hints:
+            first_type, then_type = EntityRelationship.from_type_hint(hint)
+            self.add_precedence_rule(first_type, then_type)
 
     def add_precedence_rule(self, first_type: EntityRelationship, then_type: EntityRelationship) -> None:
         """
@@ -652,6 +654,8 @@ class TypePrecedenceGraph:
         Return all the EntityRelationship in this graph in the order in which
         they should be frozen.
         """
+        if not self.root_nodes:
+            return []
         work: Set[TypePrecedenceGraphNode] = set(self.root_nodes)
         result: List[EntityRelationship] = []
 
@@ -660,7 +664,6 @@ class TypePrecedenceGraph:
             for current_node in work:
                 if all(dep.entity_relationship in result for dep in current_node.dependencies):
                     return current_node
-            # TODO: improve error reporting
             raise CycleInTypeHintsError("Cycle in type hints")
 
         while work:
@@ -669,17 +672,6 @@ class TypePrecedenceGraph:
             result.append(node.entity_relationship)
             work.update(node.dependents)
         return result
-
-    @classmethod
-    def from_type_hints(cls, type_hints: List["TypeHint"]) -> "TypePrecedenceGraph":
-        """
-        Return a TypePrecedenceGraph from the given type hints.
-        """
-        graph = cls()
-        for hint in type_hints:
-            first_type, then_type = EntityRelationship.from_type_hint(hint)
-            graph.add_precedence_rule(first_type, then_type)
-        return graph
 
 
 class TypePrecedenceGraphNode:

@@ -1091,6 +1091,8 @@ class ModuleRepoInfo(BaseModel):
 class TypeHint:
     """
     Represents a type hint specified in the project.yml file.
+    Indicates that list `first_type.first_relation_name` should
+    be frozen before `then_type.then_relation_name`.
     """
 
     first_type: str
@@ -1105,7 +1107,9 @@ class TypeHint:
         """
         match: Optional[re.Match[str]] = ProjectMetadata._re_type_hint_compiled.fullmatch(hint.strip())
         if not match:
-            raise Exception(f"Invalid type hint: {hint}. Expected: '<type>.<relation> before <type>.<relation>'")
+            raise Exception(
+                f"Invalid type hint: {hint}. Expected: '<entity-type>.<relation-name> before <entity-type>.<relation-name>'"
+            )
         group_dict = match.groupdict()
         return cls(
             first_type=group_dict["ft"],
