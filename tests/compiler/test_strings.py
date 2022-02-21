@@ -63,6 +63,7 @@ std::print(
         "Syntax error: Illegal character '\"' ({dir}/main.cf:3:3)",
     )
 
+
 def test_no_multiline_in_single_quoted_string_simple_apostrophe(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -71,8 +72,9 @@ std::print(
   string'
 )
         """,
-        "Syntax error: Illegal character '\'' ({dir}/main.cf:3:3)",
+        "Syntax error: Illegal character ''' ({dir}/main.cf:3:3)",
     )
+
 
 def test_no_multiline_in_single_quoted_raw_string_double_apostrophe(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -85,6 +87,7 @@ std::print(
         "Syntax error: Illegal character '\"' ({dir}/main.cf:3:4)",
     )
 
+
 def test_no_multiline_in_single_quoted_raw_string_simple_apostrophe(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -93,7 +96,7 @@ std::print(
   string'
 )
         """,
-        "Syntax error: Illegal character '\'' ({dir}/main.cf:3:4)",
+        "Syntax error: Illegal character ''' ({dir}/main.cf:3:4)",
     )
 
 
