@@ -1,0 +1,6 @@
+description: Trying to write a single quoted string over multiple lines now raises a syntax error.
+change-type: major
+destination-branches: [master, iso5]
+sections: {
+  bugfix: "{{description}}"
+}
