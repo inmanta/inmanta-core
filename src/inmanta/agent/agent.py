@@ -68,8 +68,8 @@ else:
 
 
 class ResourceActionBase(abc.ABC):
-    """ Base class for Local and Remote resource actions
-    """
+    """Base class for Local and Remote resource actions"""
+
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: List["ResourceActionBase"]

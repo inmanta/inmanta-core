@@ -377,7 +377,7 @@ class EnvironmentService(protocol.ServerSlice):
         if len(envs) > 0 and envs[0].id != environment_id:
             raise BadRequest(f"Project with id={project} already has an environment with name {name}")
 
-        fields = {"name": name}
+        fields: Dict[str, object] = {"name": name}
         if repository is not None:
             fields["repo_url"] = repository
 
