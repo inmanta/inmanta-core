@@ -1080,7 +1080,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         """
         Update the given fields of this document in the database. It will update the fields in this object and do a specific
         $set in the database on this document.
@@ -2091,7 +2091,7 @@ RETURNING last_version;
 
     @classmethod
     async def get_list(
-        cls: Type[TBaseDocument],
+        cls,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -2100,7 +2100,7 @@ RETURNING last_version;
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
         **query: object,
-    ) -> List[TBaseDocument]:
+    ) -> List["BaseDocument"]:
         """
         Get a list of documents matching the filter args.
 
@@ -2127,7 +2127,7 @@ RETURNING last_version;
 
     @classmethod
     async def get_list_without_details(
-        cls: Type[TBaseDocument],
+        cls,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -2135,7 +2135,7 @@ RETURNING last_version;
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
-    ) -> List[TBaseDocument]:
+    ) -> List["BaseDocument"]:
         """
         Get a list of environments matching the filter args.
         Don't return the description and icon columns.
@@ -2154,11 +2154,11 @@ RETURNING last_version;
 
     @classmethod
     async def get_by_id(
-        cls: Type[TBaseDocument],
+        cls,
         doc_id: uuid.UUID,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
-    ) -> Optional[TBaseDocument]:
+    ) -> Optional["BaseDocument"]:
         """
         Get a specific environment based on its ID
 
