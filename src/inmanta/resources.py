@@ -35,6 +35,7 @@ from typing import (
     Union,
     cast,
 )
+from inmanta.ast import attribute
 
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
@@ -310,6 +311,8 @@ class Resource(metaclass=ResourceMeta):
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
+            except KeyError as e:
+                raise KeyError(e, field_name)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
@@ -328,8 +331,13 @@ class Resource(metaclass=ResourceMeta):
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
         # map all fields
-        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
-
+        try:
+            fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object)
+                      for field in resource_cls.fields}
+        except KeyError as e:
+            key, attribute = e.args
+            raise KeyError("Key %s does not exist for attribure '%s' of entity %s[%s=%s]" %
+                           (key, attribute, obj_id.entity_type, obj_id.attribute, obj_id.attribute_value))
         obj = resource_cls(obj_id)
         obj.populate(fields)
         obj.model = model_object
