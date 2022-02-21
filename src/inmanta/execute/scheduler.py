@@ -287,22 +287,28 @@ class Scheduler(object):
             )
             for hint in self.type_hints:
                 LOGGER.info("Loaded type hint: %s", hint)
-                for (entity_type, relationship_name) in hint.iterate_types():
-                    if entity_type not in self.types:
-                        LOGGER.warning("A type hint defined for entity %s, but no such type was defined", entity_type)
+                for (entity_type_name, relationship_name) in hint.iterate_types():
+                    if entity_type_name not in self.types:
+                        LOGGER.warning("A type hint defined for entity %s, but no such type was defined", entity_type_name)
                         continue
-                    attributes_of_entity = self.types[entity_type].attributes
+                    current_type: Type = self.types[entity_type_name]
+                    if not isinstance(current_type, Entity):
+                        LOGGER.warning("A type hint was defined for non-entity type %s", current_type)
+                        continue
+                    assert isinstance(current_type, Entity)  # Make mypy happy
+                    attributes_of_entity = current_type.attributes
                     if relationship_name not in attributes_of_entity:
                         LOGGER.warning(
                             "A type hint was defined for %s, but entity %s doesn't have an attribute %s.",
-                            f"{entity_type}.{relationship_name}",
-                            entity_type,
+                            f"{entity_type_name}.{relationship_name}",
+                            entity_type_name,
                             relationship_name,
                         )
-                    elif not isinstance(attributes_of_entity[relationship_name], RelationAttribute):
+                        continue
+                    if not isinstance(attributes_of_entity[relationship_name], RelationAttribute):
                         LOGGER.warning(
                             "A type hint was defined for %s, but attribute %s is not a relationship attribute.",
-                            f"{entity_type}.{relationship_name}",
+                            f"{entity_type_name}.{relationship_name}",
                             relationship_name,
                         )
                     else:
@@ -581,16 +587,17 @@ class PrioritisedDelayedResultVariableQueue:
                 self._freeze_order_working_list.popleft()
             else:
                 return self._constraint_variables[entity_relationship].popleft()
+        raise IndexError()
 
     def replace(self, drvs: Iterator[DelayedResultVariable[Any]]) -> None:
         """
         Remove all elements from this queue and add the elements provided in drvs.
         """
-        self._unconstraint_variables: Deque[DelayedResultVariable[Any]] = deque()
-        self._constraint_variables: Dict[EntityRelationship, Deque[DelayedResultVariable[Any]]] = {
+        self._unconstraint_variables = deque()
+        self._constraint_variables = {
             entity_relationship: deque() for entity_relationship in self._all_constraint_entity_relationships
         }
-        self._tmp_list_variables: Deque[TempListVariable] = deque()
+        self._tmp_list_variables = deque()
         for drv in drvs:
             self.append(drv, dont_reset_working_list=True)
         self._freeze_order_working_list = self._freeze_order.copy()

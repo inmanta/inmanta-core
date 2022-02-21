@@ -531,6 +531,8 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
         A.optional [0:1] -- A
 
         implement A using std::none
+
+        typedef tcp_port as int matching self > 0 and self < 65535
     """
     snippetcompiler.setup_for_snippet(
         model,
@@ -582,3 +584,25 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
     compiler.do_compile()
     assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
     assert "A type hint was defined for __config__::A.var, but attribute var is not a relationship attribute." in caplog.text
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::tcp_port",
+                first_relation_name="test",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
+    assert "A type hint was defined for non-entity type __config__::tcp_port" in caplog.text
+
+    # No type hints defined. No warning usage experimental feature
+    snippetcompiler.setup_for_snippet(model)
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using type hints" not in caplog.text

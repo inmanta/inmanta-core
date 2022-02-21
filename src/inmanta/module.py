@@ -1103,7 +1103,7 @@ class TypeHint:
         """
         Create a TypeHint object from its string representation.
         """
-        match: Optional[re.Match] = ProjectMetadata._re_type_hint_compiled.fullmatch(hint.strip())
+        match: Optional[re.Match[str]] = ProjectMetadata._re_type_hint_compiled.fullmatch(hint.strip())
         if not match:
             raise Exception(f"Invalid type hint: {hint}. Expected: '<type>.<relation> before <type>.<relation>'")
         group_dict = match.groupdict()
@@ -1176,7 +1176,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         rf"^(?P<ft>{_re_fq_entity_type})\.(?P<fr>{_re_identifier})\s+before\s+"
         rf"(?P<tt>{_re_fq_entity_type})\.(?P<tr>{_re_identifier})$"
     )
-    _re_type_hint_compiled: re.Pattern = re.compile(_re_type_hint)
+    _re_type_hint_compiled: re.Pattern[str] = re.compile(_re_type_hint)
     _raw_parser: Type[YamlParser] = YamlParser
 
     author: Optional[str] = None
