@@ -341,8 +341,6 @@ def compile_project(options: argparse.Namespace) -> None:
 
     compiler_features.read_options_to_config(options)
 
-    module.Project.get(options.main_file)
-
     if options.profile:
         import cProfile
         import pstats
@@ -540,8 +538,6 @@ def export(options: argparse.Namespace) -> None:
 
     if "type" not in metadata:
         metadata["type"] = "manual"
-
-    module.Project.get(options.main_file)
 
     from inmanta.export import Exporter  # noqa: H307
 

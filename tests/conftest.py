@@ -108,7 +108,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import InmantaModuleRequirement, InstallMode, Project
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project, TypeHint
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -941,6 +941,7 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
+        type_hints: Optional[List[TypeHint]] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -956,9 +957,10 @@ class SnippetCompilationTest(KeepOnFail):
         :param python_requires: The dependencies on Python packages providing v2 modules.
         :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
                              no install mode is set explicitly in the project.yml file.
+        :param type_hints: The type hints that should be stored in the project.yml file of the Inmanta project.
         """
         self.setup_for_snippet_external(
-            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode, type_hints
         )
         return self._load_project(autostd, install_project, install_v2_modules)
 
@@ -1010,6 +1012,7 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
+        type_hints: Optional[List[TypeHint]] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1035,6 +1038,9 @@ class SnippetCompilationTest(KeepOnFail):
                         for source in python_package_sources
                     )
                 )
+            if type_hints:
+                cfg.write("\n            type_hints:\n")
+                cfg.write("\n".join(f"                - {hint}" for hint in type_hints))
             if project_requires:
                 cfg.write("\n            requires:\n")
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))

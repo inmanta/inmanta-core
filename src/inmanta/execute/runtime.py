@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
     from inmanta.compiler import Compiler
+    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
 
 
 T = TypeVar("T")
@@ -216,7 +217,7 @@ class DelayedResultVariable(ResultVariable[T]):
     When the freeze method is called, no more values will be accepted and
     the DelayedResultVariable will behave as a normal ResultVariable.
 
-    When a DelayedResultVariable is definitely full, it is freeze itself.
+    When a DelayedResultVariable is definitely full, it freezes itself.
 
     DelayedResultVariable are queued with the scheduler at the point at which they might be complete.
     The scheduler can decide when to freeze them. A DelayedResultVariable  can be complete when
@@ -465,11 +466,14 @@ class OptionVariable(DelayedResultVariable["Instance"]):
     __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        DelayedResultVariable.__init__(self, queue)
         self.value = None
         self.attribute = attribute
         self.myself = instance
         self.location = None
+        # Only call super after initialization of the above-mentioned attributes
+        # because the self.queue() operation in DelayedResultVariable requires
+        # self.attribute and self.myself to be set.
+        DelayedResultVariable.__init__(self, queue)
 
     def _get_null_value(self) -> object:
         return None
@@ -568,7 +572,7 @@ class QueueScheduler(object):
         self,
         compiler: "Compiler",
         runqueue: "Deque[Waiter]",
-        waitqueue: Deque[DelayedResultVariable],
+        waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: Dict[str, Type],
         allwaiters: "Set[Waiter]",
     ) -> None:

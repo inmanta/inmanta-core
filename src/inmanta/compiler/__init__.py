@@ -57,17 +57,17 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
 
     :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
-
     """
     compiler = Compiler(refs=refs)
 
     LOGGER.debug("Starting compile")
 
+    project = module.Project.get()
     try:
         (statements, blocks) = compiler.compile()
     except ParserException as e:
         compiler.handle_exception(e)
-    sched = scheduler.Scheduler(compiler_config.track_dataflow())
+    sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_type_hints())
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:

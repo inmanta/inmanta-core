@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
+from typing import Optional
+
 import pytest
 
-from inmanta.module import ModuleRepoType, ProjectMetadata
+from inmanta.module import ModuleRepoType, ProjectMetadata, TypeHint
 
 
 @pytest.mark.parametrize(
@@ -45,3 +47,27 @@ def test_repo_parsing(repo):
             else:
                 assert project_metadata.repo[index].type == value["type"]
                 assert project_metadata.repo[index].url == value["url"]
+
+
+@pytest.mark.parametrize(
+    "type_hints, valid, expected_hint",
+    [
+        (["a before b", False, None]),  # Entity type missing
+        (["A::a before B::b", False, None]),  # Relationship name missing
+        (["A.a befor B.b", False, None]),  # before is misspelled
+        (["A:B.attr1 B:b.attr2", False, None]),  # Single colon instead of double colon
+        (["A.a before B.b", True, TypeHint("A", "a", "B", "b")]),
+        (["__config__::B-B123.a before __config__::CC.b", True, TypeHint("__config__::B-B123", "a", "__config__::CC", "b")]),
+        (["   A.b     before     B.c   ", True, TypeHint("A", "b", "B", "c")]),
+    ],
+)
+def test_type_hint_parsing(type_hints: str, valid: bool, expected_hint: Optional[TypeHint]) -> None:
+    if valid:
+        assert expected_hint is not None
+        project_metadata = ProjectMetadata(name="test", type_hints=[type_hints])
+        type_hints = project_metadata.get_type_hints()
+        assert len(type_hints) == 1
+        assert type_hints[0] == expected_hint
+    else:
+        with pytest.raises(ValueError):
+            ProjectMetadata(name="test", type_hints=[type_hints])

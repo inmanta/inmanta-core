@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
-
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import AttributeException, MultiException
+from inmanta.ast import AttributeException, MultiException, OptionalValueException
+from inmanta.module import TypeHint
 
 
 def test_issue_139_scheduler(snippetcompiler):
@@ -463,3 +463,122 @@ a2.b += b
 """
     )
     compiler.do_compile()
+
+
+def test_type_hints(snippetcompiler) -> None:
+    """
+    End-to-end test that verifies whether type hints set on a project
+    are correctly handled by using a non-deterministic model.
+    """
+    non_deterministic_model = """
+    entity A:
+    end
+
+    A.list [0:] -- A
+    A.optional [0:1] -- A
+
+    implementation a for A:
+        self.optional = A()
+    end
+
+    implement A using std::none
+    implement A using a when std::count(self.list) > 0
+
+    a = A(list=A())
+    test = a.optional
+    """
+
+    snippetcompiler.setup_for_snippet(
+        non_deterministic_model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
+    # Type hints are set correctly, compile should succeed
+    compiler.do_compile()
+
+    snippetcompiler.setup_for_snippet(
+        non_deterministic_model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="optional",
+                then_type="__config__::A",
+                then_relation_name="list",
+            )
+        ],
+    )
+    # Compile are set in reverse order, compile should fail.
+    with pytest.raises(OptionalValueException, match="Optional variable accessed that has no value"):
+        compiler.do_compile()
+
+
+def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
+    """
+    Verify that an appropriate warning is logged when invalid type hints are defined.
+    """
+    model = """
+        entity A:
+            string var = ""
+        end
+
+        A.list [0:] -- A
+        A.optional [0:1] -- A
+
+        implement A using std::none
+    """
+    snippetcompiler.setup_for_snippet(
+        model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::B",
+                then_relation_name="test",
+            )
+        ],
+    )
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
+    assert "A type hint defined for entity __config__::B, but no such type was defined" in caplog.text
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="non_existing_relationship",
+            )
+        ],
+    )
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
+    assert (
+        "A type hint was defined for __config__::A.non_existing_relationship, "
+        "but entity __config__::A doesn't have an attribute non_existing_relationship." in caplog.text
+    )
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="var",
+            )
+        ],
+    )
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
+    assert "A type hint was defined for __config__::A.var, but attribute var is not a relationship attribute." in caplog.text

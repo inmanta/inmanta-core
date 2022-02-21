@@ -31,6 +31,7 @@ import types
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
+from dataclasses import dataclass
 from functools import lru_cache
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
@@ -61,7 +62,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, validator, constr
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
 import inmanta.warnings
 from inmanta import const, env, loader, plugins
@@ -1086,6 +1087,49 @@ class ModuleRepoInfo(BaseModel):
     type: ModuleRepoType = ModuleRepoType.git
 
 
+@dataclass(frozen=True)
+class TypeHint:
+    """
+    Represents a type hint specified in the project.yml file.
+    """
+
+    first_type: str
+    first_relation_name: str
+    then_type: str
+    then_relation_name: str
+
+    @classmethod
+    def from_string(cls, hint: str) -> "TypeHint":
+        """
+        Create a TypeHint object from its string representation.
+        """
+        match: Optional[re.Match] = ProjectMetadata._re_type_hint_compiled.fullmatch(hint.strip())
+        if not match:
+            raise Exception(f"Invalid type hint: {hint}. Expected: '<type>.<relation> before <type>.<relation>'")
+        group_dict = match.groupdict()
+        return cls(
+            first_type=group_dict["ft"],
+            first_relation_name=group_dict["fr"],
+            then_type=group_dict["tt"],
+            then_relation_name=group_dict["tr"],
+        )
+
+    def __str__(self) -> str:
+        return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def iterate_types(self) -> Iterator[Tuple[str, str]]:
+        """
+        An iterator that returns two tuples, where each tuple represent an
+        <entity-type, relationship-name> of this type hint. The relationship
+        that should be frozen first, is returned first by the iterator.
+        """
+        yield (self.first_type, self.first_relation_name)
+        yield (self.then_type, self.then_relation_name)
+
+
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
@@ -1120,7 +1164,20 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
       project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
+    :param type_hints: [EXPERIMENTAL FEATURE] A list of type hints that indicate the order in which the compiler
+                       should freeze list. A type hint should be specified using the following format:
+                       `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in place,
+                       the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
     """
+
+    _re_identifier = r"[a-zA-Z_][a-zA-Z_0-9-]*"
+    _re_fq_entity_type = rf"{_re_identifier}(::{_re_identifier})*"
+    _re_type_hint: str = (
+        rf"^(?P<ft>{_re_fq_entity_type})\.(?P<fr>{_re_identifier})\s+before\s+"
+        rf"(?P<tt>{_re_fq_entity_type})\.(?P<tr>{_re_identifier})$"
+    )
+    _re_type_hint_compiled: re.Pattern = re.compile(_re_type_hint)
+    _raw_parser: Type[YamlParser] = YamlParser
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1131,13 +1188,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    type_hints: List[
-        constr(
-            strip_whitespace=True,
-            regex=r'^[a-zA-z0-9_]?\.[a-zA-z0-9_]? before [a-zA-z0-9_]?\.[a-zA-z0-9_]?$'),
-    ] = []
-
-    _raw_parser: Type[YamlParser] = YamlParser
+    type_hints: List[constr(strip_whitespace=True, regex=_re_type_hint)] = []
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -1158,6 +1209,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
             else:
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
+
+    def get_type_hints(self) -> List[TypeHint]:
+        """
+        Return the type hints as a list of TypeHint objects.
+        """
+        return [TypeHint.from_string(hint) for hint in self.type_hints]
 
 
 @stable_api
@@ -1455,6 +1512,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+
+    def get_type_hints(self) -> List[TypeHint]:
+        return self._metadata.get_type_hints()
 
     @classmethod
     def from_path(cls: Type[TProject], path: str) -> Optional[TProject]:
