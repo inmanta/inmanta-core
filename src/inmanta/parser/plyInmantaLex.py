@@ -65,7 +65,7 @@ tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "MLS_END", "CMP_O
 
 
 def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"r(\"([^\\\"]|\\.)*\")|r(\'([^\\\']|\\.)*\')"
+    r"r(\"([^\\\"\n\r]|\\.)*\")|r(\'([^\\\'\n\r]|\\.)*\')"
     t.value = t.value[2:-1]
     lexer = t.lexer
 
