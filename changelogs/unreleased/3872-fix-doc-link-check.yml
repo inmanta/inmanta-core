@@ -1,0 +1,5 @@
+---
+description: Fix doc link check
+issue-nr: 3872
+change-type: patch
+destination-branches: [master, iso5, iso4]
