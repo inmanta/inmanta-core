@@ -34,7 +34,7 @@ set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
 
 
-SSL: remote agents and remote compiler
+SSL: agents and compiler
 --------------------------------------
 When using SSL, all remote components connecting to the server need to have SSL enabled as well.
 
