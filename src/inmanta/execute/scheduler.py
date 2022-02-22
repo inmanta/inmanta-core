@@ -70,11 +70,51 @@ class Scheduler(object):
     """
 
     def __init__(self, track_dataflow: bool = False, type_hints: Optional[List["TypeHint"]] = None):
-        if type_hints is None:
-            type_hints = []
         self.track_dataflow: bool = track_dataflow
         self.types: Dict[str, Type] = {}
-        self.type_hints = type_hints
+        self.type_hints: List["TypeHint"] = type_hints if type_hints else []
+
+    def _get_valid_type_hints(self) -> List["TypeHint"]:
+        """
+        This method validates the type hints in self.type_hints, logs warning for invalid hints and
+        return a list containing only the valid type hints.
+        """
+        if not self.types:
+            raise Exception("The self.define_types() method should be called first")
+        if self.type_hints:
+            LOGGER.warning(
+                "[EXPERIMENTAL FEATURE] Using type hints defined in the project.yml file to determine list freeze order."
+            )
+        valid_type_hints = []
+        for hint in self.type_hints:
+            LOGGER.info("Loaded type hint: %s", hint)
+            for (entity_type_name, relationship_name) in hint.iterate_types():
+                if entity_type_name not in self.types:
+                    LOGGER.warning("A type hint was defined for %s, but no such type was defined", entity_type_name)
+                    continue
+                current_type: Type = self.types[entity_type_name]
+                if not isinstance(current_type, Entity):
+                    LOGGER.warning("A type hint was defined for non-entity type %s", current_type)
+                    continue
+                assert isinstance(current_type, Entity)  # Make mypy happy
+                attributes_of_entity = current_type.attributes
+                if relationship_name not in attributes_of_entity:
+                    LOGGER.warning(
+                        "A type hint was defined for %s, but entity %s doesn't have an attribute %s.",
+                        f"{entity_type_name}.{relationship_name}",
+                        entity_type_name,
+                        relationship_name,
+                    )
+                    continue
+                if not isinstance(attributes_of_entity[relationship_name], RelationAttribute):
+                    LOGGER.warning(
+                        "A type hint was defined for %s, but attribute %s is not a relationship attribute.",
+                        f"{entity_type_name}.{relationship_name}",
+                        relationship_name,
+                    )
+                else:
+                    valid_type_hints.append(hint)
+        return valid_type_hints
 
     def freeze_all(self, exns: List[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
@@ -279,41 +319,6 @@ class Scheduler(object):
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
-        # Validate the type hints to the defined types
-        valid_type_hints = []
-        if self.type_hints:
-            LOGGER.warning(
-                "[EXPERIMENTAL FEATURE] Using type hints defined in the project.yml file to determine list freeze order."
-            )
-            for hint in self.type_hints:
-                LOGGER.info("Loaded type hint: %s", hint)
-                for (entity_type_name, relationship_name) in hint.iterate_types():
-                    if entity_type_name not in self.types:
-                        LOGGER.warning("A type hint was defined for %s, but no such type was defined", entity_type_name)
-                        continue
-                    current_type: Type = self.types[entity_type_name]
-                    if not isinstance(current_type, Entity):
-                        LOGGER.warning("A type hint was defined for non-entity type %s", current_type)
-                        continue
-                    assert isinstance(current_type, Entity)  # Make mypy happy
-                    attributes_of_entity = current_type.attributes
-                    if relationship_name not in attributes_of_entity:
-                        LOGGER.warning(
-                            "A type hint was defined for %s, but entity %s doesn't have an attribute %s.",
-                            f"{entity_type_name}.{relationship_name}",
-                            entity_type_name,
-                            relationship_name,
-                        )
-                        continue
-                    if not isinstance(attributes_of_entity[relationship_name], RelationAttribute):
-                        LOGGER.warning(
-                            "A type hint was defined for %s, but attribute %s is not a relationship attribute.",
-                            f"{entity_type_name}.{relationship_name}",
-                            relationship_name,
-                        )
-                    else:
-                        valid_type_hints.append(hint)
-
         # give all loose blocks an empty XC
         # register the XC's as scopes
         # All named scopes are now present
@@ -329,7 +334,7 @@ class Scheduler(object):
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = PrioritisedDelayedResultVariableQueue(valid_type_hints)
+        waitqueue = PrioritisedDelayedResultVariableQueue(self._get_valid_type_hints())
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
