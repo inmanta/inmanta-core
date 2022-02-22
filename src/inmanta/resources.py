@@ -337,7 +337,7 @@ class Resource(metaclass=ResourceMeta):
         except KeyError as e:
             key, attribute = e.args
             raise KeyError(
-                "Key %s does not exist for attribure '%s' of entity %s[%s=%s]"
+                "Key %s does not exist for attribute '%s' of entity %s[%s=%s]"
                 % (key, attribute, obj_id.entity_type, obj_id.attribute, obj_id.attribute_value)
             )
         obj = resource_cls(obj_id)
