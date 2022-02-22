@@ -27,13 +27,17 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
+from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
 
+@stable_api
 class Reference(ExpressionStatement):
     """
     This class represents a reference to a value
+
+    :ivar name: The name of the Reference as a string.
     """
 
     def __init__(self, name: LocatableString) -> None:
