@@ -546,7 +546,7 @@ class PrioritisedDelayedResultVariableQueue:
             + len(self._tmp_list_variables)
         )
 
-    def append(self, drv: DelayedResultVariable[Any], dont_reset_working_list: bool = False) -> None:
+    def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
         """
         Append on the right side of the queue.
         """
