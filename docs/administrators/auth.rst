@@ -19,6 +19,7 @@ For the autostarted agents and compiler to work, either add the CA cert to the t
 set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
 
 .. code-block:: ini
+
     [server]
     # The ssl certificate used by the server
     ssl_cert_file=/etc/inmanta/server.crt
