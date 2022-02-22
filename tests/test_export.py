@@ -408,5 +408,5 @@ exp::Test3(
 )
         """
     )
-    with pytest.raises(KeyError, match="Key 'tom' does not exist for attribure 'real_name' of entity exp::Test3\\[name=tom\\]"):
+    with pytest.raises(KeyError, match="Key 'tom' does not exist for attribute 'real_name' of entity exp::Test3\\[name=tom\\]"):
         snippetcompiler.do_export()
