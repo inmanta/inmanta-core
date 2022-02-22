@@ -578,7 +578,7 @@ class PrioritisedDelayedResultVariableQueue:
             pass
         return self._tmp_list_variables.popleft()
 
-    def _get_next_constraint_variable(self) -> DelayedResultVariable[Any]:
+    def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
         if not self._constraint_variables:
             raise IndexError()
         while len(self._freeze_order_working_list) > 0:
