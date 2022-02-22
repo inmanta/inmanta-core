@@ -5,14 +5,37 @@ Setting up authentication
 
 This guide explains how to enable ssl and setup authentication.
 
-SSL
----
 SSL is not strictly required for authentication but higly recommended. Inmanta uses bearer tokens
 for authorizing users and services. These tokens should be kept private and are visible in plain-text in the request headers
 without SSL.
 
+
+SSL: server side
+----------------
 Setting a private key and a public key in the server configuration enables SSL on the server. The two
 options to set are :inmanta.config:option:`server.ssl-cert-file` and :inmanta.config:option:`server.ssl-key-file`.
+
+For the autostarted agents and compiler to work, either add the CA cert to the trusted certificates of the system or
+set :inmanta.config:option:`server.ssl-ca-cert-file` to the truststore.
+
+.. code-block:: ini
+    [server]
+    # The ssl certificate used by the server
+    ssl_cert_file=/etc/inmanta/server.crt
+    # The private key used by the server, associated with the certificate
+    ssl_key_file=/etc/inmanta/server.key.open
+
+    # The certificate chain that the compiler and agents should use to validate the server certificate
+    ssl_ca_cert_file=/etc/inmanta/server.chain
+    # The address at which the compiler and agent should connect
+    # Must correspond to hostname the ssl certificate is bound to
+    server_address=localhost
+
+
+
+SSL: remote agents and remote compiler
+--------------------------------------
+When using SSL, all remote components connecting to the server need to have SSL enabled as well.
 
 For each of the transport configurations (compiler, agent, rpc client, ...) ``ssl`` has to be
 enabled: :inmanta.config:group:`agent_rest_transport`, :inmanta.config:group:`cmdline_rest_transport` and
