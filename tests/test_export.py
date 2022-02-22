@@ -383,3 +383,30 @@ exp::WrappedSelfTest(
     )
     with pytest.raises(TypeError, match="not JSON serializable"):
         snippetcompiler.do_export()
+
+
+def test_3787_key_error_export(snippetcompiler):
+    """
+    Check the error message of an export with a KeyError
+    The Key error happens in get_real_name() of class Test3
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+exp::Test3(
+    name="tom",
+    names={
+        "bob": "alice",
+        "alice": "bob",
+    },
+    agent=std::AgentConfig(
+        autostart=true,
+        agentname="bob",
+        uri="local:",
+    ),
+)
+        """
+    )
+    with pytest.raises(KeyError, match="Key 'tom' does not exist for attribure 'real_name' of entity exp::Test3\\[name=tom\\]"):
+        snippetcompiler.do_export()
