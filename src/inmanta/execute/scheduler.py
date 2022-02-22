@@ -523,8 +523,8 @@ class PrioritisedDelayedResultVariableQueue:
             itertools.chain.from_iterable(EntityRelationship.from_type_hint(hint) for hint in type_hints)
         )
 
-        self._unconstraint_variables: Deque[DelayedResultVariable[Any]] = deque()
-        self._constraint_variables: Dict[EntityRelationship, Deque[DelayedResultVariable[Any]]] = {
+        self._unconstraint_variables: Deque[DelayedResultVariable[object]] = deque()
+        self._constraint_variables: Dict[EntityRelationship, Deque[DelayedResultVariable[object]]] = {
             entity_relationship: deque() for entity_relationship in self._all_constraint_entity_relationships
         }
         self._tmp_list_variables: Deque[TempListVariable] = deque()
