@@ -548,7 +548,7 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
     caplog.clear()
     compiler.do_compile()
     assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
-    assert "A type hint defined for entity __config__::B, but no such type was defined" in caplog.text
+    assert "A type hint was defined for __config__::B, but no such type was defined" in caplog.text
 
     snippetcompiler.setup_for_snippet(
         model,
