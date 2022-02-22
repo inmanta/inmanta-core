@@ -238,8 +238,13 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        range: Range = Range(instance.locatable_name.location.file, instance.locatable_name.lnr,
-                             instance.locatable_name.start, attribute.elnr, attribute.end)
+        range: Range = Range(
+            instance.locatable_name.location.file,
+            instance.locatable_name.lnr,
+            instance.locatable_name.start,
+            attribute.elnr,
+            attribute.end,
+        )
         reference: LocatableString = LocatableString(
             "%s.%s" % (instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
         )
