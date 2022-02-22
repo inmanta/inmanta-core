@@ -592,7 +592,7 @@ class PrioritisedDelayedResultVariableQueue:
                 return self._constraint_variables[entity_relationship].popleft()
         raise IndexError()
 
-    def replace(self, drvs: Iterator[DelayedResultVariable[Any]]) -> None:
+    def replace(self, drvs: Iterable[DelayedResultVariable[object]]) -> None:
         """
         Remove all elements from this queue and add the elements provided in drvs.
         """
