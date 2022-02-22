@@ -290,6 +290,7 @@ texinfo_documents = [
 linkcheck_ignore = [
     r'http(s)?://localhost:\d+/',
     r'http://127.0.0.1:\d+',
+    r'http://172(.\d{1,3}){3}(:\d+)?',  # Ignoring all docker ips links
     r'openapi.html',
     r'https://twitter.com/inmanta_com',
     '../_specs/openapi.json',
