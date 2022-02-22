@@ -660,10 +660,32 @@ def p_list_def(p: YaccProduction) -> None:
     attach_lnr(p, 1)
 
 
+def p_r_string_dict_key(p: YaccProduction) -> None:
+    """dict_key : RSTRING"""
+    p[0] = p[1]
+
+
+def p_string_dict_key(p: YaccProduction) -> None:
+    """dict_key : STRING"""
+
+    key = str(p[1])
+    match_obj = format_regex_compiled.findall(key)
+    if len(match_obj) != 0:
+        raise ParserException(
+            p[1].location,
+            str(p[1]),
+            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",  # NOQA E501
+        )
+    p[0] = p[1]
+
+
 def p_pair_list_collect(p: YaccProduction) -> None:
-    """pair_list : STRING ':' operand ',' pair_list
-    | STRING ':' operand empty pair_list_empty"""
-    p[5].insert(0, (str(p[1]), p[3]))
+    """pair_list : dict_key ':' operand ',' pair_list
+    | dict_key ':' operand empty pair_list_empty"""
+
+    key, val = str(p[1]), p[3]
+
+    p[5].insert(0, (key, val))
     p[0] = p[5]
 
 
