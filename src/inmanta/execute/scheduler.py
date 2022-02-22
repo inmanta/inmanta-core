@@ -21,7 +21,7 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
@@ -581,7 +581,7 @@ class PrioritisedDelayedResultVariableQueue:
     def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
         if not self._constraint_variables:
             raise IndexError()
-        while len(self._freeze_order_working_list) > 0:
+        while self._freeze_order_working_list:
             entity_relationship = self._freeze_order_working_list[0]
             if (
                 entity_relationship not in self._constraint_variables
