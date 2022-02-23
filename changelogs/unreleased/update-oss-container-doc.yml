@@ -1,0 +1,6 @@
+---
+description: Updated OSS container documentation.
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  other-note: Container images are now built and distributed for each release of the orchestrator.
