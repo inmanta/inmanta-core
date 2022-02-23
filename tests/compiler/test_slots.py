@@ -58,7 +58,7 @@ def test_slots_rt():
     ns = Namespace("root", None)
     rs = Resolver(ns)
     e = Entity("xx", ns)
-    qs = QueueScheduler(None, [], [], None, set())
+    qs = QueueScheduler(None, [], [], {}, set(), [])
     r = RelationAttribute(e, None, "xx", Location("", 1))
     i = Instance(e, rs, qs)
 

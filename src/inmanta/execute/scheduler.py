@@ -359,7 +359,7 @@ class Scheduler(object):
         all_statements: Set[Waiter] = set()
 
         # Wrap in object to pass around
-        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
+        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements, self.valid_type_hints)
 
         # emit all top level statements
         for block in blocks:
@@ -673,11 +673,12 @@ class TypePrecedenceGraph:
         if entity_relationship not in self.type_to_node:
             node = TypePrecedenceGraphNode(entity_relationship)
             self.type_to_node[entity_relationship] = node
-            if attach_to_root:
-                self.root_nodes.add(node)
-            return node
         else:
-            return self.type_to_node[entity_relationship]
+            node = self.type_to_node[entity_relationship]
+
+        if attach_to_root:
+            self.root_nodes.add(node)
+        return node
 
     def get_freeze_order(self) -> List[EntityRelationship]:
         """

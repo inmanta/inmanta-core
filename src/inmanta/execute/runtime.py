@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
-
+import itertools
 from abc import abstractmethod
 from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.warnings as inmanta_warnings
+from inmanta import ast
 from inmanta.ast import (
     AttributeException,
     CompilerDeprecationWarning,
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
     from inmanta.compiler import Compiler
-    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
+    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue, TypeHint
 
 
 T = TypeVar("T")
@@ -262,7 +263,10 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        return len(self.waiters)
+        assert self.type is not None
+        # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
+        # of the scheduler. We know the order in which those types can be frozen safely.
+        return len(self.waiters) + int(self.queues.has_type_hint(self.type))
 
 
 ListValue = Union["Instance", List["Instance"]]
@@ -373,10 +377,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
 
-    def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
-        return len(self.waiters) - len(self.listeners)
-
     def receive_result(self, value: ListValue, location: Location) -> None:
         self.set_value(value, location)
 
@@ -402,6 +402,11 @@ class TempListVariable(BaseListVariable):
         # 100% accurate promisse tracking
         if len(self.promisses) == len(self.done_promisses):
             self.freeze()
+
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        # A TempListVariable is never associated with an Entity, so it cannot have a type hint.
+        return len(self.waiters) - len(self.listeners)
 
 
 class ListVariable(BaseListVariable):
@@ -459,6 +464,13 @@ class ListVariable(BaseListVariable):
 
     def __str__(self) -> str:
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        assert self.type is not None
+        # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
+        # of the scheduler. We know the order in which those types can be frozen safely.
+        return len(self.waiters) - len(self.listeners) + int(self.queues.has_type_hint(self.type))
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
@@ -566,7 +578,7 @@ class QueueScheduler(object):
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters", "types_with_type_hint")
 
     def __init__(
         self,
@@ -575,12 +587,18 @@ class QueueScheduler(object):
         waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: Dict[str, Type],
         allwaiters: "Set[Waiter]",
+        type_hints: List["TypeHint"],
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
         self.allwaiters = allwaiters
+        names_types_with_hints = itertools.chain.from_iterable([hint.first_type, hint.then_type] for hint in type_hints)
+        # Use dict to achieve O(1) access on `type in self.types_with_type_hint` operation.
+        self.types_with_type_hint: Dict[Type, None] = {
+            type_obj: None for fq_type_name, type_obj in self.types.items() if fq_type_name in names_types_with_hints
+        }
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
@@ -605,6 +623,11 @@ class QueueScheduler(object):
 
     def for_tracker(self, tracer: Tracker) -> "QueueScheduler":
         return DelegateQueueScheduler(self, tracer)
+
+    def has_type_hint(self, type_obj: Type) -> bool:
+        if not isinstance(type_obj, ast.entity.Entity):
+            return False
+        return type_obj in self.types_with_type_hint
 
 
 class DelegateQueueScheduler(QueueScheduler):
@@ -637,6 +660,9 @@ class DelegateQueueScheduler(QueueScheduler):
 
     def for_tracker(self, tracer: Tracker) -> QueueScheduler:
         return DelegateQueueScheduler(self.__delegate, tracer)
+
+    def has_type_hint(self, type_obj: Type) -> bool:
+        return self.__delegate.has_type_hint(type_obj)
 
 
 class Waiter(object):
