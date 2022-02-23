@@ -1,0 +1,6 @@
+description: Fix a potential encoding issue with unknown types or dicts and wrong encoding
+change-type: patch
+destination-branches:
+  - iso4
+  - iso5
+  - master
