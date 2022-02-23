@@ -1295,6 +1295,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values = []
         index_count = max(1, offset)
         for key, value in query.items():
+            cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
             (filter_statement, value) = cls._get_filter(name, value, index_count)
             filter_statements.append(filter_statement)
@@ -1407,18 +1408,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def get_filter_for_combined_query_type(
-        cls, name: str, value: Dict[QueryType, object], index: int
+        cls, name: str, combined_value: Dict[QueryType, object], index: int
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter a single column
         based on the defined query types
         """
-        filter_statement: str
-        values: List[object]
-        (filter_statement, values) = cls._combine_filter_statements(
-            (cls.get_filter_for_query_type(query_type, name, val, index + i))
-            for i, (query_type, val) in enumerate(value.items())
-        )
+        filters = []
+        for query_type, value in combined_value.items():
+            filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index)
+            filters.append((filter_statement, filter_values))
+            index += len(filter_values)
+        (filter_statement, values) = cls._combine_filter_statements(filters)
+
         return (filter_statement, values)
 
     @classmethod
@@ -3494,32 +3496,8 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    def validate_field_name(cls, name: str) -> ColumnNameStr:
-        """Check if the name is a valid database column name for the current type"""
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if name not in valid_field_names:
-            raise InvalidFieldNameException(f"{name} is not valid for a query on {cls.table_name()}")
-        return ColumnNameStr(name)
-
-    @classmethod
-    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
-        """Validate the correct values for order ('ASC' or 'DESC') and if the order column is an existing column name
-        :param order_by_column: The name of the column to order by
-        :param order: The sorting order.
-        :return:
-        """
-        for o in order.split(" "):
-            possible = ["ASC", "DESC"]
-            if o not in possible:
-                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
-
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if order_by_column not in valid_field_names:
-            raise RuntimeError(f"{order_by_column} is not a valid field name.")
-
-        return ColumnNameStr(order_by_column), PagingOrder[order]
+    def get_valid_field_names(cls) -> List[str]:
+        return list(cls._fields.keys()) + ["timestamp", "level", "msg"]
 
     @classmethod
     def _get_resource_logs_base_query(
@@ -4763,7 +4741,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
-        return super().get_valid_field_names() + ["status"]
+        return super().get_valid_field_names() + ["status", "model"]
 
     @property
     def done(self) -> int:
