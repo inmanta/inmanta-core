@@ -698,10 +698,12 @@ class RemoteRepo(ModuleRepo):
 
     def clone(self, name: str, dest: str) -> bool:
         try:
-            url = self.baseurl.format(name)
-            if url == self.baseurl:
+            url, nbr_substitutions = re.subn(r"{}", name, self.baseurl)
+            if nbr_substitutions == 0:
                 url = self.baseurl + name
-
+            elif nbr_substitutions > 1:
+                LOGGER.debug("Wrong repo url: %s. can only contain one occurrence of '{}'" % self.baseurl, exc_info=True)
+                return False
             gitprovider.clone(url, os.path.join(dest, name))
             return True
         except Exception:

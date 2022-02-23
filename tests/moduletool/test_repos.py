@@ -17,7 +17,7 @@
 """
 import os
 
-from inmanta.module import LocalFileRepo, RemoteRepo, gitprovider
+from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider
 
 
 def test_file_co(git_modules_dir, modules_repo):
@@ -43,6 +43,21 @@ def test_remote_repo_good(git_modules_dir, modules_repo):
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+
+
+def test_remote_repo_good2(git_modules_dir, modules_repo):
+    repo = RemoteRepo("https://github.com/rmccue/{}")
+    coroot = os.path.join(git_modules_dir, "clone_remote_good")
+    result = repo.clone("test-repository", coroot)
+    assert result
+    assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+
+
+def test_remote_repo_bad(git_modules_dir, modules_repo):
+    repo = RemoteRepo("https://github.com/{}/{}")
+    coroot = os.path.join(git_modules_dir, "clone_remote_good")
+    result = repo.clone("test-repository", coroot)
+    assert not result
 
 
 def test_local_repo_bad(git_modules_dir, modules_repo):
