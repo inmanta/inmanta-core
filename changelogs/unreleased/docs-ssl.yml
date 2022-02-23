@@ -1,0 +1,4 @@
+---
+description: Improved SSL setup documentation.
+change-type: patch
+destination-branches: [master, iso5, iso4]
