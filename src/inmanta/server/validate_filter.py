@@ -215,7 +215,7 @@ class CombinedContainsFilterResourceState(Filter):
     def parse_field(cls, v: object) -> Optional[Dict[QueryType, ReleasedResourceState]]:
         if v is None:
             return None
-        if isinstance(v, list):
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
             status_contains_filters = [status_filter for status_filter in v if not status_filter.startswith("!")]
             status_not_contains_filters = [status_filter[1:] for status_filter in v if status_filter.startswith("!")]
 

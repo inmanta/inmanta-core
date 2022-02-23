@@ -81,13 +81,19 @@ class QueryType(str, enum.Enum):
         """
         return name.lower()
 
-    EQUALS = enum.auto()
-    CONTAINS = enum.auto()
-    IS_NOT_NULL = enum.auto()
-    CONTAINS_PARTIAL = enum.auto()
-    RANGE = enum.auto()
-    NOT_CONTAINS = enum.auto()
-    COMBINED = enum.auto()
+    EQUALS = enum.auto()  # The filter value equals the value in the database
+    CONTAINS = enum.auto()  # Any of the filter values are equal to the value in the database (exact match)
+    IS_NOT_NULL = enum.auto()  # The value is NULL in the database
+    CONTAINS_PARTIAL = enum.auto()  # Any of the filter values are equal to the value in the database (partial match)
+    RANGE = enum.auto()  # The values in the database are in the range described by the filter values and operators
+    NOT_CONTAINS = enum.auto()  # None of the filter values are equal to the value in the database (exact match)
+    COMBINED = enum.auto()  # The value describes a combination of other query types
+
+
+class InvalidQueryType(Exception):
+    def __init__(self, message: str) -> None:
+        super(InvalidQueryType, self).__init__(message)
+        self.message = message
 
 
 class RangeOperator(enum.Enum):
@@ -1349,8 +1355,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
     def get_filter_for_query_type(
         cls, query_type: QueryType, key: str, value: object, index_count: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
-        filter_statement: str = ""
-        filter_values: List[object] = []
         if query_type == QueryType.EQUALS:
             (filter_statement, filter_values) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
         elif query_type == QueryType.IS_NOT_NULL:
@@ -1373,6 +1377,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             (filter_statement, filter_values) = cls.get_combined_filter(
                 key, cast(Dict[QueryType, object], value), index_count, col_name_prefix=col_name_prefix
             )
+        else:
+            raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
         return (filter_statement, filter_values)
 
     @classmethod
@@ -1417,8 +1423,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls, name: str, value: Dict[QueryType, object], index: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
         """
-        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
-        collection.
+        Returns a tuple of a PostgresQL statement and any query arguments to filter based on the defined query types
         """
         cls.validate_field_name(name)
         filter_statement: str
@@ -1427,14 +1432,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
             (cls.get_filter_for_query_type(query_type, name, val, index + i, col_name_prefix))
             for i, (query_type, val) in enumerate(value.items())
         )
-        return (filter_statement, [cls._get_value(v) for v in values])
+        return (filter_statement, values)
 
     @classmethod
     def get_not_contains_filter(
         cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
     ) -> Tuple[str, List[object]]:
         """
-        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not contained in a given
         collection.
         """
         cls.validate_field_name(name)

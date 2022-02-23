@@ -287,6 +287,9 @@ async def test_filter_resources(server, client, env_with_resources):
     result = await client.resource_list(env.id, filter={"status": ["!!!!orphaned"]})
     assert result.code == 400
 
+    result = await client.resource_list(env.id, filter={"status": [1, 2]})
+    assert result.code == 400
+
     result = await client.resource_list(
         env.id,
         filter={
