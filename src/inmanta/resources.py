@@ -35,6 +35,8 @@ from typing import (
     Union,
     cast,
 )
+from inmanta.ast import ExplicitPluginException, ExternalException, RuntimeException, WrappingRuntimeException
+from inmanta import plugins
 
 import inmanta.util
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
@@ -310,8 +312,14 @@ class Resource(metaclass=ResourceMeta):
                 return value
             except proxy.UnknownException as e:
                 return e.unknown
-            except KeyError as e:
-                raise KeyError(e, field_name)
+            except RuntimeException as e:
+                raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
+            except Exception as e:
+                import pudb
+                pu.db
+                raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
