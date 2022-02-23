@@ -1367,7 +1367,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         elif query_type == QueryType.NOT_CONTAINS:
             (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
         elif query_type == QueryType.COMBINED:
-            (filter_statement, filter_values) = cls.get_combined_filter(key, cast(Dict[QueryType, object], value), index_count)
+            (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                key, cast(Dict[QueryType, object], value), index_count
+            )
         else:
             raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
         return (filter_statement, filter_values)
@@ -1404,7 +1406,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, [value])
 
     @classmethod
-    def get_combined_filter(cls, name: str, value: Dict[QueryType, object], index: int) -> Tuple[str, List[object]]:
+    def get_filter_for_combined_query_type(
+        cls, name: str, value: Dict[QueryType, object], index: int
+    ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter a single column
         based on the defined query types

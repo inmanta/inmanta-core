@@ -191,23 +191,10 @@ class ContainsFilter(Filter):
         return None
 
 
-class ContainsFilterResourceState(Filter):
-    """Represents a valid ReleasedResourceState list constraint which should be handled as a containment filter"""
-
-    # Pydantic doesn't support Generic models on python 3.6
-    field: Optional[List[ReleasedResourceState]]
-
-    def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
-        if self.field:
-            return (QueryType.CONTAINS, self.field)
-        return None
-
-
 class CombinedContainsFilterResourceState(Filter):
     """Represents a valid ReleasedResourceState constraint,
     which handles the filters as contains or not contains filters based on their values"""
 
-    # Pydantic doesn't support Generic models on python 3.6
     field: Optional[Dict[QueryType, List[ReleasedResourceState]]]
 
     @validator("field", pre=True)
