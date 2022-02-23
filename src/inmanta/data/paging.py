@@ -39,7 +39,7 @@ from inmanta.data import (
 from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource, PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
-from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource, ResourceLog
+from inmanta.data.model import ResourceHistory, ResourceIdStr, ResourceLog, VersionedResource
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -128,7 +128,7 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        assert(isinstance(query_identifier, ResourceQueryIdentifier))
+        assert isinstance(query_identifier, ResourceQueryIdentifier)
         sql_query, values = self.data_class._get_paging_history_item_count_query(
             query_identifier.environment,
             query_identifier.resource_id,
@@ -158,7 +158,7 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        assert(isinstance(query_identifier, ResourceQueryIdentifier))
+        assert isinstance(query_identifier, ResourceQueryIdentifier)
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
             query_identifier.environment,
             query_identifier.resource_id,
