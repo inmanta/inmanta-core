@@ -195,6 +195,11 @@ Python Environment
     :members: init_env, use_virtual_env
     :undoc-members:
 
+Variables
+------
+.. autoclass:: inmanta.ast.variables.Reference
+    :members: name
+    :undoc-members:
 
 Typing
 ------
