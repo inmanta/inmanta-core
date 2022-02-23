@@ -39,7 +39,7 @@ from inmanta.data import (
 from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource, PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
-from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource
+from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource, ResourceLog
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -120,7 +120,7 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
 
     async def count_items_for_paging(
         self,
-        query_identifier: ResourceQueryIdentifier,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -128,6 +128,7 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
+        assert(isinstance(query_identifier, ResourceQueryIdentifier))
         sql_query, values = self.data_class._get_paging_history_item_count_query(
             query_identifier.environment,
             query_identifier.resource_id,
@@ -149,7 +150,7 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
 
     async def count_items_for_paging(
         self,
-        query_identifier: ResourceQueryIdentifier,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -157,6 +158,7 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
+        assert(isinstance(query_identifier, ResourceQueryIdentifier))
         sql_query, values = self.data_class._get_paging_resource_log_item_count_query(
             query_identifier.environment,
             query_identifier.resource_id,
@@ -175,7 +177,7 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
 class VersionedResourcePagingCountsProvider(PagingCountsProvider):
     async def count_items_for_paging(
         self,
-        query_identifier: VersionedQueryIdentifier,
+        query_identifier: QueryIdentifier,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -183,6 +185,7 @@ class VersionedResourcePagingCountsProvider(PagingCountsProvider):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
+        assert isinstance(query_identifier, VersionedQueryIdentifier)
         return await Resource.count_versioned_resources_for_paging(
             query_identifier.environment,
             query_identifier.version,
@@ -521,7 +524,7 @@ class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
             )
 
 
-class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
+class ResourceLogPagingHandler(PagingHandler[ResourceLog]):
     def __init__(
         self,
         counts_provider: PagingCountsProvider,
@@ -533,7 +536,7 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
     def get_base_url(self) -> str:
         return f"/api/v2/resource/{parse.quote(self.resource_id, safe='')}/logs"
 
-    def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
+    def _get_paging_boundaries(self, dtos: List[ResourceLog], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
                 start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
