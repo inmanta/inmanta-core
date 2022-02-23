@@ -1,5 +1,5 @@
 description: Writing a string over multiple lines is now only supported for strings within triple quotes.
-change-type: major
+change-type: minor
 destination-branches: [master, iso5]
 sections: {
   bugfix: "{{description}}",
