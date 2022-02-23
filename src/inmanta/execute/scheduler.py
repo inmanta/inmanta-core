@@ -72,7 +72,17 @@ class Scheduler(object):
     def __init__(self, track_dataflow: bool = False, type_hints: Optional[List["TypeHint"]] = None):
         self.track_dataflow: bool = track_dataflow
         self.types: Dict[str, Type] = {}
+        # The type hints specified in the project.yml file
         self.type_hints: List["TypeHint"] = type_hints if type_hints else []
+        # A sub-list of self.type_hints containing the valid type hints.
+        # Cache field used by self.valid_type_hints property
+        self._valid_type_hints: Optional[List["TypeHint"]] = None
+
+    @property
+    def valid_type_hints(self) -> List["TypeHint"]:
+        if self._valid_type_hints is None:
+            self._valid_type_hints = self._get_valid_type_hints()
+        return self._valid_type_hints
 
     def _get_valid_type_hints(self) -> List["TypeHint"]:
         """
@@ -297,6 +307,8 @@ class Scheduler(object):
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
+        # Determine drvs that should be frozen to break the cycle
+        freeze_candidates: List[DelayedResultVariable] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 if isinstance(rv, DelayedResultVariable):
@@ -304,10 +316,16 @@ class Scheduler(object):
                         # get_progress_potential fails when there is a value already
                         continue
                     if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
-                        LOGGER.debug("Waiting blocked on %s", rv)
-                        rv.freeze()
-                        return True
-        return False
+                        freeze_candidates.append(rv)
+
+        if not freeze_candidates:
+            return False
+        # Use the type hints to determine which drv should be frozen
+        queue = PrioritisedDelayedResultVariableQueue(self.valid_type_hints, freeze_candidates)
+        drv_to_freeze = queue.popleft()
+        LOGGER.debug("Waiting blocked on %s", drv_to_freeze)
+        drv_to_freeze.freeze()
+        return True
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
@@ -334,7 +352,7 @@ class Scheduler(object):
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = PrioritisedDelayedResultVariableQueue(self._get_valid_type_hints())
+        waitqueue = PrioritisedDelayedResultVariableQueue(self.valid_type_hints)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
@@ -518,7 +536,7 @@ class PrioritisedDelayedResultVariableQueue:
     type hints on them.
     """
 
-    def __init__(self, type_hints: List["TypeHint"]) -> None:
+    def __init__(self, type_hints: List["TypeHint"], drvs: Optional[List[DelayedResultVariable]] = None) -> None:
         self._all_constraint_entity_relationships: Set[EntityRelationship] = set(
             itertools.chain.from_iterable(EntityRelationship.from_type_hint(hint) for hint in type_hints)
         )
@@ -535,6 +553,11 @@ class PrioritisedDelayedResultVariableQueue:
         # Copy of self._freeze_order. At all times the first element of this queue
         # points to the next type that should be returned from self._constraint_variables
         self._freeze_order_working_list: Deque[EntityRelationship] = self._freeze_order.copy()
+
+        # Populate queue with given DelayedResultVariables
+        drvs = drvs if drvs else []
+        for drv in drvs:
+            self.append(drv, dont_reset_working_list=True)
 
     def __len__(self) -> int:
         """
@@ -635,6 +658,8 @@ class TypePrecedenceGraph:
         """
         first_node = self._get_or_create_node(first_type, attach_to_root=True)
         then_node = self._get_or_create_node(then_type, attach_to_root=False)
+        if then_node in self.root_nodes:
+            self.root_nodes.remove(then_node)
         first_node.add_dependent(then_node)
 
     def _get_or_create_node(self, entity_relationship: EntityRelationship, attach_to_root: bool) -> "TypePrecedenceGraphNode":
