@@ -1,0 +1,4 @@
+description: Add a return after an error log
+change-type: patch
+destination-branches:
+  - iso4
