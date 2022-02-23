@@ -86,6 +86,8 @@ class QueryType(str, enum.Enum):
     IS_NOT_NULL = enum.auto()
     CONTAINS_PARTIAL = enum.auto()
     RANGE = enum.auto()
+    NOT_CONTAINS = enum.auto()
+    COMBINED = enum.auto()
 
 
 class RangeOperator(enum.Enum):
@@ -1334,28 +1336,44 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            if query_type == QueryType.EQUALS:
-                (filter_statement, filter_values) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.IS_NOT_NULL:
-                (filter_statement, filter_values) = cls.get_is_not_null_filter(key, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.CONTAINS:
-                (filter_statement, filter_values) = cls.get_contains_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.CONTAINS_PARTIAL:
-                (filter_statement, filter_values) = cls.get_contains_partial_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.RANGE:
-                (filter_statement, filter_values) = cls.get_range_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-
+            filter_statement, filter_values = cls.get_filter_for_query_type(
+                query_type, key, value, index_count, col_name_prefix
+            )
             filter_statements.append(filter_statement)
             values.extend(filter_values)
             index_count += len(filter_values)
 
         return (filter_statements, values)
+
+    @classmethod
+    def get_filter_for_query_type(
+        cls, query_type: QueryType, key: str, value: object, index_count: int, col_name_prefix: Optional[str] = None
+    ) -> Tuple[str, List[object]]:
+        filter_statement: str = ""
+        filter_values: List[object] = []
+        if query_type == QueryType.EQUALS:
+            (filter_statement, filter_values) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
+        elif query_type == QueryType.IS_NOT_NULL:
+            (filter_statement, filter_values) = cls.get_is_not_null_filter(key, col_name_prefix=col_name_prefix)
+        elif query_type == QueryType.CONTAINS:
+            (filter_statement, filter_values) = cls.get_contains_filter(
+                key, value, index_count, col_name_prefix=col_name_prefix
+            )
+        elif query_type == QueryType.CONTAINS_PARTIAL:
+            (filter_statement, filter_values) = cls.get_contains_partial_filter(
+                key, value, index_count, col_name_prefix=col_name_prefix
+            )
+        elif query_type == QueryType.RANGE:
+            (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count, col_name_prefix=col_name_prefix)
+        elif query_type == QueryType.NOT_CONTAINS:
+            (filter_statement, filter_values) = cls.get_not_contains_filter(
+                key, value, index_count, col_name_prefix=col_name_prefix
+            )
+        elif query_type == QueryType.COMBINED:
+            (filter_statement, filter_values) = cls.get_combined_filter(
+                key, cast(Dict[QueryType, object], value), index_count, col_name_prefix=col_name_prefix
+            )
+        return (filter_statement, filter_values)
 
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
@@ -1390,6 +1408,37 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         cls.validate_field_name(name)
         filter_statement = f"{name} = ANY (${str(index)})"
+        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
+        value = cls._get_value(value)
+        return (filter_statement, [value])
+
+    @classmethod
+    def get_combined_filter(
+        cls, name: str, value: Dict[QueryType, object], index: int, col_name_prefix: Optional[str] = None
+    ) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
+        collection.
+        """
+        cls.validate_field_name(name)
+        filter_statement: str
+        values: List[object]
+        (filter_statement, values) = cls._combine_filter_statements(
+            (cls.get_filter_for_query_type(query_type, name, val, index + i, col_name_prefix))
+            for i, (query_type, val) in enumerate(value.items())
+        )
+        return (filter_statement, [cls._get_value(v) for v in values])
+
+    @classmethod
+    def get_not_contains_filter(
+        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
+    ) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
+        collection.
+        """
+        cls.validate_field_name(name)
+        filter_statement = f"NOT ({name} = ANY (${str(index)}))"
         filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         return (filter_statement, [value])
