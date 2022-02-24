@@ -18,6 +18,8 @@
 import os
 import shutil
 
+import pytest
+
 from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider
 
 
@@ -59,8 +61,11 @@ def test_remote_repo_good2(git_modules_dir, modules_repo):
 def test_remote_repo_bad(git_modules_dir, modules_repo):
     repo = RemoteRepo("https://github.com/{}/{}")
     coroot = os.path.join(git_modules_dir, "clone_remote_good")
-    result = repo.clone("test-repository", coroot)
-    assert not result
+    with pytest.raises(InvalidMetadata) as e:
+        result = repo.clone("test-repository", coroot)
+        assert not result
+    msg = e.value.msg
+    assert msg == "Wrong repo path at https://github.com/{}/{} : should only contain at most one {} pair"
 
 
 def test_local_repo_bad(git_modules_dir, modules_repo):

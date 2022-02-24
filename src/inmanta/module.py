@@ -491,7 +491,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_inmanta_module_name(cls, python_package_name: str) -> str:
         if not python_package_name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError(f"Invalid python package name: should start with {ModuleV2.PKG_NAME_PREFIX}")
-        result: str = python_package_name[len(ModuleV2.PKG_NAME_PREFIX):].replace("-", "_")
+        result: str = python_package_name[len(ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
         if not result:
             raise ValueError("Invalid python package name: empty module name part.")
         return result
@@ -699,12 +699,10 @@ class RemoteRepo(ModuleRepo):
     def clone(self, name: str, dest: str) -> bool:
         url, nbr_substitutions = re.subn(r"{}", name, self.baseurl)
         if nbr_substitutions > 1:
-            LOGGER.debug("Wrong repo url: %s. can only contain one occurrence of '{}'" % self.baseurl, exc_info=True)
-            return False
+            raise InvalidMetadata(msg=f"Wrong repo path at {self.baseurl} : should only contain at most one {{}} pair")
         elif nbr_substitutions == 0:
             url = self.baseurl + name
         try:
-            print(url)
             gitprovider.clone(url, os.path.join(dest, name))
             return True
         except Exception:
@@ -2284,7 +2282,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         files = self._get_model_files(self.model_dir)
 
         for f in files:
-            name = f[len(self.model_dir) + 1: -3]
+            name = f[len(self.model_dir) + 1 : -3]
             parts = name.split("/")
             if parts[-1] == "_init":
                 parts = parts[:-1]
@@ -2670,7 +2668,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     @classmethod
     def get_name_from_metadata(cls, metadata: ModuleV2Metadata) -> str:
-        return metadata.name[len(cls.PKG_NAME_PREFIX):].replace("-", "_")
+        return metadata.name[len(cls.PKG_NAME_PREFIX) :].replace("-", "_")
 
     @classmethod
     def get_metadata_file_schema_type(cls) -> Type[ModuleV2Metadata]:
