@@ -644,7 +644,7 @@ class ExternalException(RuntimeException):
     it is wrapped in an ExternalException to make it conform to the expected interface
     """
 
-    def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: Exception) -> None:
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
         self.__cause__ = cause
@@ -674,7 +674,7 @@ class ExplicitPluginException(ExternalException):
     Base exception for wrapping an explicit :py:class:`inmanta.plugins.PluginException` raised from a plugin call.
     """
 
-    def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: "PluginException") -> None:
         ExternalException.__init__(self, stmt, msg, cause)
         self.__cause__: PluginException
 
@@ -696,7 +696,7 @@ class ExplicitPluginException(ExternalException):
 class WrappingRuntimeException(RuntimeException):
     """Baseclass for RuntimeExceptions wrapping other CompilerException"""
 
-    def __init__(self, stmt: Locatable, msg: str, cause: CompilerException) -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: CompilerException) -> None:
         if stmt is None and isinstance(cause, RuntimeException):
             stmt = cause.stmt
 

@@ -313,13 +313,13 @@ class Resource(metaclass=ResourceMeta):
             except proxy.UnknownException as e:
                 return e.unknown
             except RuntimeException as e:
-                raise WrappingRuntimeException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+                raise WrappingRuntimeException("Exception in %s" % entity_name, e)
             except plugins.PluginException as e:
-                raise ExplicitPluginException(self.ast_node, "PluginException in plugin %s" % self.ast_node.name, e)
+                raise ExplicitPluginException("PluginException in %s" % entity_name, e)
             except Exception as e:
                 import pudb
                 pu.db
-                raise ExternalException(self.ast_node, "Exception in plugin %s" % self.ast_node.name, e)
+                raise ExternalException("Failed to get attribute", e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
@@ -338,16 +338,8 @@ class Resource(metaclass=ResourceMeta):
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
         # map all fields
-        try:
-            fields = {
-                field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields
-            }
-        except KeyError as e:
-            key, attribute = e.args
-            raise KeyError(
-                "Key %s does not exist for attribute '%s' of entity %s[%s=%s]"
-                % (key, attribute, obj_id.entity_type, obj_id.attribute, obj_id.attribute_value)
-            )
+        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
+
         obj = resource_cls(obj_id)
         obj.populate(fields)
         obj.model = model_object
