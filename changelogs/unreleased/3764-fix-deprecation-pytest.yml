@@ -1,6 +1,3 @@
 description: Add pytest-asyncio mode to remove deprecation warnings
 change-type: patch
-destination-branches: [master, iso4, iso5]
-sections: { 
-  bugfix: "{{description}}" 
-}
+destination-branches: [master, iso5]
