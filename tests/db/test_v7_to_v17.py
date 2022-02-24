@@ -49,7 +49,6 @@ async def migrate_v7_to_v17(
     await ibl.stop()
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_foreign_key_agent_to_agentinstance(migrate_v7_to_v17: None, postgresql_client: Connection) -> None:
     """
     Deleting an entry in the agentInstance table should not be allowed when it's references from the agent stable.

@@ -111,7 +111,6 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
 
-@pytest.mark.asyncio
 async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
     """Test the scheduler part in isolation, mock out compile runner and listen to state updates"""
 
@@ -297,7 +296,6 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await report_db_index_usage()
 
 
-@pytest.mark.asyncio
 @pytest.mark.slowtest
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
@@ -427,7 +425,6 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert "inmanta-core" in output
 
 
-@pytest.mark.asyncio
 @pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
@@ -464,7 +461,6 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
     assert error.message == "value set twice:\n\told value: 0\n\t\tset at ./main.cf:1\n\tnew value: 1\n\t\tset at ./main.cf:1\n"
 
 
-@pytest.mark.asyncio
 async def test_e2e_recompile_failure(compilerservice: CompilerService):
     project = data.Project(name="test")
     await project.insert()
@@ -516,7 +512,6 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -628,7 +623,6 @@ async def run_compile_and_wait_until_compile_is_done(
     await retry_limited(_is_compile_finished, timeout=10)
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
     """
     Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
@@ -730,7 +724,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
     config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -845,7 +838,6 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
     yield compile_id_old, compile_id_new
 
 
-@pytest.mark.asyncio
 async def test_compileservice_cleanup(
     server_with_frequent_cleanups,
     client_for_cleanup,
@@ -879,7 +871,6 @@ async def test_compileservice_cleanup(
     assert len(result.result["reports"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
     env = await environment_factory.create_environment(main="")
 
@@ -909,7 +900,6 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     assert compile_data is None
 
 
-@pytest.mark.asyncio
 async def test_git_uses_environment_variables(environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch):
     """
     Make sure that the git clone command on the compilerservice takes into account the environment variables
@@ -942,7 +932,6 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block, server, client, environment, caplog):
     """
     Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
@@ -986,7 +975,6 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
         )
 
 
-@pytest.mark.asyncio
 async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
     """
     Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
@@ -1017,7 +1005,6 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     assert waiting_time == 0
 
 
-@pytest.mark.asyncio
 async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
