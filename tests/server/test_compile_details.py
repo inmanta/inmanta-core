@@ -86,7 +86,6 @@ async def env_with_compiles(client, environment):
     return environment, ids, compile_requested_timestamps
 
 
-@pytest.mark.asyncio
 async def test_compile_details(server, client, env_with_compiles):
     environment, ids, compile_requested_timestamps = env_with_compiles
 

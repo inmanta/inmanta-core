@@ -279,7 +279,6 @@ def test_commit_no_tags(git_modules_dir, module_without_tags, dev, tag, version_
     assert ("5.0" in str(output)) is version_tag_in_output
 
 
-@pytest.mark.asyncio
 async def test_version_argument(modules_repo):
     make_module_simple(modules_repo, "mod-version", [], "1.2")
     module_path = os.path.join(modules_repo, "mod-version")

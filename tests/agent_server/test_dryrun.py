@@ -20,8 +20,6 @@ import json
 import logging
 import uuid
 
-import pytest
-
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -31,7 +29,6 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_dryrun_and_deploy(server, client, resource_container, environment):
     """
     dryrun and deploy a configuration model
@@ -185,7 +182,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
     """
     test dryrun scaling
@@ -271,7 +267,6 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
     """
     test dryrun scaling
@@ -316,7 +311,6 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """
     Dryrun a configuration model with the v2 api, where applicable

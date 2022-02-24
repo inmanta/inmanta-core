@@ -21,7 +21,6 @@ import random
 import socket
 
 import netifaces
-import pytest
 from tornado import netutil
 
 import inmanta.agent.config as cfg
@@ -189,7 +188,6 @@ client-id=test456
     assert Config.get("server", "agent-timeout") == 60
 
 
-@pytest.mark.asyncio
 async def test_bind_address_ipv4(async_finalizer):
     """This test case check if the Inmanta server doesn't bind on another interface than 127.0.0.1 when bind-address is equal
     to 127.0.0.1. Procedure:
@@ -240,7 +238,6 @@ async def test_bind_address_ipv4(async_finalizer):
         sock.close()
 
 
-@pytest.mark.asyncio
 async def test_bind_address_ipv6(async_finalizer) -> None:
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():
@@ -275,7 +272,6 @@ async def test_bind_address_ipv6(async_finalizer) -> None:
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
     @protocol.method(path="/test", operation="POST", client_types=[ClientType.api])
     async def test_endpoint():

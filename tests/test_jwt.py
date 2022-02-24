@@ -81,7 +81,6 @@ async def jwks(unused_tcp_port):
     await server.close_all_connections()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_validate_rs256(jwks, tmp_path):
     """
     Test that inmanta can download a rs256 public key
