@@ -59,6 +59,7 @@ file = "NOFILE"
 namespace = None
 
 precedence = (
+    ("nonassoc", "LAZY"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
@@ -137,6 +138,11 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 def p_empty(p: YaccProduction) -> None:
     "empty :"
+    pass
+
+
+def p_empty_lazy(p: YaccProduction) -> None:
+    "empty_lazy : %prec LAZY"
     pass
 
 
@@ -649,7 +655,7 @@ def p_constructor(p: YaccProduction) -> None:
 
 # TODO: write tests
 def p_constructor_err_args(p: YaccProduction) -> None:
-    "constructor : class_ref '(' operand_list ')'"
+    "constructor : class_ref '(' operand_list_non_empty ')'"
     raise ParserException(
         p[1].location,
         str(p[1]),
@@ -948,20 +954,24 @@ def p_function_param_list_nonempty(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
+def p_operand_list_empty(p: YaccProduction) -> None:
+    """operand_list : operand_list_empty
+    operand_list_empty : empty_lazy"""
+    p[0] = []
+
+
+def p_operand_list_non_empty(p: YaccProduction) -> None:
+    """operand_list : operand_list_non_empty
+    operand_list_non_empty : operand_list_non_empty_no_trail
+    | operand_list_non_empty_no_trail ','"""
+    p[0] = p[1]
+
+
 def p_operand_list_collect(p: YaccProduction) -> None:
-    """operand_list : operand ',' operand_list"""
+    """operand_list_non_empty_no_trail : operand empty_lazy operand_list_empty
+    | operand ',' operand_list_non_empty_no_trail"""
     p[3].insert(0, p[1])
     p[0] = p[3]
-
-
-def p_operand_list_term(p: YaccProduction) -> None:
-    "operand_list : operand"
-    p[0] = [p[1]]
-
-
-def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list :"
-    p[0] = []
 
 
 def p_var_ref(p: YaccProduction) -> None:
