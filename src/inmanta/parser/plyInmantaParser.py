@@ -516,13 +516,13 @@ def p_relation_unidir(p: YaccProduction) -> None:
 
 
 def p_relation_annotated(p: YaccProduction) -> None:
-    "relation_def : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+    "relation_def : class_ref '.' ID multi operand_list_non_empty class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
 def p_relation_annotated_unidir(p: YaccProduction) -> None:
-    "relation_def : class_ref '.' ID multi operand_list class_ref"
+    "relation_def : class_ref '.' ID multi operand_list_non_empty class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
