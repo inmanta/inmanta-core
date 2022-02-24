@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
+import shutil
 
 from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider
 
@@ -43,6 +44,7 @@ def test_remote_repo_good(git_modules_dir, modules_repo):
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+    shutil.rmtree(os.path.join(coroot, "test-repository"))
 
 
 def test_remote_repo_good2(git_modules_dir, modules_repo):
@@ -51,6 +53,7 @@ def test_remote_repo_good2(git_modules_dir, modules_repo):
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+    shutil.rmtree(os.path.join(coroot, "test-repository"))
 
 
 def test_remote_repo_bad(git_modules_dir, modules_repo):
