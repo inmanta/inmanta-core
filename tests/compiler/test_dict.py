@@ -368,8 +368,6 @@ z = c.tests[n = 42, **dct]
     assert x is z
 
 
-
-
 def test_string_interpolation_in_key(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
