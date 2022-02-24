@@ -2082,11 +2082,13 @@ x.n
     [
         "mymod.MyEntity()",
         "mymod.submod.MyEntity()",
+        "mymod.submod.MyEntity(x=1)",
+        "mymod.submod.MyEntity(**dct)",
         "entity Child extends mymod.MyEntity: end",
         "SomeEntity.my [1] -- mymod.MyEntity",
     ],
 )
-def test_entity_ref_err_dot(snippet: str):
+def test_entity_ref_err_dot(snippet: str) -> None:
     """
     Verify that an attempt to access an entity in a qualified manner with '.' instead of '::' results in an appropriate
     exception.
@@ -2094,4 +2096,40 @@ def test_entity_ref_err_dot(snippet: str):
     :param snippet: Snippet that is expected to produce this error for an entity named `MyEntity`.
     """
     with pytest.raises(ParserException, match="`MyEntity` looks like an entity but was accessed with '.'"):
+        parse_code(snippet)
+
+
+def test_entity_ref_err_dot_full_msg() -> None:
+    with pytest.raises(
+        ParserException,
+        match=re.escape(
+            "Syntax error: `MyEntity` looks like an entity but was accessed with '.' (`mymod.submod.MyEntity`)."
+            " To access an entity in a namespace, use '::' instead: `mymod::submod::MyEntity` (test:2:5)"
+        )
+    ):
+        parse_code(
+            """
+x = mymod.submod.MyEntity()
+            """
+        )
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "MyEntity(x)",
+        "MyEntity(x, y)",
+        "mymod::MyEntity(x, y)",
+        "mymod::MyEntity(x, other=y)",
+        "mymod::MyEntity(x, **dct)",
+    ],
+)
+def test_constructor_err_positional_args(snippet: str) -> None:
+    """
+    Verify that attempting to use a constructor with positional arguments results in an appropriate exception.
+    """
+    with pytest.raises(
+        ParserException,
+        match=r"Found positional arguments \(.*\) for Entity constructor MyEntity, requires named arguments"
+    ):
         parse_code(snippet)
