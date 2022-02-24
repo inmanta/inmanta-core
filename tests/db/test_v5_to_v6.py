@@ -43,7 +43,6 @@ async def migrate_v5_to_v6(
     await ibl.stop()
 
 
-@pytest.mark.asyncio
 async def test_add_on_delete_cascade_constraint(migrate_v5_to_v6, postgresql_client: Connection) -> None:
     """
     Verify that the ON DELETE CASCADE constraint is set correctly on the substitute_compile_id column
