@@ -24,8 +24,6 @@ from re import sub
 from typing import Any, Dict, List
 from uuid import UUID, uuid4
 
-import pytest
-
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
@@ -217,7 +215,6 @@ class MultiVersionSetup(object):
         return allresources
 
 
-@pytest.mark.asyncio
 async def test_deploy(server, agent: Agent, environment, caplog):
     """
     Test basic deploy mechanism mocking
@@ -333,7 +330,6 @@ def strip_version(v):
     return sub(",v=[0-9]+", "", v)
 
 
-@pytest.mark.asyncio
 async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -377,7 +373,6 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         assert record.levelname != "WARNING"
 
 
-@pytest.mark.asyncio
 async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -400,7 +395,6 @@ async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, e
         assert record.levelname != "WARNING"
 
 
-@pytest.mark.asyncio
 async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -434,7 +428,6 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
         assert record.levelname != "WARNING" or record.name == "inmanta.config"
 
 
-@pytest.mark.asyncio
 async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -459,7 +452,6 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
         assert record.levelname != "WARNING"
 
 
-@pytest.mark.asyncio
 async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, environment, caplog):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):

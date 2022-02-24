@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.slowtest
-@pytest.mark.asyncio
 async def test_agent_get_status(server, environment, agent):
     clients = server.get_slice(SLICE_SESSION_MANAGER)._sessions.values()
     assert len(clients) == 1
@@ -114,7 +113,6 @@ async def startable_server(server_config):
         logger.exception("Timeout during stop of the server in teardown")
 
 
-@pytest.mark.asyncio
 async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, startable_server, caplog):
     """
     When an agent with the config option use_autostart_agent_map set to true, cannot retrieve the autostart_agent_map
@@ -145,7 +143,6 @@ async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, st
     await retry_limited(lambda: (async_started_agent.environment, "agent1") in agent_manager.tid_endpoint_to_session, 10)
 
 
-@pytest.mark.asyncio
 async def test_set_agent_map(server, environment, agent_factory):
     """
     This test verifies whether an agentmap is set correct when set via:
@@ -170,7 +167,6 @@ async def test_set_agent_map(server, environment, agent_factory):
     assert agent3.agent_map == agent_map
 
 
-@pytest.mark.asyncio
 async def test_hostname(server, environment, agent_factory):
     """
     This test verifies whether the hostname of an agent is set correct when set via:
@@ -193,7 +189,6 @@ async def test_hostname(server, environment, agent_factory):
     assert list(agent3.get_end_point_names()) == ["node3"]
 
 
-@pytest.mark.asyncio
 async def test_update_agent_map(server, environment, agent_factory):
     """
     If the URI of an enabled agent changes, it should still be enabled after the change

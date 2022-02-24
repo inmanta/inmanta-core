@@ -22,8 +22,6 @@ import asyncio
 import os
 import shutil
 
-import pytest
-
 from inmanta import const
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
@@ -38,7 +36,6 @@ def check_result(result):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_dump_db(server, client, postgres_db, database_name):
     """
     Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
