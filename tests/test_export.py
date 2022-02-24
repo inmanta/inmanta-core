@@ -21,6 +21,7 @@ import os
 import pytest
 
 from inmanta import config, const
+from inmanta.ast import ExternalException
 from inmanta.const import ResourceState
 from inmanta.export import DependencyCycleException
 
@@ -404,5 +405,6 @@ exp::Test3(
 )
         """
     )
-    with pytest.raises(KeyError, match="Key 'tom' does not exist for attribute 'real_name' of entity exp::Test3\\[name=tom\\]"):
+    with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
+    assert e.value.msg == "Failed to get attribute 'real_name' on 'exp::Test3' caused by: KeyError : 'tom'"

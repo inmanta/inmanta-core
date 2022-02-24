@@ -35,11 +35,12 @@ from typing import (
     Union,
     cast,
 )
-# <-- cause of circular import ( plugins.py -> protocol(__init.py__) -> methods.py -> resources.py -> plugins.py)
-from inmanta import plugins
-from inmanta.ast import RuntimeException, WrappingRuntimeException, ExternalException, ExplicitPluginException
 
 import inmanta.util
+
+# <-- cause of circular import ( plugins.py -> protocol(__init.py__) -> methods.py -> resources.py -> plugins.py)
+from inmanta import plugins
+from inmanta.ast import ExplicitPluginException, ExternalException, RuntimeException, WrappingRuntimeException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.stable_api import stable_api
@@ -314,11 +315,13 @@ class Resource(metaclass=ResourceMeta):
             except proxy.UnknownException as e:
                 return e.unknown
             except RuntimeException as e:
-                raise WrappingRuntimeException("Exception in %s" % entity_name, e)
+                raise WrappingRuntimeException(None, "Exception in Entity: %s" % entity_name, e)
             except plugins.PluginException as e:
-                raise ExplicitPluginException("PluginException in %s" % entity_name, e)
+                raise ExplicitPluginException(None, "Exception in Entity: %s" % entity_name, e)
             except Exception as e:
-                raise ExternalException("Failed to get attribute", e)
+                msg: str = "Failed to get attribute '%s' on '%s' caused by: %s : %s" % (
+                    field_name, entity_name, e.__class__.__name__, e)
+                raise ExternalException(None, msg, e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))

@@ -22,9 +22,8 @@ import datetime
 import uuid
 from typing import Any, List, Union
 
-from inmanta import const, data
+from inmanta import const, data, resources
 from inmanta.data import model
-from inmanta import resources
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -32,7 +31,7 @@ from .common import ArgOption
 from .decorators import method, typedmethod
 
 
-async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:
@@ -53,7 +52,7 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
-async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> resources.Id:
+async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
     try:
         return resources.Id.parse_resource_version_id(rvid)
     except Exception:
