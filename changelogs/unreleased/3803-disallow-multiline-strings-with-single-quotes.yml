@@ -1,0 +1,7 @@
+description: Writing a string over multiple lines is now only supported for strings within triple quotes.
+change-type: minor
+destination-branches: [master, iso5]
+sections: {
+  bugfix: "{{description}}",
+  deprecation-note: "{{description}} This was previously allowed for strings within single quotes due to a bug."
+}

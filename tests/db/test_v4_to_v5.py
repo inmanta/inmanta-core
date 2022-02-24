@@ -43,7 +43,6 @@ async def migrate_v4_to_v5(
     await ibl.stop()
 
 
-@pytest.mark.asyncio
 async def test_db_migration_compile_data(migrate_v4_to_v5, postgresql_client: Connection) -> None:
     compiles = await postgresql_client.fetch("SELECT * FROM public.compile;")
     for c in compiles:
@@ -53,7 +52,6 @@ async def test_db_migration_compile_data(migrate_v4_to_v5, postgresql_client: Co
         assert c["compile_data"] is None
 
 
-@pytest.mark.asyncio
 async def test_db_migration_environment_halt(migrate_v4_to_v5, postgresql_client: Connection) -> None:
     environments = await postgresql_client.fetch("SELECT * FROM public.environment;")
     for env in environments:

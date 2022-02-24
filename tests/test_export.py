@@ -177,7 +177,6 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
     assert len(warning) == 0
 
 
-@pytest.mark.asyncio
 async def test_empty_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
@@ -191,7 +190,6 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     assert len(response.result["versions"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
@@ -207,7 +205,6 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.result["versions"][0]["total"] == 1
 
 
-@pytest.mark.asyncio
 async def test_dict_export_server(snippetcompiler, server, client, environment):
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
@@ -226,7 +223,6 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
-@pytest.mark.asyncio
 async def test_old_compiler(server, client, environment):
     result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={})
     assert result.code == 400

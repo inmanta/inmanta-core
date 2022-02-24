@@ -22,7 +22,7 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
     services:
         postgres:
             container_name: iso_postgres
-            image: postgres:10
+            image: postgres:13
             environment:
                 POSTGRES_USER: inmanta
                 POSTGRES_PASSWORD: inmanta
@@ -35,11 +35,10 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
             image: ghcr.io/inmanta/oss:2022
             ports:
                 - 8888:8888
-            depends_on:
-                - postgres
             networks:
                 iso_net:
                     ipv4_address: 172.30.0.3
+            command: "server --wait-for-host iso_postgres --wait-for-port 5432"
 
     networks:
         iso_net:
@@ -62,3 +61,8 @@ and password ``inmanta``.
 When using a different setup than the one mentioned above, you should overwrite the server config with one
 matching your needs.  You can find more instructions for overwriting the config in a following section, 
 :ref:`here<docker_overwrite_server_conf>`.
+
+.. warning::
+    We don't recommend using the setup described above as a production environment.  Hosting a database in a
+    container as shown here is not ideal in term of performance, reliability and raises some serious data
+    persistence concerns.

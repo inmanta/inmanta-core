@@ -15,13 +15,11 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 
 from inmanta import data
 from inmanta.util import get_compiler_version
 
 
-@pytest.mark.asyncio
 async def test_environment_settings(client, server, environment_default):
     """
     Test environment settings
@@ -112,7 +110,6 @@ async def test_environment_settings(client, server, environment_default):
     assert result.result["value"] == agent_map
 
 
-@pytest.mark.asyncio
 async def test_environment_settings_v2(client_v2, server, environment_default):
     """
     Test environment settings
@@ -140,7 +137,6 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     assert response.code == 404
 
 
-@pytest.mark.asyncio
 async def test_delete_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -175,7 +171,6 @@ async def test_delete_protected_environment(server, client):
     await assert_env_deletion(env_id, deletion_succeeds=True)
 
 
-@pytest.mark.asyncio
 async def test_clear_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -227,7 +222,6 @@ async def test_clear_protected_environment(server, client):
     await assert_clear_env(env_id, clear_succeeds=True)
 
 
-@pytest.mark.asyncio
 async def test_decommission_protected_environment(server, client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -281,7 +275,6 @@ async def test_decommission_protected_environment(server, client):
     await assert_decomission_env(env_id, decommission_succeeds=True)
 
 
-@pytest.mark.asyncio
 async def test_default_value_purge_on_delete_setting(server, client):
     """
     Ensure that the purge_on_delete setting of an environment is set to false by default.

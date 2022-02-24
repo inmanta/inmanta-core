@@ -100,7 +100,6 @@ def influxdb(event_loop, free_socket):
     ifl.server.stop()
 
 
-@pytest.mark.asyncio
 async def test_influxdb(influxdb):
     rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
     with timer("test").time():
@@ -126,7 +125,6 @@ async def test_influxdb(influxdb):
         assert "mark=X" in line
 
 
-@pytest.mark.asyncio
 async def test_timing():
     # Attempt to deploy every 0.01 seconds,
     # Deploy hangs on a semaphore, so test case can control progress

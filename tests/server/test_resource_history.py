@@ -318,7 +318,6 @@ async def env_with_resources(server, client):
     yield env, cm_times, ids, resources
 
 
-@pytest.mark.asyncio
 async def test_resource_history(client, server, env_with_resources):
     env, cm_times, ids, resources = env_with_resources
     resource_with_long_history = ids["long_history"]
@@ -393,7 +392,6 @@ def attribute_hashes(resource_objects):
         ("date", "ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_resource_history_paging(server, client, order_by_column, order, env_with_resources):
     """Test querying resource history with paging, using different sorting parameters."""
     env, cm_times, ids, resources = env_with_resources
@@ -475,7 +473,6 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert result.result["metadata"] == {"total": 5, "before": 0, "after": 0, "page_size": 5}
 
 
-@pytest.mark.asyncio
 async def test_history_not_continuous_versions(server, client, environment):
     """Test the scenario when there are gaps in the version numbers,
     but the attributes remain the same. There should be only one item in the history in this case."""
