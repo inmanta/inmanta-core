@@ -655,7 +655,8 @@ def p_constructor(p: YaccProduction) -> None:
 
 # TODO: write tests
 def p_constructor_err_args(p: YaccProduction) -> None:
-    "constructor : class_ref '(' operand_list_non_empty ')'"
+    """constructor : class_ref '(' operand_list_non_empty ')'
+    | class_ref '(' operand_list_non_empty_no_trail ',' param_list_non_empty ')'"""
     raise ParserException(
         p[1].location,
         str(p[1]),
@@ -880,6 +881,7 @@ def p_wrapped_kwargs(p: YaccProduction) -> None:
     p[0] = WrappedKwargs(p[3])
 
 
+
 def p_param_list_element_explicit(p: YaccProduction) -> None:
     # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
     "param_list_element : ID '=' operand"
@@ -894,14 +896,21 @@ def p_param_list_element_kwargs(p: YaccProduction) -> None:
 
 def p_param_list_empty(p: YaccProduction) -> None:
     """param_list : param_list_empty
-    param_list_empty : empty"""
+    param_list_empty : empty_lazy"""
     # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     p[0] = ([], [])
 
 
-def p_param_list_nonempty(p: YaccProduction) -> None:
-    """param_list : param_list_element empty param_list_empty
-    | param_list_element ',' param_list"""
+def p_param_list_non_empty(p: YaccProduction) -> None:
+    """param_list : param_list_non_empty
+    param_list_non_empty : param_list_non_empty_no_trail
+    | param_list_non_empty_no_trail ','"""
+    p[0] = p[1]
+
+
+def p_param_list_collect(p: YaccProduction) -> None:
+    """param_list_non_empty_no_trail : param_list_element empty_lazy param_list_empty
+    | param_list_element ',' param_list_non_empty_no_trail"""
     # param_list parses a sequence of named arguments.
     # The arguments are separated by commas and take one of two forms:
     #   "key = value" -> p_param_list_element_explicit
