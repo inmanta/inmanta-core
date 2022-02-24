@@ -37,8 +37,6 @@ from typing import (
 )
 
 import inmanta.util
-
-# <-- cause of circular import ( plugins.py -> protocol(__init.py__) -> methods.py -> resources.py -> plugins.py)
 from inmanta import plugins
 from inmanta.ast import ExplicitPluginException, ExternalException, RuntimeException, WrappingRuntimeException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
@@ -320,7 +318,11 @@ class Resource(metaclass=ResourceMeta):
                 raise ExplicitPluginException(None, "Exception in Entity: %s" % entity_name, e)
             except Exception as e:
                 msg: str = "Failed to get attribute '%s' on '%s' caused by: %s : %s" % (
-                    field_name, entity_name, e.__class__.__name__, e)
+                    field_name,
+                    entity_name,
+                    e.__class__.__name__,
+                    e,
+                )
                 raise ExternalException(None, msg, e)
 
         except AttributeError:
