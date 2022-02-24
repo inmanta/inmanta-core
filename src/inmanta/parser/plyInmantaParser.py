@@ -516,13 +516,13 @@ def p_relation_unidir(p: YaccProduction) -> None:
 
 
 def p_relation_annotated(p: YaccProduction) -> None:
-    "relation_def : class_ref '.' ID multi operand_list_non_empty class_ref '.' ID multi"
+    "relation_def : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
 def p_relation_annotated_unidir(p: YaccProduction) -> None:
-    "relation_def : class_ref '.' ID multi operand_list_non_empty class_ref"
+    "relation_def : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
@@ -651,19 +651,6 @@ def p_map_lookup(p: YaccProduction) -> None:
 def p_constructor(p: YaccProduction) -> None:
     "constructor : class_ref '(' param_list ')'"
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
-
-
-# TODO: write tests
-def p_constructor_err_args(p: YaccProduction) -> None:
-    """constructor : class_ref '(' operand_list_non_empty ')'
-    | class_ref '(' operand_list_non_empty_no_trail ',' param_list_non_empty ')'"""
-    raise ParserException(
-        p[1].location,
-        str(p[1]),
-        (
-            "Found positional arguments (%s) for Entity constructor %s, requires named arguments."
-        ) % (", ".join(str(operand) for operand in p[3]), p[1]),
-    )
 
 
 def p_function_call(p: YaccProduction) -> None:
@@ -881,7 +868,6 @@ def p_wrapped_kwargs(p: YaccProduction) -> None:
     p[0] = WrappedKwargs(p[3])
 
 
-
 def p_param_list_element_explicit(p: YaccProduction) -> None:
     # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
     "param_list_element : ID '=' operand"
@@ -896,21 +882,14 @@ def p_param_list_element_kwargs(p: YaccProduction) -> None:
 
 def p_param_list_empty(p: YaccProduction) -> None:
     """param_list : param_list_empty
-    param_list_empty : empty_lazy"""
+    param_list_empty : empty"""
     # param_list: Tuple[List[Tuple[ID, operand]], List[wrapped_kwargs]]
     p[0] = ([], [])
 
 
-def p_param_list_non_empty(p: YaccProduction) -> None:
-    """param_list : param_list_non_empty
-    param_list_non_empty : param_list_non_empty_no_trail
-    | param_list_non_empty_no_trail ','"""
-    p[0] = p[1]
-
-
-def p_param_list_collect(p: YaccProduction) -> None:
-    """param_list_non_empty_no_trail : param_list_element empty_lazy param_list_empty
-    | param_list_element ',' param_list_non_empty_no_trail"""
+def p_param_list_nonempty(p: YaccProduction) -> None:
+    """param_list : param_list_element empty param_list_empty
+    | param_list_element ',' param_list"""
     # param_list parses a sequence of named arguments.
     # The arguments are separated by commas and take one of two forms:
     #   "key = value" -> p_param_list_element_explicit
@@ -963,24 +942,20 @@ def p_function_param_list_nonempty(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
-def p_operand_list_empty(p: YaccProduction) -> None:
-    """operand_list : operand_list_empty
-    operand_list_empty : empty_lazy"""
-    p[0] = []
-
-
-def p_operand_list_non_empty(p: YaccProduction) -> None:
-    """operand_list : operand_list_non_empty
-    operand_list_non_empty : operand_list_non_empty_no_trail
-    | operand_list_non_empty_no_trail ','"""
-    p[0] = p[1]
-
-
 def p_operand_list_collect(p: YaccProduction) -> None:
-    """operand_list_non_empty_no_trail : operand empty_lazy operand_list_empty
-    | operand ',' operand_list_non_empty_no_trail"""
+    """operand_list : operand ',' operand_list"""
     p[3].insert(0, p[1])
     p[0] = p[3]
+
+
+def p_operand_list_term(p: YaccProduction) -> None:
+    "operand_list : operand"
+    p[0] = [p[1]]
+
+
+def p_operand_list_term_2(p: YaccProduction) -> None:
+    "operand_list :"
+    p[0] = []
 
 
 def p_var_ref(p: YaccProduction) -> None:

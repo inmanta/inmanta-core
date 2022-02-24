@@ -2112,24 +2112,3 @@ def test_entity_ref_err_dot_full_msg() -> None:
 x = mymod.submod.MyEntity()
             """
         )
-
-
-@pytest.mark.parametrize(
-    "snippet",
-    [
-        "MyEntity(x)",
-        "MyEntity(x, y)",
-        "mymod::MyEntity(x, y)",
-        "mymod::MyEntity(x, other=y)",
-        "mymod::MyEntity(x, **dct)",
-    ],
-)
-def test_constructor_err_positional_args(snippet: str) -> None:
-    """
-    Verify that attempting to use a constructor with positional arguments results in an appropriate exception.
-    """
-    with pytest.raises(
-        ParserException,
-        match=r"Found positional arguments \(.*\) for Entity constructor MyEntity, requires named arguments"
-    ):
-        parse_code(snippet)
