@@ -1,0 +1,3 @@
+description: An error message is now shown if a wrong repo path is used
+change-type: patch
+destination-branches: [master, iso4, iso5]
