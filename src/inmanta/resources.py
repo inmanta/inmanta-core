@@ -36,7 +36,7 @@ from typing import (
     cast,
 )
 # <-- cause of circular import ( plugins.py -> protocol(__init.py__) -> methods.py -> resources.py -> plugins.py)
-from inmanta.plugins import PluginException
+from inmanta import plugins
 from inmanta.ast import RuntimeException, WrappingRuntimeException, ExternalException, ExplicitPluginException
 
 import inmanta.util
@@ -315,8 +315,8 @@ class Resource(metaclass=ResourceMeta):
                 return e.unknown
             except RuntimeException as e:
                 raise WrappingRuntimeException("Exception in %s" % entity_name, e)
-            # except PluginException as e:
-            #     raise ExplicitPluginException("PluginException in %s" % entity_name, e)
+            except plugins.PluginException as e:
+                raise ExplicitPluginException("PluginException in %s" % entity_name, e)
             except Exception as e:
                 raise ExternalException("Failed to get attribute", e)
 
