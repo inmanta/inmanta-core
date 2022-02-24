@@ -665,10 +665,8 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
     raise ParserException(
         p[1].location,
         str(p[1]),
-        (
-            "can only call plugins but %s looks like an attribute."
-            " To access a plugin in a namespace, use '::' instead: `%s`"
-        ) % (p[1], str(p[1]).replace(".", "::")),
+        ("can only call plugins but %s looks like an attribute." " To access a plugin in a namespace, use '::' instead: `%s`")
+        % (p[1], str(p[1]).replace(".", "::")),
     )
 
 
@@ -1016,7 +1014,8 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
         (
             "`%s` looks like an entity but was accessed with '.' (`%s`)."
             " To access an entity in a namespace, use '::' instead: `%s`"
-        ) % (cid, full_string, str(full_string).replace(".", "::")),
+        )
+        % (cid, full_string, str(full_string).replace(".", "::")),
     )
 
 

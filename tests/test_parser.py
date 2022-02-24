@@ -2105,7 +2105,7 @@ def test_entity_ref_err_dot_full_msg() -> None:
         match=re.escape(
             "Syntax error: `MyEntity` looks like an entity but was accessed with '.' (`mymod.submod.MyEntity`)."
             " To access an entity in a namespace, use '::' instead: `mymod::submod::MyEntity` (test:2:5)"
-        )
+        ),
     ):
         parse_code(
             """
