@@ -22,7 +22,6 @@ import asyncio
 import os
 import shutil
 
-
 from inmanta import const
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER

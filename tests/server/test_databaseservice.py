@@ -17,7 +17,6 @@
 """
 import asyncio
 
-
 from inmanta import data
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice

@@ -17,7 +17,6 @@
 """
 import logging
 
-
 from agent_server.conftest import _deploy_resources, get_agent
 from utils import get_resource, log_contains, log_doesnt_contain, retry_limited
 

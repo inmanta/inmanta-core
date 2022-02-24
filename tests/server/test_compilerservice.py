@@ -228,7 +228,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
         if idx < len(remote_ids):
             current = remote_ids[idx]
-            after = remote_ids[idx + 1:]
+            after = remote_ids[idx + 1 :]
 
             assert await cs.is_compiling(env.id) == 200
 
