@@ -303,7 +303,7 @@ class Scheduler(object):
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
         # Determine drvs that should be frozen to break the cycle
-        freeze_candidates: List[DelayedResultVariable] = []
+        freeze_candidates: List[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 if isinstance(rv, DelayedResultVariable):
@@ -516,7 +516,7 @@ class EntityRelationship:
         return first, then
 
     @classmethod
-    def from_delayed_result_variable(cls, drv: DelayedResultVariable[Any]) -> "EntityRelationship":
+    def from_delayed_result_variable(cls, drv: DelayedResultVariable[object]) -> "EntityRelationship":
         return cls(
             fq_entity_name=drv.myself.get_type().get_full_name(),
             relationship_name=drv.attribute.name,
@@ -541,7 +541,7 @@ class PrioritisedDelayedResultVariableQueue:
     type hints on them.
     """
 
-    def __init__(self, type_hints: List["TypeHint"], drvs: Optional[List[DelayedResultVariable]] = None) -> None:
+    def __init__(self, type_hints: List["TypeHint"], drvs: Optional[List[DelayedResultVariable[object]]] = None) -> None:
         self._all_constraint_entity_relationships: Set[EntityRelationship] = set(
             itertools.chain.from_iterable(EntityRelationship.from_type_hint(hint) for hint in type_hints)
         )

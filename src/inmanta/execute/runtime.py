@@ -51,7 +51,8 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
     from inmanta.compiler import Compiler
-    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue, TypeHint
+    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
+    from inmanta.module import TypeHint
 
 
 T = TypeVar("T")
