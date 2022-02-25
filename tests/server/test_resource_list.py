@@ -259,6 +259,46 @@ async def test_filter_resources(server, client, env_with_resources):
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["status"] == "deployed"
 
+    result = await client.resource_list(env.id, filter={"status": ["!deployed"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 5
+    assert not any(resource["status"] == "deployed" for resource in result.result["data"])
+
+    result = await client.resource_list(env.id, filter={"status": ["!deployed", "orphaned"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    assert result.result["data"][0]["status"] == "orphaned"
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+    assert not any(resource["status"] == "orphaned" for resource in result.result["data"])
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned", "!deployed", "skipped"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned", "orphaned"]})
+    assert result.code == 400
+
+    result = await client.resource_list(env.id, filter={"status": ["!!!!orphaned"]})
+    assert result.code == 400
+
+    result = await client.resource_list(env.id, filter={"status": [1, 2]})
+    assert result.code == 400
+
+    result = await client.resource_list(
+        env.id,
+        filter={
+            "resource_id_value": ["/etc/file", "/tmp/file"],
+            "resource_type": "file",
+            "agent": "agent1",
+            "status": ["!orphaned"],
+        },
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
 
 def resource_ids(resource_objects):
     return [resource["resource_version_id"] for resource in resource_objects]
