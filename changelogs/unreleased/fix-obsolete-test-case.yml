@@ -1,4 +1,4 @@
 description: Remove obsolete test case that was failing now that multiline strings are only supported for triple qutoes
 change-type: patch
-destination-branches: [master]
+destination-branches: [master, iso5]
 sections: {}
