@@ -310,20 +310,16 @@ class Resource(metaclass=ResourceMeta):
                 # passing along the serialized version would break the resource apis
                 json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
                 return value
+            except IgnoreResourceException:
+                raise  # will be handled in _load_resources of export.py
             except proxy.UnknownException as e:
                 return e.unknown
             except RuntimeException as e:
-                raise WrappingRuntimeException(None, "Exception in Entity: %s" % entity_name, e)
+                raise WrappingRuntimeException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
             except plugins.PluginException as e:
-                raise ExplicitPluginException(None, "Exception in Entity: %s" % entity_name, e)
+                raise ExplicitPluginException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
             except Exception as e:
-                msg: str = "Failed to get attribute '%s' on '%s' caused by: %s : %s" % (
-                    field_name,
-                    entity_name,
-                    e.__class__.__name__,
-                    e,
-                )
-                raise ExternalException(None, msg, e)
+                raise ExternalException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))

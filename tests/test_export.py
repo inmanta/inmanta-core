@@ -378,8 +378,9 @@ exp::WrappedSelfTest(
 )
         """
     )
-    with pytest.raises(TypeError, match="not JSON serializable"):
+    with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
+    assert "not JSON serializable" in e.value.format_trace()
 
 
 def test_3787_key_error_export(snippetcompiler):
@@ -407,4 +408,4 @@ exp::Test3(
     )
     with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
-    assert e.value.msg == "Failed to get attribute 'real_name' on 'exp::Test3' caused by: KeyError : 'tom'"
+    assert e.value.format_trace() == "Failed to get attribute 'real_name' on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
