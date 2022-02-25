@@ -675,6 +675,10 @@ class VirtualEnv(ActiveEnv):
         """
         self._parent_python = sys.executable
 
+        if not os.path.exists(self.site_packages_dir):
+            # the venv hosts a different python version than the running process
+            raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
+
         # check if the virtual env exists
         if not os.path.exists(self.python_path):
             # venv requires some care when the .env folder already exists
