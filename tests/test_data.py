@@ -29,6 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.data import QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
@@ -2803,3 +2804,18 @@ async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_sch
     await assert_state_dependencies(env.id, rvid_r3_v2, expected_states={})
     await assert_state_dependencies(env.id, rvid_r4_v2, expected_states={rvid_r3_v2: const.ResourceState.deployed})
     await assert_state_dependencies(env.id, rvid_r5_v2, expected_states={})
+
+
+def test_validate_combined_filter():
+    combined_filter, values = data.Resource.get_filter_for_combined_query_type(
+        "status", {QueryType.IS_NOT_NULL: None, QueryType.CONTAINS: ["deployed"]}, 1
+    )
+    assert combined_filter == "status IS NOT NULL AND status = ANY ($1)"
+    assert values == [["deployed"]]
+    combined_filter, values = data.Resource.get_filter_for_combined_query_type(
+        "status",
+        {QueryType.IS_NOT_NULL: None, QueryType.CONTAINS: ["deployed", "orphaned"], QueryType.NOT_CONTAINS: ["deploying"]},
+        1,
+    )
+    assert combined_filter == "status IS NOT NULL AND status = ANY ($1) AND NOT (status = ANY ($2))"
+    assert values == [["deployed", "orphaned"], ["deploying"]]
