@@ -19,15 +19,12 @@ import asyncio
 import logging
 import uuid
 
-import pytest
-
 from inmanta import const, data, resources
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
 from utils import LogSequence, _wait_until_deployment_finishes, no_error_in_logs, retry_limited, wait_until_logs_are_available
 
 
-@pytest.mark.asyncio
 async def test_get_facts(resource_container, client, clienthelper, environment, agent, caplog):
     """
     Test retrieving facts from the agent
@@ -62,7 +59,6 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
 async def test_purged_facts(resource_container, client, clienthelper, agent, environment, no_agent_backoff, caplog):
     """
     Test if facts are purged when the resource is purged.
@@ -123,7 +119,6 @@ async def test_purged_facts(resource_container, client, clienthelper, agent, env
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
 async def test_get_facts_extended(server, client, agent, clienthelper, resource_container, environment, caplog):
     """
     dryrun and deploy a configuration model automatically
@@ -289,7 +284,6 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
     ).no_more_errors()
 
 
-@pytest.mark.asyncio
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
     """
     Test if:
@@ -392,7 +386,6 @@ async def test_purged_resources(resource_container, client, clienthelper, server
     assert len(result.result["parameters"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_get_fact_no_code(resource_container, client, clienthelper, environment, agent):
     """
     Test retrieving facts from the agent when resource cannot be loaded

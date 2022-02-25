@@ -17,14 +17,11 @@
 """
 import logging
 
-import pytest
-
 from agent_server.conftest import get_agent
 from inmanta import config
 from utils import get_resource, log_index, retry_limited
 
 
-@pytest.mark.asyncio
 async def test_agent_disconnect(resource_container, environment, server, client, clienthelper, async_finalizer, caplog):
     caplog.set_level(logging.INFO)
     config.Config.set("config", "server-timeout", "1")

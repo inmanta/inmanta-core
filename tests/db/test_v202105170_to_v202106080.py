@@ -44,7 +44,6 @@ async def migrate_v202105170_to_v202106080(
     await ibl.stop()
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_timestamp_timezones(
     migrate_v202105170_to_v202106080: Callable[[], Awaitable[None]],
     postgresql_client: Connection,

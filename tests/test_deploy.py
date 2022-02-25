@@ -50,7 +50,6 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
     assert file_name.exists()
 
 
-@pytest.mark.asyncio(timeout=10)
 async def test_fork(server):
     """
     This test should not fail. Some Subprocess'es can make the ioloop hang, this tests fails when that happens.

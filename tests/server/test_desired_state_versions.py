@@ -94,7 +94,6 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
     yield environments, cm_timestamps
 
 
-@pytest.mark.asyncio
 async def test_filter_versions(
     server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
@@ -190,7 +189,6 @@ def version_numbers(desired_state_objects):
         ("ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_desired_state_versions_paging(
     server, client, order: str, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
@@ -290,7 +288,6 @@ async def test_desired_state_versions_paging(
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
 
-@pytest.mark.asyncio
 async def test_sorting_validation(
     server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
@@ -309,7 +306,6 @@ async def test_sorting_validation(
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_filter_validation(
     server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
 ):
@@ -328,7 +324,6 @@ async def test_filter_validation(
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_promote_no_versions(server, client, environment: str):
     result = await client.promote_desired_state_version(environment, version=1)
     assert result.code == 404
@@ -338,7 +333,6 @@ async def test_promote_no_versions(server, client, environment: str):
     "trigger_method",
     [None, PromoteTriggerMethod.no_push, PromoteTriggerMethod.push_incremental_deploy, PromoteTriggerMethod.push_full_deploy],
 )
-@pytest.mark.asyncio
 async def test_promote_version(server, client, clienthelper, agent, environment: str, trigger_method):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     env_obj = await data.Environment.get_by_id(uuid.UUID(environment))

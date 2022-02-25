@@ -101,7 +101,6 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
     yield environment, [param_id_1, param_id_3], [resource_id, resource_id_2, resource_id_3, resource_id_4]
 
 
-@pytest.mark.asyncio
 async def test_get_facts(client, env_with_facts):
     """
     Test retrieving facts via the API
@@ -137,7 +136,6 @@ async def test_get_facts(client, env_with_facts):
     assert result.code == 404
 
 
-@pytest.mark.asyncio
 async def test_fact_list_filters(client, env_with_facts: Tuple[str, List[str], List[str]]):
     environment, param_ids, resource_ids = env_with_facts
     result = await client.get_all_facts(
@@ -176,7 +174,6 @@ def fact_ids(fact_objects):
 
 @pytest.mark.parametrize("order_by_column", ["name", "resource_id"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
-@pytest.mark.asyncio
 async def test_facts_paging(server, client, order_by_column, order, env_with_facts):
     """Test querying facts with paging, using different sorting parameters."""
     env, _, _ = env_with_facts
@@ -254,7 +251,6 @@ async def test_facts_paging(server, client, order_by_column, order, env_with_fac
     assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
 
 
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, env_with_facts):
     env, _, _ = env_with_facts
     sort_status_map = {
@@ -271,7 +267,6 @@ async def test_sorting_validation(server, client, env_with_facts):
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, env_with_facts):
     env, _, _ = env_with_facts
     filter_status_map = [

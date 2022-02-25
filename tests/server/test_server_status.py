@@ -15,12 +15,10 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 
 from inmanta import data
 
 
-@pytest.mark.asyncio
 async def test_server_status(server, client):
     result = await client.get_server_status()
 
@@ -40,7 +38,6 @@ async def test_server_status(server, client):
     assert len(status["features"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_server_status_database_unreachable(server, client):
     await data.Environment.close_connection_pool()
     result = await client.get_server_status()

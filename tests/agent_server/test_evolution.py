@@ -17,8 +17,6 @@
 """
 from collections import defaultdict
 
-import pytest
-
 from agent_server.conftest import get_agent, stop_agent
 from inmanta import const, data, resources
 from inmanta.agent import handler
@@ -164,7 +162,6 @@ def resource_container_b():
     return BProvider
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_resource_evolution(server, client, environment, no_agent_backoff, snippetcompiler, monkeypatch, async_finalizer):
 
     provider = resource_container_a()

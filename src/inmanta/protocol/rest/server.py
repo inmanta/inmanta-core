@@ -96,13 +96,20 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[ReturnTypes, bytes]:
+    def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
         if content_type == common.JSON_CONTENT:
             return common.json_encode(body)
         if content_type == common.HTML_CONTENT:
+            assert isinstance(body, str)
             return body.encode(common.HTML_ENCODING)
         if content_type == common.HTML_CONTENT_WITH_UTF8_CHARSET:
+            assert isinstance(body, str)
             return body.encode(common.UTF8_ENCODING)
+        elif not isinstance(body, (str, bytes)):
+            raise exceptions.ServerError(
+                f"Body should be str or bytes and not {type(body)}."
+                " For dict make sure content type is set to {common.JSON_CONTENT}"
+            )
         return body
 
     async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:

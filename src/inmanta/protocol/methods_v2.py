@@ -627,7 +627,9 @@ def resource_list(
                 agent: filter by the agent of the resource
                 resource_type: filter by the type of the resource
                 resource_id_value: filter by the attribute values of the resource
-                status: filter by the current status of the resource
+                status: filter by the current status of the resource.
+                For status filters it's also possible to invert the condition with '!', for example
+                `filter.status=!orphaned` will return all the resources that are not in 'orphaned' state
                 The values for the 'agent', 'resource_type' and 'value' filters are matched partially.
     :param sort: Return the results sorted according to the parameter value.
                 It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `resource_type.desc`
