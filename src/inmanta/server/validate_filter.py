@@ -191,15 +191,38 @@ class ContainsFilter(Filter):
         return None
 
 
-class ContainsFilterResourceState(Filter):
-    """Represents a valid ReleasedResourceState list constraint which should be handled as a containment filter"""
+class CombinedContainsFilterResourceState(Filter):
+    """Represents a valid ReleasedResourceState constraint,
+    which handles the filters as contains or not contains filters based on their values"""
 
-    # Pydantic doesn't support Generic models on python 3.6
-    field: Optional[List[ReleasedResourceState]]
+    field: Optional[Dict[QueryType, List[ReleasedResourceState]]]
+
+    @validator("field", pre=True)
+    @classmethod
+    def parse_field(cls, v: object) -> Optional[Dict[QueryType, ReleasedResourceState]]:
+        if v is None:
+            return None
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            status_contains_filters = [status_filter for status_filter in v if not status_filter.startswith("!")]
+            status_not_contains_filters = [status_filter[1:] for status_filter in v if status_filter.startswith("!")]
+
+            intersection = set(status_contains_filters).intersection(status_not_contains_filters)
+            if len(intersection) > 0:
+                raise ValueError(f"status expected to be both equal and not equal to: {intersection}")
+
+            filters = {}
+            if status_contains_filters:
+                filters[QueryType.CONTAINS] = status_contains_filters
+            if status_not_contains_filters:
+                filters[QueryType.NOT_CONTAINS] = status_not_contains_filters
+
+            return filters if filters else None
+
+        raise ValueError(f"value is not a valid list of resource state constraints: {str(v)}")
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field:
-            return (QueryType.CONTAINS, self.field)
+            return (QueryType.COMBINED, self.field)
         return None
 
 
@@ -291,7 +314,7 @@ class ResourceFilterValidator(FilterValidator):
             "resource_type": ContainsPartialFilter,
             "agent": ContainsPartialFilter,
             "resource_id_value": ContainsPartialFilter,
-            "status": ContainsFilterResourceState,
+            "status": CombinedContainsFilterResourceState,
         }
 
 
