@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import os
-import shutil
 
 import pytest
 
@@ -32,35 +31,33 @@ version: '3.2'
     assert result == module_yaml
 
 
-def test_local_repo_good(git_modules_dir, modules_repo):
+def test_local_repo_good(tmpdir, modules_repo):
     repo = LocalFileRepo(modules_repo)
-    coroot = os.path.join(git_modules_dir, "clone_local_good")
+    coroot = os.path.join(tmpdir, "clone_local_good")
     result = repo.clone("mod1", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "mod1", "module.yml"))
 
 
-def test_remote_repo_good(git_modules_dir, modules_repo):
+def test_remote_repo_good(tmpdir, modules_repo):
     repo = RemoteRepo("https://github.com/rmccue/")
-    coroot = os.path.join(git_modules_dir, "clone_remote_good")
+    coroot = os.path.join(tmpdir, "clone_remote_good")
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
-    shutil.rmtree(os.path.join(coroot, "test-repository"))
 
 
-def test_remote_repo_good2(git_modules_dir, modules_repo):
+def test_remote_repo_good2(tmpdir, modules_repo):
     repo = RemoteRepo("https://github.com/rmccue/{}")
-    coroot = os.path.join(git_modules_dir, "clone_remote_good")
+    coroot = os.path.join(tmpdir, "clone_remote_good")
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
-    shutil.rmtree(os.path.join(coroot, "test-repository"))
 
 
-def test_remote_repo_bad(git_modules_dir, modules_repo):
+def test_remote_repo_bad(tmpdir, modules_repo):
     repo = RemoteRepo("https://github.com/{}/{}")
-    coroot = os.path.join(git_modules_dir, "clone_remote_good")
+    coroot = os.path.join(tmpdir, "clone_remote_good")
     with pytest.raises(InvalidMetadata) as e:
         result = repo.clone("test-repository", coroot)
         assert not result
@@ -68,8 +65,8 @@ def test_remote_repo_bad(git_modules_dir, modules_repo):
     assert msg == "Wrong repo path at https://github.com/{}/{} : should only contain at most one {} pair"
 
 
-def test_local_repo_bad(git_modules_dir, modules_repo):
+def test_local_repo_bad(tmpdir, modules_repo):
     repo = LocalFileRepo(modules_repo)
-    coroot = os.path.join(git_modules_dir, "clone_local_good")
+    coroot = os.path.join(tmpdir, "clone_local_good")
     result = repo.clone("thatotherthing", coroot)
     assert not result
