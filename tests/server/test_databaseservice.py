@@ -17,15 +17,12 @@
 """
 import asyncio
 
-import pytest
-
 from inmanta import data
 from inmanta.server import config as opt
 from inmanta.server.services import databaseservice
 from utils import retry_limited
 
 
-@pytest.mark.asyncio
 async def test_agent_process_cleanup(server, environment, agent_factory):
     opt.agent_processes_to_keep.set("1")
     a1 = await agent_factory(environment, hostname="host", agent_map=[], agent_names=["agent1"])

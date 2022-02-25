@@ -99,7 +99,6 @@ async def env_with_logs(client, server, environment):
     yield environment, msg_timings
 
 
-@pytest.mark.asyncio
 async def test_resource_action_logs_filtering(client, server, env_with_logs):
     """Test the filters for the resource action logs"""
     environment, msg_timings = env_with_logs
@@ -168,7 +167,6 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
@@ -266,7 +264,6 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
         ("Dates.ASC", 400),
     ],
 )
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, sort, expected_status, env_with_logs):
     environment, _ = env_with_logs
     result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, sort=sort)
@@ -286,14 +283,12 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
         ({"message": ["deployed to", "setting"]}, 200),
     ],
 )
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, filter, expected_status, env_with_logs):
     environment, _ = env_with_logs
     result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, filter=filter)
     assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_log_without_kwargs(server, client, environment):
 
     await data.ConfigurationModel(
@@ -333,7 +328,6 @@ async def test_log_without_kwargs(server, client, environment):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_log_nested_kwargs(server, client, environment):
 
     await data.ConfigurationModel(
