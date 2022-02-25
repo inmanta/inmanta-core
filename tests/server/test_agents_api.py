@@ -69,7 +69,6 @@ async def env_with_agents(client, environment: str) -> None:
     await create_agent(name="failover2", with_process=True, last_failover=datetime.datetime.now())  # up
 
 
-@pytest.mark.asyncio
 async def test_agent_list_filters(client, environment: str, env_with_agents: None) -> None:
     result = await client.get_agents(environment)
     assert result.code == 200
@@ -117,7 +116,6 @@ def agent_names(agents: List[Dict[str, str]]) -> List[str]:
 
 @pytest.mark.parametrize("order_by_column", ["name", "status", "process_name", "last_failover", "paused"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
-@pytest.mark.asyncio
 async def test_agents_paging(server, client, env_with_agents: None, environment: str, order_by_column: str, order: str) -> None:
     result = await client.get_agents(
         environment,
@@ -218,7 +216,6 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["metadata"] == {"total": 7, "before": 0, "after": 0, "page_size": 100}
 
 
-@pytest.mark.asyncio
 async def test_sorting_validation(client, environment: str, env_with_agents: None) -> None:
     sort_status_map = {
         "date.desc": 400,
@@ -234,7 +231,6 @@ async def test_sorting_validation(client, environment: str, env_with_agents: Non
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_agent_process_details(client, environment: str) -> None:
     env_uuid = uuid.UUID(environment)
     process_sid = uuid.uuid4()
@@ -264,7 +260,6 @@ async def test_agent_process_details(client, environment: str) -> None:
     assert result.result["data"]["state"] is None
 
 
-@pytest.mark.asyncio
 async def test_agent_process_details_with_report(server, client, environment: str, agent) -> None:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     env = await data.Environment.get_by_id(uuid.UUID(environment))

@@ -1013,9 +1013,10 @@ a="j{{o}}s"
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, StringFormat)
     assert isinstance(stmt.value._variables[0][0], Reference)
-    assert [str(x[0].name) for x in stmt.value._variables] == ["o"]
+    assert [x[0].name for x in stmt.value._variables] == ["o"]
+    assert [str(x[0].locatable_name) for x in stmt.value._variables] == ["o"]
     range: Range = Range("test", 2, 7, 2, 8)
-    assert [(x[0].name.location) for x in stmt.value._variables] == [range]
+    assert [(x[0].locatable_name.location) for x in stmt.value._variables] == [range]
 
 
 def test_string_format_2():
@@ -1034,7 +1035,7 @@ a="j{{c.d}}s"
     assert isinstance(stmt.value._variables[0][0], AttributeReference)
     assert str(stmt.value._variables[0][0].instance.name) == "c"
     assert str(stmt.value._variables[0][0].attribute) == "d"
-    assert stmt.value._variables[0][0].instance.name.location == Range("test", 2, 7, 2, 8)
+    assert stmt.value._variables[0][0].instance.locatable_name.location == Range("test", 2, 7, 2, 8)
     assert stmt.value._variables[0][0].attribute.location == Range("test", 2, 9, 2, 10)
 
 
@@ -1414,8 +1415,9 @@ z.a+=b
     assert isinstance(stmt, SetAttribute)
     assert stmt.list_only is True
     assert isinstance(stmt.value, Reference)
-    assert str(stmt.value.name) == "b"
-    assert stmt.value.name.location == Range("test", 2, 6, 2, 7)
+    assert stmt.value.name == "b"
+    assert str(stmt.value.locatable_name) == "b"
+    assert stmt.value.locatable_name.location == Range("test", 2, 6, 2, 7)
 
 
 def test_mapref():
@@ -1431,10 +1433,11 @@ a = b.c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, AttributeReference)
-    assert str(stmt.value.themap.instance.name) == "b"
+    assert stmt.value.themap.instance.name == "b"
+    assert str(stmt.value.themap.instance.locatable_name) == "b"
     assert str(stmt.value.themap.attribute) == "c"
-    assert stmt.value.themap.name.location == Range("test", 2, 5, 2, 8)
-    assert stmt.value.themap.instance.name.location == Range("test", 2, 5, 2, 6)
+    assert stmt.value.themap.locatable_name.location == Range("test", 2, 5, 2, 8)
+    assert stmt.value.themap.instance.locatable_name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1452,8 +1455,9 @@ a = c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, Reference)
-    assert str(stmt.value.themap.name) == "c"
-    assert stmt.value.themap.name.location == Range("test", 2, 5, 2, 6)
+    assert stmt.value.themap.name == "c"
+    assert str(stmt.value.themap.locatable_name) == "c"
+    assert stmt.value.themap.locatable_name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 
@@ -1472,8 +1476,9 @@ a = c["test"]["xx"]
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, MapLookup)
     assert isinstance(stmt.value.themap.themap, Reference)
-    assert str(stmt.value.themap.themap.name) == "c"
-    assert stmt.value.themap.themap.name.location == Range("test", 2, 5, 2, 6)
+    assert stmt.value.themap.themap.name == "c"
+    assert str(stmt.value.themap.themap.locatable_name) == "c"
+    assert stmt.value.themap.themap.locatable_name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "xx"
     assert isinstance(stmt.value.themap.key, Literal)
@@ -1976,8 +1981,9 @@ a="test{{hello.world.bye}}test"
     assert str(instance1.attribute) == "world"
     assert instance1.attribute.location == Range("test", 2, 16, 2, 21)
     instance2 = instance1.instance
-    assert str(instance2.name) == "hello"
-    assert instance2.name.location == Range("test", 2, 10, 2, 15)
+    assert instance2.name == "hello"
+    assert str(instance2.locatable_name) == "hello"
+    assert instance2.locatable_name.location == Range("test", 2, 10, 2, 15)
 
 
 def test_string_attribute_reference_2():
@@ -1999,8 +2005,9 @@ a=\"""test{{hello.world.bye}}test\"""
     assert str(instance1.attribute) == "world"
     assert instance1.attribute.location == Range("test", 2, 18, 2, 23)
     instance2 = instance1.instance
-    assert str(instance2.name) == "hello"
-    assert instance2.name.location == Range("test", 2, 12, 2, 17)
+    assert instance2.name == "hello"
+    assert str(instance2.locatable_name) == "hello"
+    assert instance2.locatable_name.location == Range("test", 2, 12, 2, 17)
 
 
 def test_string_attribute_reference_3():
@@ -2025,8 +2032,9 @@ a=\"""test
     assert str(instance1.attribute) == "world"
     assert instance1.attribute.location == Range("test", 3, 16, 3, 21)
     instance2 = instance1.instance
-    assert str(instance2.name) == "hello"
-    assert instance2.name.location == Range("test", 3, 10, 3, 15)
+    assert instance2.name == "hello"
+    assert str(instance2.locatable_name) == "hello"
+    assert instance2.locatable_name.location == Range("test", 3, 10, 3, 15)
 
 
 def test_string_attribute_reference_4():
@@ -2048,8 +2056,9 @@ format string starts as first char on new line
     assert str(attribute_ref.attribute) == "n"
     assert attribute_ref.attribute.location == Range("test", 4, 5, 4, 6)
     instance1 = attribute_ref.instance
-    assert str(instance1.name) == "x"
-    assert instance1.name.location == Range("test", 4, 3, 4, 4)
+    assert instance1.name == "x"
+    assert str(instance1.locatable_name) == "x"
+    assert instance1.locatable_name.location == Range("test", 4, 3, 4, 4)
 
 
 def test_string_attribute_reference_5():
@@ -2073,5 +2082,6 @@ x.n
     assert str(attribute_ref.attribute) == "n"
     assert attribute_ref.attribute.location == Range("test", 5, 3, 5, 4)
     instance1 = attribute_ref.instance
-    assert str(instance1.name) == "x"
-    assert instance1.name.location == Range("test", 5, 1, 5, 2)
+    assert instance1.name == "x"
+    assert str(instance1.locatable_name) == "x"
+    assert instance1.locatable_name.location == Range("test", 5, 1, 5, 2)

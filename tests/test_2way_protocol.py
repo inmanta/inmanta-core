@@ -112,7 +112,6 @@ async def assert_agent_counter(agent: Agent, reconnect: int, disconnected: int) 
     await retry_limited(is_same, 10)
 
 
-@pytest.mark.asyncio
 async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -152,7 +151,6 @@ async def check_sessions(sessions):
 
 
 @pytest.mark.slowtest
-@pytest.mark.asyncio(timeout=30)
 async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 
@@ -215,7 +213,6 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
 
 
 @pytest.mark.slowtest
-@pytest.mark.asyncio(timeout=30)
 async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 

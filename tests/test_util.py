@@ -29,7 +29,6 @@ from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio
 async def test_scheduler_remove(caplog):
     sched = util.Scheduler("remove")
 
@@ -50,7 +49,6 @@ async def test_scheduler_remove(caplog):
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
 async def test_scheduler_stop(caplog):
     sched = util.Scheduler("stop")
 
@@ -77,7 +75,6 @@ async def test_scheduler_stop(caplog):
     assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
 
 
-@pytest.mark.asyncio
 async def test_scheduler_async_run_fail(caplog):
     sched = util.Scheduler("xxx")
 
@@ -104,7 +101,6 @@ async def test_scheduler_async_run_fail(caplog):
     log_contains(caplog, "inmanta.util", logging.ERROR, "Uncaught exception while executing scheduled action")
 
 
-@pytest.mark.asyncio
 async def test_scheduler_run_async(caplog):
     sched = util.Scheduler("xxx")
 
@@ -126,7 +122,6 @@ async def test_scheduler_run_async(caplog):
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
 async def test_ensure_future_and_handle_exception(caplog):
     caplog.set_level(logging.INFO)
 

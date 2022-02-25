@@ -27,18 +27,23 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
+from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
 
+@stable_api
 class Reference(ExpressionStatement):
     """
     This class represents a reference to a value
+
+    :ivar name: The name of the Reference as a string.
     """
 
     def __init__(self, name: LocatableString) -> None:
         ExpressionStatement.__init__(self)
-        self.name = name
+        self.locatable_name = name
+        self.name = str(name)
         self.full_name = str(name)
 
     def normalize(self) -> None:
@@ -49,7 +54,7 @@ class Reference(ExpressionStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # FIXME: may be done more efficient?
-        out = {str(self.name): resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
+        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
     def requires_emit_gradual(
@@ -57,40 +62,40 @@ class Reference(ExpressionStatement):
     ) -> Dict[object, ResultVariable]:
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out = {str(self.name): var}  # type : Dict[object, ResultVariable]
+        out = {self.name: var}  # type : Dict[object, ResultVariable]
         return out
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        return requires[str(self.name)]
+        return requires[self.name]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
-        if str(self.name) not in requires:
+        if self.name not in requires:
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
-        return requires[str(self.name)]
+        return requires[self.name]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
             raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
-        return Assign(self.name, value)
+        return Assign(self.locatable_name, value)
 
     def root_in_self(self) -> "Reference":
-        if str(self.name) == "self":
+        if self.name == "self":
             return self
         else:
             ref = Reference("self")
             self.copy_location(ref)
-            attr_ref = AttributeReference(ref, self.name)
+            attr_ref = AttributeReference(ref, self.locatable_name)
             self.copy_location(attr_ref)
             return attr_ref
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
-        return graph.resolver.get_dataflow_node(str(self.name))
+        return graph.resolver.get_dataflow_node(self.name)
 
     def __str__(self) -> str:
-        return str(self.name)
+        return self.name
 
     def __repr__(self) -> str:
-        return str(self.name)
+        return self.name
 
 
 T = TypeVar("T")
@@ -233,9 +238,15 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        range: Range = Range(instance.name.location.file, instance.name.lnr, instance.name.start, attribute.elnr, attribute.end)
+        range: Range = Range(
+            instance.locatable_name.location.file,
+            instance.locatable_name.lnr,
+            instance.locatable_name.start,
+            attribute.elnr,
+            attribute.end,
+        )
         reference: LocatableString = LocatableString(
-            "%s.%s" % (instance.full_name, attribute), range, instance.name.lexpos, instance.namespace
+            "%s.%s" % (instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
         )
         Reference.__init__(self, reference)
         self.attribute = attribute

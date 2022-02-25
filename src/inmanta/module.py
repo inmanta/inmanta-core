@@ -698,11 +698,12 @@ class RemoteRepo(ModuleRepo):
         self.baseurl = baseurl
 
     def clone(self, name: str, dest: str) -> bool:
+        url, nbr_substitutions = re.subn(r"{}", name, self.baseurl)
+        if nbr_substitutions > 1:
+            raise InvalidMetadata(msg=f"Wrong repo path at {self.baseurl} : should only contain at most one {{}} pair")
+        elif nbr_substitutions == 0:
+            url = self.baseurl + name
         try:
-            url = self.baseurl.format(name)
-            if url == self.baseurl:
-                url = self.baseurl + name
-
             gitprovider.clone(url, os.path.join(dest, name))
             return True
         except Exception:
