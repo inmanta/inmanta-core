@@ -675,10 +675,6 @@ class VirtualEnv(ActiveEnv):
         """
         self._parent_python = sys.executable
 
-        if not os.path.exists(self.site_packages_dir):
-            # the venv hosts a different python version than the running process
-            raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
-
         # check if the virtual env exists
         if not os.path.exists(self.python_path):
             # venv requires some care when the .env folder already exists
@@ -700,6 +696,10 @@ class VirtualEnv(ActiveEnv):
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
         elif not os.path.exists(self._path_pth_file):
+            if not os.path.exists(self.site_packages_dir):
+            # the venv hosts a different python version than the running process
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} due to python version mismatch")
+
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
