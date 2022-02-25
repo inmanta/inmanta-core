@@ -68,14 +68,14 @@ class VersionedQueryIdentifier(QueryIdentifier):
     version: int
 
 
-I = TypeVar("I", bound=QueryIdentifier)
+IQuery = TypeVar("IQuery", bound=QueryIdentifier)
 
 
-class PagingCountsProvider(ABC, Generic[I]):
+class PagingCountsProvider(ABC, Generic[IQuery]):
     @abstractmethod
     async def count_items_for_paging(
         self,
-        query_identifier: I,
+        query_identifier: IQuery,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -278,13 +278,13 @@ class FactPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
         )
 
 
-class PagingHandler(ABC, Generic[T, I]):
-    def __init__(self, counts_provider: PagingCountsProvider[I]) -> None:
-        self.counts_provider: PagingCountsProvider[I] = counts_provider
+class PagingHandler(ABC, Generic[T, IQuery]):
+    def __init__(self, counts_provider: PagingCountsProvider[IQuery]) -> None:
+        self.counts_provider: PagingCountsProvider[IQuery] = counts_provider
 
     async def prepare_paging_metadata(
         self,
-        query_identifier: I,
+        query_identifier: IQuery,
         dtos: List[T],
         db_query: Mapping[str, Tuple[QueryType, object]],
         limit: int,
