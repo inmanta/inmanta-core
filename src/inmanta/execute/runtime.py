@@ -941,8 +941,8 @@ class Instance(ExecutionContext):
         self.type = mytype
         self.slots: Dict[str, ResultVariable] = {
             n: mytype.get_attribute(n).get_new_result_variable(self, queue)
-            # prune duplicates first because get_new_result_variable() has side effects
-            for n in set(mytype.get_all_attribute_names())
+            # prune duplicates first because get_new_result_variable() has side effects, sort for determinism
+            for n in sorted(set(mytype.get_all_attribute_names()))
         }
 
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
