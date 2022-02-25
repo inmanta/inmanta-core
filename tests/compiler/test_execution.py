@@ -19,6 +19,7 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, MultiException, OptionalValueException
+from inmanta.execute.scheduler import InvalidTypeHintException
 from inmanta.module import TypeHint
 
 
@@ -518,9 +519,10 @@ def test_type_hints(snippetcompiler) -> None:
         compiler.do_compile()
 
 
-def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
+def test_validation_type_hints(snippetcompiler, caplog) -> None:
     """
-    Verify that an appropriate warning is logged when invalid type hints are defined.
+    Verify that an appropriate exception is raised when invalid type hints are defined and
+    ensure that the usage of type hints results in a warning message in the compiler log.
     """
     model = """
         entity A:
@@ -545,10 +547,9 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    caplog.clear()
-    compiler.do_compile()
-    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
-    assert "A type hint was defined for __config__::B, but no such type was defined" in caplog.text
+    expected_error_message = "A type hint was defined for __config__::B, but no such type was defined"
+    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+        compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
@@ -561,13 +562,12 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    caplog.clear()
-    compiler.do_compile()
-    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
-    assert (
+    expected_error_message = (
         "A type hint was defined for __config__::A.non_existing_relationship, "
-        "but entity __config__::A doesn't have an attribute non_existing_relationship." in caplog.text
+        "but entity __config__::A doesn't have an attribute non_existing_relationship."
     )
+    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+        compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
@@ -580,10 +580,9 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    caplog.clear()
-    compiler.do_compile()
-    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
-    assert "A type hint was defined for __config__::A.var, but attribute var is not a relationship attribute." in caplog.text
+    expected_error_message = "A type hint was defined for __config__::A.var, but attribute var is not a relationship attribute."
+    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+        compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
@@ -596,10 +595,25 @@ def test_warning_incorrect_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
+    expected_error_message = "A type hint was defined for non-entity type __config__::tcp_port"
+    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+        compiler.do_compile()
+
+    # Only valid type hints are specified. Ensure log message regarding use of experimental feature.
+    snippetcompiler.setup_for_snippet(
+        model,
+        type_hints=[
+            TypeHint(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
     caplog.clear()
     compiler.do_compile()
     assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
-    assert "A type hint was defined for non-entity type __config__::tcp_port" in caplog.text
 
     # No type hints defined. No warning usage experimental feature
     snippetcompiler.setup_for_snippet(model)

@@ -100,30 +100,25 @@ class Scheduler(object):
             LOGGER.info("Loaded type hint: %s", hint)
             for (entity_type_name, relationship_name) in hint.iterate_types():
                 if entity_type_name not in self.types:
-                    LOGGER.warning("A type hint was defined for %s, but no such type was defined", entity_type_name)
-                    continue
+                    raise InvalidTypeHintException(
+                        f"A type hint was defined for {entity_type_name}, but no such type was defined"
+                    )
                 current_type: Type = self.types[entity_type_name]
                 if not isinstance(current_type, Entity):
-                    LOGGER.warning("A type hint was defined for non-entity type %s", current_type)
-                    continue
+                    raise InvalidTypeHintException(f"A type hint was defined for non-entity type {current_type}")
                 assert isinstance(current_type, Entity)  # Make mypy happy
                 attributes_of_entity = current_type.attributes
                 if relationship_name not in attributes_of_entity:
-                    LOGGER.warning(
-                        "A type hint was defined for %s, but entity %s doesn't have an attribute %s.",
-                        f"{entity_type_name}.{relationship_name}",
-                        entity_type_name,
-                        relationship_name,
+                    raise InvalidTypeHintException(
+                        f"A type hint was defined for {entity_type_name}.{relationship_name}, "
+                        f"but entity {entity_type_name} doesn't have an attribute {relationship_name}.",
                     )
-                    continue
                 if not isinstance(attributes_of_entity[relationship_name], RelationAttribute):
-                    LOGGER.warning(
-                        "A type hint was defined for %s, but attribute %s is not a relationship attribute.",
-                        f"{entity_type_name}.{relationship_name}",
-                        relationship_name,
+                    raise InvalidTypeHintException(
+                        f"A type hint was defined for {entity_type_name}.{relationship_name}, "
+                        f"but attribute {relationship_name} is not a relationship attribute.",
                     )
-                else:
-                    valid_type_hints.append(hint)
+                valid_type_hints.append(hint)
         return valid_type_hints
 
     def freeze_all(self, exns: List[CompilerException]) -> None:
@@ -493,6 +488,16 @@ class Scheduler(object):
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
 
         return True
+
+
+class InvalidTypeHintException(CompilerException):
+    """
+    A CompilerException that is raised when the project.yml file
+    contains a type that invalid with respect to the given module.
+    """
+
+    def __init__(self, msg: str) -> None:
+        super(InvalidTypeHintException, self).__init__(msg)
 
 
 @dataclass(frozen=True)

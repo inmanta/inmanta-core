@@ -594,7 +594,7 @@ class QueueScheduler(object):
         self.waitqueue = waitqueue
         self.types = types
         self.allwaiters = allwaiters
-        names_types_with_hints = itertools.chain.from_iterable([hint.first_type, hint.then_type] for hint in type_hints)
+        names_types_with_hints = set(itertools.chain.from_iterable([hint.first_type, hint.then_type] for hint in type_hints))
         # Use dict to achieve O(1) access on `type in self.types_with_type_hint` operation.
         self.types_with_type_hint: Dict[Type, None] = {
             type_obj: None for fq_type_name, type_obj in self.types.items() if fq_type_name in names_types_with_hints
