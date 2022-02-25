@@ -21,7 +21,7 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
     version: '3'
     services:
         postgres:
-            container_name: iso_postgres
+            container_name: oss_postgres
             image: postgres:13
             environment:
                 POSTGRES_USER: inmanta
@@ -31,7 +31,7 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
                     ipv4_address: 172.30.0.2
 
         inmanta-server:
-            container_name: iso_server
+            container_name: oss_server
             image: ghcr.io/inmanta/oss:2022
             ports:
                 - 8888:8888
