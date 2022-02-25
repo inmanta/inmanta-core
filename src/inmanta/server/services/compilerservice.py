@@ -50,7 +50,7 @@ from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
-from inmanta.util import ensure_directory_exist
+from inmanta.util import LoggingContext, ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
 
@@ -269,7 +269,10 @@ class CompileRun(object):
                     return await self._end_stage(returncode=0)
 
             async def update_modules() -> data.Report:
-                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
+                with LoggingContext(LOGGER, level=logging.INFO):
+                    return await run_compile_stage_in_venv(
+                        "Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir
+                    )
 
             async def install_modules() -> data.Report:
                 return await run_compile_stage_in_venv(
