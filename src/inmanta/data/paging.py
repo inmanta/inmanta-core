@@ -39,7 +39,7 @@ from inmanta.data import (
 from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource, PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
-from inmanta.data.model import ResourceHistory, ResourceIdStr, VersionedResource
+from inmanta.data.model import ResourceHistory, ResourceIdStr, ResourceLog, VersionedResource
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -68,11 +68,14 @@ class VersionedQueryIdentifier(QueryIdentifier):
     version: int
 
 
-class PagingCountsProvider(ABC):
+IQuery = TypeVar("IQuery", bound=QueryIdentifier)
+
+
+class PagingCountsProvider(ABC, Generic[IQuery]):
     @abstractmethod
     async def count_items_for_paging(
         self,
-        query_identifier: QueryIdentifier,
+        query_identifier: IQuery,
         database_order: DatabaseOrder,
         first_id: Optional[Union[uuid.UUID, str]] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
@@ -86,7 +89,7 @@ class PagingCountsProvider(ABC):
         pass
 
 
-class ResourcePagingCountsProvider(PagingCountsProvider):
+class ResourcePagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     def __init__(self, data_class: Type[Resource]) -> None:
         self.data_class = data_class
 
@@ -114,7 +117,7 @@ class ResourcePagingCountsProvider(PagingCountsProvider):
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
-class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
+class ResourceHistoryPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifier]):
     def __init__(self, data_class: Type[Resource]) -> None:
         self.data_class = data_class
 
@@ -143,7 +146,7 @@ class ResourceHistoryPagingCountsProvider(PagingCountsProvider):
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
-class ResourceLogPagingCountsProvider(PagingCountsProvider):
+class ResourceLogPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifier]):
     def __init__(self, data_class: Type[ResourceAction]) -> None:
         self.data_class = data_class
 
@@ -172,7 +175,7 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider):
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
 
-class VersionedResourcePagingCountsProvider(PagingCountsProvider):
+class VersionedResourcePagingCountsProvider(PagingCountsProvider[VersionedQueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: VersionedQueryIdentifier,
@@ -195,7 +198,7 @@ class VersionedResourcePagingCountsProvider(PagingCountsProvider):
         )
 
 
-class CompileReportPagingCountsProvider(PagingCountsProvider):
+class CompileReportPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: QueryIdentifier,
@@ -211,7 +214,7 @@ class CompileReportPagingCountsProvider(PagingCountsProvider):
         )
 
 
-class AgentPagingCountsProvider(PagingCountsProvider):
+class AgentPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: QueryIdentifier,
@@ -227,7 +230,7 @@ class AgentPagingCountsProvider(PagingCountsProvider):
         )
 
 
-class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
+class DesiredStateVersionPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: QueryIdentifier,
@@ -243,7 +246,7 @@ class DesiredStateVersionPagingCountsProvider(PagingCountsProvider):
         )
 
 
-class ParameterPagingCountsProvider(PagingCountsProvider):
+class ParameterPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: QueryIdentifier,
@@ -259,7 +262,7 @@ class ParameterPagingCountsProvider(PagingCountsProvider):
         )
 
 
-class FactPagingCountsProvider(PagingCountsProvider):
+class FactPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
     async def count_items_for_paging(
         self,
         query_identifier: QueryIdentifier,
@@ -275,13 +278,13 @@ class FactPagingCountsProvider(PagingCountsProvider):
         )
 
 
-class PagingHandler(ABC, Generic[T]):
-    def __init__(self, counts_provider: PagingCountsProvider) -> None:
-        self.counts_provider = counts_provider
+class PagingHandler(ABC, Generic[T, IQuery]):
+    def __init__(self, counts_provider: PagingCountsProvider[IQuery]) -> None:
+        self.counts_provider: PagingCountsProvider[IQuery] = counts_provider
 
     async def prepare_paging_metadata(
         self,
-        query_identifier: QueryIdentifier,
+        query_identifier: IQuery,
         dtos: List[T],
         db_query: Mapping[str, Tuple[QueryType, object]],
         limit: int,
@@ -465,10 +468,10 @@ class PagingHandler(ABC, Generic[T]):
         return f"{base_url}?{parse.urlencode(params, doseq=True)}"
 
 
-class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
+class ResourcePagingHandler(PagingHandler[LatestReleasedResource, QueryIdentifier]):
     def __init__(
         self,
-        counts_provider: PagingCountsProvider,
+        counts_provider: PagingCountsProvider[QueryIdentifier],
     ) -> None:
         super().__init__(counts_provider)
 
@@ -492,10 +495,10 @@ class ResourcePagingHandler(PagingHandler[LatestReleasedResource]):
             )
 
 
-class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
+class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory, ResourceQueryIdentifier]):
     def __init__(
         self,
-        counts_provider: PagingCountsProvider,
+        counts_provider: PagingCountsProvider[ResourceQueryIdentifier],
         resource_id: str,
     ) -> None:
         super().__init__(counts_provider)
@@ -521,10 +524,10 @@ class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory]):
             )
 
 
-class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
+class ResourceLogPagingHandler(PagingHandler[ResourceLog, ResourceQueryIdentifier]):
     def __init__(
         self,
-        counts_provider: PagingCountsProvider,
+        counts_provider: PagingCountsProvider[ResourceQueryIdentifier],
         resource_id: str,
     ) -> None:
         super().__init__(counts_provider)
@@ -533,7 +536,7 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
     def get_base_url(self) -> str:
         return f"/api/v2/resource/{parse.quote(self.resource_id, safe='')}/logs"
 
-    def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
+    def _get_paging_boundaries(self, dtos: List[ResourceLog], sort_order: DatabaseOrder) -> PagingBoundaries:
         if sort_order.get_order() == "DESC":
             return PagingBoundaries(
                 start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
@@ -550,10 +553,10 @@ class ResourceLogPagingHandler(PagingHandler[ResourceHistory]):
             )
 
 
-class CompileReportPagingHandler(PagingHandler[CompileReport]):
+class CompileReportPagingHandler(PagingHandler[CompileReport, QueryIdentifier]):
     def __init__(
         self,
-        counts_provider: PagingCountsProvider,
+        counts_provider: PagingCountsProvider[QueryIdentifier],
     ) -> None:
         super().__init__(counts_provider)
 
@@ -577,12 +580,12 @@ class CompileReportPagingHandler(PagingHandler[CompileReport]):
             )
 
 
-class AgentPagingHandler(PagingHandler[AgentModel]):
+class AgentPagingHandler(PagingHandler[AgentModel, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/agents"
 
 
-class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion]):
+class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/desiredstate"
 
@@ -603,8 +606,8 @@ class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion]):
             )
 
 
-class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
-    def __init__(self, counts_provider: PagingCountsProvider, version: int) -> None:
+class VersionedResourcePagingHandler(PagingHandler[VersionedResource, VersionedQueryIdentifier]):
+    def __init__(self, counts_provider: PagingCountsProvider[VersionedQueryIdentifier], version: int) -> None:
         super().__init__(counts_provider)
         self.version = version
 
@@ -628,11 +631,11 @@ class VersionedResourcePagingHandler(PagingHandler[VersionedResource]):
             )
 
 
-class ParameterPagingHandler(PagingHandler[ParameterModel]):
+class ParameterPagingHandler(PagingHandler[ParameterModel, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/parameters"
 
 
-class FactPagingHandler(PagingHandler[Fact]):
+class FactPagingHandler(PagingHandler[Fact, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/facts"
