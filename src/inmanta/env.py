@@ -699,7 +699,7 @@ class VirtualEnv(ActiveEnv):
             if not os.path.exists(self.site_packages_dir):
                 # the venv hosts a different python version than the running process
                 raise VenvCreationFailedError(
-                    msg=f"Unable to create new virtualenv at {self.env_path} due to python version mismatch"
+                    msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
                 )
 
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
