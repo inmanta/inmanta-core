@@ -1,5 +1,6 @@
 description: Wrap any exception that occurs during resource export so that it is more useful to the end user
 change-type: patch
 destination-branches: [master, iso4, iso5]
+issue-nr: 3787
 sections:
     bugfix: "{{description}}"
