@@ -1,0 +1,4 @@
+description: Change the relation deprecation to be more accurate.
+change-type: patch
+issue-nr: 2443
+destination-branches: [master, iso4, iso5]
