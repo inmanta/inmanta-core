@@ -698,7 +698,7 @@ class VirtualEnv(ActiveEnv):
         elif not os.path.exists(self._path_pth_file):
             if not os.path.exists(self.site_packages_dir):
                 # the venv hosts a different python version than the running process
-                raise VenvCreationFailedError(
+                raise VenvActivationFailedError(
                     msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
                 )
 
@@ -841,3 +841,9 @@ class VenvCreationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg
+
+class VenvActivationFailedError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg
+
