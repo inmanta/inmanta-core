@@ -1,6 +1,6 @@
 change-type: patch
 issue-nr: 3851
 description: Update python versions in the setup.py classifiers
-destination-branches: [master]
-sections:
-    upgrade-note: "{{description}}"
+destination-branches: [master, iso5]
+sections: {}
+
