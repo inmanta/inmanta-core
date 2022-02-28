@@ -315,11 +315,11 @@ class Resource(metaclass=ResourceMeta):
             except proxy.UnknownException as e:
                 return e.unknown
             except RuntimeException as e:
-                raise WrappingRuntimeException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
+                raise WrappingRuntimeException(None, f"Failed to get attribute '{field_name}' on '{entity_name}'", e)
             except plugins.PluginException as e:
-                raise ExplicitPluginException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
+                raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' on '{entity_name}'", e)
             except Exception as e:
-                raise ExternalException(None, "Failed to get attribute '%s' on '%s'" % (field_name, entity_name), e)
+                raise ExternalException(None, f"Failed to get attribute '{field_name}' on '{entity_name}'", e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
