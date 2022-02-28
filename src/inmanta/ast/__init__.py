@@ -644,7 +644,7 @@ class ExternalException(RuntimeException):
     it is wrapped in an ExternalException to make it conform to the expected interface
     """
 
-    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: Exception) -> None:
+    def __init__(self, stmt: Optional[Locatable], msg: str, cause: Exception) -> None:
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
         self.__cause__ = cause
