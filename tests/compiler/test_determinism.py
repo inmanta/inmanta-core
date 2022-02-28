@@ -30,7 +30,7 @@ def test_compiler_determinism_3034(snippetcompiler, run: int):
     test is not to verify that it succeeds but to verify that it either always succeeds or always fails. With the current
     compiler implementation it happens to always succeed.
     """
-    project: Project = snippetcompiler.setup_for_snippet(
+    snippetcompiler.setup_for_snippet(
         """
 entity A:
 end
@@ -51,4 +51,4 @@ test = a.optional
         """
     )
     # fork new Python interpreter to force new Python hash seed, which is a source for nondeterminism
-    subprocess.check_output(["python", "-m", "inmanta.app", "compile"], cwd=project.path)
+    subprocess.check_output(["python", "-m", "inmanta.app", "compile"], cwd=Project.get()._path)
