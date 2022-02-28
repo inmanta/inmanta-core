@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 import subprocess
+
+import pytest
 
 from inmanta.module import Project
 
