@@ -59,7 +59,6 @@ file = "NOFILE"
 namespace = None
 
 precedence = (
-    ("nonassoc", "LAZY"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
@@ -138,11 +137,6 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 def p_empty(p: YaccProduction) -> None:
     "empty :"
-    pass
-
-
-def p_empty_lazy(p: YaccProduction) -> None:
-    "empty_lazy : %prec LAZY"
     pass
 
 
