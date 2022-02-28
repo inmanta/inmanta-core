@@ -466,9 +466,9 @@ def p_relation_deprecated_comment(p: YaccProduction) -> None:
 
 def deprecated_relation_warning(p: YaccProduction) -> None:
     values_left: Tuple[str, str] = tuple(v if v is not None else "" for v in p[3])
-    multi_left = "[%s:%s]" % values_left if values_left[0] != values_left[1] else "[%s]" % values_left[0]
+    multi_left: str = "[%s:%s]" % values_left if values_left[0] != values_left[1] else "[%s]" % values_left[0]
     values_right: Tuple[str, str] = tuple(v if v is not None else "" for v in p[5])
-    multi_right = "[%s:%s]" % values_right if values_right[0] != values_right[1] else "[%s]" % values_right[0]
+    multi_right: str = "[%s:%s]" % values_right if values_right[0] != values_right[1] else "[%s]" % values_right[0]
     inmanta_warnings.warn(
         SyntaxDeprecationWarning(
             p[0].location,
