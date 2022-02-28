@@ -408,4 +408,4 @@ exp::Test3(
     )
     with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
-    assert e.value.format_trace() == "Failed to get attribute 'real_name' on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
+    assert e.value.format_trace() == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
