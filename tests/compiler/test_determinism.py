@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import subprocess
+import sys
 
 import pytest
 
@@ -51,4 +52,4 @@ test = a.optional
         """
     )
     # fork new Python interpreter to force new Python hash seed, which is a source for nondeterminism
-    subprocess.check_output(["python", "-m", "inmanta.app", "compile"], cwd=Project.get()._path)
+    subprocess.check_output([sys.executable, "-m", "inmanta.app", "compile"], cwd=Project.get()._path)
