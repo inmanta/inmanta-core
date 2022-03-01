@@ -44,7 +44,6 @@ async def migrate_v202106080_to_v202106210(
     await ibl.stop()
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_add_value_to_resource_table(
     migrate_v202106080_to_v202106210: Callable[[], Awaitable[None]],
     postgresql_client: Connection,

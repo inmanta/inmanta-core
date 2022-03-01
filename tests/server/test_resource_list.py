@@ -30,7 +30,6 @@ from inmanta.data.model import LatestReleasedResource, ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
 
 
-@pytest.mark.asyncio
 async def test_resource_list_no_released_version(server, client):
     """Test that if there are no released versions of a resource, the result set is empty"""
     project = data.Project(name="test")
@@ -62,7 +61,6 @@ async def test_resource_list_no_released_version(server, client):
     assert len(result.result["data"]) == 0
 
 
-@pytest.mark.asyncio
 async def test_has_only_one_version_from_resource(server, client):
     """Test querying resources, when there are multiple released versions of a resource.
     The query should return only the latest one from those
@@ -209,7 +207,6 @@ async def env_with_resources(server, client):
     yield env
 
 
-@pytest.mark.asyncio
 async def test_filter_resources(server, client, env_with_resources):
     """Test querying resources."""
     env = env_with_resources
@@ -262,6 +259,46 @@ async def test_filter_resources(server, client, env_with_resources):
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["status"] == "deployed"
 
+    result = await client.resource_list(env.id, filter={"status": ["!deployed"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 5
+    assert not any(resource["status"] == "deployed" for resource in result.result["data"])
+
+    result = await client.resource_list(env.id, filter={"status": ["!deployed", "orphaned"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+    assert result.result["data"][0]["status"] == "orphaned"
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 4
+    assert not any(resource["status"] == "orphaned" for resource in result.result["data"])
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned", "!deployed", "skipped"]})
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
+    result = await client.resource_list(env.id, filter={"status": ["!orphaned", "orphaned"]})
+    assert result.code == 400
+
+    result = await client.resource_list(env.id, filter={"status": ["!!!!orphaned"]})
+    assert result.code == 400
+
+    result = await client.resource_list(env.id, filter={"status": [1, 2]})
+    assert result.code == 400
+
+    result = await client.resource_list(
+        env.id,
+        filter={
+            "resource_id_value": ["/etc/file", "/tmp/file"],
+            "resource_type": "file",
+            "agent": "agent1",
+            "status": ["!orphaned"],
+        },
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+
 
 def resource_ids(resource_objects):
     return [resource["resource_version_id"] for resource in resource_objects]
@@ -280,7 +317,6 @@ def resource_ids(resource_objects):
         ("resource_id_value", "ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_resources_paging(server, client, order_by_column, order, env_with_resources):
     """Test querying resources with paging, using different sorting parameters."""
     env = env_with_resources
@@ -378,7 +414,6 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
         ("resource_id_value.desc", 200),
     ],
 )
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, sort, expected_status, env_with_resources):
     result = await client.resource_list(env_with_resources.id, limit=2, sort=sort)
     assert result.code == expected_status
@@ -396,13 +431,11 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
         ({"state": ["deployed"]}, 400),
     ],
 )
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, filter, expected_status, env_with_resources):
     result = await client.resource_list(env_with_resources.id, limit=2, filter=filter)
     assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_paging_param_validation(server, client, env_with_resources):
     result = await client.resource_list(env_with_resources.id, limit=2, start="1", end="10")
     assert result.code == 400
@@ -417,7 +450,6 @@ async def test_paging_param_validation(server, client, env_with_resources):
     assert result.code == 400
 
 
-@pytest.mark.asyncio
 async def test_deploy_summary(server, client, env_with_resources):
     """Test querying the deployment summary of resources."""
     env = env_with_resources

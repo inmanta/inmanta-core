@@ -88,7 +88,6 @@ async def env_with_resources(server, client):
     yield env
 
 
-@pytest.mark.asyncio
 async def test_filter_resources(server, client, env_with_resources):
     """Test querying resources."""
 
@@ -150,7 +149,6 @@ def resource_ids(resource_objects):
 
 @pytest.mark.parametrize("order_by_column", ["agent", "resource_type", "resource_id_value"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
-@pytest.mark.asyncio
 async def test_resources_paging(server, client, order_by_column, order, env_with_resources):
     """Test querying resources with paging, using different sorting parameters."""
     env = env_with_resources
@@ -238,7 +236,6 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert response["metadata"] == {"total": 5, "before": 2, "after": 1, "page_size": 2}
 
 
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, env_with_resources):
     sort_status_map = {
         "agents.Desc": 400,
@@ -254,7 +251,6 @@ async def test_sorting_validation(server, client, env_with_resources):
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, env_with_resources):
     filter_status_map = [
         ("version.desc", 400),
@@ -270,7 +266,6 @@ async def test_filter_validation(server, client, env_with_resources):
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_versioned_resource_details(server, client, env_with_resources):
     result = await client.get_resources_in_version(env_with_resources.id, version=3, sort="resource_id_value.asc")
     assert result.code == 200

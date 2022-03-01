@@ -63,7 +63,6 @@ def resource_deployer(environment, agent):
     yield ResourceDeploymentHelperFunctions
 
 
-@pytest.mark.asyncio
 async def test_events_api_endpoints_basic_case(server, client, environment, clienthelper, agent, resource_deployer):
     """
     Test whether the `get_resource_events` and the `resource_did_dependency_change`
@@ -158,7 +157,6 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id)
 
 
-@pytest.mark.asyncio
 async def test_events_api_endpoints_events_across_versions(server, client, environment, clienthelper, agent, resource_deployer):
     """
     Ensure that events are captured across versions.
@@ -239,7 +237,6 @@ async def test_events_api_endpoints_events_across_versions(server, client, envir
     assert not result.result["data"]
 
 
-@pytest.mark.asyncio
 async def test_events_resource_without_dependencies(server, client, environment, clienthelper, agent, resource_deployer):
     """
     Ensure that events are captured across versions.

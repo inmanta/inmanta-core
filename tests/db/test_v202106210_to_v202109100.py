@@ -46,7 +46,6 @@ async def migrate_v202106210_to_v202109100(
     await ibl.stop()
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_valid_loglevels(migrate_v202106210_to_v202109100: Callable[[], Awaitable[None]]) -> None:
     """
     Test whether the value column was added to the resource table.
