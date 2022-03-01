@@ -56,7 +56,7 @@ LOGGER = logging.getLogger()
 
 
 file = "NOFILE"
-namespace = None
+namespace: Optional[Namespace] = None
 
 precedence = (
     ("right", ","),
@@ -80,6 +80,7 @@ def attach_lnr(p: YaccProduction, token: int = 1) -> None:
 
 
 def merge_lnr_to_string(p: YaccProduction, starttoken: int = 1, endtoken: int = 2) -> None:
+    assert namespace
     v = p[0]
 
     et = p[endtoken]
@@ -104,6 +105,7 @@ def attach_from_string(p: YaccProduction, token: int = 1) -> None:
 
 
 def make_none(p: YaccProduction, token: int) -> Literal:
+    assert namespace
     none = Literal(NoneValue())
     none.location = Location(file, p.lineno(token))
     none.namespace = namespace
@@ -207,6 +209,7 @@ def p_assign_extend(p: YaccProduction) -> None:
 
 def p_for(p: YaccProduction) -> None:
     "for : FOR ID IN operand ':' block"
+    assert namespace
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
 
@@ -219,22 +222,26 @@ def p_if_start(p: YaccProduction) -> None:
 
 def p_if_body(p: YaccProduction) -> None:
     "if_body : expression ':' stmt_list if_next"
+    assert namespace
     p[0] = If(p[1], BasicBlock(namespace, p[3]), p[4])
     attach_lnr(p, 2)
 
 
 def p_if_end(p: YaccProduction) -> None:
     "if_next : empty"
+    assert namespace
     p[0] = BasicBlock(namespace, [])
 
 
 def p_if_else(p: YaccProduction) -> None:
     "if_next : ELSE ':' stmt_list"
+    assert namespace
     p[0] = BasicBlock(namespace, p[3])
 
 
 def p_if_elif(p: YaccProduction) -> None:
     "if_next : ELIF if_body"
+    assert namespace
     p[0] = BasicBlock(namespace, [p[2]])
     attach_lnr(p, 1)
 
@@ -246,6 +253,7 @@ def p_if_elif(p: YaccProduction) -> None:
 
 def p_entity(p: YaccProduction) -> None:
     "entity_def : ENTITY CID ':' entity_body_outer"
+    assert namespace
     p[0] = DefineEntity(namespace, p[2], p[4][0], [], p[4][1])
     attach_lnr(p)
 
@@ -257,6 +265,7 @@ def p_entity_err_1(p: YaccProduction) -> None:
 
 def p_entity_extends(p: YaccProduction) -> None:
     "entity_def : ENTITY CID EXTENDS class_ref_list ':' entity_body_outer"
+    assert namespace
     p[0] = DefineEntity(namespace, p[2], p[6][0], p[4], p[6][1])
     attach_lnr(p)
 
@@ -414,6 +423,7 @@ def p_implement_when(p: YaccProduction) -> None:
 
 def p_implementation_def(p: YaccProduction) -> None:
     "implementation_def : IMPLEMENTATION ID FOR class_ref implementation"
+    assert namespace
     docstr, stmts = p[5]
     p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, stmts), docstr)
 
@@ -563,12 +573,14 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 def p_typedef_1(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
+    assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
 
 
 def p_typedef_cls(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF CID AS constructor"""
+    assert namespace
     p[0] = DefineTypeDefault(namespace, p[2], p[4])
     attach_lnr(p, 2)
 
@@ -649,11 +661,13 @@ def p_map_lookup(p: YaccProduction) -> None:
 
 def p_constructor(p: YaccProduction) -> None:
     "constructor : class_ref '(' param_list ')'"
+    assert namespace
     p[0] = Constructor(p[1], p[3][0], p[3][1], Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call(p: YaccProduction) -> None:
     "function_call : ns_ref '(' function_param_list ')'"
+    assert namespace
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
@@ -799,6 +813,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
                         just the variables and the range for those variables.
                         (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
     """
+    assert namespace
     _vars = []
     for match, var in variables:
         var_name: str = str(var)

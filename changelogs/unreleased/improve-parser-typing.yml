@@ -1,0 +1,5 @@
+description: Improve typing of parser
+change-type: patch
+destination-branches:
+  - iso5
+  - master
