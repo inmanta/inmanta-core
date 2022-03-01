@@ -1033,8 +1033,9 @@ def p_class_ref(p: YaccProduction) -> None:
 def p_class_ref_err_dot(p: YaccProduction) -> None:
     "class_ref : var_ref '.' CID"
     var: Union[LocatableString, Reference] = p[1]
-    var_str: LocatableString = var if isinstance(var, LocatableString) else var.name
+    var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
     cid: LocatableString = p[3]
+    assert namespace
     full_string: LocatableString = LocatableString(
         "%s.%s" % (var_str, cid),
         expand_range(var_str.location, cid.location),
