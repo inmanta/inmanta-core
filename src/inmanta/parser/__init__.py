@@ -28,7 +28,7 @@ from inmanta.warnings import InmantaWarning
 class ParserException(CompilerException):
     """Exception occurring during the parsing of the code"""
 
-    def __init__(self, location: Range, value, msg: Optional[str] = None) -> None:
+    def __init__(self, location: Range, value: object, msg: Optional[str] = None) -> None:
         if msg is None:
             msg = "Syntax error at token %s" % value
         else:

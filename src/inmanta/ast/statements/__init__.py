@@ -208,9 +208,12 @@ class AssignStatement(DynamicStatement):
 
 
 class Literal(ExpressionStatement):
+    lexpos: Optional[int]
+
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value
+        self.lexpos = None
 
     def normalize(self) -> None:
         pass
