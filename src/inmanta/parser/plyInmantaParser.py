@@ -671,7 +671,6 @@ def p_function_call(p: YaccProduction) -> None:
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
-# TODO: write tests
 def p_function_call_err_dot(p: YaccProduction) -> None:
     "function_call : attr_ref '(' function_param_list ')'"
     raise ParserException(
