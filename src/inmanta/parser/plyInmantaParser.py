@@ -659,7 +659,7 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
     raise ParserException(
         p[1].location,
         str(p[1]),
-        ("can only call plugins but %s looks like an attribute." " To access a plugin in a namespace, use '::' instead: `%s`")
+        "can only call plugins but %s looks like an attribute. To access a plugin in a namespace, use '::' instead: `%s`"
         % (p[1], str(p[1]).replace(".", "::")),
     )
 
@@ -990,7 +990,6 @@ def p_class_ref(p: YaccProduction) -> None:
     merge_lnr_to_string(p, 1, 3)
 
 
-# TODO: write tests
 def p_class_ref_err_dot(p: YaccProduction) -> None:
     "class_ref : var_ref '.' CID"
     var: Union[LocatableString, Reference] = p[1]

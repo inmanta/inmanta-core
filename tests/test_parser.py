@@ -2077,7 +2077,7 @@ x.n
     assert instance1.name.location == Range("test", 5, 1, 5, 2)
 
 
-@pytest.mark.parametrize(
+@pytest.mark.parametrize_any(
     "snippet",
     [
         "mymod.MyEntity()",
@@ -2110,5 +2110,41 @@ def test_entity_ref_err_dot_full_msg() -> None:
         parse_code(
             """
 x = mymod.submod.MyEntity()
+            """
+        )
+
+
+@pytest.mark.parametrize_any(
+    "snippet",
+    [
+        "mymod.my_plugin()",
+        "mymod.submod.my_plugin()",
+        "mymod.submod.my_plugin(1)",
+        "mymod.submod.my_plugin(x=1)",
+        "mymod.submod.my_plugin(**dct)",
+    ],
+)
+def test_plugin_call_err_dot(snippet: str) -> None:
+    """
+    Verify that an attempt to access a plugin in a qualified manner with '.' instead of '::' results in an appropriate
+    exception.
+
+    :param snippet: Snippet that is expected to produce this error for a plugin named `my_plugin`.
+    """
+    with pytest.raises(ParserException, match=r"can only call plugins but [a-z\.]*my_plugin looks like an attribute."):
+        parse_code(snippet)
+
+
+def test_plugin_call_err_dot_full_msg() -> None:
+    with pytest.raises(
+        ParserException,
+        match=re.escape(
+            "Syntax error: can only call plugins but mymod.submod.my_plugin looks like an attribute."
+            " To access a plugin in a namespace, use '::' instead: `mymod::submod::my_plugin` (test:2)"
+        ),
+    ):
+        parse_code(
+            """
+mymod.submod.my_plugin()
             """
         )
