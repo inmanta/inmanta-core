@@ -1904,8 +1904,8 @@ A aa [1] -- [0:] B bb
         assert len(w) == 1
         assert issubclass(w[0].category, SyntaxDeprecationWarning)
         assert str(w[0].message) == (
-            "The relation definition syntax `A aa [1:1] -- [0:] B bb` is deprecated."
-            " Please use `A.bb [0:] -- B.aa [1:1]` instead. (test:8)"
+            "The relation definition syntax `A aa [1] -- [0:] B bb` is deprecated."
+            " Please use `A.bb [0:] -- B.aa [1]` instead. (test:8)"
         )
 
 
