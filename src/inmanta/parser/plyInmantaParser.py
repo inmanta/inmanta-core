@@ -18,7 +18,7 @@
 
 import logging
 import re
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
