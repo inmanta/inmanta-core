@@ -31,7 +31,7 @@ from .common import ArgOption
 from .decorators import method, typedmethod
 
 
-async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:
