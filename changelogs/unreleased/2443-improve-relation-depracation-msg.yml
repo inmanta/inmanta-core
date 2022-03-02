@@ -1,0 +1,6 @@
+description: Change the relation deprecation warning to be more accurate.
+change-type: patch
+issue-nr: 2443
+destination-branches: [iso4]
+sections:
+    feature: "{{description}}"
