@@ -1,0 +1,8 @@
+description: Improved error reporting for invalid namespace access
+issue-nr: 2818
+change-type: patch
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - master
+  - iso5
