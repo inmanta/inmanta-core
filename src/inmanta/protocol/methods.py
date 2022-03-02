@@ -22,7 +22,7 @@ import datetime
 import uuid
 from typing import Any, List, Union
 
-from inmanta import const, data
+from inmanta import const, data, resources
 from inmanta.data import model
 from inmanta.types import JsonType, PrimitiveTypes
 
@@ -31,7 +31,7 @@ from .common import ArgOption
 from .decorators import method, typedmethod
 
 
-async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:

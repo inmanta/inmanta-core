@@ -17,6 +17,17 @@ end
 
 implement Test2 using std::none
 
+entity Test3 extends std::PurgeableResource:
+    string name
+    dict names
+end
+
+Test3.agent [1] -- std::AgentConfig
+
+index Test3(name)
+
+implement Test3 using std::none
+
 
 entity RequiresTest extends std::PurgeableResource:
 """
