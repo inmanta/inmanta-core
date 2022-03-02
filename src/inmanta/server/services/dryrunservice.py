@@ -21,7 +21,7 @@ import uuid
 from typing import Dict, List, Optional, cast
 
 from inmanta import data
-from inmanta.data.model import DryRun, DryRunReport, ResourceVersionIdStr
+from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import NotFound
 from inmanta.resources import Id
@@ -81,11 +81,13 @@ class DyrunService(protocol.ServerSlice):
         agents = await data.ConfigurationModel.get_agents(env.id, version_id)
         await self.autostarted_agent_manager._ensure_agents(env, agents)
 
+        agents_down = []
         for agent in agents:
             client = self.agent_manager.get_agent_client(env.id, agent)
             if client is not None:
                 self.add_background_task(client.do_dryrun(env.id, dryrun.id, agent, version_id))
             else:
+                agents_down.append(agent)
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 
         # Mark the resources in an undeployable state as done
@@ -93,42 +95,46 @@ class DyrunService(protocol.ServerSlice):
             undeployable_ids = await model.get_undeployable()
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
-            for res in undeployable:
-                parsed_id = Id.parse_id(res.resource_version_id)
-                payload = {
-                    "changes": {},
-                    "id_fields": {
-                        "entity_type": res.resource_type,
-                        "agent_name": res.agent,
-                        "attribute": parsed_id.attribute,
-                        "attribute_value": parsed_id.attribute_value,
-                        "version": res.model,
-                    },
-                    "id": res.resource_version_id,
-                }
-                await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
+            await self._save_resources_without_changes_to_dryrun(dryrun_id=dryrun.id, resources=undeployable)
 
             skip_undeployable_ids = await model.get_skipped_for_undeployable()
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
             )
-            for res in skipundeployable:
-                parsed_id = Id.parse_id(res.resource_version_id)
-                payload = {
-                    "changes": {},
-                    "id_fields": {
-                        "entity_type": res.resource_type,
-                        "agent_name": res.agent,
-                        "attribute": parsed_id.attribute,
-                        "attribute_value": parsed_id.attribute_value,
-                        "version": res.model,
-                    },
-                    "id": res.resource_version_id,
-                }
-                await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
+            await self._save_resources_without_changes_to_dryrun(dryrun_id=dryrun.id, resources=skipundeployable)
+
+            resources_with_agents_down = [
+                res
+                for res in rvs
+                if res.resource_version_id not in undeployable_version_ids
+                and res.resource_version_id not in skip_undeployable_version_ids
+                and res.agent in agents_down
+            ]
+            await self._save_resources_without_changes_to_dryrun(
+                dryrun_id=dryrun.id, resources=resources_with_agents_down, diff_status=ResourceDiffStatus.agent_down
+            )
 
         return dryrun
+
+    async def _save_resources_without_changes_to_dryrun(
+        self, dryrun_id: uuid.UUID, resources: List[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
+    ):
+        for res in resources:
+            parsed_id = Id.parse_id(res.resource_version_id)
+            payload = {
+                "changes": {},
+                "id_fields": {
+                    "entity_type": res.resource_type,
+                    "agent_name": res.agent,
+                    "attribute": parsed_id.attribute,
+                    "attribute_value": parsed_id.attribute_value,
+                    "version": res.model,
+                },
+                "id": res.resource_version_id,
+            }
+            payload = {**payload, "diff_status": diff_status} if diff_status else payload
+            await data.DryRun.update_resource(dryrun_id, res.resource_version_id, payload)
 
     @handle(methods_v2.dryrun_trigger, env="tid")
     async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:
@@ -183,7 +189,15 @@ class DyrunService(protocol.ServerSlice):
         resources = dryrun.to_dict()["resources"]
         from_resources = {}
         to_resources = {}
-        for resource_version_id, resource in resources.items():
+        resources_with_already_known_status = {
+            resource_version_id: resource for resource_version_id, resource in resources.items() if resource.get("diff_status")
+        }
+        resources_to_diff = {
+            resource_version_id: resource
+            for resource_version_id, resource in resources.items()
+            if resource_version_id not in resources_with_already_known_status.keys()
+        }
+        for resource_version_id, resource in resources_to_diff.items():
             resource_id = Id.parse_id(resource_version_id).resource_str()
 
             from_attributes = self.get_attributes_from_changes(resource["changes"], "current")
@@ -198,6 +212,12 @@ class DyrunService(protocol.ServerSlice):
                     to_resources.pop(resource_id)
 
         version_diff = diff.generate_diff(from_resources, to_resources, include_unmodified=True)
+        version_diff += [
+            ResourceDiff(
+                resource_id=Id.parse_resource_version_id(rvid).resource_str(), attributes={}, status=resource.get("diff_status")
+            )
+            for rvid, resource in resources_with_already_known_status.items()
+        ]
         dto = DryRunReport(summary=dryrun.to_dto(), diff=version_diff)
 
         return dto
