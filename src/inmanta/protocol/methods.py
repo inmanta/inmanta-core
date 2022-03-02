@@ -22,7 +22,7 @@ import datetime
 import uuid
 from typing import Any, List, Union
 
-from inmanta import const, data, resources
+from inmanta import const, data
 from inmanta.data import model
 from inmanta.types import JsonType, PrimitiveTypes
 
