@@ -21,6 +21,7 @@ import os
 import pytest
 
 from inmanta import config, const
+from inmanta.ast import ExternalException
 from inmanta.const import ResourceState
 from inmanta.export import DependencyCycleException
 
@@ -377,5 +378,37 @@ exp::WrappedSelfTest(
 )
         """
     )
-    with pytest.raises(TypeError, match="not JSON serializable"):
+    with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
+    assert "not JSON serializable" in e.value.format_trace()
+
+
+def test_3787_key_error_export(snippetcompiler):
+    """
+    Check the error message of an export with a KeyError
+    The Key error happens in get_real_name() of class Test3
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+exp::Test3(
+    name="tom",
+    names={
+        "bob": "alice",
+        "alice": "bob",
+    },
+    agent=std::AgentConfig(
+        autostart=true,
+        agentname="bob",
+        uri="local:",
+    ),
+)
+        """
+    )
+    with pytest.raises(ExternalException) as e:
+        snippetcompiler.do_export()
+    assert (
+        e.value.format_trace()
+        == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
+    )

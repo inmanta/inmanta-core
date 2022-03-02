@@ -46,11 +46,11 @@ class Context(object):
     An instance of this class is used to pass context to the plugin
     """
 
-    __client: Optional[protocol.Client] = None
+    __client: Optional["protocol.Client"] = None
     __sync_client = None
 
     @classmethod
-    def __get_client(cls) -> protocol.Client:
+    def __get_client(cls) -> "protocol.Client":
         if cls.__client is None:
             cls.__client = protocol.Client("compiler")
         return cls.__client
@@ -111,10 +111,10 @@ class Context(object):
 
         return data_dir
 
-    def get_client(self) -> protocol.Client:
+    def get_client(self) -> "protocol.Client":
         return self.__class__.__get_client()
 
-    def get_sync_client(self) -> protocol.SyncClient:
+    def get_sync_client(self) -> "protocol.SyncClient":
         if self.__class__.__sync_client is None:
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
