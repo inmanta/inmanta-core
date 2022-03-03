@@ -67,7 +67,7 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "EMPTY"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
     ("left", "CID", "ID"),
     ("left", "MLS"),
     ("left", "MLS_END")
@@ -979,7 +979,7 @@ def p_operand_list_term(p: YaccProduction) -> None:
 
 
 def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list :"
+    "operand_list : %prec OPERAND_LIST"
     p[0] = []
 
 
