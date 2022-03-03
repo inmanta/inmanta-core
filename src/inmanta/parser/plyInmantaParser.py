@@ -67,8 +67,10 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
+    ("left", "CID", "ID"),
     ("right", "MLS"),
-    ("right", "MLS_END"),
+    ("left", "MLS_END"),
 )
 
 
@@ -139,7 +141,7 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 
 def p_empty(p: YaccProduction) -> None:
-    "empty :"
+    "empty : %prec EMPTY"
     pass
 
 
@@ -508,7 +510,7 @@ def p_relation_outer_comment(p: YaccProduction) -> None:
 
 
 def p_relation_outer(p: YaccProduction) -> None:
-    "relation : relation_def"
+    "relation : relation_def %prec RELATION_DEF"
     p[0] = p[1]
 
 
@@ -560,7 +562,7 @@ def p_multi_4(p: YaccProduction) -> None:
 
 
 def p_typedef_outer(p: YaccProduction) -> None:
-    """typedef : typedef_inner"""
+    """typedef : typedef_inner %prec TYPEDEF_INNER"""
     p[0] = p[1]
 
 
@@ -977,7 +979,7 @@ def p_operand_list_term(p: YaccProduction) -> None:
 
 
 def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list :"
+    "operand_list : %prec OPERAND_LIST"
     p[0] = []
 
 
