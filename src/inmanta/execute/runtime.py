@@ -252,8 +252,8 @@ class Promise(ISetPromise[T]):
         self.owner: DelayedResultVariable[T] = owner
 
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
-        self.owner.fulfill(self)
         self.owner.set_value(value, location, recur)
+        self.owner.fulfill(self)
 
 
 class DelayedResultVariable(ResultVariable[T]):
@@ -309,6 +309,8 @@ class DelayedResultVariable(ResultVariable[T]):
         """
         # TODO: better to use a set?
         self.done_promises.append(promise)
+        if self.can_get():
+            self.queue()
 
     def freeze(self) -> None:
         if self.hasValue:
