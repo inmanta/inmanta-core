@@ -252,8 +252,8 @@ class Promise(ISetPromise[T]):
         self.owner: DelayedResultVariable[T] = owner
 
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
-        self.owner.set_value(value, location, recur)
         self.owner.fulfill(self)
+        self.owner.set_value(value, location, recur)
 
 
 class DelayedResultVariable(ResultVariable[T]):
@@ -290,7 +290,8 @@ class DelayedResultVariable(ResultVariable[T]):
         self.promises.append(promise)
         return promise
 
-    # TODO: acquire in if-else, ...
+    # TODO: acquire in if-else, ... Make sure to take into account (and add test) that nested ifs might never get emitted
+    #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
     def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
         """
         Acquire a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
@@ -448,9 +449,13 @@ class TempListVariable(BaseListVariable):
 
     def fulfill(self, promise: IPromise) -> None:
         super().fulfill(promise)
+        # TODO: still only applicable to literal lists or can this be moved to parent?
         # 100% accurate promisse tracking
         if len(self.promises) == len(self.done_promises):
             self.freeze()
+
+    def __str__(self) -> str:
+        return "TempListVariable %s" % (self.value)
 
 
 class ListVariable(BaseListVariable):
@@ -559,6 +564,12 @@ class OptionVariable(DelayedResultVariable["Instance"]):
         if self.type is None:
             return
         self.type.validate(value)
+
+    def get_waiting_providers(self) -> int:
+        # todo: optimize?
+        if self.hasValue:
+            return 0
+        return super().get_waiting_providers()
 
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
