@@ -38,13 +38,7 @@ from typing import (
 
 import inmanta.util
 from inmanta import plugins
-from inmanta.ast import (
-    CompilerException,
-    ExplicitPluginException,
-    ExternalException,
-    RuntimeException,
-    WrappingRuntimeException,
-)
+from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.stable_api import stable_api
