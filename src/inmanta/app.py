@@ -416,8 +416,7 @@ def deploy(options: argparse.Namespace) -> None:
     run = deploy_module.Deploy(options)
     try:
         if not run.setup():
-            LOGGER.error("Failed to setup the orchestrator.")
-            sys.exit(1)
+            raise Exception("Failed to setup the orchestrator.")
         run.run()
     finally:
         run.stop()
