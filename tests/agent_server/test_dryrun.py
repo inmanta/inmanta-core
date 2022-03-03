@@ -317,7 +317,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     """
 
     await agent_factory(
-        hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False, agent_names=["agent1"]
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost"},
+        code_loader=False,
+        agent_names=["agent1"],
     )
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -383,6 +387,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
             "id": "test::Resource[agent2,key=key6],v=%d" % version,
             "send_event": False,
             "requires": ["test::Resource[agent2,key=key5],v=%d" % version],
+            "purged": False,
+        },
+        {
+            "key": "key7",
+            "value": "val",
+            "id": "test::Resource[agent3,key=key7],v=%d" % version,
+            "send_event": False,
+            "requires": [],
             "purged": False,
         },
     ]
@@ -473,6 +485,8 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     for i in range(4, 7):
         assert changes[i]["status"] == "unmodified"
         assert changes[i]["attributes"] == {}
+    assert changes[7]["status"] == "agent_down"
+    assert changes[7]["attributes"] == {}
 
     # Change a value for a new dryrun
     res = await data.Resource.get(environment, "test::Resource[agent1,key=key1],v=%d" % version)
