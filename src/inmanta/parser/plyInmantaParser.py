@@ -67,8 +67,10 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("right", "MLS"),
-    ("right", "MLS_END"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER"),
+    ("left", "CID", "ID"),
+    ("left", "MLS"),
+    ("left", "MLS_END")
 )
 
 
@@ -508,7 +510,7 @@ def p_relation_outer_comment(p: YaccProduction) -> None:
 
 
 def p_relation_outer(p: YaccProduction) -> None:
-    "relation : relation_def"
+    "relation : relation_def %prec RELATION_DEF"
     p[0] = p[1]
 
 
@@ -560,7 +562,7 @@ def p_multi_4(p: YaccProduction) -> None:
 
 
 def p_typedef_outer(p: YaccProduction) -> None:
-    """typedef : typedef_inner"""
+    """typedef : typedef_inner %prec TYPEDEF_INNER"""
     p[0] = p[1]
 
 
