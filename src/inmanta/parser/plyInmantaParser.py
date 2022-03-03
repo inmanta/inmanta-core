@@ -67,7 +67,7 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "EMPTY"),
     ("left", "CID", "ID"),
     ("left", "MLS"),
     ("left", "MLS_END")
@@ -141,7 +141,7 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 
 def p_empty(p: YaccProduction) -> None:
-    "empty :"
+    "empty : %prec EMPTY"
     pass
 
 
