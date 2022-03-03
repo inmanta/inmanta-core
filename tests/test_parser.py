@@ -48,7 +48,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import base_parse
 
 
@@ -2090,71 +2090,42 @@ x.n
 @pytest.mark.parametrize_any(
     "snippet",
     [
+        # entity references
         "mymod.MyEntity()",
         "mymod.submod.MyEntity()",
         "mymod.submod.MyEntity(x=1)",
         "mymod.submod.MyEntity(**dct)",
         "entity Child extends mymod.MyEntity: end",
         "SomeEntity.my [1] -- mymod.MyEntity",
-    ],
-)
-def test_entity_ref_err_dot(snippet: str) -> None:
-    """
-    Verify that an attempt to access an entity in a qualified manner with '.' instead of '::' results in an appropriate
-    exception.
-
-    :param snippet: Snippet that is expected to produce this error for an entity named `MyEntity`.
-    """
-    with pytest.raises(ParserException, match="`MyEntity` looks like an entity but was accessed with '.'"):
-        parse_code(snippet)
-
-
-def test_entity_ref_err_dot_full_msg() -> None:
-    with pytest.raises(
-        ParserException,
-        match=re.escape(
-            "Syntax error: `mymod.submod.MyEntity` looks like an entity but was accessed with '.'  instead of '::'."
-            " Use `mymod::submod::MyEntity` instead.(test:2:5)"
-        ),
-    ):
-        parse_code(
-            """
-x = mymod.submod.MyEntity()
-            """
-        )
-
-
-@pytest.mark.parametrize_any(
-    "snippet",
-    [
+        # plugin calls
         "mymod.my_plugin()",
         "mymod.submod.my_plugin()",
         "mymod.submod.my_plugin(1)",
         "mymod.submod.my_plugin(x=1)",
-        "mymod.submod.my_plugin(**dct)",
+        "mymod::submod.my_plugin(**dct)",
     ],
 )
-def test_plugin_call_err_dot(snippet: str) -> None:
+def test_invalid_namespace_ref(snippet: str) -> None:
     """
-    Verify that an attempt to access a plugin in a qualified manner with '.' instead of '::' results in an appropriate
-    exception.
+    Verify that an attempt to access a namespace with '.' instead of '::' results in an appropriate exception.
 
-    :param snippet: Snippet that is expected to produce this error for a plugin named `my_plugin`.
+    :param snippet: Snippet that is expected to produce this error.
     """
-    with pytest.raises(ParserException, match=r"can only call plugins but [a-z\.]*my_plugin looks like an attribute."):
+    with pytest.raises(InvalidNamespaceAccess):
         parse_code(snippet)
 
 
-def test_plugin_call_err_dot_full_msg() -> None:
-    with pytest.raises(
-        ParserException,
-        match=re.escape(
-            "Syntax error: can only call plugins but mymod.submod.my_plugin looks like an attribute."
-            " To access a plugin in a namespace, use '::' instead: `mymod::submod::my_plugin` (test:2)"
-        ),
-    ):
-        parse_code(
-            """
-mymod.submod.my_plugin()
-            """
-        )
+@pytest.mark.parametrize_any(
+    "snippet, invalid, valid, location",
+    [
+        ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:5"),
+        ("x = mymod.submod.my_plugin()", "mymod.submod.my_plugin", "mymod::submod::my_plugin", "1:5"),
+    ]
+)
+def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, location: str) -> None:
+    with pytest.raises(InvalidNamespaceAccess) as exc_info:
+        parse_code(snippet)
+    assert exc_info.value.format_trace().strip() == (
+        f"Syntax error: invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather"
+        f" than '.' (reserved for attribute and relation access): `{valid}` (test:{location})"
+    )

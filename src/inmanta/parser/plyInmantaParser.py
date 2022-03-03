@@ -46,7 +46,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
+from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
@@ -673,12 +673,7 @@ def p_function_call(p: YaccProduction) -> None:
 
 def p_function_call_err_dot(p: YaccProduction) -> None:
     "function_call : attr_ref '(' function_param_list ')'"
-    raise ParserException(
-        p[1].location,
-        str(p[1]),
-        "can only call plugins but %s looks like an attribute. To access a plugin in a namespace, use '::' instead: `%s`"
-        % (p[1], str(p[1]).replace(".", "::")),
-    )
+    raise InvalidNamespaceAccess(p[1].locatable_name)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -1042,15 +1037,7 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
         var_str.lexpos,
         namespace,
     )
-    raise ParserException(
-        full_string.location,
-        str(full_string),
-        (
-            "`%s` looks like an entity but was accessed with '.' (`%s`)."
-            " To access an entity in a namespace, use '::' instead: `%s`"
-        )
-        % (cid, full_string, str(full_string).replace(".", "::")),
-    )
+    raise InvalidNamespaceAccess(full_string)
 
 
 def p_class_ref_list_collect(p: YaccProduction) -> None:
