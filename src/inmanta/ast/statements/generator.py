@@ -154,7 +154,6 @@ class GradualFor(ResultCollector[object]):
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(loopvar, ResultVariable)
-        loopvar.set_provider(self.stmt)
         loopvar.set_value(value, self.stmt.location)
         xc.emit(self.queue)
 
@@ -306,7 +305,6 @@ class ConditionalExpression(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # This ResultVariable will receive the result of this expression
         result: ResultVariable = ResultVariable()
-        result.set_provider(self)
 
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result)

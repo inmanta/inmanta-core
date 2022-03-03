@@ -362,7 +362,6 @@ class IndexLookup(ReferenceStatement, Resumer):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
-        temp.set_provider(self)
         HangUnit(queue, resolver, sub, temp, self)
         return {self: temp}
 

@@ -267,7 +267,6 @@ class AttributeReference(Reference):
 
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-        temp.set_provider(self)
 
         # construct waiter
         resumer = AttributeReferenceHelper(temp, self.instance, str(self.attribute), resultcollector)

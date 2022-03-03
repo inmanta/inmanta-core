@@ -263,7 +263,6 @@ class FunctionUnit(Waiter):
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
-        result.set_provider(self)
         # requires is used to track all required RV's
         # It can grow larger as new requires are discovered
         self.requires = requires

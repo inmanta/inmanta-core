@@ -69,15 +69,31 @@ class ResultCollector(Generic[T]):
         raise NotImplementedError()
 
 
-class IPromise(Generic[T]):
+class IPromise:
+    """
+    A promise to the owner to provide a value or progression towards a value in some way, either directly or indirectly.
+    """
+
     __slots__ = ()
 
+
+class ISetPromise(IPromise, Generic[T]):
+    """
+    A promise to the owner to set a value.
+    """
+
+    __slots__ = ()
+
+    # TODO: can recur be removed? If not, document! Might be required only for list promise
     @abstractmethod
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
+        """
+        Fulfills this promise by setting the owner's value and notifying the owner of the promise's completion.
+        """
         pass
 
 
-class ResultVariable(ResultCollector[T], IPromise[T]):
+class ResultVariable(ResultCollector[T], ISetPromise[T]):
     """
     A ResultVariable is like a future
      - it has a list of waiters
@@ -95,7 +111,6 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     __slots__ = ("location", "provider", "waiters", "value", "hasValue", "type", "_node")
 
     def __init__(self, value: Optional[T] = None) -> None:
-        self.provider: "Optional[Statement]" = None
         self.waiters: "List[Waiter]" = []
         self.value: Optional[T] = value
         self.hasValue: bool = False
@@ -105,13 +120,11 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
     def set_type(self, mytype: Type) -> None:
         self.type = mytype
 
-    def set_provider(self, provider: "Statement") -> None:
-        # no checking for double set, this is done in the actual assignment
-        self.provider = provider
-
-    def get_promise(self, provider: "Statement") -> IPromise[T]:
-        """Alternative for set_provider for better handling of ListVariables."""
-        self.provider = provider
+    def get_promise(self, provider: "Statement") -> ISetPromise[T]:
+        """
+        Acquire a promise to set a value for this variable. To fulfill the promise and set the promised value for this
+        variable, set the value on the promise object.
+        """
         return self
 
     def is_ready(self) -> bool:
@@ -207,6 +220,42 @@ class AttributeVariable(ResultVariable["Instance"]):
         self.waiters = None
 
 
+class ProgressionPromise(IPromise):
+    """
+    A promise from a provider to the owner to progress towards setting a value, for example by emitting additional statements.
+    """
+
+    __slots__ = ("provider", "owner")
+
+    def __init__(self, owner: "DelayedResultVariable[T]", provider: "Statement") -> None:
+        self.owner: DelayedResultVariable[T] = owner
+        self.provider: Statement = provider
+
+    def fulfill(self) -> None:
+        """
+        Fulfills this promise by notifying the owner.
+        """
+        self.owner.fulfill(self)
+
+
+# TODO: rename? SetPromise(ISetPromise[T])?
+class Promise(ISetPromise[T]):
+    # TODO: check docstring
+    """
+    A promise from a provider to the owner to set a value.
+    """
+
+    __slots__ = ("provider", "owner")
+
+    def __init__(self, owner: "DelayedResultVariable[T]", provider: "Statement"):
+        self.provider: "Optional[Statement]" = provider
+        self.owner: DelayedResultVariable[T] = owner
+
+    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
+        self.owner.set_value(value, location, recur)
+        self.owner.fulfill(self)
+
+
 class DelayedResultVariable(ResultVariable[T]):
     """
     DelayedResultVariable are ResultVariables of which it is unclear how many results will be set.
@@ -225,14 +274,40 @@ class DelayedResultVariable(ResultVariable[T]):
         (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues", "listeners")
+    __slots__ = ("queued", "queues", "listeners", "promises", "done_promises")
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
+        self.promises: List[IPromise] = []
+        self.done_promises: List[IPromise] = []
         self.queued = False
         self.queues = queue
         if self.can_get():
             self.queue()
+
+    def get_promise(self, provider: "Statement") -> ISetPromise[T]:
+        promise: ISetPromise[T] = Promise(self, provider)
+        self.promises.append(promise)
+        return promise
+
+    # TODO: acquire in if-else, ...
+    def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
+        """
+        Acquire a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
+        promise greedily (overpromise) when a provider is likely to produce progress.
+        e.g. a progression promise could be acquired by statement that might emit a new assignment statement for this variable.
+        """
+        promise: ProgressionPromise = ProgressionPromise(self, provider)
+        self.promises.append(promise)
+        return promise
+
+    def fulfill(self, promise: IPromise) -> None:
+        # TODO: mention that the promise must/is assumed to be owned/handed out by this variable
+        """
+        Considers the given promise fulfilled.
+        """
+        # TODO: better to use a set?
+        self.done_promises.append(promise)
 
     def freeze(self) -> None:
         if self.hasValue:
@@ -257,7 +332,11 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_waiting_providers(self) -> int:
         """How many values are definitely still waiting for"""
-        raise NotImplementedError()
+        # todo: optimize?
+        out = len(self.promises) - len(self.done_promises)
+        if out < 0:
+            raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
+        return out
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
@@ -267,18 +346,6 @@ class DelayedResultVariable(ResultVariable[T]):
 ListValue = Union["Instance", List["Instance"]]
 
 
-class Promise(IPromise[ListValue]):
-
-    __slots__ = ("provider", "owner")
-
-    def __init__(self, owner: "ListVariable", provider: "Statement"):
-        self.provider: "Optional[Statement]" = provider
-        self.owner: "ListVariable" = owner
-
-    def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
-        self.owner.set_promised_value(self, value, location, recur)
-
-
 class BaseListVariable(DelayedResultVariable[ListValue]):
     """
     List variable, but only the part that is independent of an instance
@@ -286,29 +353,11 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     value: "List[Instance]"
 
-    __slots__ = ("promisses", "done_promisses")
+    __slots__ = ()
 
     def __init__(self, queue: "QueueScheduler") -> None:
-        self.promisses: List[Promise] = []
-        self.done_promisses: List[Promise] = []
         self.listeners: List[ResultCollector[ListValue]] = []
         super().__init__(queue, [])
-
-    def get_promise(self, provider: "Statement") -> IPromise[ListValue]:
-        out = Promise(self, provider)
-        self.promisses.append(out)
-        return out
-
-    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
-        self.done_promisses.append(promis)
-        self.set_value(value, location, recur)
-
-    def get_waiting_providers(self) -> int:
-        # todo: optimize?
-        out = len(self.promisses) - len(self.done_promisses)
-        if out < 0:
-            raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
-        return out
 
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
         """
@@ -392,14 +441,15 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return "BaseListVariable %s" % (self.value)
 
 
+# known issue: typed as ResultVariable[ListValue] but is actually ResultVariable[object]
 class TempListVariable(BaseListVariable):
 
     __slots__ = ()
 
-    def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
-        super().set_promised_value(promis, value, location, recur)
+    def fulfill(self, promise: IPromise) -> None:
+        super().fulfill(promise)
         # 100% accurate promisse tracking
-        if len(self.promisses) == len(self.done_promisses):
+        if len(self.promises) == len(self.done_promises):
             self.freeze()
 
 
@@ -461,6 +511,9 @@ class ListVariable(BaseListVariable):
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
+    """
+    Variable to hold the value for an optional relation (arity [0:1])
+    """
 
     __slots__ = ("attribute", "myself", "location")
 
@@ -506,14 +559,6 @@ class OptionVariable(DelayedResultVariable["Instance"]):
         if self.type is None:
             return
         self.type.validate(value)
-
-    def get_waiting_providers(self) -> int:
-        # todo: optimize?
-        if self.provider is None:
-            return 0
-        if self.hasValue:
-            return 0
-        return 1
 
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
@@ -688,13 +733,13 @@ class ExecutionUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        result: ResultVariable,
+        result: ResultVariable[object],
         requires: Dict[object, ResultVariable],
         expression: "ExpressionStatement",
         owner: "Optional[Statement]" = None,
     ):
         Waiter.__init__(self, queue_scheduler)
-        self.result = result.get_promise(expression)
+        self.result: ISetPromise[object] = result.get_promise(expression)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -1044,6 +1089,7 @@ class Instance(ExecutionContext):
                 value = v.value
                 print("%s\t\t%s" % (n, value))
             else:
+                # TODO: v.provider no longer exists
                 print("BAD: %s\t\t%s" % (n, v.provider))
 
     def verify_done(self) -> bool:
