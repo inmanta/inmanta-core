@@ -116,7 +116,7 @@ class Attribute(Locatable):
             return
         self.type.validate(value)
 
-    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable["Instance"]:
         out: ResultVariable["Instance"]
 
         if self.is_optional():
