@@ -705,7 +705,7 @@ class VirtualEnv(ActiveEnv):
                     )
             else:
                 python_subprocess = subprocess.Popen([self.python_path, "--version"], stdout=subprocess.PIPE, encoding="utf-8")
-                venv_python_version = tuple(map(int,python_subprocess.stdout.readline().strip().split()[1].split(".")))
+                venv_python_version = tuple(map(int, python_subprocess.stdout.readline().strip().split()[1].split(".")))
                 LOGGER.debug(f"virtual env python version: {venv_python_version}")
                 running_process_python_version = sys.version_info[:3]
                 LOGGER.debug(f"running_process_python_version: {running_process_python_version}")
@@ -714,7 +714,6 @@ class VirtualEnv(ActiveEnv):
                     raise VenvActivationFailedError(
                         msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
                     )
-
 
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
