@@ -316,6 +316,8 @@ class Resource(metaclass=ResourceMeta):
                 # passing along the serialized version would break the resource apis
                 json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
                 return value
+            except IgnoreResourceException:
+                raise  # will be handled in _load_resources of export.py
             except proxy.UnknownException as e:
                 return e.unknown
             except plugins.PluginException as e:
