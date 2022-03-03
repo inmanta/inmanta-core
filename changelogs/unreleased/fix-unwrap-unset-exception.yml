@@ -1,0 +1,4 @@
+description: Unset exceptions should not be wrapped as they are needed by the compiler
+change-type: patch
+issue-nr: 3787
+destination-branches: [master, iso4, iso5]
