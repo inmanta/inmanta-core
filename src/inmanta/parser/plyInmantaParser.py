@@ -69,7 +69,7 @@ precedence = (
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
     ("left", "CID", "ID"),
-    ("left", "MLS"),
+    ("right", "MLS"),
     ("left", "MLS_END"),
 )
 
