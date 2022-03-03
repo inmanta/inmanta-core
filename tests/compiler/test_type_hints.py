@@ -15,9 +15,26 @@
 
     Contact: code@inmanta.com
 """
+from typing import Set
+
 import pytest
 
-from inmanta.execute.scheduler import CycleInTypeHintsError, EntityRelationship, TypePrecedenceGraph
+from inmanta.ast.attribute import RelationAttribute
+from inmanta.execute.scheduler import CycleInTypeHintsError, TypePrecedenceGraph
+
+
+class DummyRelationAttribute(RelationAttribute):
+    """
+    A dummy RelationAttribute to prevent the need to instantiate a full
+    normal RelationAttribute object.
+    """
+
+    def __init__(self, fq_attr_name: str) -> None:
+        self.fq_attr_name = fq_attr_name
+        self.type_hints: Set[RelationAttribute] = set()
+
+    def __hash__(self) -> "int":
+        return hash(self.fq_attr_name)
 
 
 @pytest.mark.parametrize("set_type_hints_twice", [True, False])
@@ -31,19 +48,19 @@ def test_type_precedence_graph_one_freeze_order(set_type_hints_twice) -> None:
      \//      _\ \/
     A.two -->  B.two
     """
-    a_one = EntityRelationship(fq_entity_name="A", relationship_name="one")
-    a_two = EntityRelationship(fq_entity_name="A", relationship_name="two")
-    b_one = EntityRelationship(fq_entity_name="B", relationship_name="one")
-    b_two = EntityRelationship(fq_entity_name="B", relationship_name="two")
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    a_two = DummyRelationAttribute(fq_attr_name="A.two")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    b_two = DummyRelationAttribute(fq_attr_name="B.two")
 
     graph = TypePrecedenceGraph()
     for _ in range(1 + int(set_type_hints_twice)):
-        graph.add_precedence_rule(first_type=a_one, then_type=a_two)
-        graph.add_precedence_rule(first_type=a_one, then_type=b_one)
-        graph.add_precedence_rule(first_type=a_one, then_type=b_two)
-        graph.add_precedence_rule(first_type=a_two, then_type=b_one)
-        graph.add_precedence_rule(first_type=a_two, then_type=b_two)
-        graph.add_precedence_rule(first_type=b_one, then_type=b_two)
+        graph.add_precedence_rule(first_attribute=a_one, then_attribute=a_two)
+        graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+        graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_two)
+        graph.add_precedence_rule(first_attribute=a_two, then_attribute=b_one)
+        graph.add_precedence_rule(first_attribute=a_two, then_attribute=b_two)
+        graph.add_precedence_rule(first_attribute=b_one, then_attribute=b_two)
 
     assert graph.get_freeze_order() == [a_one, a_two, b_one, b_two]
 
@@ -55,13 +72,13 @@ def test_type_precedence_graph_two_valid_freeze_orders() -> None:
      \/
     B.two
     """
-    a_one = EntityRelationship(fq_entity_name="A", relationship_name="one")
-    b_one = EntityRelationship(fq_entity_name="B", relationship_name="one")
-    b_two = EntityRelationship(fq_entity_name="B", relationship_name="two")
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    b_two = DummyRelationAttribute(fq_attr_name="B.two")
 
     graph = TypePrecedenceGraph()
-    graph.add_precedence_rule(first_type=a_one, then_type=b_one)
-    graph.add_precedence_rule(first_type=a_one, then_type=b_two)
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_two)
 
     freeze_order = graph.get_freeze_order()
 
@@ -76,17 +93,17 @@ def test_type_precedence_graph_cycle_in_graph() -> None:
           |  |/_             |
         B.two ----------------
     """
-    a_one = EntityRelationship(fq_entity_name="A", relationship_name="one")
-    b_one = EntityRelationship(fq_entity_name="B", relationship_name="one")
-    b_two = EntityRelationship(fq_entity_name="B", relationship_name="two")
-    c_one = EntityRelationship(fq_entity_name="C", relationship_name="one")
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    b_two = DummyRelationAttribute(fq_attr_name="B.two")
+    c_one = DummyRelationAttribute(fq_attr_name="C.one")
 
     graph = TypePrecedenceGraph()
-    graph.add_precedence_rule(first_type=a_one, then_type=b_one)
-    graph.add_precedence_rule(first_type=b_one, then_type=b_two)
-    graph.add_precedence_rule(first_type=b_two, then_type=a_one)
-    graph.add_precedence_rule(first_type=b_one, then_type=c_one)
-    graph.add_precedence_rule(first_type=b_two, then_type=c_one)
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+    graph.add_precedence_rule(first_attribute=b_one, then_attribute=b_two)
+    graph.add_precedence_rule(first_attribute=b_two, then_attribute=a_one)
+    graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
+    graph.add_precedence_rule(first_attribute=b_two, then_attribute=c_one)
 
     with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
         graph.get_freeze_order()

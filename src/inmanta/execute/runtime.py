@@ -15,12 +15,10 @@
 
     Contact: code@inmanta.com
 """
-import itertools
 from abc import abstractmethod
 from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.warnings as inmanta_warnings
-from inmanta import ast
 from inmanta.ast import (
     AttributeException,
     CompilerDeprecationWarning,
@@ -52,7 +50,6 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
     from inmanta.compiler import Compiler
     from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
-    from inmanta.module import TypeHint
 
 
 T = TypeVar("T")
@@ -264,10 +261,7 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        assert self.type is not None
-        # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
-        # of the scheduler. We know the order in which those types can be frozen safely.
-        return len(self.waiters) + int(self.queues.has_type_hint(self.type))
+        raise NotImplementedError()
 
 
 ListValue = Union["Instance", List["Instance"]]
@@ -468,10 +462,9 @@ class ListVariable(BaseListVariable):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        assert self.type is not None
         # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
         # of the scheduler. We know the order in which those types can be frozen safely.
-        return len(self.waiters) - len(self.listeners) + int(self.queues.has_type_hint(self.type))
+        return len(self.waiters) - len(self.listeners) + int(self.attribute.has_type_hint())
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
@@ -544,6 +537,18 @@ class OptionVariable(DelayedResultVariable["Instance"]):
     def __str__(self) -> str:
         return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        result = len(self.waiters)
+
+        from inmanta.ast.attribute import RelationAttribute
+
+        if isinstance(self.attribute, RelationAttribute):
+            # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
+            # of the scheduler. We know the order in which those types can be frozen safely.
+            result += int(self.attribute.has_type_hint())
+        return result
+
 
 class DeprecatedOptionVariable(OptionVariable):
     """
@@ -588,18 +593,12 @@ class QueueScheduler(object):
         waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: Dict[str, Type],
         allwaiters: "Set[Waiter]",
-        type_hints: List["TypeHint"],
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
         self.allwaiters = allwaiters
-        names_types_with_hints = set(itertools.chain.from_iterable([hint.first_type, hint.then_type] for hint in type_hints))
-        # Use dict to achieve O(1) access on `type in self.types_with_type_hint` operation.
-        self.types_with_type_hint: Dict[Type, None] = {
-            type_obj: None for fq_type_name, type_obj in self.types.items() if fq_type_name in names_types_with_hints
-        }
 
     def add_running(self, item: "Waiter") -> None:
         self.runqueue.append(item)
@@ -624,11 +623,6 @@ class QueueScheduler(object):
 
     def for_tracker(self, tracer: Tracker) -> "QueueScheduler":
         return DelegateQueueScheduler(self, tracer)
-
-    def has_type_hint(self, type_obj: Type) -> bool:
-        if not isinstance(type_obj, ast.entity.Entity):
-            return False
-        return type_obj in self.types_with_type_hint
 
 
 class DelegateQueueScheduler(QueueScheduler):
@@ -661,9 +655,6 @@ class DelegateQueueScheduler(QueueScheduler):
 
     def for_tracker(self, tracer: Tracker) -> QueueScheduler:
         return DelegateQueueScheduler(self.__delegate, tracer)
-
-    def has_type_hint(self, type_obj: Type) -> bool:
-        return self.__delegate.has_type_hint(type_obj)
 
 
 class Waiter(object):

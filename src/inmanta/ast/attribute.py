@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
@@ -163,6 +163,7 @@ class RelationAttribute(Attribute):
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
+        self.type_hints: Set[RelationAttribute] = set()
 
     def __str__(self) -> str:
         return "%s.%s" % (self.get_entity().get_full_name(), self.name)
@@ -207,3 +208,17 @@ class RelationAttribute(Attribute):
                     excns.append(TypingException(self, "Relation annotation can not be Unknown"))
             except RuntimeException as e:
                 excns.append(e)
+
+    def add_type_hint(self, successor: "RelationAttribute") -> None:
+        """
+        Attach a type hint to this RelationAttribute that this type should
+        be frozen before `successor`.
+        """
+        self.type_hints.add(successor)
+
+    def has_type_hint(self) -> bool:
+        """
+        Return true iff a type hint exists that defines that this Attribute should
+        be frozen before another Attribute.
+        """
+        return bool(self.type_hints)

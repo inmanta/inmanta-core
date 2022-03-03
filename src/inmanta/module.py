@@ -1122,18 +1122,6 @@ class TypeHint:
     def __str__(self) -> str:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def iterate_types(self) -> Iterator[Tuple[str, str]]:
-        """
-        An iterator that returns two tuples, where each tuple represent an
-        <entity-type, relationship-name> of this type hint. The relationship
-        that should be frozen first, is returned first by the iterator.
-        """
-        yield (self.first_type, self.first_relation_name)
-        yield (self.then_type, self.then_relation_name)
-
 
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
@@ -1175,12 +1163,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                        the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
     """
 
-    _re_identifier = r"[a-zA-Z_][a-zA-Z_0-9-]*"
-    _re_fq_entity_type = rf"{_re_identifier}(::{_re_identifier})*"
-    _re_type_hint: str = (
-        rf"^(?P<ft>{_re_fq_entity_type})\.(?P<fr>{_re_identifier})\s+before\s+"
-        rf"(?P<tt>{_re_fq_entity_type})\.(?P<tr>{_re_identifier})$"
-    )
+    _re_type_hint: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
     _re_type_hint_compiled: re.Pattern[str] = re.compile(_re_type_hint)
     _raw_parser: Type[YamlParser] = YamlParser
 
