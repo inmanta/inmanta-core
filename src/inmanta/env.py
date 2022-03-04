@@ -698,21 +698,21 @@ class VirtualEnv(ActiveEnv):
         elif not os.path.exists(self._path_pth_file):
             # make sure the venv hosts the same python version as the running process
             if sys.platform != "win32":
-                # on linux based systems, the python version is in the name of the executable:
+                # on UNIX based systems, the python version is in the path to the site packages dir:
                 if not os.path.exists(self.site_packages_dir):
                     raise VenvActivationFailedError(
                         msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
                     )
             else:
-                python_subprocess = subprocess.Popen([self.python_path, "--version"], stdout=subprocess.PIPE, encoding="utf-8")
-                venv_python_version = tuple(map(int, python_subprocess.stdout.readline().strip().split()[1].split(".")))
-                LOGGER.debug(f"virtual env python version: {venv_python_version}")
-                running_process_python_version = sys.version_info[:3]
-                LOGGER.debug(f"running_process_python_version: {running_process_python_version}")
+                # get version as a (major, minor) tuple for the venv and the running process
+                venv_python_version = subprocess.check_output([self.python_path, "--version"]).decode("utf-8").split()[1]
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+                running_process_python_version = sys.version_info[:2]
 
                 if venv_python_version != running_process_python_version:
                     raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
+                        msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch ({'.'.join(map(str,venv_python_version))} vs {'.'.join(map(str,running_process_python_version))})"  # NOQA E501
                     )
 
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
