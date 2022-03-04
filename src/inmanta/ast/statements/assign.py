@@ -223,7 +223,7 @@ class SetAttribute(AssignStatement, Resumer):
             # gradual only for multi
             # to preserve order on lists used in attributes
             # while allowing gradual execution on relations
-            reqs = self.value.requires_emit_gradual(resolver, queue, ResultCollectorExceptionWrapper(self, var))
+            reqs = self.value.requires_emit_gradual(resolver, queue, ResultCollectorExceptionWrapper(self, instance, var))
         else:
             reqs = self.value.requires_emit(resolver, queue)
 
@@ -241,10 +241,11 @@ class ResultCollectorExceptionWrapper(ResultCollector[T]):
     A result collector wrapper that ensures that exceptions that happen during assignment are attributed to the correct statement
     """
 
-    __slots__ = ("owner", "next")
+    __slots__ = ("owner", "next", "instance")
 
-    def __init__(self, owner: "SetAttribute", next: ResultCollector[T]) -> None:
+    def __init__(self, owner: "SetAttribute", instance: "Instance", next: ResultCollector[T]) -> None:
         self.owner = owner
+        self.instance = instance
         self.next = next
 
     def receive_result(self, value: T, location: Location) -> None:
@@ -254,7 +255,7 @@ class ResultCollectorExceptionWrapper(ResultCollector[T]):
             raise
         except RuntimeException as e:
             e.set_statement(self.owner, False)
-            raise AttributeException(self.owner, self.owner.instance, self.owner.attribute_name, e)
+            raise AttributeException(self.owner, self.instance, self.owner.attribute_name, e)
 
 
 class SetAttributeHelper(ExecutionUnit):
