@@ -223,7 +223,7 @@ implement A using std::none
 implement B using std::none
 implement C using std::none
         """,
-        """Could not set attribute `bs` on instance `c1` (reported in c1.bs = c1.ac ({dir}/main.cf:3))
+        """Could not set attribute `bs` on instance `__config__::C (instantiated at {dir}/main.cf:2)` (reported in c1.bs = c1.ac ({dir}/main.cf:3))
 caused by:
   Invalid class type for __config__::A (instantiated at {dir}/main.cf:4), should be __config__::B (reported in c1.bs = c1.ac ({dir}/main.cf:3))""",  # noqa: E501
     )
