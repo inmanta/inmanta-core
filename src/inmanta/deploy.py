@@ -102,6 +102,8 @@ class Deploy(object):
 [database]
 name=postgres
 port=%(postgres_port)s
+host=localhost
+username=postgres
 
 [config]
 state-dir=%(state_dir)s
@@ -109,18 +111,23 @@ log-dir=%(log_dir)s
 
 [server]
 bind-port=%(server_port)s
+bind-address=127.0.0.1
 
 [agent_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [compiler_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [client_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [cmdline_rest_transport]
 port=%(server_port)s
+host=localhost
 """
             % vars_in_configfile
         )
