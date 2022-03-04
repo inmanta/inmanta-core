@@ -247,6 +247,9 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
+    # TODO: overpromise for strict mode
+    # TODO: document this behavior somewhere
+    # TODO: think about / prove correctness and add rationale somewhere: ? circular logic always nondeterministic in terms of model (deterministic only due to compilation order, which is out of scope of the model) ?
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()

@@ -72,6 +72,8 @@ class ResultCollector(Generic[T]):
 class IPromise:
     """
     A promise to the owner to provide a value or progression towards a value in some way, either directly or indirectly.
+    To provide strict provider tracking, overpromising is allowed in case of uncertainty as to whether progression towards
+    a value will be made, as long as progression towards certainty is made.
     """
 
     __slots__ = ()
@@ -294,9 +296,15 @@ class DelayedResultVariable(ResultVariable[T]):
     #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
     def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
         """
-        Acquire a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
-        promise greedily (overpromise) when a provider is likely to produce progress.
-        e.g. a progression promise could be acquired by statement that might emit a new assignment statement for this variable.
+        Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
+        promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
+        soon as it is known that no further progress will be made.
+
+        e.g. a progression promise could be acquired by a conditional statement that might emit a new assignment statement for
+        this variable. As soon as the condition is evaluated this promise should be fulfilled.
+
+        This overpromising semantics allows for more strict promise tracking, providing more certainty on variable completeness
+        at the cost of disallowing circular logic.
         """
         promise: ProgressionPromise = ProgressionPromise(self, provider)
         self.promises.append(promise)
