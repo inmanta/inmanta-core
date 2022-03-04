@@ -42,11 +42,11 @@ from inmanta.execute.runtime import (
     ListVariable,
     OptionVariable,
     ProgressionPromise,
-    SetPromise,
     QueueScheduler,
     RawUnit,
     Resolver,
     ResultVariable,
+    SetPromise,
     Waiter,
 )
 
