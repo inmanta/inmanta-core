@@ -647,16 +647,15 @@ class TypePrecedenceGraph:
         Get the TypePrecedenceGraphNode for the given relation_attribute in this graph
         or create a new node if no such node exists.
 
-        :param attach_to_root: true iff attach the node to the root nodes.
+        :param attach_to_root: true iff attach the node to the root nodes if the node was newly created.
         """
         if relation_attribute not in self.attribute_to_node:
             node = TypePrecedenceGraphNode(relation_attribute)
             self.attribute_to_node[relation_attribute] = node
+            if attach_to_root:
+                self.root_nodes.add(node)
         else:
             node = self.attribute_to_node[relation_attribute]
-
-        if attach_to_root:
-            self.root_nodes.add(node)
         return node
 
     def get_freeze_order(self) -> List[RelationAttribute]:
@@ -664,7 +663,7 @@ class TypePrecedenceGraph:
         Return all the RelationAttributes in this graph in the order in which
         they should be frozen.
         """
-        if not self.root_nodes:
+        if not self.attribute_to_node:
             return []
         work: Set[TypePrecedenceGraphNode] = set(self.root_nodes)
         result: List[RelationAttribute] = []
@@ -679,8 +678,13 @@ class TypePrecedenceGraph:
         while work:
             node: TypePrecedenceGraphNode = get_next_ready_item_in_work()
             work.remove(node)
+            if node in result:
+                raise CycleInTypeHintsError("Cycle in type hints")
             result.append(node.relation_attribute)
             work.update(node.dependents)
+
+        if len(result) != len(self.attribute_to_node):
+            raise CycleInTypeHintsError("Cycle in type hints")
         return result
 
 

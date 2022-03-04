@@ -36,6 +36,9 @@ class DummyRelationAttribute(RelationAttribute):
     def __hash__(self) -> "int":
         return hash(self.fq_attr_name)
 
+    def __str__(self):
+        return self.fq_attr_name
+
 
 @pytest.mark.parametrize("set_type_hints_twice", [True, False])
 def test_type_precedence_graph_one_freeze_order(set_type_hints_twice) -> None:
@@ -85,7 +88,34 @@ def test_type_precedence_graph_two_valid_freeze_orders() -> None:
     assert freeze_order == [a_one, b_one, b_two] or freeze_order == [a_one, b_two, b_one]
 
 
-def test_type_precedence_graph_cycle_in_graph() -> None:
+def test_type_precedence_graph_disjunct_graphs() -> None:
+    r"""
+    A.one  --> B.one   |     C.one ---> D.one
+    """
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    c_one = DummyRelationAttribute(fq_attr_name="C.one")
+    d_one = DummyRelationAttribute(fq_attr_name="D.one")
+
+    graph = TypePrecedenceGraph()
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+    graph.add_precedence_rule(first_attribute=c_one, then_attribute=d_one)
+
+    freeze_order = graph.get_freeze_order()
+
+    valid_freeze_orders = [
+        [a_one, b_one, c_one, d_one],
+        [a_one, c_one, b_one, d_one],
+        [a_one, c_one, d_one, b_one],
+        [c_one, d_one, a_one, b_one],
+        [c_one, a_one, b_one, d_one],
+        [c_one, a_one, d_one, b_one],
+    ]
+
+    assert freeze_order in valid_freeze_orders
+
+
+def test_type_precedence_graph_cycle_in_graph_without_root_nodes() -> None:
     r"""
         A.one --> B.one --> C.one
           /\    /            /\
@@ -104,6 +134,56 @@ def test_type_precedence_graph_cycle_in_graph() -> None:
     graph.add_precedence_rule(first_attribute=b_two, then_attribute=a_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
     graph.add_precedence_rule(first_attribute=b_two, then_attribute=c_one)
+
+    with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
+        graph.get_freeze_order()
+
+
+def test_type_precedence_graph_cycle_in_graph_with_root_nodes() -> None:
+    r"""
+        A.one --> B.one --> C.one
+                     /\    /
+                     |    /
+                     |  |/_
+                    C.two
+    """
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    c_one = DummyRelationAttribute(fq_attr_name="C.one")
+    c_two = DummyRelationAttribute(fq_attr_name="C.two")
+
+    graph = TypePrecedenceGraph()
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+    graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
+    graph.add_precedence_rule(first_attribute=c_one, then_attribute=c_two)
+    graph.add_precedence_rule(first_attribute=c_two, then_attribute=b_one)
+
+    with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
+        graph.get_freeze_order()
+
+
+def test_type_precedence_graph_cycle_disjunct_graphs() -> None:
+    r"""
+        A.one --> B.one --> C.one     |     D.one --> E.one
+                    |                 |           <--
+                    |                 |
+                   \/                 |
+                  C.two               |
+    """
+    a_one = DummyRelationAttribute(fq_attr_name="A.one")
+    b_one = DummyRelationAttribute(fq_attr_name="B.one")
+    c_one = DummyRelationAttribute(fq_attr_name="C.one")
+    c_two = DummyRelationAttribute(fq_attr_name="C.two")
+    d_one = DummyRelationAttribute(fq_attr_name="D_one")
+    e_one = DummyRelationAttribute(fq_attr_name="E.one")
+
+    graph = TypePrecedenceGraph()
+    graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
+    graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
+    graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_two)
+
+    graph.add_precedence_rule(first_attribute=d_one, then_attribute=e_one)
+    graph.add_precedence_rule(first_attribute=e_one, then_attribute=d_one)
 
     with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
         graph.get_freeze_order()
