@@ -647,7 +647,7 @@ class TypePrecedenceGraph:
         Get the TypePrecedenceGraphNode for the given relation_attribute in this graph
         or create a new node if no such node exists.
 
-        :param attach_to_root: true iff attach the node to the root nodes if a new node was created.
+        :param attach_to_root: true iff attach the node to the root nodes.
         """
         if relation_attribute not in self.attribute_to_node:
             node = TypePrecedenceGraphNode(relation_attribute)
