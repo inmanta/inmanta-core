@@ -251,7 +251,8 @@ class ResultCollectorExceptionWrapper(ResultCollector[T]):
     def receive_result(self, value: T, location: Location) -> None:
         try:
             self.next.receive_result(value, location)
-        except AttributeException:
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
             raise
         except RuntimeException as e:
             e.set_statement(self.owner, False)
@@ -281,7 +282,8 @@ class SetAttributeHelper(ExecutionUnit):
     def execute(self) -> None:
         try:
             ExecutionUnit._unsafe_execute(self)
-        except AttributeException:
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
             raise
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
