@@ -1,0 +1,4 @@
+description: Remove loglevel from_int and from_string
+issue-nr: 3885
+change-type: patch
+destination-branches: [master, iso5, iso4]
