@@ -539,15 +539,7 @@ class OptionVariable(DelayedResultVariable["Instance"]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        result = len(self.waiters)
-
-        from inmanta.ast.attribute import RelationAttribute
-
-        if isinstance(self.attribute, RelationAttribute):
-            # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
-            # of the scheduler. We know the order in which those types can be frozen safely.
-            result += int(self.attribute.has_type_hint())
-        return result
+        return len(self.waiters) + int(self.attribute.has_type_hint())
 
 
 class DeprecatedOptionVariable(OptionVariable):

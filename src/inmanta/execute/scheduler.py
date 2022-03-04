@@ -554,6 +554,9 @@ class PrioritisedDelayedResultVariableQueue:
     def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
         """
         Append on the right side of the queue.
+
+        :param dont_reset_working_list: This argument exists to increase performance by preventing
+                                        unnecessary resets of the `self._freeze_order_working_list` queue.
         """
         if isinstance(drv, TempListVariable):
             self._tmp_list_variables.append(drv)

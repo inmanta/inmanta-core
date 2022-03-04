@@ -116,7 +116,7 @@ class Attribute(Locatable):
             return
         self.type.validate(value)
 
-    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable["Instance"]:
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         out: ResultVariable["Instance"]
 
         if self.is_optional():
@@ -147,6 +147,13 @@ class Attribute(Locatable):
 
     def final(self, excns: List[CompilerException]) -> None:
         pass
+
+    def has_type_hint(self) -> bool:
+        """
+        Return true iff a type hint exists that defines that this Attribute should
+        be frozen before another Attribute.
+        """
+        return False
 
 
 @stable_api
