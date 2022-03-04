@@ -134,14 +134,16 @@ def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3}([\s\S]*?)"{3}'
     t.value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
     lexer = t.lexer
-
-    end = lexer.lexpos - lexer.linestart + 1
+    match = lexer.lexmatch[0]
+    lines = match.split("\n")
+    start_line = lexer.lineno
+    end_line = lexer.lineno + len(lines) - 1
+    t.lexer.lineno = end_line
     (s, e) = lexer.lexmatch.span()
-    start = end - (e - s)
+    start = lexer.lexpos - lexer.linestart - (e - s) + 1
+    end = len(lines[-1]) + 1
 
-    t.value = LocatableString(
-        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
-    )
+    t.value = LocatableString(t.value, Range(lexer.inmfile, start_line, start, end_line, end), lexer.lexpos, lexer.namespace)
 
     return t
 
