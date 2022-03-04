@@ -416,7 +416,7 @@ def deploy(options: argparse.Namespace) -> None:
     run = deploy_module.Deploy(options)
     try:
         if not run.setup():
-            raise Exception("Failed to setup the orchestrator.")
+            raise Exception("Failed to setup an embedded Inmanta orchestrator.")
         run.run()
     finally:
         run.stop()
