@@ -198,3 +198,32 @@ SUBTREE for __config__::A instance:
                 dir=snippetcompiler.project_dir
             )
         )
+
+
+def test_assignment_failed_on_gradual(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+c1 = C()
+c1.bs += c1.ac
+c1.ac = A()
+
+entity A:
+end
+
+entity B extends A:
+end
+
+entity C:
+end
+
+C.ac [0:] -- A
+C.bs [0:] -- B
+
+implement A using std::none
+implement B using std::none
+implement C using std::none
+        """,
+        """Could not set attribute `bs` on instance `c1` (reported in c1.bs = c1.ac ({dir}/main.cf:3))
+caused by:
+  Invalid class type for __config__::A (instantiated at {dir}/main.cf:4), should be __config__::B (reported in c1.bs = c1.ac ({dir}/main.cf:3))""",
+    )
