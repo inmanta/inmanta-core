@@ -131,7 +131,7 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
-    r'["]{3}.*["]{3}'
+    r'"{3}([\s\S]*?)"{3}'
     t.value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
     lexer = t.lexer
 
