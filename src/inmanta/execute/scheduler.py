@@ -631,7 +631,7 @@ class TypePrecedenceGraph:
 
     def add_precedence_rule(self, first_attribute: RelationAttribute, then_attribute: RelationAttribute) -> None:
         """
-        Add a rule that `` should be frozen before `then_attribute`.
+        Add a rule that `first_attribute` should be frozen before `then_attribute`.
         """
         first_node = self._get_or_create_node(first_attribute, attach_to_root=True)
         then_node = self._get_or_create_node(then_attribute, attach_to_root=False)
