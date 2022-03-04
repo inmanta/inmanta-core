@@ -41,7 +41,8 @@ from inmanta.execute.runtime import (
     Instance,
     ListVariable,
     OptionVariable,
-    Promise,
+    ProgressionPromise,
+    SetPromise,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -64,7 +65,8 @@ def test_slots_rt():
 
     assert_slotted(ResultVariable())
     assert_slotted(AttributeVariable(None, None))
-    assert_slotted(Promise(None, None))
+    assert_slotted(ProgressionPromise(None, None))
+    assert_slotted(SetPromise(None, None))
     assert_slotted(ListVariable(r, i, qs))
     assert_slotted(OptionVariable(r, i, qs))
 

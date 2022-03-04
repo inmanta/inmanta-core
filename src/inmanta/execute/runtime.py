@@ -240,9 +240,7 @@ class ProgressionPromise(IPromise):
         self.owner.fulfill(self)
 
 
-# TODO: rename? SetPromise(ISetPromise[T])?
-class Promise(ISetPromise[T]):
-    # TODO: check docstring
+class SetPromise(ISetPromise[T]):
     """
     A promise from a provider to the owner to set a value.
     """
@@ -288,7 +286,7 @@ class DelayedResultVariable(ResultVariable[T]):
             self.queue()
 
     def get_promise(self, provider: "Statement") -> ISetPromise[T]:
-        promise: ISetPromise[T] = Promise(self, provider)
+        promise: ISetPromise[T] = SetPromise(self, provider)
         self.promises.append(promise)
         return promise
 
