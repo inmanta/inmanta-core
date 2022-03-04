@@ -69,7 +69,8 @@ precedence = (
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
     ("left", "CID", "ID"),
-    ("right", "MLS"),)
+    ("right", "MLS"),
+)
 
 
 def attach_lnr(p: YaccProduction, token: int = 1) -> None:
