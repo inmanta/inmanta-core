@@ -223,7 +223,9 @@ class SetAttribute(AssignStatement, Resumer):
             # gradual only for multi
             # to preserve order on lists used in attributes
             # while allowing gradual execution on relations
-            reqs = self.value.requires_emit_gradual(resolver, queue, ResultCollectorExceptionWrapper(self, instance, var))
+            reqs = self.value.requires_emit_gradual(
+                resolver, queue, GradualSetAttributeHelper(self, instance, self.attribute_name, var)
+            )
         else:
             reqs = self.value.requires_emit(resolver, queue)
 
@@ -236,17 +238,19 @@ class SetAttribute(AssignStatement, Resumer):
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
 
 
-class ResultCollectorExceptionWrapper(ResultCollector[T]):
+class GradualSetAttributeHelper(ResultCollector[T]):
     """
-    A result collector wrapper that ensures that exceptions that happen during assignment are attributed to the correct statement
+    A result collector wrapper that ensures that exceptions that happen during assignment
+    are attributed to the correct statement
     """
 
-    __slots__ = ("owner", "next", "instance")
+    __slots__ = ("owner", "next", "instance", "attribute_name")
 
-    def __init__(self, owner: "SetAttribute", instance: "Instance", next: ResultCollector[T]) -> None:
+    def __init__(self, owner: "Statement", instance: "Instance", attribute_name: str, next: ResultCollector[T]) -> None:
         self.owner = owner
         self.instance = instance
         self.next = next
+        self.attribute_name = attribute_name
 
     def receive_result(self, value: T, location: Location) -> None:
         try:
@@ -256,7 +260,7 @@ class ResultCollectorExceptionWrapper(ResultCollector[T]):
             raise
         except RuntimeException as e:
             e.set_statement(self.owner, False)
-            raise AttributeException(self.owner, self.instance, self.owner.attribute_name, e)
+            raise AttributeException(self.owner, self.instance, self.attribute_name, e)
 
 
 class SetAttributeHelper(ExecutionUnit):

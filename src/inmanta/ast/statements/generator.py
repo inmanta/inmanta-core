@@ -37,7 +37,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DynamicStatement, ExpressionStatement, RawResumer
-from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -572,7 +572,9 @@ class Constructor(ExpressionStatement):
                 # gradual only for multi
                 # to preserve order on lists used in attributes
                 # while allowing gradual execution on relations
-                reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
+                reqs = valueexpression.requires_emit_gradual(
+                    resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
+                )
             else:
                 reqs = valueexpression.requires_emit(resolver, queue)
             SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
