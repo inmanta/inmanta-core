@@ -1231,8 +1231,6 @@ end
 
     mls = stmt.comment
 
-    print(mls)
-
     assert (
         str(mls)
         == """
@@ -1249,6 +1247,98 @@ end
 
         More test
     """
+    )
+
+
+def test_mls_2():
+    statements = parse_code(
+        """
+\"""
+This
+is
+a
+mls
+\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+
+    assert mls.lnr == 2
+    assert mls.elnr == 7
+    assert mls.start == 1
+    assert mls.end == 4
+    assert (
+        str(mls.value)
+        == """
+This
+is
+a
+mls
+"""
+    )
+
+
+def test_mls_3():
+    statements = parse_code(
+        """
+\"""This is a mls on one line\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 32
+    assert str(mls.value) == "This is a mls on one line"
+
+
+def test_mls_4():
+    statements = parse_code(
+        """
+\"""
+str1
+\"""
+
+a = "One big token"
+
+\"""
+str1 with
+some variations\"""
+"""
+    )
+    assert len(statements) == 3
+    mls1 = statements[0]
+    mls2 = statements[2]
+
+    assert isinstance(mls1, LocatableString)
+    assert isinstance(mls2, LocatableString)
+
+    assert mls1.lnr == 2
+    assert mls1.elnr == 4
+    assert mls1.start == 1
+    assert mls1.end == 4
+    assert (
+        str(mls1)
+        == """
+str1
+"""
+    )
+
+    assert mls2.lnr == 8
+    assert mls2.elnr == 10
+    assert mls2.start == 1
+    assert mls2.end == 19
+    assert (
+        str(mls2)
+        == """
+str1 with
+some variations"""
     )
 
 
