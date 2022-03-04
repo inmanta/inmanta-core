@@ -2,6 +2,6 @@
 description: Fixed bug that makes the `inmanta deploy` command fail when the database and server sections of the inmanta configuration files contain non-default values.
 issue-nr: 3927
 change-type: patch
-destination-branches: [master, iso5, iso4]
+destination-branches: [iso4]
 sections:
   bugfix: "{{description}}"
