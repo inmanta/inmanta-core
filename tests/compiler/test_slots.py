@@ -83,7 +83,7 @@ def test_slots_rt():
     assert_slotted(FunctionUnit(qs, rs, ResultVariable(), {}, None))
 
     assert_slotted(i)
-    assert_slotted(GradualSetAttributeHelper(sa, ResultVariable()))
+    assert_slotted(GradualSetAttributeHelper(sa, i, "A", ResultVariable()))
     assert_slotted(SetAttributeHelper(qs, rs, ResultVariable(), {}, Literal("A"), sa, i, "A"))
 
 
