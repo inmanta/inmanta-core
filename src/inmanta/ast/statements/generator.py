@@ -27,6 +27,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
+    Locatable,
     LocatableString,
     Location,
     Namespace,
@@ -384,7 +385,7 @@ class IndexAttributeMissingInConstructorException(TypingException):
     Raised when an index attribute was not set in the constructor call for an entity.
     """
 
-    def __init__(self, stmt: "Optional[Locatable]", entity: "Entity", unset_attributes: List[str]):
+    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: List[str]):
         if not unset_attributes:
             raise Exception("Argument `unset_attributes` should contain at least one element")
         error_message = self._get_error_message(entity, unset_attributes)
@@ -396,8 +397,10 @@ class IndexAttributeMissingInConstructorException(TypingException):
             attribute: Optional[Attribute] = entity.get_attribute(attribute_name)
             assert attribute is not None  # Make mypy happy
             attribute_kind = "relation" if isinstance(attribute, RelationAttribute) else "attribute"
-            exc_message += f"\n\t* Missing {attribute_kind} '{attribute.name}'. " \
-                           f"The relation {entity.get_full_name()}.{attribute.name} is part of an index."
+            exc_message += (
+                f"\n\t* Missing {attribute_kind} '{attribute.name}'. "
+                f"The relation {entity.get_full_name()}.{attribute.name} is part of an index."
+            )
         return exc_message
 
 

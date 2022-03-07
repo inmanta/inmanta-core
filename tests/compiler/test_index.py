@@ -549,5 +549,5 @@ Test_A()
         """,
         re.escape(
             "Invalid Constructor call:\n\t* Missing attribute 'name'. The relation __config__::Test_A.name is part of an index."
-        )
+        ),
     )
