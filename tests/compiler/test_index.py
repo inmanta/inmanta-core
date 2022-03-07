@@ -534,10 +534,14 @@ index TestA(name)
     )
 
 
-def test_index_attribute_missing_in_constructor_call(snippetcompiler) -> None:
-    snippetcompiler.setup_for_error_re(
-        """
+@pytest.mark.parametrize("use_wrapped_kwargs", [True, False])
+def test_index_attribute_missing_in_constructor_call(snippetcompiler, use_wrapped_kwargs: bool) -> None:
+    """
+    Assert correct error message when index attribute is not set in the constructor call.
+    """
+    model = f"""
 entity Test_A:
+    number id
     string name
 end
 
@@ -545,8 +549,11 @@ index Test_A(name)
 
 implement Test_A using std::none
 
-Test_A()
-        """,
+Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
+    """
+
+    snippetcompiler.setup_for_error_re(
+        model,
         re.escape(
             "Invalid Constructor call:\n\t* Missing attribute 'name'. The relation __config__::Test_A.name is part of an index."
         ),

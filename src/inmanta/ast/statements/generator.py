@@ -532,7 +532,7 @@ class Constructor(ExpressionStatement):
 
         missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
         if missing_attrs:
-            raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), missing_attrs)
+            raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
 
         # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
         # because a RuntimeException is raised above when they are not.
