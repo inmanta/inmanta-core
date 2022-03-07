@@ -67,9 +67,8 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
     ("left", "CID", "ID"),
-    ("left", "(", "["),
     ("left", "MLS"),
 )
 
@@ -116,15 +115,21 @@ def make_none(p: YaccProduction, token: int) -> Literal:
 
 
 def p_main(p: YaccProduction) -> None:
-    "main : body"
+    "main : head body"
+    if p[1]:
+        p[0] = (p[1], p[2])
+    else:
+        p[0] = p[2]
+
+
+def p_main_head(p: YaccProduction) -> None:
+    "head :"
+    p[0] = None
+
+
+def p_main_head_doc(p: YaccProduction) -> None:
+    "head : MLS"
     p[0] = p[1]
-
-
-def p_main_comment(p: YaccProduction) -> None:
-    "main : MLS body"
-    v = p[2]
-    v.insert(0, p[1])
-    p[0] = v
 
 
 def p_body_collect(p: YaccProduction) -> None:
@@ -619,11 +624,11 @@ def p_expression(p: YaccProduction) -> None:
     """expression : boolean_expression
     | constant
     | function_call
-    | var_ref %prec VAR_REF
+    | var_ref
     | constructor
     | list_def
     | map_def
-    | map_lookup %prec MAP_LOOKUP
+    | map_lookup
     | index_lookup
     | conditional_expression"""
     p[0] = p[1]
@@ -998,7 +1003,7 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
 
 
 def p_var_ref(p: YaccProduction) -> None:
-    "var_ref : attr_ref %prec VAR_REF"
+    "var_ref : attr_ref"
     p[0] = p[1]
 
 
@@ -1015,7 +1020,7 @@ def p_attr_ref(p: YaccProduction) -> None:
 
 
 def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref %prec NS_REF"
+    "var_ref : ns_ref"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
