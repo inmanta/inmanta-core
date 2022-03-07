@@ -701,7 +701,8 @@ class VirtualEnv(ActiveEnv):
                 # on UNIX based systems, the python version is in the path to the site packages dir:
                 if not os.path.exists(self.site_packages_dir):
                     raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch"
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version"
+                        "is different from the Python version of this process."
                     )
             else:
                 # get version as a (major, minor) tuple for the venv and the running process
@@ -712,7 +713,8 @@ class VirtualEnv(ActiveEnv):
 
                 if venv_python_version != running_process_python_version:
                     raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} due to python version mismatch ({'.'.join(map(str,venv_python_version))} vs {'.'.join(map(str,running_process_python_version))})"  # NOQA E501
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version"
+                        "is different from the Python version of this process."
                     )
 
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
