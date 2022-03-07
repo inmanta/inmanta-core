@@ -69,7 +69,7 @@ precedence = (
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
     ("left", "CID", "ID"),
-    ("right", "MLS"),
+    ("left", "MLS"),
 )
 
 
@@ -127,8 +127,7 @@ def p_main_term(p: YaccProduction) -> None:
 
 
 def p_top_stmt(p: YaccProduction) -> None:
-    """top_stmt : MLS
-    | entity_def
+    """top_stmt : entity_def
     | implement_def
     | implementation_def
     | relation
@@ -168,10 +167,9 @@ def p_import_1(p: YaccProduction) -> None:
 
 def p_stmt(p: YaccProduction) -> None:
     """statement : assign
-    | constructor
-    | function_call
     | for
-    | if"""
+    | if
+    | expression"""
     p[0] = p[1]
 
 
@@ -654,8 +652,7 @@ def p_operand(p: YaccProduction) -> None:
 
 
 def p_map_lookup(p: YaccProduction) -> None:
-    """map_lookup : attr_ref '[' operand ']'
-    | local_var '[' operand ']'
+    """map_lookup : var_ref '[' operand ']'
     | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
@@ -993,10 +990,10 @@ def p_attr_ref(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
-def p_local_var(p: YaccProduction) -> None:
-    "local_var : ns_ref"
-    p[0] = Reference(p[1])
-    attach_from_string(p, 1)
+# def p_local_var(p: YaccProduction) -> None:
+#     "local_var : ns_ref"
+#     p[0] = Reference(p[1])
+#     attach_from_string(p, 1)
 
 
 def p_var_ref_2(p: YaccProduction) -> None:
