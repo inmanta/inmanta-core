@@ -706,7 +706,9 @@ class VirtualEnv(ActiveEnv):
                     )
             else:
                 # get version as a (major, minor) tuple for the venv and the running process
-                venv_python_version = subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+                venv_python_version = (
+                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+                )
                 venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
 
                 running_process_python_version = sys.version_info[:2]
