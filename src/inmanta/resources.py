@@ -38,7 +38,7 @@ from typing import (
 
 import inmanta.util
 from inmanta import plugins
-from inmanta.ast import ExplicitPluginException, ExternalException, RuntimeException, WrappingRuntimeException
+from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
@@ -315,10 +315,12 @@ class Resource(metaclass=ResourceMeta):
                 raise  # will be handled in _load_resources of export.py
             except proxy.UnknownException as e:
                 return e.unknown
-            except RuntimeException as e:
-                raise WrappingRuntimeException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
             except plugins.PluginException as e:
                 raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+            except CompilerException:
+                # Internal exceptions (like UnsetException) should be propagated without being wrapped
+                # as they are used later on and wrapping them would break the compiler
+                raise
             except Exception as e:
                 raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
 

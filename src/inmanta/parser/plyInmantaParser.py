@@ -67,8 +67,9 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
+    ("left", "CID", "ID"),
     ("right", "MLS"),
-    ("right", "MLS_END"),
 )
 
 
@@ -126,7 +127,7 @@ def p_main_term(p: YaccProduction) -> None:
 
 
 def p_top_stmt(p: YaccProduction) -> None:
-    """top_stmt : mls
+    """top_stmt : MLS
     | entity_def
     | implement_def
     | implementation_def
@@ -139,7 +140,7 @@ def p_top_stmt(p: YaccProduction) -> None:
 
 
 def p_empty(p: YaccProduction) -> None:
-    "empty :"
+    "empty : %prec EMPTY"
     pass
 
 
@@ -276,7 +277,7 @@ def p_entity_extends_err(p: YaccProduction) -> None:
 
 
 def p_entity_body_outer(p: YaccProduction) -> None:
-    """entity_body_outer : mls entity_body END"""
+    """entity_body_outer : MLS entity_body END"""
     p[0] = (p[1], p[2])
 
 
@@ -291,7 +292,7 @@ def p_entity_body_outer_none(p: YaccProduction) -> None:
 
 
 def p_entity_body_outer_4(p: YaccProduction) -> None:
-    """entity_body_outer : mls END"""
+    """entity_body_outer : MLS END"""
     p[0] = (p[1], [])
 
 
@@ -404,7 +405,7 @@ def p_implement_ns_list_collect(p: YaccProduction) -> None:
 
 def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
-    | IMPLEMENT class_ref USING implement_ns_list mls"""
+    | IMPLEMENT class_ref USING implement_ns_list MLS"""
     (inherit, implementations) = p[4]
     p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
     attach_lnr(p)
@@ -412,7 +413,7 @@ def p_implement(p: YaccProduction) -> None:
 
 def p_implement_when(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
-    | IMPLEMENT class_ref USING implement_ns_list WHEN expression mls"""
+    | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS"""
     (inherit, implementations) = p[4]
     p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
@@ -435,7 +436,7 @@ def p_implementation_def(p: YaccProduction) -> None:
 
 
 def p_implementation(p: YaccProduction) -> None:
-    "implementation : ':' mls block"
+    "implementation : ':' MLS block"
     p[0] = (p[2], p[3])
 
 
@@ -462,7 +463,7 @@ def p_relation_deprecated(p: YaccProduction) -> None:
 
 
 def p_relation_deprecated_comment(p: YaccProduction) -> None:
-    "relation : class_ref ID multi REL multi class_ref ID mls"
+    "relation : class_ref ID multi REL multi class_ref ID MLS"
     if not (p[4] == "--"):
         LOGGER.warning(
             "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
@@ -501,14 +502,14 @@ def deprecated_relation_warning(p: YaccProduction) -> None:
 
 
 def p_relation_outer_comment(p: YaccProduction) -> None:
-    "relation : relation_def mls"
+    "relation : relation_def MLS"
     rel = p[1]
     rel.comment = str(p[2])
     p[0] = rel
 
 
 def p_relation_outer(p: YaccProduction) -> None:
-    "relation : relation_def"
+    "relation : relation_def %prec RELATION_DEF"
     p[0] = p[1]
 
 
@@ -560,12 +561,12 @@ def p_multi_4(p: YaccProduction) -> None:
 
 
 def p_typedef_outer(p: YaccProduction) -> None:
-    """typedef : typedef_inner"""
+    """typedef : typedef_inner %prec TYPEDEF_INNER"""
     p[0] = p[1]
 
 
 def p_typedef_outer_comment(p: YaccProduction) -> None:
-    """typedef : typedef_inner mls"""
+    """typedef : typedef_inner MLS"""
     tdef = p[1]
     tdef.comment = str(p[2])
     p[0] = tdef
@@ -787,7 +788,7 @@ def p_constant_rstring(p: YaccProduction) -> None:
 
 
 def p_constant_mls(p: YaccProduction) -> None:
-    "constant : mls"
+    "constant : MLS"
     p[0] = get_string_ast_node(p[1], True)
     attach_from_string(p)
 
@@ -977,7 +978,7 @@ def p_operand_list_term(p: YaccProduction) -> None:
 
 
 def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list :"
+    "operand_list : %prec OPERAND_LIST"
     p[0] = []
 
 
@@ -1069,17 +1070,6 @@ def p_id_list_collect(p: YaccProduction) -> None:
 def p_id_list_term(p: YaccProduction) -> None:
     "id_list : ID"
     p[0] = [p[1]]
-
-
-def p_mls_term(p: YaccProduction) -> None:
-    "mls : MLS_END"
-    p[0] = p[1]
-
-
-def p_mls_collect(p: YaccProduction) -> None:
-    "mls : MLS mls"
-    p[0] = "%s%s" % (p[1], p[2])
-    merge_lnr_to_string(p, 1, 2)
 
 
 # Error rule for syntax errors
