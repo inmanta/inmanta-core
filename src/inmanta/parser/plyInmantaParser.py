@@ -435,13 +435,18 @@ def p_implementation_def(p: YaccProduction) -> None:
 
 
 def p_implementation(p: YaccProduction) -> None:
-    "implementation : ':' MLS block"
-    p[0] = (p[2], p[3])
+    "implementation : implementation_head block"
+    p[0] = (p[1], p[2])
 
 
-def p_implementation_1(p: YaccProduction) -> None:
-    "implementation : ':' block"
-    p[0] = (None, p[2])
+def p_implementation_head(p: YaccProduction) -> None:
+    "implementation_head : ':'"
+    p[0] = None
+
+
+def p_implementation_head_doc(p: YaccProduction) -> None:
+    "implementation_head : ':' MLS"
+    p[0] = p[2]
 
 
 def p_block(p: YaccProduction) -> None:
