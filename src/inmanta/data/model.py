@@ -472,6 +472,8 @@ class ResourceDiffStatus(str, Enum):
     deleted = "deleted"
     unmodified = "unmodified"
     agent_down = "agent_down"
+    undefined = "undefined"
+    skipped_for_undefined = "skipped_for_undefined"
 
 
 class AttributeDiff(BaseModel):

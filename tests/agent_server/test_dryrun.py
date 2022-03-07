@@ -327,6 +327,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key_mod", {"first_level": {"nested": [5, 3, 2, 1, 1]}})
     resource_container.Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key_unmodified", "the_same")
 
     clienthelper = ClientHelper(client, environment)
 
@@ -364,6 +365,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
             "send_event": False,
             "requires": [],
             "purged": False,
+        },
+        {
+            "key": "key_unmodified",
+            "value": "the_same",
+            "id": "test::Resource[agent1,key=key_unmodified],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
         },
         {
             "key": "key4",
@@ -481,12 +490,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
         "to_value": resources[3]["value"],
         "to_value_compare": json.dumps(resources[3]["value"], indent=4, sort_keys=True),
     }
+    assert changes[4]["status"] == "unmodified"
+    assert changes[5]["status"] == "undefined"
+    assert changes[6]["status"] == "skipped_for_undefined"
+    assert changes[7]["status"] == "skipped_for_undefined"
+    assert changes[8]["status"] == "agent_down"
     # Changes for undeployable resources are empty
-    for i in range(4, 7):
-        assert changes[i]["status"] == "unmodified"
+    for i in range(4, 9):
         assert changes[i]["attributes"] == {}
-    assert changes[7]["status"] == "agent_down"
-    assert changes[7]["attributes"] == {}
 
     # Change a value for a new dryrun
     res = await data.Resource.get(environment, "test::Resource[agent1,key=key1],v=%d" % version)
