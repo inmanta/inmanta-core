@@ -675,7 +675,8 @@ def p_operand(p: YaccProduction) -> None:
 
 
 def p_map_lookup(p: YaccProduction) -> None:
-    """map_lookup : var_ref '[' operand ']'
+    """map_lookup : attr_ref '[' operand ']'
+    | var_ref '[' operand ']'
     | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
