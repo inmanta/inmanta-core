@@ -244,10 +244,10 @@ class GradualSetAttributeHelper(ResultCollector[T]):
     are attributed to the correct statement
     """
 
-    __slots__ = ("owner", "next", "instance", "attribute_name")
+    __slots__ = ("stmt", "next", "instance", "attribute_name")
 
-    def __init__(self, owner: "Statement", instance: "Instance", attribute_name: str, next: ResultCollector[T]) -> None:
-        self.owner = owner
+    def __init__(self, stmt: "Statement", instance: "Instance", attribute_name: str, next: ResultCollector[T]) -> None:
+        self.stmt = stmt
         self.instance = instance
         self.next = next
         self.attribute_name = attribute_name
@@ -259,8 +259,8 @@ class GradualSetAttributeHelper(ResultCollector[T]):
             e.set_statement(self.stmt, False)
             raise
         except RuntimeException as e:
-            e.set_statement(self.owner, False)
-            raise AttributeException(self.owner, self.instance, self.attribute_name, e)
+            e.set_statement(self.stmt, False)
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
 
 
 class SetAttributeHelper(ExecutionUnit):
