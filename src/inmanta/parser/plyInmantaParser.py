@@ -122,17 +122,16 @@ def p_main(p: YaccProduction) -> None:
 
 def p_main_comment(p: YaccProduction) -> None:
     "main : MLS body"
-    p[0] = (p[1], p[2])
+    v = p[2]
+    v.insert(0, p[1])
+    p[0] = v
 
 
 def p_body_collect(p: YaccProduction) -> None:
     "body : top_stmt body"
-    if(p[2]):
-        v = p[2]
-        v.insert(0, p[1])
-        p[0] = v
-    else:
-        p[0] = p[1]
+    v = p[2]
+    v.insert(0, p[1])
+    p[0] = v
 
 
 def p_body_term(p: YaccProduction) -> None:
