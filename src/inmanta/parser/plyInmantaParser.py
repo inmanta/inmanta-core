@@ -116,15 +116,14 @@ def make_none(p: YaccProduction, token: int) -> Literal:
 
 def p_main(p: YaccProduction) -> None:
     "main : head body"
-    if p[1]:
-        p[0] = (p[1], p[2])
-    else:
-        p[0] = p[2]
+    v = p[2]
+    v.insert(0, p[1])
+    p[0] = v
 
 
 def p_main_head(p: YaccProduction) -> None:
     "head :"
-    p[0] = None
+    p[0] = []
 
 
 def p_main_head_doc(p: YaccProduction) -> None:
