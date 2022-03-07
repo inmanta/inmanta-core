@@ -27,6 +27,7 @@ from inmanta.ast import (
     DuplicateException,
     KeyException,
     LocatableString,
+    Location,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
@@ -49,7 +50,7 @@ from inmanta.execute.util import Unknown
 from . import ReferenceStatement
 
 try:
-    from typing import TYPE_CHECKING, Dict, Optional
+    from typing import TYPE_CHECKING, Dict, Optional, TypeVar
 except ImportError:
     TYPE_CHECKING = False
 
@@ -57,6 +58,8 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
+
+T = TypeVar("T")
 
 
 class CreateList(ReferenceStatement):
@@ -218,7 +221,9 @@ class SetAttribute(AssignStatement, Resumer):
             # gradual only for multi
             # to preserve order on lists used in attributes
             # while allowing gradual execution on relations
-            reqs = self.value.requires_emit_gradual(resolver, queue, var)
+            reqs = self.value.requires_emit_gradual(
+                resolver, queue, GradualSetAttributeHelper(self, instance, self.attribute_name, var)
+            )
         else:
             reqs = self.value.requires_emit(resolver, queue)
 
@@ -231,7 +236,35 @@ class SetAttribute(AssignStatement, Resumer):
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
 
 
+class GradualSetAttributeHelper(ResultCollector[T]):
+    """
+    A result collector wrapper that ensures that exceptions that happen during assignment
+    are attributed to the correct statement
+    """
+
+    __slots__ = ("stmt", "next", "instance", "attribute_name")
+
+    def __init__(self, stmt: "Statement", instance: "Instance", attribute_name: str, next: ResultCollector[T]) -> None:
+        self.stmt = stmt
+        self.instance = instance
+        self.next = next
+        self.attribute_name = attribute_name
+
+    def receive_result(self, value: T, location: Location) -> None:
+        try:
+            self.next.receive_result(value, location)
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
+            raise
+        except RuntimeException as e:
+            e.set_statement(self.stmt, False)
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
+
+
 class SetAttributeHelper(ExecutionUnit):
+
+    __slots__ = ("stmt", "instance", "attribute_name")
+
     def __init__(
         self,
         queue_scheduler: QueueScheduler,
@@ -251,6 +284,9 @@ class SetAttributeHelper(ExecutionUnit):
     def execute(self) -> None:
         try:
             ExecutionUnit._unsafe_execute(self)
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
+            raise
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
