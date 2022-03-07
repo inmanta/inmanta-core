@@ -148,9 +148,9 @@ class Attribute(Locatable):
     def final(self, excns: List[CompilerException]) -> None:
         pass
 
-    def has_type_hint(self) -> bool:
+    def has_relation_precedence_rules(self) -> bool:
         """
-        Return true iff a type hint exists that defines that this Attribute should
+        Return true iff a relation precedence rule exists that defines that this Attribute should
         be frozen before another Attribute.
         """
         return False
@@ -163,6 +163,10 @@ class RelationAttribute(Attribute):
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, location: Location) -> None:
+        """
+        :param freeze_dependents: Contains the set of RelationAttributes that can only be frozen
+                                  once this attribute if frozen.
+        """
         Attribute.__init__(self, entity, value_type, name, location)
         self.end: Optional[RelationAttribute] = None
         self.low = 1
@@ -170,7 +174,7 @@ class RelationAttribute(Attribute):
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
-        self.type_hints: Set[RelationAttribute] = set()
+        self.freeze_dependents: Set[RelationAttribute] = set()
 
     def __str__(self) -> str:
         return "%s.%s" % (self.get_entity().get_full_name(), self.name)
@@ -216,16 +220,16 @@ class RelationAttribute(Attribute):
             except RuntimeException as e:
                 excns.append(e)
 
-    def add_type_hint(self, successor: "RelationAttribute") -> None:
+    def add_freeze_dependent(self, successor: "RelationAttribute") -> None:
         """
-        Attach a type hint to this RelationAttribute that this type should
+        Attach a constraint to this RelationAttribute that this RelationAttribute should
         be frozen before `successor`.
         """
-        self.type_hints.add(successor)
+        self.freeze_dependents.add(successor)
 
-    def has_type_hint(self) -> bool:
+    def has_relation_precedence_rules(self) -> bool:
         """
-        Return true iff a type hint exists that defines that this Attribute should
+        Return true iff a relation precedence rule exists that defines that this Attribute should
         be frozen before another Attribute.
         """
-        return bool(self.type_hints)
+        return bool(self.freeze_dependents)

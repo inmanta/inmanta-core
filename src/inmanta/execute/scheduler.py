@@ -53,7 +53,7 @@ from inmanta.execute.tracking import ModuleTracker
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
     from inmanta.compiler import Compiler  # noqa: F401
-    from inmanta.module import TypeHint
+    from inmanta.module import RelationPrecedenceRule
 
 
 DEBUG = True
@@ -68,56 +68,72 @@ class Scheduler(object):
     This class schedules statements for execution
     """
 
-    def __init__(self, track_dataflow: bool = False, type_hints: Optional[List["TypeHint"]] = None):
+    def __init__(
+        self, track_dataflow: bool = False, relation_precedence_rules: Optional[List["RelationPrecedenceRule"]] = None
+    ) -> None:
+        if relation_precedence_rules is None:
+            relation_precedence_rules = []
         self.track_dataflow: bool = track_dataflow
         self.types: Dict[str, Type] = {}
-        # The type hints specified in the project.yml file. This list may contain invalid type hints.
-        self.type_hints: List["TypeHint"] = type_hints if type_hints else []
+        # The precedence rules specified in the project.yml file. This list may contain rules that are invalid with
+        # respect to the model.
+        self.relation_precedence_rules: List["RelationPrecedenceRule"] = relation_precedence_rules
 
-    def _set_type_hints_on_relationship_attributes(self) -> List[RelationAttribute]:
+    def _set_precedence_rules_on_relationship_attributes(self) -> List[RelationAttribute]:
         """
         This method:
-           * Validates the type hints in self.type_hints and raises an exception for invalid type hints.
-           * Set the RelationAttribute.type_hints field on all RelationAttributes.
-           * Returns the list of RelationAttributes for which a type hint exists saying that it should
+           * Validates the relation precedence rules in self.relation_precedence_policy and raises an exception for invalid
+             relation precedence rules.
+           * Set the RelationAttribute.relation_precedence_rules field on all RelationAttributes.
+           * Returns the list of RelationAttributes for which a relation precedence policy exists saying that it should
              be frozen before another RelationshipAttribute.
         """
-        if self.type_hints:
-            LOGGER.warning(
-                "[EXPERIMENTAL FEATURE] Using type hints defined in the project.yml file to determine list freeze order."
-            )
+        if not self.relation_precedence_rules:
+            return []
+        LOGGER.warning(
+            "[EXPERIMENTAL FEATURE] Using the relation precedence policy defined in the project.yml file to determine list "
+            "freeze order."
+        )
         result = []
-        for hint in self.type_hints:
-            LOGGER.info("Loaded type hint: %s", hint)
-            first_attribute: RelationAttribute = self._get_relation_attribute(hint.first_type, hint.first_relation_name)
-            then_attribute: RelationAttribute = self._get_relation_attribute(hint.then_type, hint.then_relation_name)
-            first_attribute.add_type_hint(then_attribute)
+        for rule in self.relation_precedence_rules:
+            LOGGER.info("Loaded relation precedence rule: %s", rule)
+            first_attribute: RelationAttribute = self._get_relation_attribute_with_precedence_rule(
+                rule.first_type, rule.first_relation_name
+            )
+            then_attribute: RelationAttribute = self._get_relation_attribute_with_precedence_rule(
+                rule.then_type, rule.then_relation_name
+            )
+            first_attribute.add_freeze_dependent(then_attribute)
             if first_attribute not in result:
                 result.append(first_attribute)
         return result
 
-    def _get_relation_attribute(self, entity_type_name: str, relationship_name: str) -> RelationAttribute:
+    def _get_relation_attribute_with_precedence_rule(self, entity_type_name: str, relationship_name: str) -> RelationAttribute:
         """
         Return the RelationAttribute in `self.types` that has the given `entity_type_name` and `relationship_name`.
         """
         if not self.types:
             raise Exception("The self.define_types() method should be called first")
         if entity_type_name not in self.types:
-            raise InvalidTypeHintException(f"A type hint was defined for {entity_type_name}, but no such type was defined")
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}, but no such type was defined"
+            )
         current_type: Type = self.types[entity_type_name]
         if not isinstance(current_type, Entity):
-            raise InvalidTypeHintException(f"A type hint was defined for non-entity type {current_type}")
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for non-entity type {current_type}"
+            )
         assert isinstance(current_type, Entity)  # Make mypy happy
         attributes_of_entity = current_type.attributes
         if relationship_name not in attributes_of_entity:
-            raise InvalidTypeHintException(
-                f"A type hint was defined for {entity_type_name}.{relationship_name}, "
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}.{relationship_name}, "
                 f"but entity {entity_type_name} doesn't have an attribute {relationship_name}.",
             )
         attribute = attributes_of_entity[relationship_name]
         if not isinstance(attribute, RelationAttribute):
-            raise InvalidTypeHintException(
-                f"A type hint was defined for {entity_type_name}.{relationship_name}, "
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}.{relationship_name}, "
                 f"but attribute {relationship_name} is not a relationship attribute.",
             )
         return attribute
@@ -282,7 +298,7 @@ class Scheduler(object):
 
         return rangetorange
 
-    def find_wait_cycle(self, attributes_with_type_hints: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
+    def find_wait_cycle(self, attributes_with_precedence_rule: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -316,8 +332,8 @@ class Scheduler(object):
 
         if not freeze_candidates:
             return False
-        # Use the type hints to determine which drv should be frozen
-        queue = PrioritisedDelayedResultVariableQueue(attributes_with_type_hints, freeze_candidates)
+        # Use the relation precedence rules to determine which drv should be frozen
+        queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
         drv_to_freeze = queue.popleft()
         LOGGER.debug("Waiting blocked on %s", drv_to_freeze)
         drv_to_freeze.freeze()
@@ -332,7 +348,7 @@ class Scheduler(object):
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
-        attributes_with_type_hints: List[RelationAttribute] = self._set_type_hints_on_relationship_attributes()
+        attributes_with_precedence_rule: List[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
 
         # give all loose blocks an empty XC
         # register the XC's as scopes
@@ -349,7 +365,7 @@ class Scheduler(object):
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue = PrioritisedDelayedResultVariableQueue(attributes_with_type_hints)
+        waitqueue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
@@ -438,7 +454,7 @@ class Scheduler(object):
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
-                progress = self.find_wait_cycle(attributes_with_type_hints, queue.allwaiters)
+                progress = self.find_wait_cycle(attributes_with_precedence_rule, queue.allwaiters)
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
@@ -492,20 +508,21 @@ class Scheduler(object):
         return True
 
 
-class InvalidTypeHintException(CompilerException):
+class InvalidRelationPrecedenceRuleError(CompilerException):
     """
     A CompilerException that is raised when the project.yml file
-    contains a type that invalid with respect to the given project.
+    contains a relation precedence rule that invalid with respect
+    to the given project.
     """
 
     def __init__(self, msg: str) -> None:
-        super(InvalidTypeHintException, self).__init__(msg)
+        super(InvalidRelationPrecedenceRuleError, self).__init__(msg)
 
 
 class PrioritisedDelayedResultVariableQueue:
     """
     A queue for DelayedResultVariables that is prioritized based on the
-    type hints passed to the Compiler. This queue will return elements
+    relation precedence policy passed to the Compiler. This queue will return elements
     in the following order:
 
     * First return the DelayedResultVariables, which are not an instance of
@@ -517,15 +534,18 @@ class PrioritisedDelayedResultVariableQueue:
 
     TempListVariables is subclass of DelayedResultVariables that is not
     associated with an entity. That way it's not possible to set
-    type hints on them.
+    a relation precedence rule on them.
     """
 
     def __init__(
-        self, attributes_with_type_hints: List[RelationAttribute], drvs: Optional[List[DelayedResultVariable[object]]] = None
+        self,
+        attributes_with_precedence_rule: List[RelationAttribute],
+        drvs: Optional[List[DelayedResultVariable[object]]] = None
     ) -> None:
+        relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
         # This queue is never modified.
-        self._freeze_order: Deque[RelationAttribute] = deque(TypePrecedenceGraph(attributes_with_type_hints).get_freeze_order())
+        self._freeze_order: Deque[RelationAttribute] = deque(relation_precedence_graph.get_freeze_order())
         # Copy of self._freeze_order. At all times the first element of this queue
         # points to the next type that should be returned from self._constraint_variables
         self._freeze_order_working_list: Deque[RelationAttribute] = self._freeze_order.copy()
@@ -608,28 +628,29 @@ class PrioritisedDelayedResultVariableQueue:
         self._freeze_order_working_list = self._freeze_order.copy()
 
 
-class CycleInTypeHintsError(CompilerException):
+class CycleInRelationPrecedencePolicyError(CompilerException):
     """
-    Raised when a cycle exists in the type hints provided to the compiler.
-    """
-
-    pass
-
-
-class TypePrecedenceGraph:
-    """
-    A graph representation of the type hints provided to the compiler.
+    Raised when a cycle exists in the relation precedence rules provided to the compiler.
     """
 
-    def __init__(self, relation_attributes_with_type_hints: Optional[List[RelationAttribute]] = None) -> None:
-        if relation_attributes_with_type_hints is None:
-            relation_attributes_with_type_hints = []
+    def __init__(self) -> None:
+        super(CycleInRelationPrecedencePolicyError, self).__init__("A cycle exists in the relation precedence policy")
+
+
+class RelationPrecedenceGraph:
+    """
+    A graph representation of the relation precedence policy provided to the compiler.
+    """
+
+    def __init__(self, relation_attributes_with_precedence_rule: Optional[List[RelationAttribute]] = None) -> None:
+        if relation_attributes_with_precedence_rule is None:
+            relation_attributes_with_precedence_rule = []
         # The root nodes of the graph, where all other nodes attach to.
-        self.root_nodes: Set[TypePrecedenceGraphNode] = set()
-        self.attribute_to_node: Dict[RelationAttribute, TypePrecedenceGraphNode] = {}
+        self.root_nodes: Set[RelationPrecedenceGraphNode] = set()
+        self.attribute_to_node: Dict[RelationAttribute, RelationPrecedenceGraphNode] = {}
         # Creates nodes in graph
-        for first_attribute in relation_attributes_with_type_hints:
-            for then_attribute in first_attribute.type_hints:
+        for first_attribute in relation_attributes_with_precedence_rule:
+            for then_attribute in first_attribute.freeze_dependents:
                 self.add_precedence_rule(first_attribute, then_attribute)
 
     def add_precedence_rule(self, first_attribute: RelationAttribute, then_attribute: RelationAttribute) -> None:
@@ -642,15 +663,15 @@ class TypePrecedenceGraph:
             self.root_nodes.remove(then_node)
         first_node.add_dependent(then_node)
 
-    def _get_or_create_node(self, relation_attribute: RelationAttribute, attach_to_root: bool) -> "TypePrecedenceGraphNode":
+    def _get_or_create_node(self, relation_attribute: RelationAttribute, attach_to_root: bool) -> "RelationPrecedenceGraphNode":
         """
-        Get the TypePrecedenceGraphNode for the given relation_attribute in this graph
+        Get the RelationPrecedenceGraphNode for the given relation_attribute in this graph
         or create a new node if no such node exists.
 
         :param attach_to_root: true iff attach the node to the root nodes if the node was newly created.
         """
         if relation_attribute not in self.attribute_to_node:
-            node = TypePrecedenceGraphNode(relation_attribute)
+            node = RelationPrecedenceGraphNode(relation_attribute)
             self.attribute_to_node[relation_attribute] = node
             if attach_to_root:
                 self.root_nodes.add(node)
@@ -665,39 +686,39 @@ class TypePrecedenceGraph:
         """
         if not self.attribute_to_node:
             return []
-        work: Set[TypePrecedenceGraphNode] = set(self.root_nodes)
+        work: Set[RelationPrecedenceGraphNode] = set(self.root_nodes)
         result: List[RelationAttribute] = []
 
-        def get_next_ready_item_in_work() -> TypePrecedenceGraphNode:
+        def get_next_ready_item_in_work() -> RelationPrecedenceGraphNode:
             assert work
             for current_node in work:
                 if all(dep.relation_attribute in result for dep in current_node.dependencies):
                     return current_node
-            raise CycleInTypeHintsError("Cycle in type hints")
+            raise CycleInRelationPrecedencePolicyError()
 
         while work:
-            node: TypePrecedenceGraphNode = get_next_ready_item_in_work()
+            node: RelationPrecedenceGraphNode = get_next_ready_item_in_work()
             work.remove(node)
             if node in result:
-                raise CycleInTypeHintsError("Cycle in type hints")
+                raise CycleInRelationPrecedencePolicyError()
             result.append(node.relation_attribute)
             work.update(node.dependents)
 
         if len(result) != len(self.attribute_to_node):
-            raise CycleInTypeHintsError("Cycle in type hints")
+            raise CycleInRelationPrecedencePolicyError()
         return result
 
 
-class TypePrecedenceGraphNode:
+class RelationPrecedenceGraphNode:
     """
-    A node in the TypePrecedenceGraph that represents the relationship of an Inmanta entity.
+    A node in the RelationPrecedenceGraph that represents the relationship of an Inmanta entity.
     """
 
     def __init__(self, relation_attribute: RelationAttribute) -> None:
         self.relation_attribute: RelationAttribute = relation_attribute
-        self.dependents: Set[TypePrecedenceGraphNode] = set()
-        self.dependencies: Set[TypePrecedenceGraphNode] = set()
+        self.dependents: Set[RelationPrecedenceGraphNode] = set()
+        self.dependencies: Set[RelationPrecedenceGraphNode] = set()
 
-    def add_dependent(self, dependent: "TypePrecedenceGraphNode") -> None:
+    def add_dependent(self, dependent: "RelationPrecedenceGraphNode") -> None:
         self.dependents.add(dependent)
         dependent.dependencies.add(self)

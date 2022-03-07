@@ -19,8 +19,8 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, MultiException, OptionalValueException
-from inmanta.execute.scheduler import InvalidTypeHintException
-from inmanta.module import TypeHint
+from inmanta.execute.scheduler import InvalidRelationPrecedenceRuleError
+from inmanta.module import RelationPrecedenceRule
 
 
 def test_issue_139_scheduler(snippetcompiler):
@@ -491,8 +491,8 @@ def test_type_hints(snippetcompiler) -> None:
 
     snippetcompiler.setup_for_snippet(
         non_deterministic_model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="list",
                 then_type="__config__::A",
@@ -505,8 +505,8 @@ def test_type_hints(snippetcompiler) -> None:
 
     snippetcompiler.setup_for_snippet(
         non_deterministic_model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="optional",
                 then_type="__config__::A",
@@ -538,8 +538,8 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
     """
     snippetcompiler.setup_for_snippet(
         model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="list",
                 then_type="__config__::B",
@@ -547,14 +547,14 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    expected_error_message = "A type hint was defined for __config__::B, but no such type was defined"
-    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+    expected_error_message = "A relation precedence rule was defined for __config__::B, but no such type was defined"
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="list",
                 then_type="__config__::A",
@@ -563,16 +563,16 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
         ],
     )
     expected_error_message = (
-        "A type hint was defined for __config__::A.non_existing_relationship, "
+        "A relation precedence rule was defined for __config__::A.non_existing_relationship, "
         "but entity __config__::A doesn't have an attribute non_existing_relationship."
     )
-    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="list",
                 then_type="__config__::A",
@@ -580,14 +580,15 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    expected_error_message = "A type hint was defined for __config__::A.var, but attribute var is not a relationship attribute."
-    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+    expected_error_message = "A relation precedence rule was defined for __config__::A.var, " \
+                             "but attribute var is not a relationship attribute."
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
         model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::tcp_port",
                 first_relation_name="test",
                 then_type="__config__::A",
@@ -595,15 +596,15 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    expected_error_message = "A type hint was defined for non-entity type __config__::tcp_port"
-    with pytest.raises(InvalidTypeHintException, match=expected_error_message):
+    expected_error_message = "A relation precedence rule was defined for non-entity type __config__::tcp_port"
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
     # Only valid type hints are specified. Ensure log message regarding use of experimental feature.
     snippetcompiler.setup_for_snippet(
         model,
-        type_hints=[
-            TypeHint(
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
                 first_type="__config__::A",
                 first_relation_name="list",
                 then_type="__config__::A",
@@ -613,10 +614,10 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
     )
     caplog.clear()
     compiler.do_compile()
-    assert "[EXPERIMENTAL FEATURE] Using type hints" in caplog.text
+    assert "[EXPERIMENTAL FEATURE] Using the relation precedence policy" in caplog.text
 
     # No type hints defined. No warning usage experimental feature
     snippetcompiler.setup_for_snippet(model)
     caplog.clear()
     compiler.do_compile()
-    assert "[EXPERIMENTAL FEATURE] Using type hints" not in caplog.text
+    assert "[EXPERIMENTAL FEATURE] Using the relation precedence policy" not in caplog.text

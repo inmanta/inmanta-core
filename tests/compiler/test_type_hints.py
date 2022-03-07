@@ -20,7 +20,7 @@ from typing import Set
 import pytest
 
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.execute.scheduler import CycleInTypeHintsError, TypePrecedenceGraph
+from inmanta.execute.scheduler import CycleInRelationPrecedencePolicyError, RelationPrecedenceGraph
 
 
 class DummyRelationAttribute(RelationAttribute):
@@ -56,7 +56,7 @@ def test_type_precedence_graph_one_freeze_order(set_type_hints_twice) -> None:
     b_one = DummyRelationAttribute(fq_attr_name="B.one")
     b_two = DummyRelationAttribute(fq_attr_name="B.two")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     for _ in range(1 + int(set_type_hints_twice)):
         graph.add_precedence_rule(first_attribute=a_one, then_attribute=a_two)
         graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
@@ -79,7 +79,7 @@ def test_type_precedence_graph_two_valid_freeze_orders() -> None:
     b_one = DummyRelationAttribute(fq_attr_name="B.one")
     b_two = DummyRelationAttribute(fq_attr_name="B.two")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_two)
 
@@ -97,7 +97,7 @@ def test_type_precedence_graph_disjunct_graphs() -> None:
     c_one = DummyRelationAttribute(fq_attr_name="C.one")
     d_one = DummyRelationAttribute(fq_attr_name="D.one")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
     graph.add_precedence_rule(first_attribute=c_one, then_attribute=d_one)
 
@@ -128,14 +128,14 @@ def test_type_precedence_graph_cycle_in_graph_without_root_nodes() -> None:
     b_two = DummyRelationAttribute(fq_attr_name="B.two")
     c_one = DummyRelationAttribute(fq_attr_name="C.one")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=b_two)
     graph.add_precedence_rule(first_attribute=b_two, then_attribute=a_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
     graph.add_precedence_rule(first_attribute=b_two, then_attribute=c_one)
 
-    with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
+    with pytest.raises(CycleInRelationPrecedencePolicyError, match="A cycle exists in the relation precedence policy"):
         graph.get_freeze_order()
 
 
@@ -152,13 +152,13 @@ def test_type_precedence_graph_cycle_in_graph_with_root_nodes() -> None:
     c_one = DummyRelationAttribute(fq_attr_name="C.one")
     c_two = DummyRelationAttribute(fq_attr_name="C.two")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
     graph.add_precedence_rule(first_attribute=c_one, then_attribute=c_two)
     graph.add_precedence_rule(first_attribute=c_two, then_attribute=b_one)
 
-    with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
+    with pytest.raises(CycleInRelationPrecedencePolicyError, match="A cycle exists in the relation precedence policy"):
         graph.get_freeze_order()
 
 
@@ -177,7 +177,7 @@ def test_type_precedence_graph_cycle_disjunct_graphs() -> None:
     d_one = DummyRelationAttribute(fq_attr_name="D_one")
     e_one = DummyRelationAttribute(fq_attr_name="E.one")
 
-    graph = TypePrecedenceGraph()
+    graph = RelationPrecedenceGraph()
     graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_one)
     graph.add_precedence_rule(first_attribute=b_one, then_attribute=c_two)
@@ -185,5 +185,5 @@ def test_type_precedence_graph_cycle_disjunct_graphs() -> None:
     graph.add_precedence_rule(first_attribute=d_one, then_attribute=e_one)
     graph.add_precedence_rule(first_attribute=e_one, then_attribute=d_one)
 
-    with pytest.raises(CycleInTypeHintsError, match="Cycle in type hints"):
+    with pytest.raises(CycleInRelationPrecedencePolicyError, match="A cycle exists in the relation precedence policy"):
         graph.get_freeze_order()

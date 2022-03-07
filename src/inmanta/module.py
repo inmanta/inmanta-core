@@ -1089,11 +1089,11 @@ class ModuleRepoInfo(BaseModel):
 
 
 @dataclass(frozen=True)
-class TypeHint:
+class RelationPrecedenceRule:
     """
-    Represents a type hint specified in the project.yml file.
-    Indicates that list `first_type.first_relation_name` should
-    be frozen before `then_type.then_relation_name`.
+    Represents a rule defined in the relation precedence policy of the project.yml file.
+    Indicates that list `first_type.first_relation_name` should be frozen
+    before `then_type.then_relation_name`.
     """
 
     first_type: str
@@ -1102,14 +1102,15 @@ class TypeHint:
     then_relation_name: str
 
     @classmethod
-    def from_string(cls, hint: str) -> "TypeHint":
+    def from_string(cls, rule: str) -> "RelationPrecedenceRule":
         """
-        Create a TypeHint object from its string representation.
+        Create a RelationPrecedencePolicy object from its string representation.
         """
-        match: Optional[re.Match[str]] = ProjectMetadata._re_type_hint_compiled.fullmatch(hint.strip())
+        match: Optional[re.Match[str]] = ProjectMetadata._re_relation_precedence_rule_compiled.fullmatch(rule.strip())
         if not match:
             raise Exception(
-                f"Invalid type hint: {hint}. Expected: '<entity-type>.<relation-name> before <entity-type>.<relation-name>'"
+                f"Invalid rule in relation precedence policy: {rule}. "
+                f"Expected syntax: '<entity-type>.<relation-name> before <entity-type>.<relation-name>'"
             )
         group_dict = match.groupdict()
         return cls(
@@ -1157,15 +1158,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
       project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
-    :param type_hints: [EXPERIMENTAL FEATURE] A list of type hints that indicate the order in which the compiler
-                       should freeze list. A type hint should be specified using the following format:
-                       `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in place,
-                       the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
+    :param relation_precedence_policy: [EXPERIMENTAL FEATURE] A list of rules that indicate the order in which the compiler
+                                       should freeze lists. The following syntax should be used to specify a rule
+                                       `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
+                                       place, the compiler will first freeze
+                                       `first-type.relation-name` and only then `then-type.relation-name`.
     """
 
-    _re_type_hint: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_type_hint_compiled: re.Pattern[str] = re.compile(_re_type_hint)
     _raw_parser: Type[YamlParser] = YamlParser
+    _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
+    _re_relation_precedence_rule_compiled: re.Pattern[str] = re.compile(_re_relation_precedence_rule)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1176,7 +1178,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    type_hints: List[constr(strip_whitespace=True, regex=_re_type_hint)] = []
+    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -1198,11 +1200,11 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
 
-    def get_type_hints(self) -> List[TypeHint]:
+    def get_relation_precedence_rules(self) -> List[RelationPrecedenceRule]:
         """
-        Return the type hints as a list of TypeHint objects.
+        Return all RelationPrecedenceRules defined in the project.yml file.
         """
-        return [TypeHint.from_string(hint) for hint in self.type_hints]
+        return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
 
 @stable_api
@@ -1501,8 +1503,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
-    def get_type_hints(self) -> List[TypeHint]:
-        return self._metadata.get_type_hints()
+    def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
+        return self._metadata.get_relation_precedence_rules()
 
     @classmethod
     def from_path(cls: Type[TProject], path: str) -> Optional[TProject]:

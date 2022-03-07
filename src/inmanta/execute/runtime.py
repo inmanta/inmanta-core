@@ -400,7 +400,7 @@ class TempListVariable(BaseListVariable):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        # A TempListVariable is never associated with an Entity, so it cannot have a type hint.
+        # A TempListVariable is never associated with an Entity, so it cannot have a relation precedence rule.
         return len(self.waiters) - len(self.listeners)
 
 
@@ -462,9 +462,9 @@ class ListVariable(BaseListVariable):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        # Ensure that relationships with a type hint cannot end up in the zerowaiters queue
+        # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
         # of the scheduler. We know the order in which those types can be frozen safely.
-        return len(self.waiters) - len(self.listeners) + int(self.attribute.has_type_hint())
+        return len(self.waiters) - len(self.listeners) + int(self.attribute.has_relation_precedence_rules())
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
@@ -539,7 +539,7 @@ class OptionVariable(DelayedResultVariable["Instance"]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        return len(self.waiters) + int(self.attribute.has_type_hint())
+        return len(self.waiters) + int(self.attribute.has_relation_precedence_rules())
 
 
 class DeprecatedOptionVariable(OptionVariable):
@@ -576,7 +576,7 @@ class QueueScheduler(object):
     MUTABLE!
     """
 
-    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters", "types_with_type_hint")
+    __slots__ = ("compiler", "runqueue", "waitqueue", "types", "allwaiters")
 
     def __init__(
         self,
