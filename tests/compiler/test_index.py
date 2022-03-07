@@ -532,3 +532,22 @@ index TestA(name)
         """,
         "could not find type TestA in namespace __config__ ({dir}/main.cf:6:7)",
     )
+
+
+def test_index_attribute_missing_in_constructor_call(snippetcompiler) -> None:
+    snippetcompiler.setup_for_error_re(
+        """
+entity Test_A:
+    string name
+end
+
+index Test_A(name)
+
+implement Test_A using std::none
+
+Test_A()
+        """,
+        re.escape(
+            "Invalid Constructor call:\n\t* Missing attribute 'name'. The relation __config__::Test_A.name is part of an index."
+        )
+    )

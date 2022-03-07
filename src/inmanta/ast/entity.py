@@ -261,7 +261,7 @@ class Entity(EntityLike, NamedType):
         else:
             raise DuplicateException(self._attributes[attribute.name], attribute, "attribute already exists")
 
-    def get_attribute(self, name: str) -> "Attribute":
+    def get_attribute(self, name: str) -> Optional["Attribute"]:
         """
         Get the attribute with the given name
         """
