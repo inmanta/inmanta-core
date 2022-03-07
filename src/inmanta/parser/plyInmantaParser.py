@@ -67,8 +67,9 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
     ("left", "CID", "ID"),
+    ("left", "(", "["),
     ("left", "MLS"),
 )
 
@@ -601,11 +602,11 @@ def p_expression(p: YaccProduction) -> None:
     """expression : boolean_expression
     | constant
     | function_call
-    | var_ref
+    | var_ref %prec VAR_REF
     | constructor
     | list_def
     | map_def
-    | map_lookup
+    | map_lookup %prec MAP_LOOKUP
     | index_lookup
     | conditional_expression"""
     p[0] = p[1]
@@ -980,7 +981,7 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
 
 
 def p_var_ref(p: YaccProduction) -> None:
-    "var_ref : attr_ref"
+    "var_ref : attr_ref %prec VAR_REF"
     p[0] = p[1]
 
 
@@ -997,7 +998,7 @@ def p_attr_ref(p: YaccProduction) -> None:
 
 
 def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref"
+    "var_ref : ns_ref %prec NS_REF"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
