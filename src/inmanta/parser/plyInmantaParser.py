@@ -115,15 +115,28 @@ def make_none(p: YaccProduction, token: int) -> Literal:
     return none
 
 
-def p_main_collect(p: YaccProduction) -> None:
-    "main : top_stmt main"
-    v = p[2]
-    v.insert(0, p[1])
-    p[0] = v
+def p_main(p: YaccProduction) -> None:
+    "main : body"
+    p[0] = p[1]
 
 
-def p_main_term(p: YaccProduction) -> None:
-    "main : empty"
+def p_main_comment(p: YaccProduction) -> None:
+    "main : MLS body"
+    p[0] = (p[1], p[2])
+
+
+def p_body_collect(p: YaccProduction) -> None:
+    "body : top_stmt body"
+    if(p[2]):
+        v = p[2]
+        v.insert(0, p[1])
+        p[0] = v
+    else:
+        p[0] = p[1]
+
+
+def p_body_term(p: YaccProduction) -> None:
+    "body : empty"
     p[0] = []
 
 
