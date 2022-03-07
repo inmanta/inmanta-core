@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
-from typing import Optional
+from typing import List, Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, ProjectMetadata, TypeHint
+from inmanta.module import ModuleRepoType, ProjectMetadata, RelationPrecedenceRule
 
 
 @pytest.mark.parametrize(
@@ -50,24 +50,32 @@ def test_repo_parsing(repo):
 
 
 @pytest.mark.parametrize(
-    "type_hints, valid, expected_hint",
+    "precedence_rule, valid, expected_precedence_rule",
     [
         (["a before b", False, None]),  # Entity type missing
         (["A::a before B::b", False, None]),  # Relationship name missing
         (["A.a befor B.b", False, None]),  # before is misspelled
         (["A:B.attr1 B:b.attr2", False, None]),  # Single colon instead of double colon
-        (["A.a before B.b", True, TypeHint("A", "a", "B", "b")]),
-        (["__config__::B-B123.a before __config__::CC.b", True, TypeHint("__config__::B-B123", "a", "__config__::CC", "b")]),
-        (["   A.b     before     B.c   ", True, TypeHint("A", "b", "B", "c")]),
+        (["A.a before B.b", True, RelationPrecedenceRule("A", "a", "B", "b")]),
+        (
+            [
+                "__config__::B-B123.a before __config__::CC.b",
+                True,
+                RelationPrecedenceRule("__config__::B-B123", "a", "__config__::CC", "b"),
+            ]
+        ),
+        (["   A.b     before     B.c   ", True, RelationPrecedenceRule("A", "b", "B", "c")]),
     ],
 )
-def test_type_hint_parsing(type_hints: str, valid: bool, expected_hint: Optional[TypeHint]) -> None:
+def test_relation_precedence_policy_parsing(
+    precedence_rule: str, valid: bool, expected_precedence_rule: Optional[RelationPrecedenceRule]
+) -> None:
     if valid:
-        assert expected_hint is not None
-        project_metadata = ProjectMetadata(name="test", type_hints=[type_hints])
-        type_hints = project_metadata.get_type_hints()
-        assert len(type_hints) == 1
-        assert type_hints[0] == expected_hint
+        assert expected_precedence_rule is not None
+        project_metadata = ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
+        relation_precedence_rules: List[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
+        assert len(relation_precedence_rules) == 1
+        assert relation_precedence_rules[0] == expected_precedence_rule
     else:
         with pytest.raises(ValueError):
-            ProjectMetadata(name="test", type_hints=[type_hints])
+            ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])

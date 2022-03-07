@@ -466,10 +466,10 @@ a2.b += b
     compiler.do_compile()
 
 
-def test_type_hints(snippetcompiler) -> None:
+def test_relation_precedence_policy(snippetcompiler) -> None:
     """
-    End-to-end test that verifies whether type hints set on a project
-    are correctly handled.
+    End-to-end test that verifies whether the relation precedence policy set on a project
+    is correctly handled.
     """
     non_deterministic_model = """
     entity A:
@@ -500,7 +500,7 @@ def test_type_hints(snippetcompiler) -> None:
             )
         ],
     )
-    # Type hints are set correctly, compile should succeed
+    # Relation precedence rules are set correctly, compile should succeed.
     compiler.do_compile()
 
     snippetcompiler.setup_for_snippet(
@@ -514,15 +514,15 @@ def test_type_hints(snippetcompiler) -> None:
             )
         ],
     )
-    # Compile are set in reverse order, compile should fail.
+    # Relation precedence rules are set correctly, compile should fail.
     with pytest.raises(OptionalValueException, match="Optional variable accessed that has no value"):
         compiler.do_compile()
 
 
-def test_validation_type_hints(snippetcompiler, caplog) -> None:
+def test_validation_relation_precedence_rules(snippetcompiler, caplog) -> None:
     """
-    Verify that an appropriate exception is raised when invalid type hints are defined and
-    ensure that the usage of type hints results in a warning message in the compiler log.
+    Verify that an appropriate exception is raised when invalid relation precedence rules are defined and
+    ensure that the usage a relation precedence policy results in a warning message in the compiler log.
     """
     model = """
         entity A:
@@ -601,7 +601,7 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
     with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
-    # Only valid type hints are specified. Ensure log message regarding use of experimental feature.
+    # Only valid relation precedence rules are specified. Ensure log message regarding use of experimental feature.
     snippetcompiler.setup_for_snippet(
         model,
         relation_precedence_rules=[
@@ -617,7 +617,7 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
     compiler.do_compile()
     assert "[EXPERIMENTAL FEATURE] Using the relation precedence policy" in caplog.text
 
-    # No type hints defined. No warning usage experimental feature
+    # No relation precedence policy defined. No warning usage experimental feature
     snippetcompiler.setup_for_snippet(model)
     caplog.clear()
     compiler.do_compile()

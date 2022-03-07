@@ -31,7 +31,7 @@ class DummyRelationAttribute(RelationAttribute):
 
     def __init__(self, fq_attr_name: str) -> None:
         self.fq_attr_name = fq_attr_name
-        self.type_hints: Set[RelationAttribute] = set()
+        self.freeze_dependents: Set[RelationAttribute] = set()
 
     def __hash__(self) -> "int":
         return hash(self.fq_attr_name)
@@ -40,8 +40,8 @@ class DummyRelationAttribute(RelationAttribute):
         return self.fq_attr_name
 
 
-@pytest.mark.parametrize("set_type_hints_twice", [True, False])
-def test_type_precedence_graph_one_freeze_order(set_type_hints_twice) -> None:
+@pytest.mark.parametrize("set_relation_precedence_rule_twice", [True, False])
+def test_type_precedence_graph_one_freeze_order(set_relation_precedence_rule_twice: bool) -> None:
     r"""
     A.one --> B.one
       |   \  /\   |
@@ -57,7 +57,7 @@ def test_type_precedence_graph_one_freeze_order(set_type_hints_twice) -> None:
     b_two = DummyRelationAttribute(fq_attr_name="B.two")
 
     graph = RelationPrecedenceGraph()
-    for _ in range(1 + int(set_type_hints_twice)):
+    for _ in range(1 + int(set_relation_precedence_rule_twice)):
         graph.add_precedence_rule(first_attribute=a_one, then_attribute=a_two)
         graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_one)
         graph.add_precedence_rule(first_attribute=a_one, then_attribute=b_two)
