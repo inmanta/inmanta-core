@@ -1316,7 +1316,7 @@ some variations\"""
     mls2 = statements[2]
 
     assert isinstance(mls1, LocatableString)
-    assert isinstance(mls2, LocatableString)
+    assert isinstance(mls2, Literal)
 
     assert mls1.lnr == 2
     assert mls1.elnr == 4
@@ -1329,16 +1329,11 @@ str1
 """
     )
 
-    assert mls2.lnr == 8
-    assert mls2.elnr == 10
-    assert mls2.start == 1
-    assert mls2.end == 19
-    assert (
-        str(mls2)
-        == """
-str1 with
-some variations"""
-    )
+    assert mls2.location.lnr == 8
+    assert mls2.location.end_lnr == 10
+    assert mls2.location.start_char == 1
+    assert mls2.location.end_char == 19
+    assert mls2.value == "\nstr1 with\nsome variations"
 
 
 def test_bad():
