@@ -2175,3 +2175,35 @@ x.n
     assert instance1.name == "x"
     assert str(instance1.locatable_name) == "x"
     assert instance1.locatable_name.location == Range("test", 5, 1, 5, 2)
+
+
+def test_espression_as_statements():
+    statements = parse_code(
+        """
+1 == 2
+"hello"
+file(b)
+File(host = 5, path = "Jos")
+[1,2]
+{ "a":"b", "b":1}
+File[host = 5, path = "Jos"]
+y > 0 ? y : y < 0 ? -1 : 0
+    """
+    )
+    assert len(statements) == 8
+    boolean_expression = statements[0]
+    constant = statements[1]
+    function_call = statements[2]
+    constructor = statements[3]
+    list_def = statements[4]
+    map_def = statements[5]
+    index_lookup = statements[6]
+    conditional_expression = statements[7]
+    assert isinstance(boolean_expression, Equals)
+    assert isinstance(constant, Literal)
+    assert isinstance(function_call, FunctionCall)
+    assert isinstance(constructor, Constructor)
+    assert isinstance(list_def, CreateList)
+    assert isinstance(map_def, CreateDict)
+    assert isinstance(index_lookup, IndexLookup)
+    assert isinstance(conditional_expression, ConditionalExpression)
