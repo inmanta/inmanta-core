@@ -141,11 +141,11 @@ def test_type_precedence_graph_cycle_in_graph_without_root_nodes() -> None:
 
 def test_type_precedence_graph_cycle_in_graph_with_root_nodes() -> None:
     r"""
-        A.one --> B.one --> C.one
-                     /\    /
-                     |    /
-                     |  |/_
-                    C.two
+    A.one --> B.one --> C.one
+                 /\    /
+                 |    /
+                 |  |/_
+                C.two
     """
     a_one = DummyRelationAttribute(fq_attr_name="A.one")
     b_one = DummyRelationAttribute(fq_attr_name="B.one")
@@ -164,11 +164,11 @@ def test_type_precedence_graph_cycle_in_graph_with_root_nodes() -> None:
 
 def test_type_precedence_graph_cycle_disjunct_graphs() -> None:
     r"""
-        A.one --> B.one --> C.one     |     D.one --> E.one
-                    |                 |           <--
-                    |                 |
-                   \/                 |
-                  C.two               |
+    A.one --> B.one --> C.one     |     D.one --> E.one
+                |                 |           <--
+                |                 |
+               \/                 |
+              C.two               |
     """
     a_one = DummyRelationAttribute(fq_attr_name="A.one")
     b_one = DummyRelationAttribute(fq_attr_name="B.one")

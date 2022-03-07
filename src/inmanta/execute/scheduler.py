@@ -540,7 +540,7 @@ class PrioritisedDelayedResultVariableQueue:
     def __init__(
         self,
         attributes_with_precedence_rule: List[RelationAttribute],
-        drvs: Optional[List[DelayedResultVariable[object]]] = None
+        drvs: Optional[List[DelayedResultVariable[object]]] = None,
     ) -> None:
         relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned

@@ -580,8 +580,9 @@ def test_validation_type_hints(snippetcompiler, caplog) -> None:
             )
         ],
     )
-    expected_error_message = "A relation precedence rule was defined for __config__::A.var, " \
-                             "but attribute var is not a relationship attribute."
+    expected_error_message = (
+        "A relation precedence rule was defined for __config__::A.var, " "but attribute var is not a relationship attribute."
+    )
     with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
         compiler.do_compile()
 
