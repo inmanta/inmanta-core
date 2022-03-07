@@ -95,14 +95,18 @@ class DyrunService(protocol.ServerSlice):
             undeployable_ids = await model.get_undeployable()
             undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undeployable_ids]
             undeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=undeployable_version_ids)
-            await self._save_resources_without_changes_to_dryrun(dryrun_id=dryrun.id, resources=undeployable)
+            await self._save_resources_without_changes_to_dryrun(
+                dryrun_id=dryrun.id, resources=undeployable, diff_status=ResourceDiffStatus.undefined
+            )
 
             skip_undeployable_ids = await model.get_skipped_for_undeployable()
             skip_undeployable_version_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skip_undeployable_ids]
             skipundeployable = await data.Resource.get_resources(
                 environment=env.id, resource_version_ids=skip_undeployable_version_ids
             )
-            await self._save_resources_without_changes_to_dryrun(dryrun_id=dryrun.id, resources=skipundeployable)
+            await self._save_resources_without_changes_to_dryrun(
+                dryrun_id=dryrun.id, resources=skipundeployable, diff_status=ResourceDiffStatus.skipped_for_undefined
+            )
 
             resources_with_agents_down = [
                 res
@@ -218,6 +222,7 @@ class DyrunService(protocol.ServerSlice):
             )
             for rvid, resource in resources_with_already_known_status.items()
         ]
+        version_diff.sort(key=lambda r: r.resource_id)
         dto = DryRunReport(summary=dryrun.to_dto(), diff=version_diff)
 
         return dto
