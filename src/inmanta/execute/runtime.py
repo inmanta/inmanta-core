@@ -945,7 +945,9 @@ class Instance(ExecutionContext):
                 # prune duplicates because get_new_result_variable() has side effects
                 # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
                 continue
-            self.slots[attr_name] = mytype.get_attribute(attr_name).get_new_result_variable(self, queue)
+            attribute = mytype.get_attribute(attr_name)
+            assert attribute is not None  # Make mypy happy
+            self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
@@ -1012,6 +1014,7 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
+                    assert attr is not None  # Make mypy happy
                     if attr.is_multi():
                         low = attr.low
                         # none for list attributes
