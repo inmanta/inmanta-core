@@ -528,7 +528,7 @@ class PrioritisedDelayedResultVariableQueue:
     * First return the DelayedResultVariables for relations that do not have an order constraint.
     * Then return DelayedResultVariables for relations with order constraint.
       They are returned in an order that is valid with respect to the constraints.
-    * Finally, all variables DelayedResultVariables that are not associated with an entity are
+    * Finally, all DelayedResultVariables that are not associated with an entity are
       returned.
     """
 
