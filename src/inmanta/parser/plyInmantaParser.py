@@ -67,9 +67,10 @@ precedence = (
     ("left", "CMP_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY"),
+    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
     ("left", "CID", "ID"),
-    ("right", "MLS"),
+    ("left", "(", "["),
+    ("left", "MLS"),
 )
 
 
@@ -114,21 +115,38 @@ def make_none(p: YaccProduction, token: int) -> Literal:
     return none
 
 
-def p_main_collect(p: YaccProduction) -> None:
-    "main : top_stmt main"
+def p_main(p: YaccProduction) -> None:
+    "main : head body"
+    v = p[2]
+    if p[1]:
+        v.insert(0, p[1])
+    p[0] = v
+
+
+def p_main_head(p: YaccProduction) -> None:
+    "head : %prec EMPTY"
+    p[0] = None
+
+
+def p_main_head_doc(p: YaccProduction) -> None:
+    "head : MLS"
+    p[0] = p[1]
+
+
+def p_body_collect(p: YaccProduction) -> None:
+    "body : top_stmt body"
     v = p[2]
     v.insert(0, p[1])
     p[0] = v
 
 
-def p_main_term(p: YaccProduction) -> None:
-    "main : empty"
+def p_body_term(p: YaccProduction) -> None:
+    "body : empty"
     p[0] = []
 
 
 def p_top_stmt(p: YaccProduction) -> None:
-    """top_stmt : MLS
-    | entity_def
+    """top_stmt : entity_def
     | implement_def
     | implementation_def
     | relation
@@ -168,10 +186,9 @@ def p_import_1(p: YaccProduction) -> None:
 
 def p_stmt(p: YaccProduction) -> None:
     """statement : assign
-    | constructor
-    | function_call
     | for
-    | if"""
+    | if
+    | expression"""
     p[0] = p[1]
 
 
@@ -436,13 +453,18 @@ def p_implementation_def(p: YaccProduction) -> None:
 
 
 def p_implementation(p: YaccProduction) -> None:
-    "implementation : ':' MLS block"
-    p[0] = (p[2], p[3])
+    "implementation : implementation_head block"
+    p[0] = (p[1], p[2])
 
 
-def p_implementation_1(p: YaccProduction) -> None:
-    "implementation : ':' block"
-    p[0] = (None, p[2])
+def p_implementation_head(p: YaccProduction) -> None:
+    "implementation_head : ':'"
+    p[0] = None
+
+
+def p_implementation_head_doc(p: YaccProduction) -> None:
+    "implementation_head : ':' MLS"
+    p[0] = p[2]
 
 
 def p_block(p: YaccProduction) -> None:
@@ -603,11 +625,11 @@ def p_expression(p: YaccProduction) -> None:
     """expression : boolean_expression
     | constant
     | function_call
-    | var_ref
+    | var_ref %prec VAR_REF
     | constructor
     | list_def
     | map_def
-    | map_lookup
+    | map_lookup %prec MAP_LOOKUP
     | index_lookup
     | conditional_expression"""
     p[0] = p[1]
@@ -655,7 +677,7 @@ def p_operand(p: YaccProduction) -> None:
 
 def p_map_lookup(p: YaccProduction) -> None:
     """map_lookup : attr_ref '[' operand ']'
-    | local_var '[' operand ']'
+    | var_ref '[' operand ']'
     | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
@@ -983,7 +1005,7 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
 
 
 def p_var_ref(p: YaccProduction) -> None:
-    "var_ref : attr_ref"
+    "var_ref : attr_ref %prec VAR_REF"
     p[0] = p[1]
 
 
@@ -993,14 +1015,8 @@ def p_attr_ref(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
-def p_local_var(p: YaccProduction) -> None:
-    "local_var : ns_ref"
-    p[0] = Reference(p[1])
-    attach_from_string(p, 1)
-
-
 def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref"
+    "var_ref : ns_ref %prec NS_REF"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
