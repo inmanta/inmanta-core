@@ -1355,17 +1355,6 @@ a=|
         )
 
 
-def test_error_on_relation():
-    with pytest.raises(ParserException) as e:
-        parse_code(
-            """
-Host.provider [1] -- Provider test"""
-        )
-    assert e.value.location.file == "test"
-    assert e.value.location.lnr == 3
-    assert e.value.location.start_char == 2
-
-
 def test_doc_string_on_new_relation():
     statements = parse_code(
         """
