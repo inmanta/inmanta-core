@@ -165,7 +165,7 @@ class RelationAttribute(Attribute):
     def __init__(self, entity: "Entity", value_type: "Type", name: str, location: Location) -> None:
         """
         :param freeze_dependents: Contains the set of RelationAttributes that can only be frozen
-                                  once this attribute if frozen.
+                                  once this attribute is frozen.
         """
         Attribute.__init__(self, entity, value_type, name, location)
         self.end: Optional[RelationAttribute] = None
