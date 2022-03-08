@@ -325,12 +325,12 @@ Example: Consider the following ``project.yml`` file.
     repo: https://github.com/inmanta/
     description: A quickstart project that installs a drupal website.
     relation_precedence_policy:
-      - "A::Submod_A.relation before B::Submod_B.other_relation"
+      - "A::EntityA.relation before B::EntityB.other_relation"
 
 
 The last two lines of this file define the relation precedence policy of the project. The policy contains one rule
-saying that the relationship ``relation`` of entity ``A::Submod_A`` should be considered completely populated before
-the relation ``other_relation`` of entity ``B::Submod_B`` can be considered complete.
+saying that the relationship ``relation`` of entity ``A::EntityA`` should be considered completely populated before
+the relation ``other_relation`` of entity ``B::EntityB`` can be considered complete.
 
 Each rule in a relation precedence policy should have the following syntax:
 
