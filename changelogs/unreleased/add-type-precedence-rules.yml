@@ -1,0 +1,7 @@
+---
+description: Add support to pass type precedence hints to the compiler
+issue-nr: 3098
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"
