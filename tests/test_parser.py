@@ -2161,9 +2161,10 @@ File(host = 5, path = "Jos")
 { "a":"b", "b":1}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
+/some_out_of_place_regex/
     """
     )
-    assert len(statements) == 8
+    assert len(statements) == 9
     boolean_expression = statements[0]
     constant = statements[1]
     function_call = statements[2]
@@ -2172,6 +2173,7 @@ y > 0 ? y : y < 0 ? -1 : 0
     map_def = statements[5]
     index_lookup = statements[6]
     conditional_expression = statements[7]
+    regex = statements[8]
     assert isinstance(boolean_expression, Equals)
     assert isinstance(constant, Literal)
     assert isinstance(function_call, FunctionCall)
@@ -2180,3 +2182,4 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(map_def, CreateDict)
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)
+    assert isinstance(regex, Regex)
