@@ -1,0 +1,5 @@
+description: Improved clarity of and added docstring to TempListVariable class.
+change-type: patch
+destination-branches:
+  - iso5
+  - master
