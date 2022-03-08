@@ -31,6 +31,7 @@ import types
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
+from dataclasses import dataclass
 from functools import lru_cache
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
@@ -61,7 +62,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
 import inmanta.warnings
 from inmanta import const, env, loader, plugins
@@ -1087,6 +1088,42 @@ class ModuleRepoInfo(BaseModel):
     type: ModuleRepoType = ModuleRepoType.git
 
 
+@dataclass(frozen=True)
+class RelationPrecedenceRule:
+    """
+    Represents a rule defined in the relation precedence policy of the project.yml file.
+    Indicates that list `first_type.first_relation_name` should be frozen
+    before `then_type.then_relation_name`.
+    """
+
+    first_type: str
+    first_relation_name: str
+    then_type: str
+    then_relation_name: str
+
+    @classmethod
+    def from_string(cls, rule: str) -> "RelationPrecedenceRule":
+        """
+        Create a RelationPrecedencePolicy object from its string representation.
+        """
+        match: Optional[re.Match[str]] = ProjectMetadata._re_relation_precedence_rule_compiled.fullmatch(rule.strip())
+        if not match:
+            raise Exception(
+                f"Invalid rule in relation precedence policy: {rule}. "
+                f"Expected syntax: '<entity-type>.<relation-name> before <entity-type>.<relation-name>'"
+            )
+        group_dict = match.groupdict()
+        return cls(
+            first_type=group_dict["ft"],
+            first_relation_name=group_dict["fr"],
+            then_type=group_dict["tt"],
+            then_relation_name=group_dict["tr"],
+        )
+
+    def __str__(self) -> str:
+        return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
+
+
 @stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
@@ -1121,7 +1158,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
       project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
       Valid values are [==, ~=, >=]. *Default is '~='*
+    :param relation_precedence_policy: [EXPERIMENTAL FEATURE] A list of rules that indicate the order in which the compiler
+                                       should freeze lists. The following syntax should be used to specify a rule
+                                       `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
+                                       place, the compiler will first freeze
+                                       `first-type.relation-name` and only then `then-type.relation-name`.
     """
+
+    _raw_parser: Type[YamlParser] = YamlParser
+    _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
+    _re_relation_precedence_rule_compiled: re.Pattern[str] = re.compile(_re_relation_precedence_rule)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1132,8 +1178,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-
-    _raw_parser: Type[YamlParser] = YamlParser
+    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -1154,6 +1199,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
             else:
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
         return result
+
+    def get_relation_precedence_rules(self) -> List[RelationPrecedenceRule]:
+        """
+        Return all RelationPrecedenceRules defined in the project.yml file.
+        """
+        return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
 
 @stable_api
@@ -1451,6 +1502,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+
+    def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
+        return self._metadata.get_relation_precedence_rules()
 
     @classmethod
     def from_path(cls: Type[TProject], path: str) -> Optional[TProject]:
