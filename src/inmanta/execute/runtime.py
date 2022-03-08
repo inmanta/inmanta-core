@@ -127,6 +127,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         Acquire a promise to set a value for this variable. To fulfill the promise and set the promised value for this
         variable, set the value on the promise object.
         """
+        # TODO: not used by plain RV, document or move down
         return self
 
     def is_ready(self) -> bool:
