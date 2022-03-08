@@ -1015,12 +1015,6 @@ def p_attr_ref(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
-# def p_local_var(p: YaccProduction) -> None:
-#     "local_var : ns_ref"
-#     p[0] = Reference(p[1])
-#     attach_from_string(p, 1)
-
-
 def p_var_ref_2(p: YaccProduction) -> None:
     "var_ref : ns_ref %prec NS_REF"
     p[0] = Reference(p[1])
