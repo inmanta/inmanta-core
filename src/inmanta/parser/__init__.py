@@ -71,8 +71,8 @@ class InvalidNamespaceAccess(ParserException):
             location=invalid.location,
             value=str(invalid),
             msg=(
-                f"invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather than '.'"
-                f" (reserved for attribute and relation access): `{self.suggest_replacement()}`"
+                f"invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather than '.'. "
+                f"The '.' separator is reserved for attribute and relation access. Did you mean: `{self.suggest_replacement()}`"
             ),
         )
 
