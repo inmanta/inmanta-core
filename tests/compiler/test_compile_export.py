@@ -102,7 +102,7 @@ x = 1
             "1 = 1",
             ParserException,
             ast_export.ErrorCategory.parser,
-            "Syntax error at token 1",
+            "Syntax error at token =",
             "inmanta.parser.ParserException",
         ),
         (
