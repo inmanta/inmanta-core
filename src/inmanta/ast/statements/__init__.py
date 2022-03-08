@@ -211,6 +211,7 @@ class Literal(ExpressionStatement):
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value
+        self.lexpos: Optional[int] = None
 
     def normalize(self) -> None:
         pass

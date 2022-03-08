@@ -157,7 +157,6 @@ def test_end_to_end_2():
     assert "badplugin" not in all
 
 
-@pytest.mark.asyncio
 async def test_startup_failure(async_finalizer, server_config):
     with splice_extension_in("bad_module_path"):
         config.server_enabled_extensions.set("badplugin")
@@ -228,7 +227,6 @@ def test_load_feature_file(tmp_path):
     assert fm.contains(s2, "random")
 
 
-@pytest.mark.asyncio
 async def test_custom_feature_manager(
     tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory
 ):

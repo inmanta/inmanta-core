@@ -45,7 +45,6 @@ async def environment(environment, client):
     yield environment
 
 
-@pytest.mark.asyncio
 async def test_purge_on_delete_requires(client: Client, server: Server, environment: str, clienthelper: ClientHelper):
     """
     Test purge on delete of resources and inversion of requires
@@ -141,7 +140,6 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_purge_on_delete_compile_failed_with_compile(
     event_loop, client: Client, server: Server, environment: str, snippetcompiler
 ):
@@ -172,7 +170,6 @@ async def test_purge_on_delete_compile_failed_with_compile(
     assert result.result["model"]["total"] == 0
 
 
-@pytest.mark.asyncio
 async def test_purge_on_delete_compile_failed(client: Client, server: Server, clienthelper: ClientHelper, environment: str):
     """
     Test purge on delete of resources
@@ -274,7 +271,6 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     assert len(result.result["unknowns"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
     """
     Test purge on delete of resources
@@ -405,7 +401,6 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
     """
     Test purge on delete behavior for resources that have not longer purged_on_delete set
@@ -528,7 +523,6 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
     """
     Test disable purge on delete of resources

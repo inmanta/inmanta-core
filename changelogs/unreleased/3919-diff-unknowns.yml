@@ -1,0 +1,4 @@
+description: Handle unknown and skipped for unknown resources in dryrun diff
+issue-nr: 3919
+change-type: minor
+destination-branches: [master, iso5]

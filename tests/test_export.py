@@ -21,6 +21,7 @@ import os
 import pytest
 
 from inmanta import config, const
+from inmanta.ast import ExternalException
 from inmanta.const import ResourceState
 from inmanta.export import DependencyCycleException
 
@@ -177,7 +178,6 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
     assert len(warning) == 0
 
 
-@pytest.mark.asyncio
 async def test_empty_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
@@ -191,7 +191,6 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     assert len(response.result["versions"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
@@ -207,7 +206,6 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.result["versions"][0]["total"] == 1
 
 
-@pytest.mark.asyncio
 async def test_dict_export_server(snippetcompiler, server, client, environment):
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet(
@@ -226,7 +224,6 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
     assert result.result["versions"][0]["total"] == 1
 
 
-@pytest.mark.asyncio
 async def test_old_compiler(server, client, environment):
     result = await client.put_version(tid=environment, version=123456, resources=[], unknowns=[], version_info={})
     assert result.code == 400
@@ -381,5 +378,37 @@ exp::WrappedSelfTest(
 )
         """
     )
-    with pytest.raises(TypeError, match="not JSON serializable"):
+    with pytest.raises(ExternalException) as e:
         snippetcompiler.do_export()
+    assert "not JSON serializable" in e.value.format_trace()
+
+
+def test_3787_key_error_export(snippetcompiler):
+    """
+    Check the error message of an export with a KeyError
+    The Key error happens in get_real_name() of class Test3
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import exp
+
+exp::Test3(
+    name="tom",
+    names={
+        "bob": "alice",
+        "alice": "bob",
+    },
+    agent=std::AgentConfig(
+        autostart=true,
+        agentname="bob",
+        uri="local:",
+    ),
+)
+        """
+    )
+    with pytest.raises(ExternalException) as e:
+        snippetcompiler.do_export()
+    assert (
+        e.value.format_trace()
+        == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
+    )

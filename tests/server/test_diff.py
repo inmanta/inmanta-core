@@ -64,7 +64,6 @@ async def create_resource_in_multiple_versions(
         await res.insert()
 
 
-@pytest.mark.asyncio
 async def test_list_attr_diff(client, environment, env_with_versions):
     """Test the diff functionality with simple values and lists."""
     env_id = uuid.UUID(environment)
@@ -165,7 +164,6 @@ async def test_list_attr_diff(client, environment, env_with_versions):
     assert result.result["data"][0]["attributes"] == {**v1_v2_diff, **v2_v3_diff}
 
 
-@pytest.mark.asyncio
 async def test_dict_attr_diff(client, environment, env_with_versions):
     """Test the diff functionality with dicts and nested structures"""
     env_id = uuid.UUID(environment)
@@ -267,7 +265,6 @@ def assert_resource_added(resource):
         assert attr["from_value_compare"] == ""
 
 
-@pytest.mark.asyncio
 async def test_resources_diff(client, environment, env_with_versions):
     """Test the diff functionality on multiple resources across multiple versions"""
     env_id = uuid.UUID(environment)
@@ -365,7 +362,6 @@ async def test_resources_diff(client, environment, env_with_versions):
     assert_resource_added(result.result["data"][1])
 
 
-@pytest.mark.asyncio
 async def test_validate_versions(client, environment, env_with_versions):
     """Test the version parameter validation of the diff endpoint."""
     result = await client.get_diff_of_versions(environment, 1, 2)
