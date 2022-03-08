@@ -118,17 +118,10 @@ class VirtualEnv(object):
                         "is different from the Python version of this process."
                     )
 
-
-
-
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
 
         return True
-
-
-
-
 
     def use_virtual_env(self) -> None:
         """
@@ -379,6 +372,8 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
+
+
 class VenvCreationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
