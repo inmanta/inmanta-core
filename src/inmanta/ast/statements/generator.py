@@ -399,7 +399,7 @@ class IndexAttributeMissingInConstructorException(TypingException):
             attribute_kind = "relation" if isinstance(attribute, RelationAttribute) else "attribute"
             exc_message += (
                 f"\n\t* Missing {attribute_kind} '{attribute.name}'. "
-                f"The relation {entity.get_full_name()}.{attribute.name} is part of an index."
+                f"The {attribute_kind} {entity.get_full_name()}.{attribute.name} is part of an index."
             )
         return exc_message
 
