@@ -15,16 +15,16 @@
 
     Contact: code@inmanta.com
 """
-
 import itertools
 import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, Iterator, List, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
+from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
@@ -45,6 +45,7 @@ from inmanta.execute.runtime import (
     Instance,
     QueueScheduler,
     Resolver,
+    TempListVariable,
     Waiter,
 )
 from inmanta.execute.tracking import ModuleTracker
@@ -52,6 +53,7 @@ from inmanta.execute.tracking import ModuleTracker
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, NamedType, Statement  # noqa: F401
     from inmanta.compiler import Compiler  # noqa: F401
+    from inmanta.module import RelationPrecedenceRule
 
 
 DEBUG = True
@@ -66,9 +68,75 @@ class Scheduler(object):
     This class schedules statements for execution
     """
 
-    def __init__(self, track_dataflow: bool = False):
+    def __init__(
+        self, track_dataflow: bool = False, relation_precedence_rules: Optional[List["RelationPrecedenceRule"]] = None
+    ) -> None:
+        if relation_precedence_rules is None:
+            relation_precedence_rules = []
         self.track_dataflow: bool = track_dataflow
         self.types: Dict[str, Type] = {}
+        # The precedence rules specified in the project.yml file. This list may contain rules that are invalid with
+        # respect to the model.
+        self.relation_precedence_rules: List["RelationPrecedenceRule"] = relation_precedence_rules
+
+    def _set_precedence_rules_on_relationship_attributes(self) -> List[RelationAttribute]:
+        """
+        This method:
+           * Validates the relation precedence rules in self.relation_precedence_policy and raises an exception for invalid
+             relation precedence rules.
+           * Set the RelationAttribute.relation_precedence_rules field on all RelationAttributes.
+           * Returns the list of RelationAttributes for which a relation precedence policy exists saying that it should
+             be frozen before another RelationshipAttribute.
+        """
+        if not self.relation_precedence_rules:
+            return []
+        LOGGER.warning(
+            "[EXPERIMENTAL FEATURE] Using the relation precedence policy defined in the project.yml file to determine list "
+            "freeze order."
+        )
+        result = []
+        for rule in self.relation_precedence_rules:
+            LOGGER.info("Loaded relation precedence rule: %s", rule)
+            first_attribute: RelationAttribute = self._get_relation_attribute_with_precedence_rule(
+                rule.first_type, rule.first_relation_name
+            )
+            then_attribute: RelationAttribute = self._get_relation_attribute_with_precedence_rule(
+                rule.then_type, rule.then_relation_name
+            )
+            first_attribute.add_freeze_dependent(then_attribute)
+            if first_attribute not in result:
+                result.append(first_attribute)
+        return result
+
+    def _get_relation_attribute_with_precedence_rule(self, entity_type_name: str, relationship_name: str) -> RelationAttribute:
+        """
+        Return the RelationAttribute in `self.types` that has the given `entity_type_name` and `relationship_name`.
+        """
+        if not self.types:
+            raise Exception("The self.define_types() method should be called first")
+        if entity_type_name not in self.types:
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}, but no such type was defined"
+            )
+        current_type: Type = self.types[entity_type_name]
+        if not isinstance(current_type, Entity):
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for non-entity type {current_type}"
+            )
+        assert isinstance(current_type, Entity)  # Make mypy happy
+        attributes_of_entity = current_type.attributes
+        if relationship_name not in attributes_of_entity:
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}.{relationship_name}, "
+                f"but entity {entity_type_name} doesn't have an attribute {relationship_name}.",
+            )
+        attribute = attributes_of_entity[relationship_name]
+        if not isinstance(attribute, RelationAttribute):
+            raise InvalidRelationPrecedenceRuleError(
+                f"A relation precedence rule was defined for {entity_type_name}.{relationship_name}, "
+                f"but attribute {relationship_name} is not a relationship attribute.",
+            )
+        return attribute
 
     def freeze_all(self, exns: List[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
@@ -230,7 +298,7 @@ class Scheduler(object):
 
         return rangetorange
 
-    def find_wait_cycle(self, allwaiters: Set[Waiter]) -> bool:
+    def find_wait_cycle(self, attributes_with_precedence_rule: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -251,6 +319,8 @@ class Scheduler(object):
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
+        # Determine drvs that should be frozen to break the cycle
+        freeze_candidates: List[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 if isinstance(rv, DelayedResultVariable):
@@ -258,10 +328,16 @@ class Scheduler(object):
                         # get_progress_potential fails when there is a value already
                         continue
                     if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
-                        LOGGER.debug("Waiting blocked on %s", rv)
-                        rv.freeze()
-                        return True
-        return False
+                        freeze_candidates.append(rv)
+
+        if not freeze_candidates:
+            return False
+        # Use the relation precedence rules to determine which drv should be frozen
+        queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
+        drv_to_freeze = queue.popleft()
+        LOGGER.debug("Waiting blocked on %s", drv_to_freeze)
+        drv_to_freeze.freeze()
+        return True
 
     def run(self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]) -> bool:
         """
@@ -272,6 +348,7 @@ class Scheduler(object):
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
+        attributes_with_precedence_rule: List[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
 
         # give all loose blocks an empty XC
         # register the XC's as scopes
@@ -288,7 +365,7 @@ class Scheduler(object):
         # queue for runnable items
         basequeue: Deque[Waiter] = deque()
         # queue for RV's that are delayed
-        waitqueue: Deque[DelayedResultVariable[Any]] = deque()
+        waitqueue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule)
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
@@ -363,8 +440,7 @@ class Scheduler(object):
             # see if any zerowaiters have become gotten waiters
             if not progress:
                 zerowaiters_tmp = [w for w in zerowaiters if not w.hasValue]
-                waitqueue = deque(w for w in zerowaiters_tmp if w.get_progress_potential() > 0)
-                queue.waitqueue = waitqueue
+                waitqueue.replace(w for w in zerowaiters_tmp if w.get_progress_potential() > 0)
                 zerowaiters = deque(w for w in zerowaiters_tmp if w.get_progress_potential() <= 0)
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
@@ -378,7 +454,7 @@ class Scheduler(object):
 
             if not progress:
                 # nothing works anymore, attempt to unfreeze wait cycle
-                progress = self.find_wait_cycle(queue.allwaiters)
+                progress = self.find_wait_cycle(attributes_with_precedence_rule, queue.allwaiters)
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
@@ -430,3 +506,219 @@ class Scheduler(object):
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
 
         return True
+
+
+class InvalidRelationPrecedenceRuleError(CompilerException):
+    """
+    A CompilerException that is raised when the project.yml file
+    contains a relation precedence rule that invalid with respect
+    to the given project.
+    """
+
+    def __init__(self, msg: str) -> None:
+        super(InvalidRelationPrecedenceRuleError, self).__init__(msg)
+
+
+class PrioritisedDelayedResultVariableQueue:
+    """
+    A queue for DelayedResultVariables that is prioritized based on the
+    relation precedence policy passed to the Compiler. This queue will return elements
+    in the following order:
+
+    * First return the DelayedResultVariables, which are not an instance of
+      TempListVariable and that do not have an order constraint.
+    * Then return DelayedResultVariables with order constraint.
+      They are returned in an order that is valid with respect to the
+      constraints.
+    * Finally, all TempListVariables are returned.
+
+    TempListVariables is subclass of DelayedResultVariables that is not
+    associated with an entity. That way it's not possible to set
+    a relation precedence rule on them.
+    """
+
+    def __init__(
+        self,
+        attributes_with_precedence_rule: List[RelationAttribute],
+        drvs: Optional[List[DelayedResultVariable[object]]] = None,
+    ) -> None:
+        relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
+        # A queue that indicates a valid order in which the self._constraint_variables have to be returned
+        # This queue is never modified.
+        self._freeze_order: Deque[RelationAttribute] = deque(relation_precedence_graph.get_freeze_order())
+        # Copy of self._freeze_order. At all times the first element of this queue
+        # points to the next type that should be returned from self._constraint_variables
+        self._freeze_order_working_list: Deque[RelationAttribute] = self._freeze_order.copy()
+
+        self._unconstraint_variables: Deque[DelayedResultVariable[object]] = deque()
+        self._constraint_variables: Dict[RelationAttribute, Deque[DelayedResultVariable[object]]] = {
+            relation_attribute: deque() for relation_attribute in self._freeze_order
+        }
+        self._tmp_list_variables: Deque[TempListVariable] = deque()
+
+        # Populate queue with given DelayedResultVariables
+        drvs = drvs if drvs else []
+        for drv in drvs:
+            self.append(drv, dont_reset_working_list=True)
+
+    def __len__(self) -> int:
+        """
+        Return the number of elements present in this queue.
+        """
+        return (
+            len(self._unconstraint_variables)
+            + sum(len(v) for v in self._constraint_variables.values())
+            + len(self._tmp_list_variables)
+        )
+
+    def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
+        """
+        Append on the right side of the queue.
+
+        :param dont_reset_working_list: This argument exists to increase performance by preventing
+                                        unnecessary resets of the `self._freeze_order_working_list` queue.
+        """
+        if isinstance(drv, TempListVariable):
+            self._tmp_list_variables.append(drv)
+        elif drv.attribute in self._constraint_variables:
+            self._constraint_variables[drv.attribute].append(drv)
+            if not dont_reset_working_list and drv.attribute not in self._freeze_order_working_list:
+                # working list is dirty
+                self._freeze_order_working_list = self._freeze_order.copy()
+        else:
+            self._unconstraint_variables.append(drv)
+
+    def popleft(self) -> DelayedResultVariable[Any]:
+        """
+        Remove element from the left side of the queue and return it.
+        """
+        try:
+            return self._unconstraint_variables.popleft()
+        except IndexError:
+            # Empty
+            pass
+        try:
+            return self._get_next_constraint_variable()
+        except IndexError:
+            # Empty
+            pass
+        return self._tmp_list_variables.popleft()
+
+    def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
+        if not self._constraint_variables:
+            raise IndexError()
+        while self._freeze_order_working_list:
+            relation_attribute: RelationAttribute = self._freeze_order_working_list[0]
+            if relation_attribute not in self._constraint_variables or not self._constraint_variables[relation_attribute]:
+                self._freeze_order_working_list.popleft()
+            else:
+                return self._constraint_variables[relation_attribute].popleft()
+        raise IndexError()
+
+    def replace(self, drvs: Iterable[DelayedResultVariable[object]]) -> None:
+        """
+        Remove all elements from this queue and add the elements provided in drvs.
+        """
+        self._unconstraint_variables.clear()
+        for queue in self._constraint_variables.values():
+            queue.clear()
+        self._tmp_list_variables.clear()
+        for drv in drvs:
+            self.append(drv, dont_reset_working_list=True)
+        self._freeze_order_working_list = self._freeze_order.copy()
+
+
+class CycleInRelationPrecedencePolicyError(CompilerException):
+    """
+    Raised when a cycle exists in the relation precedence rules provided to the compiler.
+    """
+
+    def __init__(self) -> None:
+        super(CycleInRelationPrecedencePolicyError, self).__init__("A cycle exists in the relation precedence policy")
+
+
+class RelationPrecedenceGraph:
+    """
+    A graph representation of the relation precedence policy provided to the compiler.
+    """
+
+    def __init__(self, relation_attributes_with_precedence_rule: Optional[List[RelationAttribute]] = None) -> None:
+        if relation_attributes_with_precedence_rule is None:
+            relation_attributes_with_precedence_rule = []
+        # The root nodes of the graph, where all other nodes attach to.
+        self.root_nodes: Set[RelationPrecedenceGraphNode] = set()
+        self.attribute_to_node: Dict[RelationAttribute, RelationPrecedenceGraphNode] = {}
+        # Creates nodes in graph
+        for first_attribute in relation_attributes_with_precedence_rule:
+            for then_attribute in first_attribute.freeze_dependents:
+                self.add_precedence_rule(first_attribute, then_attribute)
+
+    def add_precedence_rule(self, first_attribute: RelationAttribute, then_attribute: RelationAttribute) -> None:
+        """
+        Add a rule that `first_attribute` should be frozen before `then_attribute`.
+        """
+        first_node = self._get_or_create_node(first_attribute, attach_to_root=True)
+        then_node = self._get_or_create_node(then_attribute, attach_to_root=False)
+        if then_node in self.root_nodes:
+            self.root_nodes.remove(then_node)
+        first_node.add_dependent(then_node)
+
+    def _get_or_create_node(self, relation_attribute: RelationAttribute, attach_to_root: bool) -> "RelationPrecedenceGraphNode":
+        """
+        Get the RelationPrecedenceGraphNode for the given relation_attribute in this graph
+        or create a new node if no such node exists.
+
+        :param attach_to_root: true iff attach the node to the root nodes if the node was newly created.
+        """
+        if relation_attribute not in self.attribute_to_node:
+            node = RelationPrecedenceGraphNode(relation_attribute)
+            self.attribute_to_node[relation_attribute] = node
+            if attach_to_root:
+                self.root_nodes.add(node)
+        else:
+            node = self.attribute_to_node[relation_attribute]
+        return node
+
+    def get_freeze_order(self) -> List[RelationAttribute]:
+        """
+        Return all the RelationAttributes in this graph in the order in which
+        they should be frozen.
+        """
+        if not self.attribute_to_node:
+            return []
+        work: Set[RelationPrecedenceGraphNode] = set(self.root_nodes)
+        result: List[RelationAttribute] = []
+
+        def get_next_ready_item_in_work() -> RelationPrecedenceGraphNode:
+            assert work
+            for current_node in work:
+                if all(dep.relation_attribute in result for dep in current_node.dependencies):
+                    return current_node
+            raise CycleInRelationPrecedencePolicyError()
+
+        while work:
+            node: RelationPrecedenceGraphNode = get_next_ready_item_in_work()
+            work.remove(node)
+            if node in result:
+                raise CycleInRelationPrecedencePolicyError()
+            result.append(node.relation_attribute)
+            work.update(node.dependents)
+
+        if len(result) != len(self.attribute_to_node):
+            raise CycleInRelationPrecedencePolicyError()
+        return result
+
+
+class RelationPrecedenceGraphNode:
+    """
+    A node in the RelationPrecedenceGraph that represents the relationship of an Inmanta entity.
+    """
+
+    def __init__(self, relation_attribute: RelationAttribute) -> None:
+        self.relation_attribute: RelationAttribute = relation_attribute
+        self.dependents: Set[RelationPrecedenceGraphNode] = set()
+        self.dependencies: Set[RelationPrecedenceGraphNode] = set()
+
+    def add_dependent(self, dependent: "RelationPrecedenceGraphNode") -> None:
+        self.dependents.add(dependent)
+        dependent.dependencies.add(self)

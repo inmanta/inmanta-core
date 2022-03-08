@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
@@ -148,6 +148,13 @@ class Attribute(Locatable):
     def final(self, excns: List[CompilerException]) -> None:
         pass
 
+    def has_relation_precedence_rules(self) -> bool:
+        """
+        Return true iff a relation precedence rule exists that defines that this Attribute should
+        be frozen before another Attribute.
+        """
+        return False
+
 
 @stable_api
 class RelationAttribute(Attribute):
@@ -156,6 +163,10 @@ class RelationAttribute(Attribute):
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, location: Location) -> None:
+        """
+        :ivar freeze_dependents: Contains the set of RelationAttributes that can only be frozen
+                                 once this attribute is frozen.
+        """
         Attribute.__init__(self, entity, value_type, name, location)
         self.end: Optional[RelationAttribute] = None
         self.low = 1
@@ -163,6 +174,7 @@ class RelationAttribute(Attribute):
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
+        self.freeze_dependents: Set[RelationAttribute] = set()
 
     def __str__(self) -> str:
         return "%s.%s" % (self.get_entity().get_full_name(), self.name)
@@ -207,3 +219,17 @@ class RelationAttribute(Attribute):
                     excns.append(TypingException(self, "Relation annotation can not be Unknown"))
             except RuntimeException as e:
                 excns.append(e)
+
+    def add_freeze_dependent(self, successor: "RelationAttribute") -> None:
+        """
+        Attach a constraint to this RelationAttribute that this RelationAttribute should
+        be frozen before `successor`.
+        """
+        self.freeze_dependents.add(successor)
+
+    def has_relation_precedence_rules(self) -> bool:
+        """
+        Return true iff a relation precedence rule exists that defines that this Attribute should
+        be frozen before another Attribute.
+        """
+        return bool(self.freeze_dependents)
