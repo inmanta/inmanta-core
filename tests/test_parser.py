@@ -1263,6 +1263,7 @@ mls
     )
     assert len(statements) == 1
     mls = statements[0]
+
     assert isinstance(mls, LocatableString)
 
     assert mls.lnr == 2
@@ -2149,7 +2150,7 @@ x.n
     assert instance1.locatable_name.location == Range("test", 5, 1, 5, 2)
 
 
-def test_espression_as_statements():
+def test_expression_as_statements():
     statements = parse_code(
         """
 1 == 2
