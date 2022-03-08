@@ -101,10 +101,34 @@ class VirtualEnv(object):
                 return False
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
+        else:
+            # make sure the venv hosts the same python version as the running process
+            if sys.platform != "win32":
+                # get version as a (major, minor) tuple for the venv and the running process
+                venv_python_version = (
+                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+                )
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+                running_process_python_version = sys.version_info[:2]
+
+                if venv_python_version != running_process_python_version:
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+
+
+
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
 
         return True
+
+
+
+
 
     def use_virtual_env(self) -> None:
         """
@@ -355,3 +379,13 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
+class VenvCreationFailedError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg
+
+
+class VenvActivationFailedError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg
