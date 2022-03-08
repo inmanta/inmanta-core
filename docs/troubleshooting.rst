@@ -282,7 +282,7 @@ Compilation fails
 =================
 
 In rare situations, the compiler might fail with a ``List modified after freeze`` or an
-``Optional variable accessed that has no value`` error, even thought the model is syntactically correct. The following
+``Optional variable accessed that has no value`` error, even though the model is syntactically correct. The following
 sections describe why this error occurs and what can be done to make the compilation succeed.
 
 Reason for compilation failure
