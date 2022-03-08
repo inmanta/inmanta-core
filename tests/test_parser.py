@@ -2183,14 +2183,15 @@ def test_invalid_namespace_ref(snippet: str) -> None:
     [
         ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:5"),
         ("x = mymod.submod.my_plugin()", "mymod.submod.my_plugin", "mymod::submod::my_plugin", "1:5"),
-    ]
+    ],
 )
 def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, location: str) -> None:
     with pytest.raises(InvalidNamespaceAccess) as exc_info:
         parse_code(snippet)
     assert exc_info.value.format_trace().strip() == (
         f"Syntax error: invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather"
-        f" than '.' (reserved for attribute and relation access): `{valid}` (test:{location})"
+        f" than '.'. The '.' separator is reserved for attribute and relation access. Did you mean: `{valid}`"
+        " (test:{location})"
     )
 
 
