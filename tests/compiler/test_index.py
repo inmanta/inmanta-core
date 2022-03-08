@@ -555,6 +555,7 @@ Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
     snippetcompiler.setup_for_error_re(
         model,
         re.escape(
-            "Invalid Constructor call:\n\t* Missing attribute 'name'. The relation __config__::Test_A.name is part of an index."
+            "Invalid Constructor call:\n\t* Missing attribute 'name'. "
+            "The attribute __config__::Test_A.name is part of an index."
         ),
     )
