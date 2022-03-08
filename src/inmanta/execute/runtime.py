@@ -416,7 +416,7 @@ class ListLiteral(BaseListVariable):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        # A TempListVariable is never associated with an Entity, so it cannot have a relation precedence rule.
+        # A ListLiteral is never associated with an Entity, so it cannot have a relation precedence rule.
         return len(self.waiters) - len(self.listeners)
 
 
