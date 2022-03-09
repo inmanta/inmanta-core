@@ -1,4 +1,4 @@
-description: Toggle on_resume for halted agents
+description: Add support to change the state (paused, un-paused) an agent should get when its environment is resumed
 issue-nr: 3534
 change-type: minor
 destination-branches: [master, iso5]

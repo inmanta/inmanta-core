@@ -973,20 +973,24 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
     await agent_manager.ensure_agent_registered(env=env, nodename="agent2")
     await agent_manager.ensure_agent_registered(env=env, nodename="agent3")
+    # The keep_paused_on_resume and unpause_on_resume actions are only allowed when the environment is halted
     result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
     assert result.code == 403
     result = await client.agent_action(environment, name="agent1", action=AgentAction.unpause_on_resume.value)
     assert result.code == 403
 
+    result = await client.agent_action(environment, name="agent1", action="unknown_action")
+    assert result.code == 400
+
     result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
     assert result.code == 200
 
-    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]):
+    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]) -> None:
         for agent_name, on_resume in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.unpause_on_resume is on_resume
 
-    async def assert_agents_paused_state(agent_states: Dict[str, Optional[bool]]):
+    async def assert_agents_paused_state(agent_states: Dict[str, bool]) -> None:
         for agent_name, paused in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.paused is paused
@@ -994,6 +998,7 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
     await assert_agents_paused_state({"agent1": False, "agent2": True, "agent3": False})
 
+    # Halt the environment and check the on_resume state
     result = await client.halt_environment(environment)
     assert result.code == 200
 
@@ -1016,6 +1021,7 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     await assert_agents_paused_state({"agent1": True, "agent2": False, "agent3": False})
     await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
 
+    # The keep_paused_on_resume and unpause_on_resume actions are only allowed when the environment is halted
     result = await client.all_agents_action(environment, action=AgentAction.keep_paused_on_resume.value)
     assert result.code == 403
     result = await client.all_agents_action(environment, action=AgentAction.unpause_on_resume.value)

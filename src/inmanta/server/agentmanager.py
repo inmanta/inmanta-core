@@ -215,9 +215,11 @@ class AgentManager(ServerSlice, SessionListener):
         elif action is AgentAction.unpause:
             await self._unpause_agent(env)
         elif action is AgentAction.keep_paused_on_resume:
-            await self._keep_agent_paused_on_resume(env)
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
+        elif action is AgentAction.unpause_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True)
         else:
-            await self._unpause_agent_on_resume(env)
+            raise BadRequest(f"Unknown agent action: {action.name}")
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
@@ -230,9 +232,11 @@ class AgentManager(ServerSlice, SessionListener):
         elif action is AgentAction.unpause:
             await self._unpause_agent(env, name)
         elif action is AgentAction.keep_paused_on_resume:
-            await self._keep_agent_paused_on_resume(env, name)
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
+        elif action is AgentAction.unpause_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True, endpoint=name)
         else:
-            await self._unpause_agent_on_resume(env, name)
+            raise BadRequest(f"Unknown agent action: {action.name}")
 
     async def _pause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -276,31 +280,20 @@ class AgentManager(ServerSlice, SessionListener):
                 env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
             )
 
-    async def _keep_agent_paused_on_resume(
-        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def _set_unpause_on_resume(
+        self,
+        env: data.Environment,
+        should_be_unpaused_on_resume: bool,
+        endpoint: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ):
         """
         Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
-        so that the agent is still paused after the environment is resumed
+        so that the agent is paused or unpaused after the environment is resumed
         """
-
-        async with self.session_lock:
-            await data.Agent.set_unpause_on_resume(
-                env=env.id, endpoint=endpoint, should_be_unpaused_on_resume=False, connection=connection
-            )
-
-    async def _unpause_agent_on_resume(
-        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
-        """
-        Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
-        so that the agent is unpaused after the environment is resumed
-        """
-
-        async with self.session_lock:
-            await data.Agent.set_unpause_on_resume(
-                env=env.id, endpoint=endpoint, should_be_unpaused_on_resume=True, connection=connection
-            )
+        await data.Agent.set_unpause_on_resume(
+            env=env.id, endpoint=endpoint, should_be_unpaused_on_resume=should_be_unpaused_on_resume, connection=connection
+        )
 
     async def _process_session_listener_actions(self) -> None:
         """
