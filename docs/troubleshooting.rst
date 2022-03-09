@@ -307,7 +307,9 @@ Relationship precedence policy
 
 .. warning::
 
-    The relationship precedence policy feature is currently experimental
+    The inmanta compiler is very good at determining in which order it should evaluate the orchestration model. Unfortunately in very complex models it might not be able to do this. In that case you can give the compiler some instruction by providing it with relationship precedence rules.
+
+    This is a very powerful tool because you can override all the intelligence in the compiler. This means that if you provide the correct rule it will fix the compilation. If you provide a wrong rule it can make this even worse. However, it can never make the orchestrator compile incorrect results.
 
 The above-mentioned problem can be resolved by defining a *relation precedence policy* in the ``project.yml``
 file of an Inmanta project. This policy consists of a list of rules. Each rule defining the order in which two
