@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import logging
 import typing
+import uuid
 from asyncio import subprocess
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
@@ -952,6 +953,95 @@ async def test_agent_actions(server, client, async_finalizer):
     )
     await assert_agents_halt_state(env1_id, {"agent1": False, "agent2": True}, False)
     await assert_agents_halt_state(env2_id, {"agent1": False}, False)
+
+
+async def test_agent_on_resume_actions(server, environment, client, agent_factory) -> None:
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2", "agent3"],
+    )
+
+    env_id = uuid.UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent2")
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent3")
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 403
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 403
+
+    result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
+    assert result.code == 200
+
+    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]):
+        for agent_name, on_resume in agent_states.items():
+            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert agent_from_db.unpause_on_resume is on_resume
+
+    async def assert_agents_paused_state(agent_states: Dict[str, Optional[bool]]):
+        for agent_name, paused in agent_states.items():
+            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert agent_from_db.paused is paused
+
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
+    await assert_agents_paused_state({"agent1": False, "agent2": True, "agent3": False})
+
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_on_resume_state({"agent1": True, "agent2": False, "agent3": True})
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": True})
+
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 200
+
+    result = await client.agent_action(environment, name="agent2", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+
+    # The on_resume actions don't start the agents immediately, just manipulate the 'unpause_on_resume' flag
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": True})
+    await assert_agents_on_resume_state({"agent1": False, "agent2": True, "agent3": True})
+
+    result = await client.resume_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_paused_state({"agent1": True, "agent2": False, "agent3": False})
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
+
+    result = await client.all_agents_action(environment, action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 403
+    result = await client.all_agents_action(environment, action=AgentAction.unpause_on_resume.value)
+    assert result.code == 403
+
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": True, "agent3": True})
+
+    result = await client.all_agents_action(environment, action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": True, "agent2": True, "agent3": True})
+
+    result = await client.all_agents_action(environment, action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": False, "agent3": False})
+
+    result = await client.agent_action(environment, name="agent3", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": False, "agent3": True})
+
+    result = await client.resume_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": False})
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
 
 
 async def test_process_already_terminated(server, environment):

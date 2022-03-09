@@ -2820,6 +2820,25 @@ class Agent(BaseDocument):
         return sorted([r["name"] for r in result])
 
     @classmethod
+    async def set_unpause_on_resume(
+        cls,
+        env: uuid.UUID,
+        endpoint: Optional[str],
+        should_be_unpaused_on_resume: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values, connection=connection)
+
+    @classmethod
     async def update_primary(
         cls,
         env: uuid.UUID,

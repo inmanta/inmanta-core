@@ -1,0 +1,4 @@
+description: Toggle on_resume for halted agents
+issue-nr: 3534
+change-type: minor
+destination-branches: [master, iso5]
