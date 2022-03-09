@@ -46,7 +46,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, SyntaxDeprecationWarning, plyInmantaLex
+from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
@@ -86,18 +86,17 @@ def merge_lnr_to_string(p: YaccProduction, starttoken: int = 1, endtoken: int = 
     v = p[0]
 
     et = p[endtoken]
-    endline = et.elnr
-    endchar = et.end
-
     st = p[starttoken]
-    if isinstance(st, LocatableString):
-        startline = st.lnr
-        startchar = st.start
-    else:
-        startline = et.lnr
-        startchar = et.start
 
-    p[0] = LocatableString(v, Range(file, startline, startchar, endline, endchar), endchar, namespace)
+    expanded_range: Range = expand_range(st.location, et.location) if isinstance(st, LocatableString) else et.location
+    p[0] = LocatableString(v, expanded_range, p.lexpos(endtoken), namespace)
+
+
+def expand_range(start: Range, end: Range) -> Range:
+    """
+    Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
+    """
+    return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
 
 def attach_from_string(p: YaccProduction, token: int = 1) -> None:
@@ -695,6 +694,11 @@ def p_function_call(p: YaccProduction) -> None:
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
 
+def p_function_call_err_dot(p: YaccProduction) -> None:
+    "function_call : attr_ref '(' function_param_list ')'"
+    raise InvalidNamespaceAccess(p[1].locatable_name)
+
+
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
@@ -1038,10 +1042,19 @@ def p_class_ref(p: YaccProduction) -> None:
     merge_lnr_to_string(p, 1, 3)
 
 
-# def p_class_ref_err(p):
-#     "class_ref : ns_ref SEP ID"
-#     raise ParserException(
-#         file, p.lineno(3), p.lexpos(3), p[3], "Invalid identifier: Entity names must start with a capital")
+def p_class_ref_err_dot(p: YaccProduction) -> None:
+    "class_ref : var_ref '.' CID"
+    var: Union[LocatableString, Reference] = p[1]
+    var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
+    cid: LocatableString = p[3]
+    assert namespace
+    full_string: LocatableString = LocatableString(
+        "%s.%s" % (var_str, cid),
+        expand_range(var_str.location, cid.location),
+        var_str.lexpos,
+        namespace,
+    )
+    raise InvalidNamespaceAccess(full_string)
 
 
 def p_class_ref_list_collect(p: YaccProduction) -> None:
