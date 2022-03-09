@@ -247,7 +247,9 @@ class CompileRun(object):
                 if force_update or self.request.force_update:
                     await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     LOGGER.info("Installing and updating modules")
-                    await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir)
+                    await self._run_compile_stage(
+                        "Updating modules", inmanta_path + ["-vvv", "-X", "modules", "update"], project_dir
+                    )
 
             server_address = opt.server_address.get()
             server_port = opt.get_bind_port()
