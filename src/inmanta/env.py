@@ -103,7 +103,7 @@ class VirtualEnv(object):
 
         else:
             # make sure the venv hosts the same python version as the running process
-            if sys.platform != "win32":
+            if sys.platform == "win32":
                 # get version as a (major, minor) tuple for the venv and the running process
                 venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
                 venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
@@ -370,12 +370,6 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
-
-
-class VenvCreationFailedError(Exception):
-    def __init__(self, msg: str) -> None:
-        super().__init__(msg)
-        self.msg = msg
 
 
 class VenvActivationFailedError(Exception):
