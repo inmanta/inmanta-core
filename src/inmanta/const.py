@@ -257,6 +257,8 @@ MAX_UPDATE_ATTEMPT = 5
 class AgentAction(str, Enum):
     pause = "pause"
     unpause = "unpause"
+    keep_paused_on_resume = "keep_paused_on_resume"
+    unpause_on_resume = "unpause_on_resume"
 
 
 class AgentStatus(str, Enum):
