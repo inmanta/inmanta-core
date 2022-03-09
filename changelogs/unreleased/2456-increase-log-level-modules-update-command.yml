@@ -1,0 +1,7 @@
+description: Increase log level to DEBUG when compiler service is updating modules
+change-type: patch
+issue-nr: 2456
+destination-branches: [iso4]
+sections: {
+  bugfix: "{{description}}"
+}
