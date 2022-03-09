@@ -351,10 +351,15 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     :param tid: The environment this agent is defined in.
     :param name: The name of the agent.
     :param action: The type of action that should be executed on an agent.
+                    Pause and unpause can only be used when the environment is not halted,
+                    while the on_resume actions can only be used when the environment is halted.
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
+                    * keep_paused_on_resume: The agent will still be paused when the environment is resumed
+                    * unpause_on_resume: The agent will be unpaused when the environment is resumed
 
-    :raises Forbidden: The given environment has been halted.
+    :raises Forbidden: The given environment has been halted and the action is pause/unpause,
+                        or the environment is not halted and the action is related to the on_resume behavior
     """
 
 
@@ -366,11 +371,16 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     Execute an action on all agents in the given environment.
 
     :param tid: The environment of the agents.
-    :param action: The type of action that should be executed on the agents
+    :param action: The type of action that should be executed on the agents.
+                    Pause and unpause can only be used when the environment is not halted,
+                    while the on_resume actions can only be used when the environment is halted.
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
+                    * keep_paused_on_resume: The agents will still be paused when the environment is resumed
+                    * unpause_on_resume: The agents will be unpaused when the environment is resumed
 
-    :raises Forbidden: The given environment has been halted.
+    :raises Forbidden: The given environment has been halted and the action is pause/unpause,
+                        or the environment is not halted and the action is related to the on_resume behavior
     """
 
 
