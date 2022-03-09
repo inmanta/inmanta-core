@@ -146,7 +146,7 @@ class WarningsManager:
         text: str
         logger: logging.Logger
         if issubclass(category, InmantaWarning):
-            text = "%s: %s\n" % (category.__name__, message)
+            text = "%s: %s" % (category.__name__, message)
             logger = logging.getLogger("inmanta.warnings")
         else:
             text = warnings.formatwarning(
