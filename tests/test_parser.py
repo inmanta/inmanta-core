@@ -2191,7 +2191,7 @@ def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, 
     assert exc_info.value.format_trace().strip() == (
         f"Syntax error: invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather"
         f" than '.'. The '.' separator is reserved for attribute and relation access. Did you mean: `{valid}`"
-        " (test:{location})"
+        f" (test:{location})"
     )
 
 
