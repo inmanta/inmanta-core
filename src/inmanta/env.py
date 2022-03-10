@@ -103,7 +103,22 @@ class VirtualEnv(object):
 
         else:
             # make sure the venv hosts the same python version as the running process
-            if sys.platform == "win32":
+
+            if sys.platform != "win32":
+                # On UNIX distribs we can check the versions match because the env's version is in the site-packages dir's path
+                binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
+                base = os.path.dirname(binpath)
+                site_packages = os.path.join(
+                    base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+                )
+                if not os.path.exists(site_packages):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+            else:
+                # On windows distributions a more costly check is required:
                 # get version as a (major, minor) tuple for the venv and the running process
                 venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
                 venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
