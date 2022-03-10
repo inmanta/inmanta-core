@@ -53,6 +53,9 @@ class BasicBlock(object):
         self.__definition_stmts.append(stmt)
 
     def get_variables(self) -> List[str]:
+        """
+        Returns a list of all variables declared in this block. Does not include variables declared in nested blocks.
+        """
         return [var for var, _ in self.__variables]
 
     def add_var(self, name: str, stmt: Statement) -> None:
@@ -112,7 +115,7 @@ class BasicBlock(object):
         surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
     ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
         """
-        Returns an iterator over variables shadowed in this block or it's nested blocks.
+        Returns an iterator over variables shadowed in this block or its nested blocks.
         The elements are tuples of the variable name, a set of the shadowed locations
         and a set of the originally declared locations.
         :param surrounding_vars: an accumulator for variables declared in surrounding blocks.
