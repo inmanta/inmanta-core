@@ -1337,6 +1337,57 @@ str1
     assert mls2.value == "\nstr1 with\nsome variations"
 
 
+def test_mls_5():
+    statements = parse_code(
+        """
+\"""This is a mls on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == 'This is a mls on one "line"'
+
+
+def test_mls_6():
+    statements = parse_code(
+        """
+\"\"""This" is a mls on one line\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == '"This" is a mls on one line'
+
+
+def test_mls_7():
+    statements = parse_code(
+        """
+\"\"""This" is a "mls" on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 38
+    assert str(mls.value) == '"This" is a "mls" on one "line"'
+
+
 def test_mls_as_argument():
     statements = parse_code(
         """
@@ -1355,7 +1406,7 @@ std::print(\"""hello\""")
 def test_mls_as_argument_2():
     statements = parse_code(
         """
-std::print(\"""hello"world"\""")
+std::print("\""hello"hello"\""")
 
 """
     )
@@ -1364,37 +1415,7 @@ std::print(\"""hello"world"\""")
 
     assert isinstance(function_call, FunctionCall)
     arg = function_call.arguments[0]
-    assert arg.value == 'hello"world"'
-
-
-def test_mls_as_argument_3():
-    statements = parse_code(
-        """
-std::print("\"""hello"world\""")
-
-"""
-    )
-    assert len(statements) == 1
-    function_call = statements[0]
-
-    assert isinstance(function_call, FunctionCall)
-    arg = function_call.arguments[0]
-    assert arg.value == '"hello"world'
-
-
-def test_mls_as_argument_4():
-    statements = parse_code(
-        """
-std::print("\""aaaa"helloworld"aaaa\""")
-
-"""
-    )
-    assert len(statements) == 1
-    function_call = statements[0]
-
-    assert isinstance(function_call, FunctionCall)
-    arg = function_call.arguments[0]
-    assert arg.value == 'aaaa"helloworld"aaaa'
+    assert arg.value == 'hello"hello"'
 
 
 def test_bad():
