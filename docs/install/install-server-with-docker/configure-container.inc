@@ -12,8 +12,8 @@ If you use docker-compose, you can simply update this section of the example abo
 .. code-block:: yaml
 
     inmanta-server:
-        container_name: iso_server
-        image: ghcr.io/inmanta/oss:2022
+        container_name: inmanta_orchestrator
+        image: ghcr.io/inmanta/orchestrator:2022
         ports:
             - 8888:8888
         volumes:
@@ -38,7 +38,7 @@ If you use docker-compose, it should look like:
 .. code-block:: yaml
 
     inmanta-server:
-        container_name: iso_server
+        container_name: inmanta_orchestrator
         ...
         command: "server-with-ssh"
 
@@ -67,7 +67,7 @@ If you use docker-compose, it should look like:
 .. code-block:: yaml
 
     inmanta-server:
-        container_name: iso_server
+        container_name: inmanta_orchestrator
         ...
         command: "server --wait-for-host <your-db-host> --wait-for-port <your-db-port>"
 
@@ -88,8 +88,8 @@ There are two ways you can achieve this:
 .. code-block:: yaml
 
     inmanta-server:
-        container_name: iso_server
-        image: ghcr.io/inmanta/oss:2022
+        container_name: inmanta_orchestrator
+        image: ghcr.io/inmanta/orchestrator:2022
         ports:
             - 8888:8888
         volumes:
