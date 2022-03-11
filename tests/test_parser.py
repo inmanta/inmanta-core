@@ -48,7 +48,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import base_parse
 
 
@@ -2148,6 +2148,51 @@ x.n
     assert instance1.name == "x"
     assert str(instance1.locatable_name) == "x"
     assert instance1.locatable_name.location == Range("test", 5, 1, 5, 2)
+
+
+@pytest.mark.parametrize_any(
+    "snippet",
+    [
+        # entity references
+        "mymod.MyEntity()",
+        "mymod.submod.MyEntity()",
+        "mymod.submod.MyEntity(x=1)",
+        "mymod.submod.MyEntity(**dct)",
+        "entity Child extends mymod.MyEntity: end",
+        "SomeEntity.my [1] -- mymod.MyEntity",
+        # plugin calls
+        "mymod.my_plugin()",
+        "mymod.submod.my_plugin()",
+        "mymod.submod.my_plugin(1)",
+        "mymod.submod.my_plugin(x=1)",
+        "mymod::submod.my_plugin(**dct)",
+    ],
+)
+def test_invalid_namespace_ref(snippet: str) -> None:
+    """
+    Verify that an attempt to access a namespace with '.' instead of '::' results in an appropriate exception.
+
+    :param snippet: Snippet that is expected to produce this error.
+    """
+    with pytest.raises(InvalidNamespaceAccess):
+        parse_code(snippet)
+
+
+@pytest.mark.parametrize_any(
+    "snippet, invalid, valid, location",
+    [
+        ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:5"),
+        ("x = mymod.submod.my_plugin()", "mymod.submod.my_plugin", "mymod::submod::my_plugin", "1:5"),
+    ],
+)
+def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, location: str) -> None:
+    with pytest.raises(InvalidNamespaceAccess) as exc_info:
+        parse_code(snippet)
+    assert exc_info.value.format_trace().strip() == (
+        f"Syntax error: invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather"
+        f" than '.'. The '.' separator is reserved for attribute and relation access. Did you mean: `{valid}`"
+        f" (test:{location})"
+    )
 
 
 def test_expression_as_statements():
