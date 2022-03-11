@@ -277,6 +277,129 @@ the log level of the command to the DEBUG level and the ``-X`` option shows stac
 
    $ inmanta -vvv export -X
 
+
+Compilation fails
+=================
+
+In rare situations, the compiler might fail with a ``List modified after freeze`` or an
+``Optional variable accessed that has no value`` error, even though the model is syntactically correct. The following
+sections describe why this error occurs and what can be done to make the compilation succeed.
+
+Reason for compilation failure
+------------------------------
+
+When the compiler runs, it cannot know upfront how many elements will be added to a relationship. At some stages of the
+compilation process the compiler has to guess which relations are completely populated in order to be able to continue
+the compilation process. Heuristics are being used to determine the correct order in which relationships can be
+considered completely populated. In most situation these heuristics work well, but in rare situations the compiler
+makes an incorrect decision and considers a relationship to be complete while it isn't. In those situation the compiler
+crashes with one of the following exception:
+
+* ``List modified after freeze``: This error occurs when a relationship with an upper arity larger than one was
+  considered complete too soon.
+* ``Optional variable accessed that has no value``: This error occurs when a ``[0:1]`` relationship was considered
+  complete too soon.
+
+The following sections provide information on how this issue can be resolved.
+
+Relationship precedence policy
+------------------------------
+
+.. warning::
+
+    The inmanta compiler is very good at determining in which order it should evaluate the orchestration model. Unfortunately in very complex models it might not be able to do this. In that case you can give the compiler some instruction by providing it with relationship precedence rules.
+
+    This is a very powerful tool because you can override all the intelligence in the compiler. This means that if you provide the correct rule it will fix the compilation. If you provide a wrong rule it can make this even worse. However, it can never make the orchestrator compile incorrect results.
+
+The above-mentioned problem can be resolved by defining a *relation precedence policy* in the ``project.yml``
+file of an Inmanta project. This policy consists of a list of rules. Each rule defining the order in which two
+relationships should be considered complete with respect to each other. By providing this policy, it's possible to
+guide the compiler in making the correct decisions that lead to a successful compilation.
+
+Example: Consider the following ``project.yml`` file.
+
+.. code-block:: text
+    :linenos:
+
+    name: quickstart
+    modulepath: libs
+    downloadpath: libs
+    repo: https://github.com/inmanta/
+    description: A quickstart project that installs a drupal website.
+    relation_precedence_policy:
+      - "a::EntityA.relation before b::EntityB.other_relation"
+
+
+The last two lines of this file define the relation precedence policy of the project. The policy contains one rule
+saying that the relationship ``relation`` of entity ``a::EntityA`` should be considered completely populated before
+the relation ``other_relation`` of entity ``b::EntityB`` can be considered complete.
+
+Each rule in a relation precedence policy should have the following syntax:
+
+.. code-block:: text
+
+    <first-type>.<first-relation-name> before <then-type>.<then-relation-name>
+
+
+Compose a relationship precedence policy
+----------------------------------------
+
+Depending on the complexity of your model, it might be difficult to determine the rule(s) that should be added to the
+relation precedence policy to make the compile succeed. In this section we will provide some guidelines to compose
+the correct set of rules.
+
+When the compilation of a model fails with a ``List modified after freeze`` or an
+``Optional variable accessed that has no value`` error, the output from the compiler will contain information regarding
+which relationship was frozen too soon.
+
+For example, consider the following compiler output:
+
+.. code-block:: text
+
+    ...
+    Exception explanation
+    =====================
+    The compiler could not figure out how to execute this model.
+
+    During compilation, the compiler has to decide when it expects a relation to have all its elements.
+    In this compiler run, it guessed that the relation 'finds' on the instance maze::ServiceA
+    (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) would be complete with the values [], but the
+    value maze::SubB (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:62) was added at
+    /home/centos/maze_project/libs/maze/model/_init.cf:75
+    ...
+
+In the above-mentioned example, the relationship ``maze::ServiceA.finds`` was incorrectly considered complete. To find
+the other relation in the ordering conflict, compile the model once more with the log level set to DEBUG by passing
+the ``-vvv`` option and grep for the log lines that contain the word ``freezing``. The output will contains a log line
+for each relationship that is considered complete. This way you get an overview regarding the order in which the
+compiler considers the different relations to be complete.
+
+.. code-block:: text
+
+    $ inmanta -vvv compile|grep -i freezing
+    ...
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::ServiceA (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:43) maze::ServiceA.finds = []
+    inmanta.execute.schedulerLevel 3 Freezing ListVariable maze::World (instantiated at /home/centos/maze_project/libs/maze/model/_init.cf:10) maze::World.services = [maze::ServiceA 7f8feb20f700, maze::ServiceA 7f8feb20faf0, maze::ServiceA 7f8feb20fee0, maze::ServiceA 7f8feb1e7310, maze::ServiceA 7f8feb1e7700]
+    Could not set attribute `finds` on instance `maze::ServiceA
+    ...
+
+All the relationships frozen after the freeze of the ``maze::ServiceA.finds`` relationship are potentially causing the
+compilation problem. In the above-mention example, there is only one, namely the ``maze::World.services`` relationship.
+
+As such the following rule should be added to the relation precedence policy to resolve this specific conflict:
+
+.. code-block:: text
+
+    maze::World.services before maze::ServiceA.finds
+
+When you compile the model once more with the relation precedence policy in-place, the compilation can either succeed
+or fail with another ``List modified after freeze`` or an ``Optional variable accessed that has no value`` error. The
+latter case indicates that a second rule should be added to the relation precedence policy.
+
 Debugging
 =========
 
