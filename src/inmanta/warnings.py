@@ -146,7 +146,7 @@ class WarningsManager:
         text: str
         logger: logging.Logger
         if issubclass(category, InmantaWarning):
-            text = "%s: %s\n" % (category.__name__, message)
+            text = "%s: %s" % (category.__name__, message)
             logger = logging.getLogger("inmanta.warnings")
         else:
             text = warnings.formatwarning(
@@ -160,7 +160,8 @@ class WarningsManager:
             logger = logging.getLogger("py.warnings")
         if file is not None:
             try:
-                file.write(text)
+                # This code path is currently not used in our code base
+                file.write(f"{text}\n")
             except OSError:
                 pass
         else:
