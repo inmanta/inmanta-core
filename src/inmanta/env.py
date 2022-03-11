@@ -61,6 +61,21 @@ class VirtualEnv(object):
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
+        python_name = os.path.basename(sys.executable)
+
+        if sys.platform == "win32":
+            self.binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
+            site_package_relative_path = os.path.join("Lib", "site-packages")
+        else:
+            self.binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
+            site_package_relative_path = os.path.join(
+                "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            )
+
+        self.python_bin = os.path.join(self.binpath, python_name)
+        self.base = os.path.dirname(self.binpath)
+        self.site_packages = os.path.join(self.base, site_package_relative_path)
+
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
             self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
@@ -73,22 +88,35 @@ class VirtualEnv(object):
         """
         self._parent_python = sys.executable
 
-        python_name = os.path.basename(sys.executable)
-
         # check if the virtual env exists
-        if sys.platform == "win32":
-            python_bin = os.path.join(self.env_path, "Scripts", python_name)
-        else:
-            python_bin = os.path.join(self.env_path, "bin", python_name)
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+            # make sure the venv hosts the same python version as the running process
+            if sys.platform.startswith("linux"):
+                # On linux distributions we can check the versions match because
+                # the env's version is in the site-packages dir's path
 
-        if not os.path.exists(python_bin):
-            # venv requires some care when the .env folder already exists
-            # https://docs.python.org/3/library/venv.html
-            if not os.path.exists(self.env_path):
-                path = self.env_path
+                if not os.path.exists(self.site_packages):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
             else:
-                # venv has problems with symlinks
-                path = os.path.realpath(self.env_path)
+                # On other distributions a more costly check is required:
+                # get version as a (major, minor) tuple for the venv and the running process
+                venv_python_version = subprocess.check_output([self.python_bin, "--version"]).decode("utf-8").strip().split()[1]
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+                running_process_python_version = sys.version_info[:2]
+
+                if venv_python_version != running_process_python_version:
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+        else:
+            path = os.path.realpath(self.env_path)
 
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
@@ -102,7 +130,7 @@ class VirtualEnv(object):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         # set the path to the python and the pip executables
-        self.virtual_python = python_bin
+        self.virtual_python = self.python_bin
 
         return True
 
@@ -130,24 +158,13 @@ class VirtualEnv(object):
         # Copyright (c) 2009 Ian Bicking, The Open Planning Project
         # Copyright (c) 2011-2016 The virtualenv developers
 
-        if sys.platform == "win32":
-            binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
-            base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "Lib", "site-packages")
-        else:
-            binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-            base = os.path.dirname(binpath)
-            site_packages = os.path.join(
-                base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
-            )
-
         old_os_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = binpath + os.pathsep + old_os_path
+        os.environ["PATH"] = self.binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        site.addsitedir(site_packages)
+        site.addsitedir(self.site_packages)
         sys.real_prefix = sys.prefix
-        sys.prefix = base
+        sys.prefix = self.base
         # Move the added items to the front of the path:
         new_sys_path = []
         for item in list(sys.path):
@@ -355,3 +372,9 @@ python -m pip $@
             LOGGER.debug("%s: %s", cmd, output.decode())
 
         return {r["name"]: r["version"] for r in json.loads(output.decode())}
+
+
+class VenvActivationFailedError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg

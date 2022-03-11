@@ -1,0 +1,6 @@
+description: An exception is now raised when there is a mismatch between the python version of the compiler venv and the python version of the active process
+change-type: patch
+destination-branches: [iso4]
+sections: {
+  bugfix: "{{description}}"
+}
