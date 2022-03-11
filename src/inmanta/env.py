@@ -61,16 +61,21 @@ class VirtualEnv(object):
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
+        python_name = os.path.basename(sys.executable)
+
         if sys.platform == "win32":
             self.binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
             self.base = os.path.dirname(self.binpath)
             self.site_packages = os.path.join(self.base, "Lib", "site-packages")
+            self.python_bin = os.path.join(self.env_path, "Scripts", python_name)
+
         else:
             self.binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
             self.base = os.path.dirname(self.binpath)
             self.site_packages = os.path.join(
                 self.base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
             )
+            self.python_bin = os.path.join(self.env_path, "bin", python_name)
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
@@ -84,15 +89,12 @@ class VirtualEnv(object):
         """
         self._parent_python = sys.executable
 
-        python_name = os.path.basename(sys.executable)
-
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             # make sure the venv hosts the same python version as the running process
             if sys.platform.startswith("linux"):
                 # On linux distribs we can check the versions match because the env's version is in the site-packages dir's path
 
-                python_bin = os.path.join(self.env_path, "bin", python_name)
                 if not os.path.exists(self.site_packages):
                     raise VenvActivationFailedError(
                         msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
@@ -102,8 +104,7 @@ class VirtualEnv(object):
             else:
                 # On other distributions a more costly check is required:
                 # get version as a (major, minor) tuple for the venv and the running process
-                python_bin = os.path.join(self.env_path, "Scripts", python_name)
-                venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
+                venv_python_version = subprocess.check_output([self.python_bin, "--version"]).decode("utf-8").strip().split()[1]
                 venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
 
                 running_process_python_version = sys.version_info[:2]
@@ -129,7 +130,7 @@ class VirtualEnv(object):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         # set the path to the python and the pip executables
-        self.virtual_python = python_bin
+        self.virtual_python = self.python_bin
 
         return True
 
