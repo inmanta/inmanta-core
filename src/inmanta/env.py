@@ -92,7 +92,8 @@ class VirtualEnv(object):
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             # make sure the venv hosts the same python version as the running process
             if sys.platform.startswith("linux"):
-                # On linux distributions we can check the versions match because the env's version is in the site-packages dir's path
+                # On linux distributions we can check the versions match because
+                # the env's version is in the site-packages dir's path
 
                 if not os.path.exists(self.site_packages):
                     raise VenvActivationFailedError(
