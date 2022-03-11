@@ -1309,12 +1309,21 @@ a = "One big token"
 
 \"""
 str1 with
-some variations\"""
+"some" variations\"""
+
+b = "another big token"
+
+\"""
+str1 with
+some other variations
+\"""
+
 """
     )
-    assert len(statements) == 3
+    assert len(statements) == 5
     mls1 = statements[0]
     mls2 = statements[2]
+    mls3 = statements[4]
 
     assert isinstance(mls1, LocatableString)
     assert isinstance(mls2, Literal)
@@ -1333,8 +1342,14 @@ str1
     assert mls2.location.lnr == 8
     assert mls2.location.end_lnr == 10
     assert mls2.location.start_char == 1
-    assert mls2.location.end_char == 19
-    assert mls2.value == "\nstr1 with\nsome variations"
+    assert mls2.location.end_char == 21
+    assert mls2.value == '\nstr1 with\n"some" variations'
+
+    assert mls3.location.lnr == 14
+    assert mls3.location.end_lnr == 17
+    assert mls3.location.start_char == 1
+    assert mls3.location.end_char == 4
+    assert mls3.value == "\nstr1 with\nsome other variations\n"
 
 
 def test_mls_5():
