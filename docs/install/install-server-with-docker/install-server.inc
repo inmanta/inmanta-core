@@ -8,7 +8,7 @@ Use docker pull to get the desired image:
     docker pull ghcr.io/inmanta/orchestrator:2022
 
 
-This command will pull the latest version of the Inmanta orchestrator Orchestrator image.
+This command will pull the latest version of the Inmanta Orchestrator image.
 
 
 Start the server with docker-compose
