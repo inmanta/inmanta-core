@@ -5,10 +5,10 @@ Use docker pull to get the desired image:
 
 .. code-block:: sh
 
-    docker pull ghcr.io/inmanta/oss:2022
+    docker pull ghcr.io/inmanta/orchestrator:2022
 
 
-This command will pull the latest version of the Inmanta OSS Orchestrator image.
+This command will pull the latest version of the Inmanta Orchestrator image.
 
 
 Start the server with docker-compose
@@ -21,27 +21,27 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
     version: '3'
     services:
         postgres:
-            container_name: iso_postgres
+            container_name: inmanta_db
             image: postgres:13
             environment:
                 POSTGRES_USER: inmanta
                 POSTGRES_PASSWORD: inmanta
             networks:
-                iso_net:
+                inm_net:
                     ipv4_address: 172.30.0.2
 
         inmanta-server:
-            container_name: iso_server
-            image: ghcr.io/inmanta/oss:2022
+            container_name: inmanta_orchestrator
+            image: ghcr.io/inmanta/orchestrator:2022
             ports:
                 - 8888:8888
             networks:
-                iso_net:
+                inm_net:
                     ipv4_address: 172.30.0.3
-            command: "server --wait-for-host iso_postgres --wait-for-port 5432"
+            command: "server --wait-for-host inmanta_db --wait-for-port 5432"
 
     networks:
-        iso_net:
+        inm_net:
             ipam:
                 driver: default
                 config:
@@ -56,7 +56,7 @@ Then bring the containers up by running the following command:
 You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
 
 The default server config included in the container images assumes that the orchestrator will have a database 
-with hostname ``iso_postgres`` reachable and that it can authenticate to it using the username ``inmanta`` 
+with hostname ``inmanta_db`` reachable and that it can authenticate to it using the username ``inmanta`` 
 and password ``inmanta``.  
 When using a different setup than the one mentioned above, you should overwrite the server config with one
 matching your needs.  You can find more instructions for overwriting the config in a following section, 
