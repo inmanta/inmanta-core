@@ -160,7 +160,8 @@ class WarningsManager:
             logger = logging.getLogger("py.warnings")
         if file is not None:
             try:
-                file.write(text)
+                # This code path is currently not used in our code base
+                file.write(f"{text}\n")
             except OSError:
                 pass
         else:
