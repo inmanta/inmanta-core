@@ -696,16 +696,17 @@ class VirtualEnv(ActiveEnv):
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
         elif not os.path.exists(self._path_pth_file):
-            # make sure the venv hosts the same python version as the running process
-            if sys.platform != "win32":
-                # on UNIX based systems, the python version is in the path to the site packages dir:
+            # Make sure the venv hosts the same python version as the running process
+            if sys.platform.startswith("linux"):
+                # On linux based systems, the python version is in the path to the site packages dir:
                 if not os.path.exists(self.site_packages_dir):
                     raise VenvActivationFailedError(
                         msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
                         "is different from the Python version of this process."
                     )
             else:
-                # get version as a (major, minor) tuple for the venv and the running process
+                # On other distributions a more costly check is required:
+                # Get version as a (major, minor) tuple for the venv and the running process
                 venv_python_version = (
                     subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
                 )
