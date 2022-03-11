@@ -87,19 +87,35 @@ class VirtualEnv(object):
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
-        if sys.platform == "win32":
-            python_bin = os.path.join(self.env_path, "Scripts", python_name)
-        else:
-            python_bin = os.path.join(self.env_path, "bin", python_name)
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+            # make sure the venv hosts the same python version as the running process
+            if sys.platform.startswith("linux"):
+                # On linux distribs we can check the versions match because the env's version is in the site-packages dir's path
 
-        if not os.path.exists(python_bin):
-            # venv requires some care when the .env folder already exists
-            # https://docs.python.org/3/library/venv.html
-            if not os.path.exists(self.env_path):
-                path = self.env_path
+                python_bin = os.path.join(self.env_path, "bin", python_name)
+                if not os.path.exists(self.site_packages):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
             else:
-                # venv has problems with symlinks
-                path = os.path.realpath(self.env_path)
+                # On other distributions a more costly check is required:
+                # get version as a (major, minor) tuple for the venv and the running process
+                python_bin = os.path.join(self.env_path, "Scripts", python_name)
+                venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+                running_process_python_version = sys.version_info[:2]
+
+                if venv_python_version != running_process_python_version:
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+        else:
+            path = os.path.realpath(self.env_path)
 
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
@@ -111,32 +127,6 @@ class VirtualEnv(object):
                 LOGGER.exception("Unable to create new virtualenv at %s", self.env_path)
                 return False
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
-
-        else:
-            # make sure the venv hosts the same python version as the running process
-
-            if sys.platform.startswith("linux"):
-                # On linux distribs we can check the versions match because the env's version is in the site-packages dir's path
-
-                if not os.path.exists(self.site_packages):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-
-            else:
-                # On other distributions a more costly check is required:
-                # get version as a (major, minor) tuple for the venv and the running process
-                venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
-                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
-
-                running_process_python_version = sys.version_info[:2]
-
-                if venv_python_version != running_process_python_version:
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
