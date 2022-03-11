@@ -1403,6 +1403,57 @@ def test_mls_7():
     assert str(mls.value) == '"This" is a "mls" on one "line"'
 
 
+def test_mls_8():
+    statements = parse_code(
+        """
+\"""String: ""\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 17
+    assert str(mls.value) == 'String: ""'
+
+
+def test_mls_9():
+    statements = parse_code(
+        """
+\"""\"" is a string\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 21
+    assert str(mls.value) == '"" is a string'
+
+
+def test_mls_10():
+    statements = parse_code(
+        """
+\"""\" start and end with "\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 29
+    assert str(mls.value) == '" start and end with "'
+
+
 def test_mls_as_argument():
     statements = parse_code(
         """
