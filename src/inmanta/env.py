@@ -682,8 +682,7 @@ class VirtualEnv(ActiveEnv):
             if not os.path.exists(self.env_path):
                 path = self.env_path
             else:
-                # venv has problems with symlinks
-                path = os.path.realpath(self.env_path)
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} (environment already exists)")
 
             # --clear is required in python prior to 3.4 if the folder already exists
             try:
