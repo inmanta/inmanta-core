@@ -131,7 +131,7 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
-    r'"{3}([\s\S]*?)"{3}'
+    r'"{3}(((\"([^"]+)*\")|[\s\S])*?)"{3}'
     value = t.value[3:-3]
     lexer = t.lexer
     match = lexer.lexmatch[0]

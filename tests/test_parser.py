@@ -1337,6 +1337,66 @@ str1
     assert mls2.value == "\nstr1 with\nsome variations"
 
 
+def test_mls_as_argument():
+    statements = parse_code(
+        """
+std::print(\"""hello\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == "hello"
+
+
+def test_mls_as_argument_2():
+    statements = parse_code(
+        """
+std::print(\"""hello"world"\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == 'hello"world"'
+
+
+def test_mls_as_argument_3():
+    statements = parse_code(
+        """
+std::print("\"""hello"world\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == '"hello"world'
+
+
+def test_mls_as_argument_4():
+    statements = parse_code(
+        """
+std::print("\""aaaa"helloworld"aaaa\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == 'aaaa"helloworld"aaaa'
+
+
 def test_bad():
     with pytest.raises(ParserException):
         parse_code(
