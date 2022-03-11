@@ -701,10 +701,6 @@ class VirtualEnv(ActiveEnv):
                         "is different from the Python version of this process."
                     )
 
-            raise VenvCreationFailedError(
-                msg=f"Unable to create new virtualenv at {self.env_path} (environment already exists)"
-            )
-
         else:
             path = os.path.realpath(self.env_path)
             try:
