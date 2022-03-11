@@ -61,6 +61,17 @@ class VirtualEnv(object):
         self._parent_python: Optional[str] = None
         self._packages_installed_in_parent_env: Optional[Dict[str, str]] = None
 
+        if sys.platform == "win32":
+            self.binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
+            self.base = os.path.dirname(self.binpath)
+            self.site_packages = os.path.join(self.base, "Lib", "site-packages")
+        else:
+            self.binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
+            self.base = os.path.dirname(self.binpath)
+            self.site_packages = os.path.join(
+                self.base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            )
+
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
             self._packages_installed_in_parent_env = self._get_installed_packages(self._parent_python)
@@ -104,21 +115,17 @@ class VirtualEnv(object):
         else:
             # make sure the venv hosts the same python version as the running process
 
-            if sys.platform != "win32":
-                # On UNIX distribs we can check the versions match because the env's version is in the site-packages dir's path
-                binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-                base = os.path.dirname(binpath)
-                site_packages = os.path.join(
-                    base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
-                )
-                if not os.path.exists(site_packages):
+            if sys.platform.startswith("linux"):
+                # On linux distribs we can check the versions match because the env's version is in the site-packages dir's path
+
+                if not os.path.exists(self.site_packages):
                     raise VenvActivationFailedError(
                         msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
                         "is different from the Python version of this process."
                     )
 
             else:
-                # On windows distributions a more costly check is required:
+                # On other distributions a more costly check is required:
                 # get version as a (major, minor) tuple for the venv and the running process
                 venv_python_version = subprocess.check_output([python_bin, "--version"]).decode("utf-8").strip().split()[1]
                 venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
@@ -160,24 +167,13 @@ class VirtualEnv(object):
         # Copyright (c) 2009 Ian Bicking, The Open Planning Project
         # Copyright (c) 2011-2016 The virtualenv developers
 
-        if sys.platform == "win32":
-            binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
-            base = os.path.dirname(binpath)
-            site_packages = os.path.join(base, "Lib", "site-packages")
-        else:
-            binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-            base = os.path.dirname(binpath)
-            site_packages = os.path.join(
-                base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
-            )
-
         old_os_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = binpath + os.pathsep + old_os_path
+        os.environ["PATH"] = self.binpath + os.pathsep + old_os_path
         prev_sys_path = list(sys.path)
 
-        site.addsitedir(site_packages)
+        site.addsitedir(self.site_packages)
         sys.real_prefix = sys.prefix
-        sys.prefix = base
+        sys.prefix = self.base
         # Move the added items to the front of the path:
         new_sys_path = []
         for item in list(sys.path):
