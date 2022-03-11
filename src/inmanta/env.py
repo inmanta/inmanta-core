@@ -676,25 +676,7 @@ class VirtualEnv(ActiveEnv):
         self._parent_python = sys.executable
 
         # check if the virtual env exists
-        if not os.path.exists(self.python_path):
-            # venv requires some care when the .env folder already exists
-            # https://docs.python.org/3/library/venv.html
-            if not os.path.exists(self.env_path):
-                path = self.env_path
-            else:
-                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} (environment already exists)")
-
-            # --clear is required in python prior to 3.4 if the folder already exists
-            try:
-                venv.create(path, clear=True, with_pip=False)
-                self._write_pip_binary()
-                self._write_pth_file()
-            except CalledProcessError as e:
-                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
-            except Exception:
-                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
-            LOGGER.debug("Created a new virtualenv at %s", self.env_path)
-        elif not os.path.exists(self._path_pth_file):
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             # Make sure the venv hosts the same python version as the running process
             if sys.platform.startswith("linux"):
                 # On linux based systems, the python version is in the path to the site packages dir:
@@ -718,6 +700,24 @@ class VirtualEnv(ActiveEnv):
                         msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
                         "is different from the Python version of this process."
                     )
+
+            raise VenvCreationFailedError(
+                msg=f"Unable to create new virtualenv at {self.env_path} (environment already exists)"
+            )
+
+        else:
+            path = os.path.realpath(self.env_path)
+            try:
+                venv.create(path, clear=True, with_pip=False)
+                self._write_pip_binary()
+                self._write_pth_file()
+            except CalledProcessError as e:
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
+            except Exception:
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
+            LOGGER.debug("Created a new virtualenv at %s", self.env_path)
+
+        if not os.path.exists(self._path_pth_file):
 
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
