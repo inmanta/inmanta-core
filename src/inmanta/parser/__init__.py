@@ -19,7 +19,7 @@
 from typing import Optional
 
 import inmanta.ast.export as ast_export
-from inmanta.ast import CompilerException, Range
+from inmanta.ast import CompilerException, LocatableString, Range
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -58,3 +58,26 @@ class SyntaxDeprecationWarning(ParserWarning):
 
     def __init__(self, location: Range, value: object, msg: str) -> None:
         ParserWarning.__init__(self, location, value, msg)
+
+
+class InvalidNamespaceAccess(ParserException):
+    """
+    Exception raised when a namespace access is attempted with '.' rather than '::'.
+    """
+
+    def __init__(self, invalid: LocatableString) -> None:
+        self.invalid: LocatableString = invalid
+        super().__init__(
+            location=invalid.location,
+            value=str(invalid),
+            msg=(
+                f"invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather than '.'. "
+                f"The '.' separator is reserved for attribute and relation access. Did you mean: `{self.suggest_replacement()}`"
+            ),
+        )
+
+    def suggest_replacement(self) -> str:
+        """
+        Returns the suggested replacement to fix this error.
+        """
+        return str(self.invalid).replace(".", "::")
