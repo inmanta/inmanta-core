@@ -65,17 +65,16 @@ class VirtualEnv(object):
 
         if sys.platform == "win32":
             self.binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
-            self.base = os.path.dirname(self.binpath)
-            self.site_packages = os.path.join(self.base, "Lib", "site-packages")
-            self.python_bin = os.path.join(self.env_path, "Scripts", python_name)
-
+            site_package_relative_path = os.path.join("Lib", "site-packages")
         else:
             self.binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-            self.base = os.path.dirname(self.binpath)
-            self.site_packages = os.path.join(
-                self.base, "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
+            site_package_relative_path = os.path.join(
+                "lib", "python%s" % ".".join(str(digit) for digit in sys.version_info[:2]), "site-packages"
             )
-            self.python_bin = os.path.join(self.env_path, "bin", python_name)
+
+        self.python_bin = os.path.join(self.binpath, python_name)
+        self.base = os.path.dirname(self.binpath)
+        self.site_packages = os.path.join(self.base, site_package_relative_path)
 
     def get_package_installed_in_parent_env(self) -> Optional[Dict[str, str]]:
         if self._packages_installed_in_parent_env is None:
@@ -93,7 +92,7 @@ class VirtualEnv(object):
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             # make sure the venv hosts the same python version as the running process
             if sys.platform.startswith("linux"):
-                # On linux distribs we can check the versions match because the env's version is in the site-packages dir's path
+                # On linux distributions we can check the versions match because the env's version is in the site-packages dir's path
 
                 if not os.path.exists(self.site_packages):
                     raise VenvActivationFailedError(
