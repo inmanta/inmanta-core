@@ -25,7 +25,7 @@ from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
 from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer
 from inmanta.ast.type import Bool, create_function
-from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
+from inmanta.ast.variables import AttributeReferenceHelperABC, IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
 
@@ -78,14 +78,15 @@ class IsDefined(ReferenceStatement):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
-        resumer = IsDefinedReferenceHelper(temp, self.attr, self.name)
+        resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
+            instance=self.attr,
+            attribute=self.name,
+            action=IsDefinedGradual(target=temp),
+        )
         self.copy_location(resumer)
+        resumer.schedule(resolver, queue)
 
-        # wait for the instance
-        if self.requires():
-            RawUnit(queue, resolver, super().requires_emit(resolver, queue), resumer)
-        else:
-            resumer.resume({}, resolver, queue)
+        # wait for the attribute value
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
