@@ -85,6 +85,12 @@ class DynamicStatement(Statement):
         """List of all variable names used by this statement"""
         raise NotImplementedError()
 
+    # TODO: name
+    def emit_promise(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        # TODO: docstring: emit progression promise on parent context
+        # TODO: implement
+        pass
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()

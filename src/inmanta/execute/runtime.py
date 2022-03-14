@@ -95,6 +95,24 @@ class ISetPromise(IPromise, Generic[T]):
         pass
 
 
+class ProgressionPromise(IPromise):
+    """
+    A promise from a provider to the owner to progress towards setting a value, for example by emitting additional statements.
+    """
+
+    __slots__ = ("provider", "owner")
+
+    def __init__(self, owner: "ResultVariable[T]", provider: "Statement") -> None:
+        self.owner: ResultVariable[T] = owner
+        self.provider: Statement = provider
+
+    def fulfill(self) -> None:
+        """
+        Fulfills this promise by notifying the owner.
+        """
+        self.owner.fulfill(self)
+
+
 class ResultVariable(ResultCollector[T], ISetPromise[T]):
     """
     A ResultVariable is like a future
@@ -127,8 +145,34 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         Acquire a promise to set a value for this variable. To fulfill the promise and set the promised value for this
         variable, set the value on the promise object.
         """
-        # TODO: not used by plain RV, document or move down
+        # TODO: not used by plain RV, document or move down (perhaps have this method return Optional[ISetPromise] as below?)
         return self
+
+    # TODO: acquire in if-else, ... Make sure to take into account (and add test) that nested ifs might never get emitted
+    #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
+    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
+        """
+        Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
+        promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
+        soon as it is known that no further progress will be made.
+
+        Returns None if this variable does not track progression promises.
+
+        e.g. a progression promise could be acquired by a conditional statement that might emit a new assignment statement for
+        this variable. As soon as the condition is evaluated this promise should be fulfilled.
+
+        This overpromising semantics allows for more strict promise tracking, providing more certainty on variable completeness
+        at the cost of disallowing circular logic.
+        """
+        return None
+
+    def fulfill(self, promise: IPromise) -> None:
+        # TODO: mention that the promise must/is assumed to be owned/handed out by this variable
+        """
+        Considers the given promise fulfilled.
+        """
+        # plain ResultVariable does not track promises -> simply return
+        pass
 
     def is_ready(self) -> bool:
         return self.hasValue
@@ -151,7 +195,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         self.location = location
         self.hasValue = True
         for waiter in self.waiters:
-            waiter.ready(self)
+
         # prevent memory leaks
         self.waiters = None
 
@@ -223,24 +267,6 @@ class AttributeVariable(ResultVariable["Instance"]):
         self.waiters = None
 
 
-class ProgressionPromise(IPromise):
-    """
-    A promise from a provider to the owner to progress towards setting a value, for example by emitting additional statements.
-    """
-
-    __slots__ = ("provider", "owner")
-
-    def __init__(self, owner: "DelayedResultVariable[T]", provider: "Statement") -> None:
-        self.owner: DelayedResultVariable[T] = owner
-        self.provider: Statement = provider
-
-    def fulfill(self) -> None:
-        """
-        Fulfills this promise by notifying the owner.
-        """
-        self.owner.fulfill(self)
-
-
 class SetPromise(ISetPromise[T]):
     """
     A promise from a provider to the owner to set a value.
@@ -291,20 +317,7 @@ class DelayedResultVariable(ResultVariable[T]):
         self.promises.append(promise)
         return promise
 
-    # TODO: acquire in if-else, ... Make sure to take into account (and add test) that nested ifs might never get emitted
-    #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
     def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
-        """
-        Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
-        promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
-        soon as it is known that no further progress will be made.
-
-        e.g. a progression promise could be acquired by a conditional statement that might emit a new assignment statement for
-        this variable. As soon as the condition is evaluated this promise should be fulfilled.
-
-        This overpromising semantics allows for more strict promise tracking, providing more certainty on variable completeness
-        at the cost of disallowing circular logic.
-        """
         promise: ProgressionPromise = ProgressionPromise(self, provider)
         self.promises.append(promise)
         return promise

@@ -186,6 +186,7 @@ class AttributeReferencePromise(AttributeReferenceActionABC):
         super().__init__()
         self.provider: Statement = provider
         self._promise: Optional[ProgressionPromise] = None
+        # TODO: add single responsible per block for this?
         self._fulfilled: bool = False
 
     def resolve(
