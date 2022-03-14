@@ -173,7 +173,15 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         return self._node
 
 
-class AttributeVariable(ResultVariable["Instance"]):
+class RelationAttributeVariable:
+    """
+    Abstract base class for variables associated with a relation attribute.
+    """
+
+    __slots__ = ()
+
+
+class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
     a result variable for a relation with arity 1
 
@@ -388,23 +396,34 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return "BaseListVariable %s" % (self.value)
 
 
-class TempListVariable(BaseListVariable):
+class ListLiteral(BaseListVariable):
+    """
+    Transient variable to represent a list (of either constants or instances) literal (not a variable).
+    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
+    tracking and freezing. Instances of this class should never require forceful freezing.
+    """
 
     __slots__ = ()
 
     def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
+        """
+        Set a promised value with 100% accurate promise tracking. Because of this class' invariant that all promises are
+        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
+        """
         super().set_promised_value(promis, value, location, recur)
-        # 100% accurate promisse tracking
         if len(self.promisses) == len(self.done_promisses):
             self.freeze()
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        # A TempListVariable is never associated with an Entity, so it cannot have a relation precedence rule.
+        # A ListLiteral is never associated with an Entity, so it cannot have a relation precedence rule.
         return len(self.waiters) - len(self.listeners)
 
 
-class ListVariable(BaseListVariable):
+class ListVariable(BaseListVariable, RelationAttributeVariable):
+    """
+    ResultVariable that represents a list of instances associated with a relation attribute.
+    """
 
     value: "List[Instance]"
 
@@ -412,8 +431,8 @@ class ListVariable(BaseListVariable):
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.attribute: "RelationAttribute" = attribute
-        self.myself = instance
-        super().__init__(queue)
+        self.myself: "Instance" = instance
+        BaseListVariable.__init__(self, queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if isinstance(value, NoneValue):
@@ -467,14 +486,14 @@ class ListVariable(BaseListVariable):
         return len(self.waiters) - len(self.listeners) + int(self.attribute.has_relation_precedence_rules())
 
 
-class OptionVariable(DelayedResultVariable["Instance"]):
+class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
 
     __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.value = None
-        self.attribute = attribute
-        self.myself = instance
+        self.attribute: "RelationAttribute" = attribute
+        self.myself: "Instance" = instance
         self.location = None
         # Only call super after initialization of the above-mentioned attributes
         # because the self.queue() operation in DelayedResultVariable requires
