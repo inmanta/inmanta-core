@@ -24,7 +24,7 @@ from inmanta.ast import Locatable, LocatableString, Location, NotFoundException,
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import Instance, ProgressionPromise, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
