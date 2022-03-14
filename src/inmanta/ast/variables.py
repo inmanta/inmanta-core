@@ -21,7 +21,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -98,13 +98,33 @@ class Reference(ExpressionStatement):
         return self.name
 
 
-T = TypeVar("T")
+# TODO: name
+# TODO: generic?
+class AttributeReferenceActionABC(Locatable):
+    # TODO: docstring
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    # TODO: name
+    def resolve(
+        self,
+        attribute: ResultVariable,
+        requires: Dict[object, ResultVariable],
+        resolver: Resolver,
+        queue_scheduler: QueueScheduler,
+    ) -> None:
+        # TODO
+        pass
+
+    # TODO: str and repr
 
 
 # TODO; is this even an ABC anymore? Looks pretty concrete to me
 class AttributeReferenceHelperABC(RawResumer):
+    # TODO: docstring
     """
-    Generic helper class for accessing an instance attribute. Supplies subscribers with the attribute's ResultVariable
+    Generic helper class for accessing an instance attribute. Triggers action with the attribute's ResultVariable
     as soon as it's available.
     """
     # TODO: this might not work: different subscribers have different resolvers => single action
@@ -118,7 +138,6 @@ class AttributeReferenceHelperABC(RawResumer):
         self.attribute: str = attribute
         # TODO: name
         self.action: AttributeReferenceActionABC = action
-        self.copy_location(self.action)
 
     def _fetch_variable(
         self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
@@ -160,15 +179,15 @@ class AttributeReferenceHelperABC(RawResumer):
     # TODO: str and repr
 
 
-# TODO: name
-# TODO: generic?
-class AttributeReferenceActionABC(Locatable):
+class AttributeReferencePromise(AttributeReferenceActionABC):
     # TODO: docstring
 
-    def __init__(self) -> None:
+    def __init__(self, provider: Statement) -> None:
         super().__init__()
+        self.provider: Statement = provider
+        self._promise: Optional[ProgressionPromise] = None
+        self._fulfilled: bool = False
 
-    # TODO: name
     def resolve(
         self,
         attribute: ResultVariable,
@@ -176,10 +195,22 @@ class AttributeReferenceActionABC(Locatable):
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
-        # TODO
-        pass
+        # TODO: docstring
+        if self._fulfilled:
+            # already fulfilled, no need to acquire additional promises
+            return
+        # TODO: raise exception if self._promise already set?
+        # TODO: get_progression_promise only exists on DRV
+        self._promise = attribute.get_progression_promise(self.provider)
 
-    # TODO: str and repr
+    def fulfill(self) -> None:
+        # TODO: docstring
+        if self._promise is not None:
+            self._promise.fulfill()
+        self._fulfilled = True
+
+
+T = TypeVar("T")
 
 
 # TODO: name
@@ -304,11 +335,13 @@ class AttributeReference(Reference):
         temp = ResultVariable()
 
         # construct waiter
+        reader: AttributeReferenceRead = AttributeReferenceRead(target=temp, resultcollector=resultcollector)
         resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
             self.instance,
             str(self.attribute),
-            action=AttributeReferenceRead(target=temp, resultcollector=resultcollector),
+            action=reader,
         )
+        self.copy_location(reader)
         self.copy_location(resumer)
         resumer.schedule(resolver, queue)
 

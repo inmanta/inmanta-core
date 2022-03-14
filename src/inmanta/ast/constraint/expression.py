@@ -78,11 +78,13 @@ class IsDefined(ReferenceStatement):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
+        gradual_helper: IsDefinedGradual = IsDefinedGradual(target=temp)
         resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
             instance=self.attr,
             attribute=self.name,
-            action=IsDefinedGradual(target=temp),
+            action=gradual_helper,
         )
+        self.copy_location(gradual_helper)
         self.copy_location(resumer)
         resumer.schedule(resolver, queue)
 
