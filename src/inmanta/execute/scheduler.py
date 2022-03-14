@@ -44,8 +44,8 @@ from inmanta.execute.runtime import (
     ExecutionUnit,
     Instance,
     QueueScheduler,
+    RelationAttributeVariable,
     Resolver,
-    TempListVariable,
     Waiter,
 )
 from inmanta.execute.tracking import ModuleTracker
@@ -525,16 +525,11 @@ class PrioritisedDelayedResultVariableQueue:
     relation precedence policy passed to the Compiler. This queue will return elements
     in the following order:
 
-    * First return the DelayedResultVariables, which are not an instance of
-      TempListVariable and that do not have an order constraint.
-    * Then return DelayedResultVariables with order constraint.
-      They are returned in an order that is valid with respect to the
-      constraints.
-    * Finally, all TempListVariables are returned.
-
-    TempListVariables is subclass of DelayedResultVariables that is not
-    associated with an entity. That way it's not possible to set
-    a relation precedence rule on them.
+    * First return the DelayedResultVariables for relations that do not have an order constraint.
+    * Then return DelayedResultVariables for relations with order constraint.
+      They are returned in an order that is valid with respect to the constraints.
+    * Finally, all DelayedResultVariables that are not associated with an entity are
+      returned.
     """
 
     def __init__(
@@ -554,7 +549,7 @@ class PrioritisedDelayedResultVariableQueue:
         self._constraint_variables: Dict[RelationAttribute, Deque[DelayedResultVariable[object]]] = {
             relation_attribute: deque() for relation_attribute in self._freeze_order
         }
-        self._tmp_list_variables: Deque[TempListVariable] = deque()
+        self._non_relation_variables: Deque[DelayedResultVariable] = deque()
 
         # Populate queue with given DelayedResultVariables
         drvs = drvs if drvs else []
@@ -568,7 +563,7 @@ class PrioritisedDelayedResultVariableQueue:
         return (
             len(self._unconstraint_variables)
             + sum(len(v) for v in self._constraint_variables.values())
-            + len(self._tmp_list_variables)
+            + len(self._non_relation_variables)
         )
 
     def append(self, drv: DelayedResultVariable[object], dont_reset_working_list: bool = False) -> None:
@@ -578,8 +573,8 @@ class PrioritisedDelayedResultVariableQueue:
         :param dont_reset_working_list: This argument exists to increase performance by preventing
                                         unnecessary resets of the `self._freeze_order_working_list` queue.
         """
-        if isinstance(drv, TempListVariable):
-            self._tmp_list_variables.append(drv)
+        if not isinstance(drv, RelationAttributeVariable):
+            self._non_relation_variables.append(drv)
         elif drv.attribute in self._constraint_variables:
             self._constraint_variables[drv.attribute].append(drv)
             if not dont_reset_working_list and drv.attribute not in self._freeze_order_working_list:
@@ -602,7 +597,7 @@ class PrioritisedDelayedResultVariableQueue:
         except IndexError:
             # Empty
             pass
-        return self._tmp_list_variables.popleft()
+        return self._non_relation_variables.popleft()
 
     def _get_next_constraint_variable(self) -> DelayedResultVariable[object]:
         if not self._constraint_variables:
@@ -622,7 +617,7 @@ class PrioritisedDelayedResultVariableQueue:
         self._unconstraint_variables.clear()
         for queue in self._constraint_variables.values():
             queue.clear()
-        self._tmp_list_variables.clear()
+        self._non_relation_variables.clear()
         for drv in drvs:
             self.append(drv, dont_reset_working_list=True)
         self._freeze_order_working_list = self._freeze_order.copy()
