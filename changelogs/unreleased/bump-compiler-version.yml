@@ -1,0 +1,6 @@
+description: Bumped compiler version after compiler improvements
+change-type: patch
+issue-repo: inmanta-service-orchestrator
+issue-nr: 272
+destination-branches:
+  - iso4
