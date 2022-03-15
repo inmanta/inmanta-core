@@ -2119,6 +2119,7 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
+            await Notification.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
@@ -5414,7 +5415,9 @@ class Notification(BaseDocument):
     :param title: The title of the notification
     :param message: The actual text of the notification
     :param severity: The severity of the notification
-    :param uri: A link relevant to the message
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
     :param read: Whether the notification was read or not
     :param cleared: Whether the notification was cleared or not
     """
@@ -5427,7 +5430,7 @@ class Notification(BaseDocument):
     severity: const.NotificationSeverity = Field(
         field_type=const.NotificationSeverity, default=const.NotificationSeverity.message
     )
-    uri: str = Field(field_type=str, default="")
+    uri: str = Field(field_type=str, required=True)
     read: bool = Field(field_type=bool, default=False)
     cleared: bool = Field(field_type=bool, default=False)
 
@@ -5469,7 +5472,7 @@ class Notification(BaseDocument):
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
     @classmethod
-    async def get_notification_list(
+    async def list_notifications(
         cls,
         database_order: DatabaseOrder,
         limit: int,

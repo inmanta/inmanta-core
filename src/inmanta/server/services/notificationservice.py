@@ -63,7 +63,15 @@ class NotificationService(protocol.ServerSlice):
         severity: const.NotificationSeverity = const.NotificationSeverity.message,
         connection: Optional[Connection] = None,
     ) -> None:
-        """Internal API to create a new notification"""
+        """Internal API to create a new notification
+        :param environment: The environment this notification belongs to
+        :param title: The title of the notification
+        :param message: The actual text of the notification
+        :param severity: The severity of the notification
+        :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                    and can be used to get further information about the problem.
+                    For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+        """
         await data.Notification(
             environment=environment,
             title=title,
@@ -73,8 +81,8 @@ class NotificationService(protocol.ServerSlice):
             created=datetime.datetime.now().astimezone(),
         ).insert(connection)
 
-    @handle(methods_v2.get_notifications, env="tid")
-    async def get_notifications(
+    @handle(methods_v2.list_notifications, env="tid")
+    async def list_notifications(
         self,
         env: data.Environment,
         limit: Optional[int] = None,
@@ -103,7 +111,7 @@ class NotificationService(protocol.ServerSlice):
             raise BadRequest(e.message) from e
 
         try:
-            dtos = await data.Notification.get_notification_list(
+            dtos = await data.Notification.list_notifications(
                 database_order=notification_order,
                 limit=limit,
                 environment=env.id,
@@ -164,4 +172,6 @@ class NotificationService(protocol.ServerSlice):
             await notification.update(read=read)
         elif cleared is not None:
             await notification.update(cleared=cleared)
+        elif read is None and cleared is None:
+            raise BadRequest("At least one of {read, cleared} should be specified for a valid update")
         return notification.to_dto()

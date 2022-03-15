@@ -23,6 +23,7 @@ DISABLED = False
 
 async def update(connection: Connection) -> None:
     schema = """
+    CREATE TYPE notificationseverity AS ENUM('message', 'info', 'success', 'warning', 'error');
 
     -- Table: public.notification
     CREATE TABLE IF NOT EXISTS public.notification (
@@ -31,13 +32,13 @@ async def update(connection: Connection) -> None:
         created TIMESTAMP WITH TIME ZONE NOT NULL,
         title varchar NOT NULL,
         message varchar NOT NULL,
-        severity varchar DEFAULT 'message',
-        uri varchar DEFAULT '',
-        read boolean DEFAULT FALSE,
-        cleared boolean DEFAULT FALSE,
+        severity notificationseverity DEFAULT 'message',
+        uri varchar NOT NULL,
+        read boolean NOT NULL DEFAULT FALSE,
+        cleared boolean NOT NULL DEFAULT FALSE,
         PRIMARY KEY(environment, id)
     );
-    CREATE INDEX notification_env_created_id_index ON notification (environment, created DESC, id);
+    CREATE INDEX IF NOT EXISTS notification_env_created_id_index ON notification (environment, created DESC, id);
     """
     async with connection.transaction():
         await connection.execute(schema)

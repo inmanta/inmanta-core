@@ -50,43 +50,43 @@ async def environment_with_notifications(server, environment: str):
 
 async def test_filters(environment_with_notifications, client):
     environment = environment_with_notifications
-    result = await client.get_notifications(uuid.uuid4())
+    result = await client.list_notifications(uuid.uuid4())
     assert result.code == 404
 
-    result = await client.get_notifications(environment)
+    result = await client.list_notifications(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 8
 
-    result = await client.get_notifications(environment, filter={"read": False})
+    result = await client.list_notifications(environment, filter={"read": False})
     assert result.code == 200
     assert len(result.result["data"]) == 6
     assert all(not notification["read"] for notification in result.result["data"])
 
-    result = await client.get_notifications(environment, filter={"read": True})
+    result = await client.list_notifications(environment, filter={"read": True})
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert all(notification["read"] for notification in result.result["data"])
 
-    result = await client.get_notifications(environment, filter={"read": False, "cleared": False})
+    result = await client.list_notifications(environment, filter={"read": False, "cleared": False})
     assert result.code == 200
     assert len(result.result["data"]) == 5
     assert all(not notification["read"] for notification in result.result["data"])
     assert all(not notification["cleared"] for notification in result.result["data"])
 
-    result = await client.get_notifications(environment, filter={"title": "Error"})
+    result = await client.list_notifications(environment, filter={"title": "Error"})
     assert result.code == 200
     assert len(result.result["data"]) == 4
 
-    result = await client.get_notifications(environment, filter={"message": "Bad"})
+    result = await client.list_notifications(environment, filter={"message": "Bad"})
     assert result.code == 200
     assert len(result.result["data"]) == 4
 
-    result = await client.get_notifications(environment, filter={"severity": "message"})
+    result = await client.list_notifications(environment, filter={"severity": "message"})
     assert result.code == 200
     assert len(result.result["data"]) == 4
     assert all(notification["severity"] == "message" for notification in result.result["data"])
 
-    result = await client.get_notifications(environment, filter={"severity": "error"})
+    result = await client.list_notifications(environment, filter={"severity": "error"})
     assert result.code == 200
     assert len(result.result["data"]) == 4
     assert all(notification["severity"] == "error" for notification in result.result["data"])
@@ -107,7 +107,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     environment = environment_with_notifications
     order_by_column = "created"
 
-    result = await client.get_notifications(
+    result = await client.list_notifications(
         environment,
         filter={
             "read": False,
@@ -121,7 +121,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     )
     all_notification_ids_in_expected_order = notification_ids(all_notifications_in_expected_order)
 
-    result = await client.get_notifications(
+    result = await client.list_notifications(
         environment,
         limit=2,
         sort=f"{order_by_column}.{order}",
@@ -188,7 +188,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     assert response["links"].get("next") is not None
     assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
 
-    result = await client.get_notifications(
+    result = await client.list_notifications(
         environment,
         limit=6,
         sort=f"{order_by_column}.{order}",
@@ -206,7 +206,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
 async def test_update_read_cleared(environment_with_notifications, client) -> None:
     environment = environment_with_notifications
 
-    result = await client.get_notifications(environment, filter={"read": False})
+    result = await client.list_notifications(environment, filter={"read": False})
     assert result.code == 200
     assert len(result.result["data"]) == 6
     notification_id = result.result["data"][0]["id"]
@@ -219,7 +219,7 @@ async def test_update_read_cleared(environment_with_notifications, client) -> No
     result = await client.update_notification(environment, notification_id, read=True)
     assert result.code == 200
     assert result.result["data"]["read"]
-    result = await client.get_notifications(environment, filter={"read": False})
+    result = await client.list_notifications(environment, filter={"read": False})
     assert result.code == 200
     assert len(result.result["data"]) == 5
     assert notification_id not in notification_ids(result.result["data"])
@@ -230,14 +230,14 @@ async def test_update_read_cleared(environment_with_notifications, client) -> No
     assert result.code == 200
     assert result.result["data"]["cleared"]
 
-    result = await client.get_notifications(environment, filter={"cleared": False})
+    result = await client.list_notifications(environment, filter={"cleared": False})
     assert result.code == 200
     assert notification_id not in notification_ids(result.result["data"])
 
     result = await client.update_notification(environment, notification_id, read=False)
     assert result.code == 200
     assert not result.result["data"]["read"]
-    result = await client.get_notifications(environment, filter={"read": False})
+    result = await client.list_notifications(environment, filter={"read": False})
     assert result.code == 200
     assert len(result.result["data"]) == 6
     assert notification_id in notification_ids(result.result["data"])
@@ -246,25 +246,29 @@ async def test_update_read_cleared(environment_with_notifications, client) -> No
     assert result.code == 200
     assert result.result["data"]["read"]
     assert not result.result["data"]["cleared"]
-    result = await client.get_notifications(environment, filter={"read": False})
+    result = await client.list_notifications(environment, filter={"read": False})
     assert result.code == 200
     assert notification_id not in notification_ids(result.result["data"])
-    result = await client.get_notifications(environment, filter={"cleared": False})
+    result = await client.list_notifications(environment, filter={"cleared": False})
     assert result.code == 200
     assert notification_id in notification_ids(result.result["data"])
 
     result = await client.get_notification(environment, uuid.uuid4())
     assert result.code == 404
 
+    # Empty update is invalid
+    result = await client.update_notification(environment, notification_id)
+    assert result.code == 400
+
 
 async def test_internal_api(environment: str, server, client) -> None:
     notificationservice = server.get_slice(SLICE_NOTIFICATION)
-    result = await client.get_notifications(environment)
+    result = await client.list_notifications(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
     await notificationservice.notify(uuid.UUID(environment), title="Title", message="test message", uri="/api/v2/notification")
-    result = await client.get_notifications(environment)
+    result = await client.list_notifications(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert result.result["data"][0]["severity"] == "message"
@@ -277,9 +281,36 @@ async def test_internal_api(environment: str, server, client) -> None:
         severity=const.NotificationSeverity.warning,
         uri="/api/v2/notification",
     )
-    result = await client.get_notifications(environment)
+    result = await client.list_notifications(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 2
     assert result.result["data"][0]["severity"] == "warning"
     assert not result.result["data"][0]["read"]
     assert not result.result["data"][0]["cleared"]
+
+
+async def test_notifications_deleted_when_env_deleted(environment_with_notifications, client) -> None:
+    environment = environment_with_notifications
+
+    result = await client.list_notifications(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 8
+    result = await client.environment_delete(environment)
+    assert result.code == 200
+    result = await client.list_notifications(environment)
+    assert result.code == 404
+    notifications_in_db = await data.Notification.get_list()
+    assert len(notifications_in_db) == 0
+
+
+async def test_notifications_deleted_when_env_cleared(environment_with_notifications, client) -> None:
+    environment = environment_with_notifications
+
+    result = await client.list_notifications(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 8
+    result = await client.environment_clear(environment)
+    assert result.code == 200
+    result = await client.list_notifications(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0

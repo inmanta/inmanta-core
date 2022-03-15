@@ -1138,7 +1138,7 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_notifications(
+def list_notifications(
     tid: uuid.UUID,
     limit: Optional[int] = None,
     first_id: Optional[uuid.UUID] = None,
@@ -1162,8 +1162,11 @@ def get_notifications(
                 Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned notifications.
                 The following options are available:
-                name: filter by the name of the fact
-                resource_id: filter by the resource_id of the fact
+                read: Whether the notification was read or not
+                cleared: Whether the notification was cleared or not
+                severity: Filter by the severity field of the notifications
+                title: Filter by the title of the notifications
+                message: Filter by the message of the notifications
     :param sort: Return the results sorted according to the parameter value.
                 Only sorting by the 'created' date is supported.
                 The following orders are supported: 'asc', 'desc'
