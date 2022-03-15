@@ -1129,3 +1129,91 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The dryrun report, with a summary and the list of differences.
     """
+
+
+@typedmethod(
+    path="/notification",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_notifications(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "created.desc",
+) -> List[model.Notification]:
+    """
+    List the notifications in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of notifications that are returned
+    :param first_id: The notification id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The notification id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned notifications.
+                The following options are available:
+                name: filter by the name of the fact
+                resource_id: filter by the resource_id of the fact
+    :param sort: Return the results sorted according to the parameter value.
+                Only sorting by the 'created' date is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching notifications
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/notification/<notification_id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_notification(
+    tid: uuid.UUID,
+    notification_id: uuid.UUID,
+) -> model.Notification:
+    """
+    Get a single notification
+
+    :param tid: The id of the environment
+    :param notification_id: The id of the notification
+    :return: The notification with the specified id
+    :raise NotFound: When the referenced environment or notification is not found
+    """
+
+
+@typedmethod(
+    path="/notification/<notification_id>",
+    operation="PATCH",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def update_notification(
+    tid: uuid.UUID,
+    notification_id: uuid.UUID,
+    read: Optional[bool] = None,
+    cleared: Optional[bool] = None,
+) -> model.Notification:
+    """
+    Update a notification by setting its flags
+
+    :param tid: The id of the environment
+    :param notification_id: The id of the notification to update
+    :param read: Whether the notification has been read
+    :param cleared: Whether the notification has been cleared
+    :return: The updated notification
+    :raise NotFound: When the referenced environment or notification is not found
+    """

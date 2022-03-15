@@ -1,0 +1,167 @@
+"""
+    Copyright 2022 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+import datetime
+import logging
+import uuid
+from typing import Dict, List, Optional, Tuple
+
+from asyncpg import Connection
+
+from inmanta import const, data
+from inmanta.data import APILIMIT, InvalidSort, NotificationOrder, QueryType
+from inmanta.data.model import Notification
+from inmanta.data.paging import NotificationPagingCountsProvider, NotificationPagingHandler, QueryIdentifier
+from inmanta.protocol import handle, methods_v2
+from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.protocol.return_value_meta import ReturnValueWithMeta
+from inmanta.server import SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
+from inmanta.server.validate_filter import InvalidFilter, NotificationFilterValidator
+
+LOGGER = logging.getLogger(__name__)
+
+
+class NotificationService(protocol.ServerSlice):
+    """Slice for notification management"""
+
+    def __init__(self) -> None:
+        super(NotificationService, self).__init__(SLICE_NOTIFICATION)
+
+    def get_dependencies(self) -> List[str]:
+        return [SLICE_DATABASE]
+
+    def get_depended_by(self) -> List[str]:
+        return [SLICE_TRANSPORT]
+
+    async def prestart(self, server: protocol.Server) -> None:
+        await super().prestart(server)
+
+    async def start(self) -> None:
+        await super().start()
+
+    async def notify(
+        self,
+        environment: uuid.UUID,
+        title: str,
+        message: str,
+        uri: str,
+        severity: const.NotificationSeverity = const.NotificationSeverity.message,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """Internal API to create a new notification"""
+        await data.Notification(
+            environment=environment,
+            title=title,
+            message=message,
+            uri=uri,
+            severity=severity,
+            created=datetime.datetime.now().astimezone(),
+        ).insert(connection)
+
+    @handle(methods_v2.get_notifications, env="tid")
+    async def get_notifications(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "created.desc",
+    ) -> ReturnValue[List[Notification]]:
+        if limit is None:
+            limit = APILIMIT
+        elif limit > APILIMIT:
+            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+
+        query: Dict[str, Tuple[QueryType, object]] = {}
+        if filter:
+            try:
+                query.update(NotificationFilterValidator().process_filters(filter))
+            except InvalidFilter as e:
+                raise BadRequest(e.message) from e
+
+        try:
+            notification_order = NotificationOrder.parse_from_string(sort)
+        except InvalidSort as e:
+            raise BadRequest(e.message) from e
+
+        try:
+            dtos = await data.Notification.get_notification_list(
+                database_order=notification_order,
+                limit=limit,
+                environment=env.id,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+                connection=None,
+                **query,
+            )
+        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message)
+
+        paging_handler = NotificationPagingHandler(NotificationPagingCountsProvider())
+        metadata = await paging_handler.prepare_paging_metadata(
+            QueryIdentifier(environment=env.id), dtos, query, limit, notification_order
+        )
+        links = await paging_handler.prepare_paging_links(
+            dtos,
+            filter,
+            notification_order,
+            limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            has_next=metadata.after > 0,
+            has_prev=metadata.before > 0,
+        )
+
+        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+
+    @handle(methods_v2.get_notification, env="tid")
+    async def get_notification(
+        self,
+        env: data.Environment,
+        notification_id: uuid.UUID,
+    ) -> Notification:
+        notification = await data.Notification.get_one(environment=env.id, id=notification_id)
+        if not notification:
+            raise NotFound(f"Notification with id {notification_id} not found")
+        return notification.to_dto()
+
+    @handle(methods_v2.update_notification, env="tid")
+    async def update_notification(
+        self,
+        env: data.Environment,
+        notification_id: uuid.UUID,
+        read: Optional[bool] = None,
+        cleared: Optional[bool] = None,
+    ) -> Notification:
+        notification = await data.Notification.get_one(environment=env.id, id=notification_id)
+        if not notification:
+            raise NotFound(f"Notification with id {notification_id} not found")
+        if read is not None and cleared is not None:
+            await notification.update(read=read, cleared=cleared)
+        elif read is not None:
+            await notification.update(read=read)
+        elif cleared is not None:
+            await notification.update(cleared=cleared)
+        return notification.to_dto()

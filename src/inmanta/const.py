@@ -286,3 +286,11 @@ class DesiredStateVersionStatus(str, Enum):
     candidate = "candidate"
     retired = "retired"
     skipped_candidate = "skipped_candidate"
+
+
+class NotificationSeverity(str, Enum):
+    message = "message"
+    info = "info"
+    success = "success"
+    warning = "warning"
+    error = "error"

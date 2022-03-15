@@ -395,8 +395,8 @@ COPY public.dryrun (id, environment, model, date, total, todo, resources) FROM s
 --
 
 COPY public.environment (id, name, project, repo_url, repo_branch, settings, last_version, halted, description, icon) FROM stdin;
-d394352c-792d-4a2a-932f-97a632b16ef2	dev-2	ea9f3337-e3e6-4742-b03f-a54dc5061166			{}	0	f
-2fed2574-e578-48c6-8fc0-5e1c6d0cf39c	dev-1	ea9f3337-e3e6-4742-b03f-a54dc5061166			{"auto_deploy": true, "server_compile": true, "purge_on_delete": false, "autostart_agent_map": {"internal": "local:", "localhost": "local:"}, "push_on_auto_deploy": true, "autostart_agent_deploy_interval": 0, "autostart_agent_repair_interval": 600, "autostart_agent_deploy_splay_time": 0, "autostart_agent_repair_splay_time": 0, "agent_trigger_method_on_auto_deploy": "push_incremental_deploy"}	2	f
+d394352c-792d-4a2a-932f-97a632b16ef2	dev-2	ea9f3337-e3e6-4742-b03f-a54dc5061166			{}	0	f		
+2fed2574-e578-48c6-8fc0-5e1c6d0cf39c	dev-1	ea9f3337-e3e6-4742-b03f-a54dc5061166			{"auto_deploy": true, "server_compile": true, "purge_on_delete": false, "autostart_agent_map": {"internal": "local:", "localhost": "local:"}, "push_on_auto_deploy": true, "autostart_agent_deploy_interval": 0, "autostart_agent_repair_interval": 600, "autostart_agent_deploy_splay_time": 0, "autostart_agent_repair_splay_time": 0, "agent_trigger_method_on_auto_deploy": "push_incremental_deploy"}	2	f		
 \.
 
 

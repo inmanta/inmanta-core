@@ -582,3 +582,27 @@ class DryRun(BaseModel):
 class DryRunReport(BaseModel):
     summary: DryRun
     diff: List[ResourceDiff]
+
+
+class Notification(BaseModel):
+    """
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link relevant to the message
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    id: uuid.UUID
+    environment: uuid.UUID
+    created: datetime.datetime
+    title: str
+    message: str
+    severity: const.NotificationSeverity
+    uri: str
+    read: bool
+    cleared: bool

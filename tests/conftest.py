@@ -394,6 +394,17 @@ def get_columns_in_db_table(postgresql_client):
     return _get_columns_in_db_table
 
 
+@pytest.fixture(scope="function")
+def get_tables_in_db(postgresql_client):
+    async def _get_tables_in_db() -> List[str]:
+        result = await postgresql_client.fetch(
+            "SELECT table_name " "FROM information_schema.tables " "WHERE table_schema='public'"
+        )
+        return [r["table_name"] for r in result]
+
+    return _get_tables_in_db
+
+
 @pytest.fixture(scope="function", autouse=True)
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
