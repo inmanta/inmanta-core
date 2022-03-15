@@ -1309,12 +1309,21 @@ a = "One big token"
 
 \"""
 str1 with
-some variations\"""
+"some" variations\"""
+
+b = "another big token"
+
+\"""
+str1 with
+some other variations
+\"""
+
 """
     )
-    assert len(statements) == 3
+    assert len(statements) == 5
     mls1 = statements[0]
     mls2 = statements[2]
+    mls3 = statements[4]
 
     assert isinstance(mls1, LocatableString)
     assert isinstance(mls2, Literal)
@@ -1333,8 +1342,146 @@ str1
     assert mls2.location.lnr == 8
     assert mls2.location.end_lnr == 10
     assert mls2.location.start_char == 1
-    assert mls2.location.end_char == 19
-    assert mls2.value == "\nstr1 with\nsome variations"
+    assert mls2.location.end_char == 21
+    assert mls2.value == '\nstr1 with\n"some" variations'
+
+    assert mls3.location.lnr == 14
+    assert mls3.location.end_lnr == 17
+    assert mls3.location.start_char == 1
+    assert mls3.location.end_char == 4
+    assert mls3.value == "\nstr1 with\nsome other variations\n"
+
+
+def test_mls_5():
+    statements = parse_code(
+        """
+\"""This is a mls on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == 'This is a mls on one "line"'
+
+
+def test_mls_6():
+    statements = parse_code(
+        """
+\"\"""This" is a mls on one line\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == '"This" is a mls on one line'
+
+
+def test_mls_7():
+    statements = parse_code(
+        """
+\"\"""This" is a "mls" on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 38
+    assert str(mls.value) == '"This" is a "mls" on one "line"'
+
+
+def test_mls_8():
+    statements = parse_code(
+        """
+\"""String: ""\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 17
+    assert str(mls.value) == 'String: ""'
+
+
+def test_mls_9():
+    statements = parse_code(
+        """
+\"""\"" is a string\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 21
+    assert str(mls.value) == '"" is a string'
+
+
+def test_mls_10():
+    statements = parse_code(
+        """
+\"""\" start and end with "\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 29
+    assert str(mls.value) == '" start and end with "'
+
+
+def test_mls_as_argument():
+    statements = parse_code(
+        """
+std::print(\"""hello\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == "hello"
+
+
+def test_mls_as_argument_2():
+    statements = parse_code(
+        """
+std::print("\""hello"hello"\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == 'hello"hello"'
 
 
 def test_bad():
