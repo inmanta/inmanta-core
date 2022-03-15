@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Any, Dict, Iterator, List, Optional, Tuple  # noqa: F401
+from typing import Dict, FrozenSet, Iterator, List, Optional, Tuple
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
@@ -31,7 +31,7 @@ except ImportError:
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
-    from inmanta.ast.variables import Reference  # noqa: F401
+    from inmanta.ast.variables import AttributeReferencePromise, Reference  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -85,11 +85,37 @@ class DynamicStatement(Statement):
         """List of all variable names used by this statement"""
         raise NotImplementedError()
 
+    # TODO: implement in If, For, SubConstructor
     # TODO: name
-    def emit_promise(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        # TODO: docstring: emit progression promise on parent context
-        # TODO: implement
+    def emit_nested_promises(self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str]) -> None:
+        # TODO: double check docstring correctness when final
+        """
+        Emits any progression promises for nested blocks. Makes sure the promises get fulfilled as soon as certainty is
+        reached on whether or not the block will be emitted. Promises are acquired on any attribute assignments on any variables
+        that have not been declared out of scope. This allows to emit promises only relative to a certain parent context,
+        excluding sibling and/or intermediate parent (shadowed) declarations.
+
+        Expected to be called after normalization and before emit.
+
+        :param resolver: Resolver for the parent context promises should be acquired on.
+        :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired for these
+            variables or their attributes.
+        """
         pass
+
+    def emit_progression_promise(
+        self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str]
+    ) -> Optional["variables.AttributeReferencePromise"]:
+        # TODO: better to make AttributeReferencePromise a child of ProgressionPromise or something generic like that.
+        """
+        Emits a progression promise for this statement if emitting it would make progression towards a variable's completeness
+        and returns it. If emitting this statement would make no such progression, returns None.
+
+        :param resolver: Resolver for the parent context promises should be acquired on.
+        :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired on their or their
+            attribute's variables.
+        """
+        return None
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""

@@ -83,7 +83,26 @@ class BasicBlock(object):
     #     def get_requires(self) -> List[str]:
     #         return self.external
 
+    def emit_nested_promises(
+        self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str] = frozenset(), root: bool = False
+    ) -> None:
+        # TODO: rest of docstring, see Statement.emit_nested_promises
+        """
+        :param root: If true, this block is considered the root reference for this nested promise emit and promises are
+            acquired on this block's variables. If false, this block's variables are considered out of scope in addiiton
+            to the ones declared in the out_of_scope parameter.
+        """
+        # if this block is not the root reference, make sure statements don't acquire promises on this block's variables
+        out_of_scope_block: FrozenSet[str] = out_of_scope if root else out_of_scope.union({self.get_variables()})
+        for s in self.__stmts:
+            try:
+                s.emit_nested_promises(resolver, queue, out_of_scope_block)
+            except RuntimeException as e:
+                e.set_statement(s)
+                raise e
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        self.emit_nested_promises(resolver, queue, root=True)
         for s in self.__stmts:
             try:
                 s.emit(resolver, queue)
