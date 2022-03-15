@@ -195,6 +195,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         self.location = location
         self.hasValue = True
         for waiter in self.waiters:
+            waiter.ready(self)
 
         # prevent memory leaks
         self.waiters = None
