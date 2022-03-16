@@ -56,6 +56,7 @@ environment.
 """
 
 
+# Import test modules differently when conftest is put into the inmanta_tests packages
 import asyncio
 import concurrent
 import csv
@@ -118,7 +119,6 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 
-# Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
@@ -330,6 +330,17 @@ async def do_clean_hard(postgresql_client):
     assert not postgresql_client.is_in_transaction()
     await postgresql_client.reload_schema_state()
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
+    functions_query = """
+SELECT routine_name
+FROM  information_schema.routines
+WHERE routine_type = 'FUNCTION'
+AND routine_schema = 'public';
+    """
+    functions_in_db = await postgresql_client.fetch(functions_query)
+    for function in functions_in_db:
+        drop_query = "DROP FUNCTION if exists %s" % function["routine_name"]
+        await postgresql_client.execute(drop_query)
     table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
