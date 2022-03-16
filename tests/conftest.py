@@ -56,7 +56,8 @@ environment.
 """
 
 
-# Import test modules differently when conftest is put into the inmanta_tests packages
+
+
 import asyncio
 import concurrent
 import csv
@@ -82,7 +83,6 @@ import venv
 from configparser import ConfigParser
 from types import ModuleType
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
-
 import asyncpg
 import pkg_resources
 import psutil
@@ -95,7 +95,6 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-
 import build.env
 import inmanta.agent
 import inmanta.app
@@ -119,6 +118,7 @@ from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 
+# Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
