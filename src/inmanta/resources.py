@@ -37,6 +37,8 @@ from typing import (
 )
 
 import inmanta.util
+from inmanta import plugins
+from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, runtime, util
 from inmanta.stable_api import stable_api
@@ -308,8 +310,18 @@ class Resource(metaclass=ResourceMeta):
                 # passing along the serialized version would break the resource apis
                 json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
                 return value
+            except IgnoreResourceException:
+                raise  # will be handled in _load_resources of export.py
             except proxy.UnknownException as e:
                 return e.unknown
+            except plugins.PluginException as e:
+                raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+            except CompilerException:
+                # Internal exceptions (like UnsetException) should be propagated without being wrapped
+                # as they are used later on and wrapping them would break the compiler
+                raise
+            except Exception as e:
+                raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
 
         except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))

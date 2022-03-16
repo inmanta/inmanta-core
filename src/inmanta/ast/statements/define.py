@@ -678,6 +678,7 @@ class DefineIndex(DefinitionStatement):
                 )
             else:
                 rattribute = entity_type.get_attribute(attribute)
+                assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
                         self,

@@ -361,6 +361,7 @@ class RemoteResourceAction(ResourceAction):
             )
             if result.code != 200:
                 LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
+                return
 
             status = const.ResourceState[result.result["resource"]["status"]]
             if status in const.TRANSIENT_STATES or self.future.done():

@@ -416,8 +416,7 @@ def deploy(options: argparse.Namespace) -> None:
     run = deploy_module.Deploy(options)
     try:
         if not run.setup():
-            LOGGER.error("Failed to setup the orchestrator.")
-            return
+            raise Exception("Failed to setup an embedded Inmanta orchestrator.")
         run.run()
     finally:
         run.stop()
@@ -737,14 +736,14 @@ def app() -> None:
 
     logging.captureWarnings(True)
 
-    if options.inmanta_version:
-        print_versions_installed_components_and_exit()
-
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
     # Load the configuration
     Config.load_config(options.config_file, options.config_dir)
+
+    if options.inmanta_version:
+        print_versions_installed_components_and_exit()
 
     if options.warnings is not None:
         Config.set("warnings", "default", options.warnings)

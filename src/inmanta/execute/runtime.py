@@ -939,12 +939,15 @@ class Instance(ExecutionContext):
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
-        self.slots: Dict[str, ResultVariable] = {
-            n: mytype.get_attribute(n).get_new_result_variable(self, queue)
-            # prune duplicates first because get_new_result_variable() has side effects
-            for n in set(mytype.get_all_attribute_names())
-        }
-
+        self.slots: Dict[str, ResultVariable] = {}
+        for attr_name in mytype.get_all_attribute_names():
+            if attr_name in self.slots:
+                # prune duplicates because get_new_result_variable() has side effects
+                # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
+                continue
+            attribute = mytype.get_attribute(attr_name)
+            assert attribute is not None  # Make mypy happy
+            self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
@@ -1011,6 +1014,7 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
+                    assert attr is not None  # Make mypy happy
                     if attr.is_multi():
                         low = attr.low
                         # none for list attributes

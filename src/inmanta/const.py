@@ -176,18 +176,6 @@ class LogLevel(str, Enum):
     def to_int(self) -> int:
         return LOG_LEVEL_AS_INTEGER[self]
 
-    def from_int(level: int) -> "LogLevel":
-        """
-        This methods is an example of construction of a LogLevel value from an integer
-        """
-        return LogLevel(level)
-
-    def from_str(level: str) -> "LogLevel":
-        """
-        This methods is an example of construction of a LogLevel value from a string
-        """
-        return LogLevel(level)
-
 
 # Mapping each log level to its integer value
 LOG_LEVEL_AS_INTEGER = {
