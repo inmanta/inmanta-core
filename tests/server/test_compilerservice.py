@@ -52,14 +52,16 @@ logger = logging.getLogger("inmanta.test.server.compilerservice")
 @pytest.fixture
 async def compilerservice(server_config, init_dataclasses_and_load_schema):
     server = Server()
-    notification_service = NotificationService()
-    await notification_service.prestart(server)
-    await notification_service.start()
-    server.add_slice(notification_service)
     cs = CompilerService()
     await cs.prestart(server)
     await cs.start()
+    server.add_slice(cs)
+    notification_service = NotificationService()
+    await notification_service.prestart(server)
+    await notification_service.start()
     yield cs
+    await notification_service.prestop()
+    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -189,13 +191,13 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     # manual setup of server
     server = Server()
-    notification_service = NotificationService()
-    await notification_service.prestart(server)
-    await notification_service.start()
-    server.add_slice(notification_service)
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    server.add_slice(cs)
+    notification_service = NotificationService()
+    await notification_service.prestart(server)
+    await notification_service.start()
     collector = Collector()
     cs.add_listener(collector)
 
@@ -277,6 +279,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await retry_limited(lambda: len(collector.preseen) == 2, 1)
 
     # test server restart
+    await notification_service.prestop()
+    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -1032,24 +1036,22 @@ async def test_notification_on_failed_exporting_compile(server, client, environm
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
-    compile_id, _ = await compilerservice.request_recompile(env, False, True, uuid.uuid4())
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=False, do_export=True, remote_id=uuid.uuid4())
 
-    assert await compilerservice.is_compiling(env.id) == 200
-
-    async def compile_done():
+    async def compile_done() -> bool:
         res = await compilerservice.is_compiling(env.id)
         return res == 204
 
-    await retry_limited(compile_done, 10)
+    await retry_limited(compile_done, timeout=10)
 
-    async def notification_logged():
+    async def notification_logged() -> bool:
         result = await client.list_notifications(env.id)
         assert result.code == 200
         return len(result.result["data"]) > 0
 
-    await retry_limited(notification_logged, 10)
+    await retry_limited(notification_logged, timeout=10)
     result = await client.list_notifications(env.id)
     assert result.code == 200
-    compile_failed_notification = result.result["data"][0]
-    assert compile_failed_notification["title"] == "Compilation failed"
+    compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
+    assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]

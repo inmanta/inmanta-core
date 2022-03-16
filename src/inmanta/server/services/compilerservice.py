@@ -45,10 +45,9 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
-from inmanta.server.services.notificationservice import NotificationService
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import ensure_directory_exist
@@ -470,7 +469,6 @@ class CompilerService(ServerSlice):
     """
 
     _env_folder: str
-    _notification_service: NotificationService
 
     def __init__(self) -> None:
         super(CompilerService, self).__init__(SLICE_COMPILER)
@@ -485,7 +483,7 @@ class CompilerService(ServerSlice):
         self.listeners.append(listener)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE, SLICE_NOTIFICATION]
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -495,7 +493,6 @@ class CompilerService(ServerSlice):
         state_dir: str = opt.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
-        self._notification_service = cast(NotificationService, server.get_slice(SLICE_NOTIFICATION))
 
     async def start(self) -> None:
         await super(CompilerService, self).start()
@@ -600,14 +597,6 @@ class CompilerService(ServerSlice):
         await asyncio.gather(*[notify(listener) for listener in self.listeners])
         await compile.update_fields(handled=True)
         LOGGER.log(const.LOG_LEVEL_TRACE, "listeners notified for %s", compile.id)
-        if compile.success is False and compile.do_export:
-            await self._notification_service.notify(
-                compile.environment,
-                title="Compilation failed",
-                message="An exporting compile has failed",
-                severity=const.NotificationSeverity.error,
-                uri=f"/api/v2/compilereport/{compile.id}",
-            )
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
