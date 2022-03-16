@@ -81,6 +81,7 @@ import venv
 from configparser import ConfigParser
 from types import ModuleType
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
+
 import asyncpg
 import pkg_resources
 import psutil
@@ -93,6 +94,7 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+
 import build.env
 import inmanta.agent
 import inmanta.app
