@@ -457,9 +457,6 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
         assert "data" in result.result
         compile_data: model.CompileData = model.CompileData(**result.result["data"])
         assert compile_data_a == compile_data
-        result = await client.get_notifications(env.id)
-        assert result.code == 200
-        print("ASDASD", result.result["data"])
         return compile_data
 
     errors0: List[ast_export.Error] = (await get_compile_data("x = 0")).errors
