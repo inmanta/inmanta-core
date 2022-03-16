@@ -172,6 +172,6 @@ class NotificationService(protocol.ServerSlice):
             await notification.update(read=read)
         elif cleared is not None:
             await notification.update(cleared=cleared)
-        elif read is None and cleared is None:
+        else:
             raise BadRequest("At least one of {read, cleared} should be specified for a valid update")
         return notification.to_dto()
