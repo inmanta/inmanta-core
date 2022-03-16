@@ -1,0 +1,4 @@
+---
+description: Bump the version of inmanta-dev-dependencies in order to have the latest fixes in inmanta-sphinx
+change-type: patch
+destination-branches: [iso4]
