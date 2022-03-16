@@ -329,6 +329,19 @@ async def postgress_get_custom_types(postgresql_client):
 async def do_clean_hard(postgresql_client):
     assert not postgresql_client.is_in_transaction()
     await postgresql_client.reload_schema_state()
+    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
+    functions_query = """
+SELECT routine_name
+FROM  information_schema.routines
+WHERE routine_type = 'FUNCTION'
+AND routine_schema = 'public';
+    """
+    functions_in_db = await postgresql_client.fetch(functions_query)
+    function_names = [x["routine_name"] for x in functions_in_db]
+    if function_names:
+        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
+        await postgresql_client.execute(drop_query)
+
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
@@ -339,7 +352,12 @@ async def do_clean_hard(postgresql_client):
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
-    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
+    logger.info(
+        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
+        ",".join(table_names),
+        ",".join(type_names),
+        ",".join(function_names),
+    )
 
 
 @pytest.fixture(scope="function")
