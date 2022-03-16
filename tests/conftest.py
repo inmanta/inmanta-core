@@ -337,8 +337,9 @@ WHERE routine_type = 'FUNCTION'
 AND routine_schema = 'public';
     """
     functions_in_db = await postgresql_client.fetch(functions_query)
-    for function in functions_in_db:
-        drop_query = "DROP FUNCTION if exists %s" % function["routine_name"]
+    function_names = [x["routine_name"] for x in functions_in_db]
+    if function_names:
+        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
         await postgresql_client.execute(drop_query)
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
@@ -351,7 +352,12 @@ AND routine_schema = 'public';
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
-    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
+    logger.info(
+        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
+        ",".join(table_names),
+        ",".join(type_names),
+        ",".join(function_names),
+    )
 
 
 @pytest.fixture(scope="function")
