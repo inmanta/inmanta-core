@@ -296,6 +296,7 @@ class NotificationSeverity(str, Enum):
     The 'message' category corresponds to a generic message, which
     is shown without extra styling on the frontend.
     """
+
     message = "message"
     info = "info"
     success = "success"
