@@ -22,9 +22,9 @@ import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
-from inmanta.server.bootloader import InmantaBootloader
-from inmanta.data import Resource
 from inmanta.const import ResourceState
+from inmanta.data import Resource
+from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture

@@ -142,10 +142,7 @@ class ResourceAction(ResourceActionBase):
         )
         if result.code != 200 or result.result is None:
             raise Exception("Failed to report the start of the deployment to the server")
-        return {
-            Id.parse_id(key).resource_str(): const.ResourceState[value]
-            for key, value in result.result["data"].items()
-        }
+        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
     async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceIdStr, const.ResourceState]) -> None:
         """

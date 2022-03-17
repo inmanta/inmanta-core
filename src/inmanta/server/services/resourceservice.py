@@ -23,6 +23,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
+from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
@@ -73,7 +74,6 @@ from inmanta.server.validate_filter import (
     VersionedResourceFilterValidator,
 )
 from inmanta.types import Apireturn, PrimitiveTypes
-from asyncpg.connection import Connection
 
 LOGGER = logging.getLogger(__name__)
 

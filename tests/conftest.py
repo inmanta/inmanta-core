@@ -413,14 +413,14 @@ def get_columns_in_db_table(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-<<<<<<< Updated upstream
 def get_tables_in_db(postgresql_client):
     async def _get_tables_in_db() -> List[str]:
         result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
         return [r["table_name"] for r in result]
 
     return _get_tables_in_db
-=======
+
+@pytest.fixture(scope="function")
 def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
     """
     Fixture that returns an async callable that returns all the custom types defined
@@ -429,7 +429,6 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     async def f() -> List[str]:
         return await postgress_get_custom_types(postgresql_client)
     return f
->>>>>>> Stashed changes
 
 
 @pytest.fixture(scope="function", autouse=True)
