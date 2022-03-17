@@ -1784,6 +1784,7 @@ SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
+NOTIFICATION_RETENTION = "notification_retention"
 
 
 class Setting(object):
@@ -2019,6 +2020,13 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
+        ),
+        NOTIFICATION_RETENTION: Setting(
+            name=NOTIFICATION_RETENTION,
+            default=365,
+            typ="int",
+            validator=convert_int,
+            doc="The number of days to retain notifications for",
         ),
     }
 
@@ -5521,6 +5529,18 @@ class Notification(BaseDocument):
             for notification in notification_records
         ]
         return dtos
+
+    @classmethod
+    async def clean_up_notifications(cls) -> None:
+        environments = await Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
+            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
+            LOGGER.info(
+                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
+            )
+            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
+            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
 
     def to_dto(self) -> m.Notification:
         return m.Notification(

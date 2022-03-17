@@ -58,6 +58,10 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
+        self.schedule(self._cleanup, 3600, initial_delay=0)
+
+    async def _cleanup(self) -> None:
+        await data.Notification.clean_up_notifications()
 
     async def compile_done(self, compile: data.Compile) -> None:
         if not compile.success and compile.do_export:
