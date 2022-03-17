@@ -27,6 +27,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
+    Locatable,
     LocatableString,
     Location,
     Namespace,
@@ -35,9 +36,10 @@ from inmanta.ast import (
     TypeReferenceAnchor,
     TypingException,
 )
+from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import ConditionalPromiseABC, ConditionalPromiseBlock, DynamicStatement, ExpressionStatement, RawResumer
-from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -402,6 +404,30 @@ class ConditionalExpressionResumer(RawResumer):
             self.result.set_value(value, self.location)
 
 
+class IndexAttributeMissingInConstructorException(TypingException):
+    """
+    Raised when an index attribute was not set in the constructor call for an entity.
+    """
+
+    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: List[str]):
+        if not unset_attributes:
+            raise Exception("Argument `unset_attributes` should contain at least one element")
+        error_message = self._get_error_message(entity, unset_attributes)
+        super(IndexAttributeMissingInConstructorException, self).__init__(stmt, error_message)
+
+    def _get_error_message(self, entity: "Entity", unset_attributes: List[str]) -> str:
+        exc_message = "Invalid Constructor call:"
+        for attribute_name in unset_attributes:
+            attribute: Optional[Attribute] = entity.get_attribute(attribute_name)
+            assert attribute is not None  # Make mypy happy
+            attribute_kind = "relation" if isinstance(attribute, RelationAttribute) else "attribute"
+            exc_message += (
+                f"\n\t* Missing {attribute_kind} '{attribute.name}'. "
+                f"The {attribute_kind} {entity.get_full_name()}.{attribute.name} is part of an index."
+            )
+        return exc_message
+
+
 class Constructor(ExpressionStatement):
     """
     This class represents the usage of a constructor to create a new object.
@@ -468,10 +494,7 @@ class Constructor(ExpressionStatement):
                     continue
                 inindex.add(attr)
         if self.required_kwargs and not self.wrapped_kwargs:
-            raise TypingException(
-                self,
-                "attributes %s are part of an index and should be set in the constructor." % ",".join(self.required_kwargs),
-            )
+            raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
 
         for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
@@ -533,9 +556,7 @@ class Constructor(ExpressionStatement):
 
         missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
         if missing_attrs:
-            raise TypingException(
-                self, "attributes %s are part of an index and should be set in the constructor." % ",".join(missing_attrs)
-            )
+            raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
 
         # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
         # because a RuntimeException is raised above when they are not.
@@ -596,7 +617,9 @@ class Constructor(ExpressionStatement):
                 # gradual only for multi
                 # to preserve order on lists used in attributes
                 # while allowing gradual execution on relations
-                reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
+                reqs = valueexpression.requires_emit_gradual(
+                    resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
+                )
             else:
                 reqs = valueexpression.requires_emit(resolver, queue)
             SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)

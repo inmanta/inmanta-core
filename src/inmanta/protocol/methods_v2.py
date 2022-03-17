@@ -351,10 +351,15 @@ def agent_action(tid: uuid.UUID, name: str, action: AgentAction) -> None:
     :param tid: The environment this agent is defined in.
     :param name: The name of the agent.
     :param action: The type of action that should be executed on an agent.
+                    Pause and unpause can only be used when the environment is not halted,
+                    while the on_resume actions can only be used when the environment is halted.
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
+                    * keep_paused_on_resume: The agent will still be paused when the environment is resumed
+                    * unpause_on_resume: The agent will be unpaused when the environment is resumed
 
-    :raises Forbidden: The given environment has been halted.
+    :raises Forbidden: The given environment has been halted and the action is pause/unpause,
+                        or the environment is not halted and the action is related to the on_resume behavior
     """
 
 
@@ -366,11 +371,16 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
     Execute an action on all agents in the given environment.
 
     :param tid: The environment of the agents.
-    :param action: The type of action that should be executed on the agents
+    :param action: The type of action that should be executed on the agents.
+                    Pause and unpause can only be used when the environment is not halted,
+                    while the on_resume actions can only be used when the environment is halted.
                     * pause: A paused agent cannot execute any deploy operations.
                     * unpause: A unpaused agent will be able to execute deploy operations.
+                    * keep_paused_on_resume: The agents will still be paused when the environment is resumed
+                    * unpause_on_resume: The agents will be unpaused when the environment is resumed
 
-    :raises Forbidden: The given environment has been halted.
+    :raises Forbidden: The given environment has been halted and the action is pause/unpause,
+                        or the environment is not halted and the action is related to the on_resume behavior
     """
 
 
@@ -1118,4 +1128,95 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
     :param report_id: The dryrun id to calculate the diff for
     :raise NotFound: This exception is raised when the referenced environment or version is not found
     :return: The dryrun report, with a summary and the list of differences.
+    """
+
+
+@typedmethod(
+    path="/notification",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def list_notifications(
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[uuid.UUID] = None,
+    last_id: Optional[uuid.UUID] = None,
+    start: Optional[datetime.datetime] = None,
+    end: Optional[datetime.datetime] = None,
+    filter: Optional[Dict[str, List[str]]] = None,
+    sort: str = "created.desc",
+) -> List[model.Notification]:
+    """
+    List the notifications in an environment
+    :param tid: The id of the environment
+    :param limit: Limit the number of notifications that are returned
+    :param first_id: The notification id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The notification id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param filter: Filter the list of returned notifications.
+                The following options are available:
+                read: Whether the notification was read or not
+                cleared: Whether the notification was cleared or not
+                severity: Filter by the severity field of the notifications
+                title: Filter by the title of the notifications
+                message: Filter by the message of the notifications
+    :param sort: Return the results sorted according to the parameter value.
+                Only sorting by the 'created' date is supported.
+                The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching notifications
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/notification/<notification_id>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_notification(
+    tid: uuid.UUID,
+    notification_id: uuid.UUID,
+) -> model.Notification:
+    """
+    Get a single notification
+
+    :param tid: The id of the environment
+    :param notification_id: The id of the notification
+    :return: The notification with the specified id
+    :raise NotFound: When the referenced environment or notification is not found
+    """
+
+
+@typedmethod(
+    path="/notification/<notification_id>",
+    operation="PATCH",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def update_notification(
+    tid: uuid.UUID,
+    notification_id: uuid.UUID,
+    read: Optional[bool] = None,
+    cleared: Optional[bool] = None,
+) -> model.Notification:
+    """
+    Update a notification by setting its flags
+
+    :param tid: The id of the environment
+    :param notification_id: The id of the notification to update
+    :param read: Whether the notification has been read
+    :param cleared: Whether the notification has been cleared
+    :return: The updated notification
+    :raise NotFound: When the referenced environment or notification is not found
     """

@@ -1,0 +1,4 @@
+description: Add notification cleanup
+issue-nr: 3982
+change-type: minor
+destination-branches: [master, iso5]

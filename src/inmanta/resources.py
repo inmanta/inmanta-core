@@ -40,13 +40,14 @@ import inmanta.util
 from inmanta import plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import proxy, runtime, util
+from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
+    from inmanta.execute import runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -225,7 +226,7 @@ class Resource(metaclass=ResourceMeta):
         """
         for res in resources.values():
             final_requires: Set["Resource"] = set()
-            initial_requires: List[runtime.Instance] = [x for x in res.model.requires]
+            initial_requires: List["runtime.Instance"] = [x for x in res.model.requires]
 
             for r in initial_requires:
                 if r in resources:

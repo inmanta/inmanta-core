@@ -471,6 +471,9 @@ class ResourceDiffStatus(str, Enum):
     modified = "modified"
     deleted = "deleted"
     unmodified = "unmodified"
+    agent_down = "agent_down"
+    undefined = "undefined"
+    skipped_for_undefined = "skipped_for_undefined"
 
 
 class AttributeDiff(BaseModel):
@@ -579,3 +582,29 @@ class DryRun(BaseModel):
 class DryRunReport(BaseModel):
     summary: DryRun
     diff: List[ResourceDiff]
+
+
+class Notification(BaseModel):
+    """
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    id: uuid.UUID
+    environment: uuid.UUID
+    created: datetime.datetime
+    title: str
+    message: str
+    severity: const.NotificationSeverity
+    uri: str
+    read: bool
+    cleared: bool

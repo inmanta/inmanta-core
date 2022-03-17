@@ -108,7 +108,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
-from inmanta.module import InmantaModuleRequirement, InstallMode, Project
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -329,6 +329,19 @@ async def postgress_get_custom_types(postgresql_client):
 async def do_clean_hard(postgresql_client):
     assert not postgresql_client.is_in_transaction()
     await postgresql_client.reload_schema_state()
+    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
+    functions_query = """
+SELECT routine_name
+FROM  information_schema.routines
+WHERE routine_type = 'FUNCTION'
+AND routine_schema = 'public';
+    """
+    functions_in_db = await postgresql_client.fetch(functions_query)
+    function_names = [x["routine_name"] for x in functions_in_db]
+    if function_names:
+        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
+        await postgresql_client.execute(drop_query)
+
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     table_names = ["public." + x["table_name"] for x in tables_in_db]
     if table_names:
@@ -339,7 +352,12 @@ async def do_clean_hard(postgresql_client):
     if type_names:
         drop_query = "DROP TYPE %s" % ", ".join(type_names)
         await postgresql_client.execute(drop_query)
-    logger.info("Performed Hard Clean with tables: %s  types: %s", ",".join(table_names), ",".join(type_names))
+    logger.info(
+        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
+        ",".join(table_names),
+        ",".join(type_names),
+        ",".join(function_names),
+    )
 
 
 @pytest.fixture(scope="function")
@@ -392,6 +410,15 @@ def get_columns_in_db_table(postgresql_client):
         return [r["column_name"] for r in result]
 
     return _get_columns_in_db_table
+
+
+@pytest.fixture(scope="function")
+def get_tables_in_db(postgresql_client):
+    async def _get_tables_in_db() -> List[str]:
+        result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+        return [r["table_name"] for r in result]
+
+    return _get_tables_in_db
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -941,6 +968,7 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
+        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -956,9 +984,17 @@ class SnippetCompilationTest(KeepOnFail):
         :param python_requires: The dependencies on Python packages providing v2 modules.
         :param install_mode: The install mode to configure in the project.yml file of the inmanta project. If None,
                              no install mode is set explicitly in the project.yml file.
+        :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
+                                           Inmanta project.
         """
         self.setup_for_snippet_external(
-            snippet, add_to_module_path, python_package_sources, project_requires, python_requires, install_mode
+            snippet,
+            add_to_module_path,
+            python_package_sources,
+            project_requires,
+            python_requires,
+            install_mode,
+            relation_precedence_rules,
         )
         return self._load_project(autostd, install_project, install_v2_modules)
 
@@ -1010,11 +1046,13 @@ class SnippetCompilationTest(KeepOnFail):
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
+        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
+        relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
         with open(os.path.join(self.project_dir, "project.yml"), "w", encoding="utf-8") as cfg:
             cfg.write(
                 f"""
@@ -1035,6 +1073,9 @@ class SnippetCompilationTest(KeepOnFail):
                         for source in python_package_sources
                     )
                 )
+            if relation_precedence_rules:
+                cfg.write("\n            relation_precedence_policy:\n")
+                cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
             if project_requires:
                 cfg.write("\n            requires:\n")
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))

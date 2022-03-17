@@ -676,16 +676,33 @@ class VirtualEnv(ActiveEnv):
         self._parent_python = sys.executable
 
         # check if the virtual env exists
-        if not os.path.exists(self.python_path):
-            # venv requires some care when the .env folder already exists
-            # https://docs.python.org/3/library/venv.html
-            if not os.path.exists(self.env_path):
-                path = self.env_path
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+            # Make sure the venv hosts the same python version as the running process
+            if sys.platform.startswith("linux"):
+                # On linux based systems, the python version is in the path to the site packages dir:
+                if not os.path.exists(self.site_packages_dir):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
             else:
-                # venv has problems with symlinks
-                path = os.path.realpath(self.env_path)
+                # On other distributions a more costly check is required:
+                # Get version as a (major, minor) tuple for the venv and the running process
+                venv_python_version = (
+                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+                )
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
 
-            # --clear is required in python prior to 3.4 if the folder already exists
+                running_process_python_version = sys.version_info[:2]
+
+                if venv_python_version != running_process_python_version:
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+        else:
+            path = os.path.realpath(self.env_path)
             try:
                 venv.create(path, clear=True, with_pip=False)
                 self._write_pip_binary()
@@ -695,7 +712,9 @@ class VirtualEnv(ActiveEnv):
             except Exception:
                 raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
-        elif not os.path.exists(self._path_pth_file):
+
+        if not os.path.exists(self._path_pth_file):
+
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
@@ -832,6 +851,12 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
 
 class VenvCreationFailedError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg = msg
+
+
+class VenvActivationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
         self.msg = msg

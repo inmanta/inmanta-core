@@ -1,0 +1,6 @@
+description: Expressions are now treated as statements
+change-type: minor
+destination-branches: [master, iso5]
+issue-nr: 3367
+sections:
+    feature: "{{description}}"

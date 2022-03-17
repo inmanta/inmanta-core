@@ -48,7 +48,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import ParserException, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import base_parse
 
 
@@ -1231,8 +1231,6 @@ end
 
     mls = stmt.comment
 
-    print(mls)
-
     assert (
         str(mls)
         == """
@@ -1252,6 +1250,240 @@ end
     )
 
 
+def test_mls_2():
+    statements = parse_code(
+        """
+\"""
+This
+is
+a
+mls
+\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+
+    assert mls.lnr == 2
+    assert mls.elnr == 7
+    assert mls.start == 1
+    assert mls.end == 4
+    assert (
+        str(mls.value)
+        == """
+This
+is
+a
+mls
+"""
+    )
+
+
+def test_mls_3():
+    statements = parse_code(
+        """
+\"""This is a mls on one line\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 32
+    assert str(mls.value) == "This is a mls on one line"
+
+
+def test_mls_4():
+    statements = parse_code(
+        """
+\"""
+str1
+\"""
+
+a = "One big token"
+
+\"""
+str1 with
+"some" variations\"""
+
+b = "another big token"
+
+\"""
+str1 with
+some other variations
+\"""
+
+"""
+    )
+    assert len(statements) == 5
+    mls1 = statements[0]
+    mls2 = statements[2]
+    mls3 = statements[4]
+
+    assert isinstance(mls1, LocatableString)
+    assert isinstance(mls2, Literal)
+
+    assert mls1.lnr == 2
+    assert mls1.elnr == 4
+    assert mls1.start == 1
+    assert mls1.end == 4
+    assert (
+        str(mls1)
+        == """
+str1
+"""
+    )
+
+    assert mls2.location.lnr == 8
+    assert mls2.location.end_lnr == 10
+    assert mls2.location.start_char == 1
+    assert mls2.location.end_char == 21
+    assert mls2.value == '\nstr1 with\n"some" variations'
+
+    assert mls3.location.lnr == 14
+    assert mls3.location.end_lnr == 17
+    assert mls3.location.start_char == 1
+    assert mls3.location.end_char == 4
+    assert mls3.value == "\nstr1 with\nsome other variations\n"
+
+
+def test_mls_5():
+    statements = parse_code(
+        """
+\"""This is a mls on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == 'This is a mls on one "line"'
+
+
+def test_mls_6():
+    statements = parse_code(
+        """
+\"\"""This" is a mls on one line\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 34
+    assert str(mls.value) == '"This" is a mls on one line'
+
+
+def test_mls_7():
+    statements = parse_code(
+        """
+\"\"""This" is a "mls" on one "line"\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 38
+    assert str(mls.value) == '"This" is a "mls" on one "line"'
+
+
+def test_mls_8():
+    statements = parse_code(
+        """
+\"""String: ""\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 17
+    assert str(mls.value) == 'String: ""'
+
+
+def test_mls_9():
+    statements = parse_code(
+        """
+\"""\"" is a string\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 21
+    assert str(mls.value) == '"" is a string'
+
+
+def test_mls_10():
+    statements = parse_code(
+        """
+\"""\" start and end with "\"""
+"""
+    )
+    assert len(statements) == 1
+    mls = statements[0]
+
+    assert isinstance(mls, LocatableString)
+    assert mls.lnr == 2
+    assert mls.elnr == 2
+    assert mls.start == 1
+    assert mls.end == 29
+    assert str(mls.value) == '" start and end with "'
+
+
+def test_mls_as_argument():
+    statements = parse_code(
+        """
+std::print(\"""hello\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == "hello"
+
+
+def test_mls_as_argument_2():
+    statements = parse_code(
+        """
+std::print("\""hello"hello"\""")
+
+"""
+    )
+    assert len(statements) == 1
+    function_call = statements[0]
+
+    assert isinstance(function_call, FunctionCall)
+    arg = function_call.arguments[0]
+    assert arg.value == 'hello"hello"'
+
+
 def test_bad():
     with pytest.raises(ParserException):
         parse_code(
@@ -1269,17 +1501,6 @@ def test_bad_2():
 a=|
 """
         )
-
-
-def test_error_on_relation():
-    with pytest.raises(ParserException) as e:
-        parse_code(
-            """
-Host.provider [1] -- Provider test"""
-        )
-    assert e.value.location.file == "test"
-    assert e.value.location.lnr == 3
-    assert e.value.location.start_char == 2
 
 
 def test_doc_string_on_new_relation():
@@ -1785,17 +2006,6 @@ def test_1766_empty_model_multiple_newline():
     assert len(statements) == 0
 
 
-def test_1707_out_of_place_regex():
-    with pytest.raises(ParserException) as pytest_e:
-        parse_code(
-            """
-/some_out_of_place_regex/
-            """,
-        )
-    exc: ParserException = pytest_e.value
-    assert exc.msg == "Syntax error at token /some_out_of_place_regex/"
-
-
 def test_multiline_string_interpolation():
     statements = parse_code(
         """
@@ -2085,3 +2295,83 @@ x.n
     assert instance1.name == "x"
     assert str(instance1.locatable_name) == "x"
     assert instance1.locatable_name.location == Range("test", 5, 1, 5, 2)
+
+
+@pytest.mark.parametrize_any(
+    "snippet",
+    [
+        # entity references
+        "mymod.MyEntity()",
+        "mymod.submod.MyEntity()",
+        "mymod.submod.MyEntity(x=1)",
+        "mymod.submod.MyEntity(**dct)",
+        "entity Child extends mymod.MyEntity: end",
+        "SomeEntity.my [1] -- mymod.MyEntity",
+        # plugin calls
+        "mymod.my_plugin()",
+        "mymod.submod.my_plugin()",
+        "mymod.submod.my_plugin(1)",
+        "mymod.submod.my_plugin(x=1)",
+        "mymod::submod.my_plugin(**dct)",
+    ],
+)
+def test_invalid_namespace_ref(snippet: str) -> None:
+    """
+    Verify that an attempt to access a namespace with '.' instead of '::' results in an appropriate exception.
+
+    :param snippet: Snippet that is expected to produce this error.
+    """
+    with pytest.raises(InvalidNamespaceAccess):
+        parse_code(snippet)
+
+
+@pytest.mark.parametrize_any(
+    "snippet, invalid, valid, location",
+    [
+        ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:5"),
+        ("x = mymod.submod.my_plugin()", "mymod.submod.my_plugin", "mymod::submod::my_plugin", "1:5"),
+    ],
+)
+def test_invalid_namespace_ref_full_msg(snippet: str, invalid: str, valid: str, location: str) -> None:
+    with pytest.raises(InvalidNamespaceAccess) as exc_info:
+        parse_code(snippet)
+    assert exc_info.value.format_trace().strip() == (
+        f"Syntax error: invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather"
+        f" than '.'. The '.' separator is reserved for attribute and relation access. Did you mean: `{valid}`"
+        f" (test:{location})"
+    )
+
+
+def test_expression_as_statements():
+    statements = parse_code(
+        """
+1 == 2
+"hello"
+file(b)
+File(host = 5, path = "Jos")
+[1,2]
+{ "a":"b", "b":1}
+File[host = 5, path = "Jos"]
+y > 0 ? y : y < 0 ? -1 : 0
+/some_out_of_place_regex/
+    """
+    )
+    assert len(statements) == 9
+    boolean_expression = statements[0]
+    constant = statements[1]
+    function_call = statements[2]
+    constructor = statements[3]
+    list_def = statements[4]
+    map_def = statements[5]
+    index_lookup = statements[6]
+    conditional_expression = statements[7]
+    regex = statements[8]
+    assert isinstance(boolean_expression, Equals)
+    assert isinstance(constant, Literal)
+    assert isinstance(function_call, FunctionCall)
+    assert isinstance(constructor, Constructor)
+    assert isinstance(list_def, CreateList)
+    assert isinstance(map_def, CreateDict)
+    assert isinstance(index_lookup, IndexLookup)
+    assert isinstance(conditional_expression, ConditionalExpression)
+    assert isinstance(regex, Regex)

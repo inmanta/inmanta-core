@@ -1,0 +1,7 @@
+---
+description: Fix bug that makes every inmanta warning end with an empty line.
+issue-nr: 3951
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  bugfix: "{{description}}"

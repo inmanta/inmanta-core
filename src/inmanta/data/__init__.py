@@ -484,6 +484,21 @@ class FactOrder(DatabaseOrder):
         return Parameter
 
 
+class NotificationOrder(DatabaseOrder):
+    """Represents the ordering by which notifications should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            "created": datetime.datetime,
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Notification
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -1769,6 +1784,7 @@ SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
+NOTIFICATION_RETENTION = "notification_retention"
 
 
 class Setting(object):
@@ -2005,6 +2021,13 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
         ),
+        NOTIFICATION_RETENTION: Setting(
+            name=NOTIFICATION_RETENTION,
+            default=365,
+            typ="int",
+            validator=convert_int,
+            doc="The number of days to retain notifications for",
+        ),
     }
 
     _renamed_settings_map = {
@@ -2104,6 +2127,7 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
+            await Notification.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
@@ -2818,6 +2842,25 @@ class Agent(BaseDocument):
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
         result = await cls._fetch_query(query, *values, connection=connection)
         return sorted([r["name"] for r in result])
+
+    @classmethod
+    async def set_unpause_on_resume(
+        cls,
+        env: uuid.UUID,
+        endpoint: Optional[str],
+        should_be_unpaused_on_resume: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def update_primary(
@@ -5370,6 +5413,149 @@ class DryRun(BaseDocument):
         )
 
 
+class Notification(BaseDocument):
+    """
+    A notification in an environment
+
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    created: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    title: str = Field(field_type=str, required=True)
+    message: str = Field(field_type=str, required=True)
+    severity: const.NotificationSeverity = Field(
+        field_type=const.NotificationSeverity, default=const.NotificationSeverity.message
+    )
+    uri: str = Field(field_type=str, required=True)
+    read: bool = Field(field_type=bool, default=False)
+    cleared: bool = Field(field_type=bool, default=False)
+
+    @classmethod
+    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT n.*""",
+            from_clause=f" FROM {cls.table_name()} as n",
+            filter_statements=[" environment = $1 "],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_notifications_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def list_notifications(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Notification]:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
+            order == PagingOrder.DESC and (start is not None or first_id)
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        notification_records = cast(Iterable[Record], notification_records)
+        dtos = [
+            m.Notification(
+                id=notification["id"],
+                title=notification["title"],
+                message=notification["message"],
+                severity=notification["severity"],
+                created=notification["created"],
+                read=notification["read"],
+                cleared=notification["cleared"],
+                uri=notification["uri"],
+                environment=notification["environment"],
+            )
+            for notification in notification_records
+        ]
+        return dtos
+
+    @classmethod
+    async def clean_up_notifications(cls) -> None:
+        environments = await Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
+            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
+            LOGGER.info(
+                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
+            )
+            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
+            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+
+    def to_dto(self) -> m.Notification:
+        return m.Notification(
+            id=self.id,
+            title=self.title,
+            message=self.message,
+            severity=self.severity,
+            created=self.created,
+            read=self.read,
+            cleared=self.cleared,
+            uri=self.uri,
+            environment=self.environment,
+        )
+
+
 _classes = [
     Project,
     Environment,
@@ -5385,6 +5571,7 @@ _classes = [
     DryRun,
     Compile,
     Report,
+    Notification,
 ]
 
 

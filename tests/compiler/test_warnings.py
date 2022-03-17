@@ -69,7 +69,7 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: Type[War
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
     if isinstance(warning, InmantaWarning):
-        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s\n" % (category.__name__, warning))]
+        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s" % (category.__name__, warning))]
     else:
         assert caplog.record_tuples == [
             (

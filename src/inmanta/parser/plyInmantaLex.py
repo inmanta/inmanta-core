@@ -24,8 +24,6 @@ from inmanta.ast.constraint.expression import Regex
 from inmanta.ast.variables import Reference
 from inmanta.parser import ParserException
 
-states = (("mls", "exclusive"),)
-
 keyworldlist = [
     "typedef",
     "as",
@@ -60,7 +58,7 @@ literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "MLS_END", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING"] + sorted(
+tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING"] + sorted(
     list(reserved.values())
 )
 
@@ -132,43 +130,21 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
     pass
 
 
-def t_begin_mls(t: lex.LexToken) -> lex.LexToken:
-    r'["]{3}'
-    t.lexer.begin("mls")
-    t.type = "MLS"
-
+def t_MLS(t: lex.LexToken) -> lex.LexToken:
+    r'"{3,5}([\s\S]*?)"{3,5}'
+    value = t.value[3:-3]
     lexer = t.lexer
-
-    end = lexer.lexpos - lexer.linestart + 1
+    match = lexer.lexmatch[0]
+    lines = match.split("\n")
+    start_line = lexer.lineno
+    end_line = lexer.lineno + len(lines) - 1
+    t.lexer.lineno = end_line
     (s, e) = lexer.lexmatch.span()
-    start = end - (e - s)
+    start = lexer.lexpos - lexer.linestart - (e - s) + 1
+    end = len(lines[-1]) + 1
 
-    t.value = LocatableString("", Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString(value, Range(lexer.inmfile, start_line, start, end_line, end), lexer.lexpos, lexer.namespace)
 
-    return t
-
-
-def t_mls_end(t: lex.LexToken) -> lex.LexToken:
-    r'.*["]{3}'
-    t.lexer.begin("INITIAL")
-    t.type = "MLS_END"
-    value = t.value[:-3]
-
-    lexer = t.lexer
-
-    end = lexer.lexpos - lexer.linestart + 1
-    (s, e) = lexer.lexmatch.span()
-    start = end - (e - s)
-
-    t.value = LocatableString(
-        value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
-    )
-
-    return t
-
-
-def t_mls_MLS(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r".+"
     return t
 
 
@@ -223,18 +199,8 @@ def t_newline(t: lex.LexToken) -> None:  # noqa: N802
     t.lexer.linestart = t.lexer.lexpos
 
 
-def t_mls_newline(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"\n+"
-    t.lexer.lineno += len(t.value)
-    t.lexer.linestart = t.lexer.lexpos
-    t.type = "MLS"
-    return t
-
-
 # A string containing ignored characters (spaces and tabs)
 t_ignore = " \t"
-t_mls_ignore = ""
-
 # Error handling rule
 
 
