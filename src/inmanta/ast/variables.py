@@ -98,8 +98,8 @@ class Reference(ExpressionStatement):
         return self.name
 
 
-# TODO: name
-# TODO: generic?
+# TODO: name, perhaps AttributeResumer? Might also need to move to be able to inherit both here and in as.statements.assign
+#       or VariableResumer? Perhaps move to inmanta.execute.runtime? Locatable inheritance might be an issue -> required?
 class AttributeReferenceActionABC(Locatable):
     # TODO: docstring
 
@@ -120,6 +120,7 @@ class AttributeReferenceActionABC(Locatable):
     # TODO: str and repr
 
 
+# TODO: not only attribute, instance ref is optional -> rename?
 # TODO; is this even an ABC anymore? Looks pretty concrete to me
 class AttributeReferenceHelperABC(RawResumer):
     # TODO: docstring
@@ -139,6 +140,7 @@ class AttributeReferenceHelperABC(RawResumer):
         # TODO: name
         self.action: AttributeReferenceActionABC = action
 
+    # TODO: method still required?
     def _fetch_variable(
         self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
     ) -> ResultVariable:
@@ -157,12 +159,14 @@ class AttributeReferenceHelperABC(RawResumer):
             # get the attribute result variable
             return obj.get_attribute(self.attribute)
         else:
+            # TODO: what if this is not an RV?
             return resolver.lookup(self.attribute)
 
     def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         RawUnit(
             queue_scheduler,
             resolver,
+            # TODO: shouldn't we do gradual execution on self.instance as well?
             self.instance.requires_emit(resolver, queue_scheduler) if self.instance is not None else {},
             self,
         )

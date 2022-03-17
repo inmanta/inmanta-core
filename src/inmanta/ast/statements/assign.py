@@ -25,7 +25,6 @@ from typing import Dict, FrozenSet, Optional, Sequence, TypeVar
 import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
-    variables,
     AttributeException,
     DuplicateException,
     HyphenDeprecationWarning,
@@ -216,9 +215,12 @@ class SetAttribute(AssignStatement, Resumer):
         # TODO: this check is a temporary hack, clean it up!
         if "::" in self.instance.name or self.instance.name.split(".", 1)[0] not in in_scope:
             return []
-        # TODO: clean up import
-        promise: AttributeReferencePromise = variables.AttributeReferencePromise(provider=self)
-        resumer: AttributeReferenceHelperABC = variables.AttributeReferenceHelperABC(
+        # TODO: clean up import -> causing import cycle
+        # TODO: refactor SetAttribute to have AttributeReference, then add AttributeReference.acquire_promise etc
+        #       => use same mechanism for attr read, attr promise, attr assign, ...
+        from inmanta.ast.variables import AttributeReferenceHelperABC, AttributeReferencePromise
+        promise: AttributeReferencePromise = AttributeReferencePromise(provider=self)
+        resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
             self.instance,
             self.attribute_name,
             action=promise,
