@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
-from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
@@ -37,11 +37,6 @@ from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute, RelationAttribute
