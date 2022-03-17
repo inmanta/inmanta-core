@@ -322,7 +322,7 @@ async def test_notifications_deleted_when_env_cleared(environment_with_notificat
     assert len(result.result["data"]) == 0
 
 
-async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, async_finalizer) -> None:
+async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, async_finalizer, server_config) -> None:
     project = data.Project(name="test")
     await project.insert()
 
