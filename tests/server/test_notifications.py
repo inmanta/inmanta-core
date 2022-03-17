@@ -18,7 +18,9 @@
 import datetime
 import json
 import uuid
+from functools import partial
 from operator import itemgetter
+from typing import Sequence
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -26,6 +28,10 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import const, data
 from inmanta.server import SLICE_NOTIFICATION
 from inmanta.server.config import get_bind_port
+from inmanta.server.protocol import Server
+from inmanta.server.services.compilerservice import CompilerService
+from inmanta.server.services.notificationservice import NotificationService
+from utils import retry_limited
 
 
 @pytest.fixture
@@ -314,3 +320,68 @@ async def test_notifications_deleted_when_env_cleared(environment_with_notificat
     result = await client.list_notifications(environment)
     assert result.code == 200
     assert len(result.result["data"]) == 0
+
+
+async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, async_finalizer, server_config) -> None:
+    project = data.Project(name="test")
+    await project.insert()
+
+    env_with_default_retention = data.Environment(name="testenv", project=project.id)
+    await env_with_default_retention.insert()
+    env_with_short_retention = data.Environment(name="testenv2", project=project.id)
+    await env_with_short_retention.insert()
+    await env_with_short_retention.set(data.NOTIFICATION_RETENTION, 30)
+
+    timestamps = [
+        datetime.datetime.now().astimezone() - datetime.timedelta(days=366),
+        datetime.datetime.now().astimezone() - datetime.timedelta(days=35),
+        datetime.datetime.now().astimezone(),
+    ]
+
+    async def insert_notifications_with_timestamps(
+        timestamps: Sequence[datetime.datetime], environment_ids: Sequence[uuid.UUID]
+    ) -> None:
+        for env_id in environment_ids:
+            for created in timestamps:
+                await data.Notification(
+                    title="Notification",
+                    message="Something happened",
+                    environment=env_id,
+                    severity=const.NotificationSeverity.message,
+                    uri="/api/v2/notification",
+                    created=created,
+                    read=False,
+                    cleared=False,
+                ).insert()
+
+    await insert_notifications_with_timestamps(timestamps, [env_with_default_retention.id, env_with_short_retention.id])
+
+    server = Server()
+    notification_service = NotificationService()
+    compiler_service = CompilerService()
+    server.add_slice(compiler_service)
+    server.add_slice(notification_service)
+    await server.start()
+    async_finalizer.add(server.stop)
+
+    async def notification_cleaned_up(env_id: uuid.UUID, expected_length_after_cleanup: int) -> bool:
+        default_env_notifications = await data.Notification.get_list(environment=env_id)
+        return len(default_env_notifications) == expected_length_after_cleanup
+
+    await retry_limited(partial(notification_cleaned_up, env_with_default_retention.id, 2), timeout=10)
+
+    default_env_notifications = await data.Notification.get_list(
+        environment=env_with_default_retention.id, order="DESC", order_by_column="created"
+    )
+    # Only the oldest one is deleted
+    assert len(default_env_notifications) == 2
+    assert default_env_notifications[0].created == timestamps[2]
+    assert default_env_notifications[1].created == timestamps[1]
+
+    await retry_limited(partial(notification_cleaned_up, env_with_short_retention.id, 1), timeout=10)
+    short_retention_notifications = await data.Notification.get_list(
+        environment=env_with_short_retention.id, order="DESC", order_by_column="created"
+    )
+    # Only the latest one is kept
+    assert len(short_retention_notifications) == 1
+    assert short_retention_notifications[0].created == timestamps[2]
