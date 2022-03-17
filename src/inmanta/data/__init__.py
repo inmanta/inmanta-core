@@ -3875,7 +3875,7 @@ class Resource(BaseDocument):
         """
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
-        query = f"""
+        query = """
             SELECT r1.resource_version_id, r1.last_non_deploying_status
             FROM resource AS r1
             WHERE r1.environment=$1

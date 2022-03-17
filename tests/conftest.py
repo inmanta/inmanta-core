@@ -420,14 +420,17 @@ def get_tables_in_db(postgresql_client):
 
     return _get_tables_in_db
 
+
 @pytest.fixture(scope="function")
 def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
     """
     Fixture that returns an async callable that returns all the custom types defined
     in the PostgreSQL database.
     """
+
     async def f() -> List[str]:
         return await postgress_get_custom_types(postgresql_client)
+
     return f
 
 

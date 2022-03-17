@@ -21,7 +21,6 @@ import pytest
 
 from inmanta import const, data
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from utils import ClientHelper
 
 
 @pytest.fixture
