@@ -18,7 +18,7 @@
 import datetime
 import logging
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, cast
 
 from asyncpg import Connection
 
@@ -30,29 +30,44 @@ from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
+from inmanta.server.services.compilerservice import CompilerService, CompileStateListener
 from inmanta.server.validate_filter import InvalidFilter, NotificationFilterValidator
 
 LOGGER = logging.getLogger(__name__)
 
 
-class NotificationService(protocol.ServerSlice):
+class NotificationService(protocol.ServerSlice, CompileStateListener):
     """Slice for notification management"""
+
+    _compiler_service: CompilerService
 
     def __init__(self) -> None:
         super(NotificationService, self).__init__(SLICE_NOTIFICATION)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE]
+        return [SLICE_DATABASE, SLICE_COMPILER]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
+        self._compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
+        self._compiler_service.add_listener(self)
 
     async def start(self) -> None:
         await super().start()
+
+    async def compile_done(self, compile: data.Compile) -> None:
+        if not compile.success and compile.do_export:
+            await self.notify(
+                compile.environment,
+                title="Compilation failed",
+                message="An exporting compile has failed",
+                severity=const.NotificationSeverity.error,
+                uri=f"/api/v2/compilereport/{compile.id}",
+            )
 
     async def notify(
         self,
