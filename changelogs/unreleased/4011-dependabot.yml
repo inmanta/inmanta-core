@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 36.0.1 to 36.0.2
+destination-branches:
+- master
+sections: {}
