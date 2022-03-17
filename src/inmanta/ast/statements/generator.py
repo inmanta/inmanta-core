@@ -271,7 +271,7 @@ class If(ExpressionStatement):
         #       and are currently never cleaned up => when branch is picked, a lot of already fulfilled promises are iterated
         self._if_promises.append(if_block)
         self._else_promises.append(if_block)
-        return [self._if_promises, self._else_promises]
+        return [*self._if_promises, *self._else_promises]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.condition.requires_emit(resolver, queue)
