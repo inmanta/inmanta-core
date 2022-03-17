@@ -934,18 +934,21 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
+        last_non_deploying_status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()

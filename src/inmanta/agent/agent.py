@@ -142,12 +142,16 @@ class ResourceAction(ResourceActionBase):
         )
         if result.code != 200 or result.result is None:
             raise Exception("Failed to report the start of the deployment to the server")
-        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
+        return {
+            Id.parse_id(key).resource_str(): const.ResourceState[value]
+            for key, value in result.result["data"].items()
+        }
 
     async def _execute(self, ctx: handler.HandlerContext, requires: Dict[ResourceIdStr, const.ResourceState]) -> None:
         """
         :param ctx: The context to use during execution of this deploy
-        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its resource state.
+        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
+                         state that was not `deploying'.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
@@ -228,9 +232,8 @@ class ResourceAction(ResourceActionBase):
                     # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                     return
 
-                requires: Optional[Dict[ResourceIdStr, const.ResourceState]] = None
                 try:
-                    requires = await self.send_in_progress(ctx.action_id)
+                    requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
                 except Exception:
                     ctx.set_status(const.ResourceState.failed)
                     ctx.exception("Failed to report the start of the deployment to the server")

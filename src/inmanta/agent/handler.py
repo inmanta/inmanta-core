@@ -640,6 +640,7 @@ class ResourceHandler(object):
                 const.ResourceState.dry,
                 const.ResourceState.undefined,
                 const.ResourceState.skipped_for_undefined,
+                const.ResourceState.deploying,
             }
             return {rid: state for rid, state in reqs.items() if state in unexpected_states}
 
