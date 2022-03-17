@@ -20,10 +20,12 @@
 
 import typing
 from itertools import chain
+from typing import Dict, FrozenSet, Optional, Sequence
 
 import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
+    variables,
     AttributeException,
     DuplicateException,
     HyphenDeprecationWarning,
@@ -34,7 +36,7 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
+from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, Resumer, Statement
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -51,14 +53,14 @@ from inmanta.execute.util import Unknown
 from . import ReferenceStatement
 
 try:
-    from typing import TYPE_CHECKING, Dict, Optional
+    from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
 
 
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
-    from inmanta.ast.variables import Reference  # noqa: F401
+    from inmanta.ast.variables import AttributeReferenceHelperABC, AttributeReferencePromise, Reference  # noqa: F401
 
 
 class CreateList(ReferenceStatement):
@@ -198,6 +200,28 @@ class SetAttribute(AssignStatement, Resumer):
             return
         node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
         node.assign(self.value.get_dataflow_node(graph), self, graph)
+
+    def emit_progression_promises(
+        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = True
+    ) -> Sequence[ConditionalPromiseABC]:
+        if root:
+            return []
+        # TODO: handle explicit namespace references, are they always in scope (think not)? If so, add to parent docstring.
+        #       If not, how to deal with them?
+        # TODO: this check is a temporary hack, clean it up!
+        if "::" in self.instance.name or self.instance.name.split(".", 1)[0] not in in_scope:
+            return []
+        # TODO: clean up import
+        promise: AttributeReferencePromise = variables.AttributeReferencePromise(provider=self)
+        resumer: AttributeReferenceHelperABC = variables.AttributeReferenceHelperABC(
+            self.instance,
+            self.attribute_name,
+            action=promise,
+        )
+        self.copy_location(promise)
+        self.copy_location(resumer)
+        resumer.schedule(resolver, queue)
+        return [promise]
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)

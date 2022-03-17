@@ -17,11 +17,11 @@
 """
 
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement
+from inmanta.ast.statements import ConditionalPromiseABC, ConditionalPromiseBlock, DefinitionStatement, DynamicStatement, Statement
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
@@ -83,26 +83,30 @@ class BasicBlock(object):
     #     def get_requires(self) -> List[str]:
     #         return self.external
 
-    def emit_nested_promises(
-        self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str] = frozenset(), root: bool = False
-    ) -> None:
-        # TODO: rest of docstring, see Statement.emit_nested_promises
+    def emit_progression_promises(
+        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str] = frozenset(), root: bool = False
+    ) -> ConditionalPromiseBlock:
+        # TODO: rest of docstring, see Statement.emit_progression_promises
         """
         :param root: If true, this block is considered the root reference for this nested promise emit and promises are
             acquired on this block's variables. If false, this block's variables are considered out of scope in addiiton
             to the ones declared in the out_of_scope parameter.
         """
+        # TODO: raise ValueError if in_scope and root both set
         # if this block is not the root reference, make sure statements don't acquire promises on this block's variables
-        out_of_scope_block: FrozenSet[str] = out_of_scope if root else out_of_scope.union({self.get_variables()})
+        declared_vars: FrozenSet[str] = frozenset(self.get_variables())
+        in_scope_block: FrozenSet[str] = declared_vars if root else in_scope.difference(declared_vars)
+        sub_promises: List[ConditionalPromiseABC] = []
         for s in self.__stmts:
             try:
-                s.emit_nested_promises(resolver, queue, out_of_scope_block)
+                sub_promises.extend(s.emit_progression_promises(resolver, queue, in_scope=in_scope_block, root=root))
             except RuntimeException as e:
                 e.set_statement(s)
                 raise e
+        return ConditionalPromiseBlock(sub_promises=sub_promises)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        self.emit_nested_promises(resolver, queue, root=True)
+        self.emit_progression_promises(resolver, queue, root=True)
         for s in self.__stmts:
             try:
                 s.emit(resolver, queue)

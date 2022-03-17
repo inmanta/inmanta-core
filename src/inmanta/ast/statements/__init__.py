@@ -15,12 +15,14 @@
 
     Contact: code@inmanta.com
 """
-from typing import Dict, FrozenSet, Iterator, List, Optional, Tuple
+from dataclasses import dataclass
+from itertools import chain
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, ProgressionPromiseABC, QueueScheduler, Resolver, ResultCollector, ResultVariable
 
 try:
     from typing import TYPE_CHECKING
@@ -69,6 +71,68 @@ class Statement(Namespaced):
         return iter(())
 
 
+# TODO: move up or down?
+# TODO: inherit from ProgressionPromise. Requires new ProgressionPromise subclass for owner and provider
+class ConditionalPromiseABC(ProgressionPromiseABC):
+    """
+    Promise for progression that might or might not be made depending on a condition. Can be either picked or dropped when the
+    condition becomes known.
+    """
+    # TODO: docstring
+
+    def pick(self) -> None:
+        """
+        Fulfills this promise with the additional context that further progression will be made by newly emitted statements
+        and/or promises.
+        """
+        # for simple conditional promises the context is irrelevant, just fulfill the promise
+        self.fulfill()
+
+    def drop(self) -> None:
+        """
+        Fulfills this promise with the additional context that the potential progression for this promise will never occur.
+        """
+        # for simple conditional promises the context is irrelevant, just fulfill the promise
+        self.fulfill()
+
+
+# TODO: could be a lot cleaner if this is mutable so classes don't need to store a list of blocks that differ only in reference
+#       scope, but how to merge? Might need a different data structure alltogether. First make it work with this one, then clean
+#       up
+@dataclass(frozen=True)
+class ConditionalPromiseBlock(ConditionalPromiseABC):
+    """
+    Conditional promise for a whole block. Contains promises for statements in the block. Dropping a block means dropping
+    everything below it while picking a block means fulfilling the immediate promises of this block while leaving nested
+    conditional block promises hanging (their condition isn't known yet).
+    """
+
+    sub_promises: Sequence[ConditionalPromiseABC]
+
+    def fulfill(self) -> None:
+        """
+        Fulfills this promise without fulfilling any of its sub promises.
+        """
+        pass
+
+    def pick(self) -> None:
+        """
+        Fulfills all promises in the block without recursing on nested blocks.
+        """
+        # TODO: document why this behavior
+        for promise in self.sub_promises:
+            promise.fulfill()
+        self.fulfill()
+
+    def drop(self) -> None:
+        """
+        Drops all promises in the block, recursing on nested blocks.
+        """
+        for promise in self.sub_promises:
+            promise.drop()
+        self.fulfill()
+
+
 class DynamicStatement(Statement):
     """
     This class represents all statements that have dynamic properties.
@@ -85,12 +149,26 @@ class DynamicStatement(Statement):
         """List of all variable names used by this statement"""
         raise NotImplementedError()
 
+    # TODO: contract has changed: for nested blocks it no longer returns just the newly acquired promises but all promises that
+    #       are held. This is required for deeply nested promises that are dropped by another scope than the one that acquired
+    #       them
     # TODO: implement in If, For, SubConstructor
-    # TODO: name
-    def emit_nested_promises(self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str]) -> None:
+    # TODO: name: emit_eager_promises? emit_conditional_promises?
+    # TODO: caller: set root appropriately
+    def emit_progression_promises(
+        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
+    ) -> Sequence[ConditionalPromiseABC]:
+        # TODO: mention that this may be called multiple times with different scopes
         # TODO: double check docstring correctness when final
+        # TODO: docstring is complete chaos now
         """
-        Emits any progression promises for nested blocks. Makes sure the promises get fulfilled as soon as certainty is
+        Emits progression promises for this statement if emitting it would make progression towards any of the in scope
+        variables' completeness and returns these promises. The caller is responsible for fulfilling each of these promises,
+        either by picking them or by dropping them.
+
+        :param root: If true, this statement lives in the root reference scope, in which case only promises for nested blocks
+            should be emitted.
+
         reached on whether or not the block will be emitted. Promises are acquired on any attribute assignments on any variables
         that have not been declared out of scope. This allows to emit promises only relative to a certain parent context,
         excluding sibling and/or intermediate parent (shadowed) declarations.
@@ -101,11 +179,14 @@ class DynamicStatement(Statement):
         :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired for these
             variables or their attributes.
         """
-        pass
+        # TODO: update docs out_of_scope -> in_scope
+        return []
 
+    # TODO: can be removed? Parts of docstring may have  to be moved to other method
+    # TODO: can this be made 1 method? If not, add it to BasicBlock as well and/or clean up implementation in if statement.
     def emit_progression_promise(
-        self, resolver: Resolver, queue: QueueScheduler, *, out_of_scope: FrozenSet[str]
-    ) -> Optional["variables.AttributeReferencePromise"]:
+        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str]
+    ) -> Optional[ConditionalPromiseABC]:
         # TODO: better to make AttributeReferencePromise a child of ProgressionPromise or something generic like that.
         """
         Emits a progression promise for this statement if emitting it would make progression towards a variable's completeness
@@ -115,6 +196,7 @@ class DynamicStatement(Statement):
         :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired on their or their
             attribute's variables.
         """
+        # TODO: update docs out_of_scope -> in_scope
         return None
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:

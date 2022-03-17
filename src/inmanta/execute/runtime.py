@@ -95,6 +95,18 @@ class ISetPromise(IPromise, Generic[T]):
         pass
 
 
+class ProgressionPromiseABC(IPromise):
+    """
+    A promise to the owner to progress towards setting a value, for example by emitting additional statements.
+    """
+
+    def fulfill(self) -> None:
+        """
+        Considers this promise fulfilled. No further progression is expected. Idempotent.
+        """
+        raise NotImplementedError()
+
+
 class ProgressionPromise(IPromise):
     """
     A promise from a provider to the owner to progress towards setting a value, for example by emitting additional statements.
@@ -108,7 +120,7 @@ class ProgressionPromise(IPromise):
 
     def fulfill(self) -> None:
         """
-        Fulfills this promise by notifying the owner.
+        Fulfills this promise by notifying the owner. Idempotent.
         """
         self.owner.fulfill(self)
 
@@ -169,7 +181,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
     def fulfill(self, promise: IPromise) -> None:
         # TODO: mention that the promise must/is assumed to be owned/handed out by this variable
         """
-        Considers the given promise fulfilled.
+        Considers the given promise fulfilled. Idempotent.
         """
         # plain ResultVariable does not track promises -> simply return
         pass
@@ -307,7 +319,7 @@ class DelayedResultVariable(ResultVariable[T]):
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
         self.promises: List[IPromise] = []
-        self.done_promises: List[IPromise] = []
+        self.done_promises: Set[IPromise] = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -329,7 +341,7 @@ class DelayedResultVariable(ResultVariable[T]):
         Considers the given promise fulfilled.
         """
         # TODO: better to use a set?
-        self.done_promises.append(promise)
+        self.done_promises.add(promise)
         if self.can_get():
             self.queue()
 

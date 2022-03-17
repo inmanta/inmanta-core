@@ -21,7 +21,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement
+from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, RawResumer, Statement
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, ProgressionPromise, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -179,7 +179,7 @@ class AttributeReferenceHelperABC(RawResumer):
     # TODO: str and repr
 
 
-class AttributeReferencePromise(AttributeReferenceActionABC):
+class AttributeReferencePromise(AttributeReferenceActionABC, ConditionalPromiseABC):
     # TODO: docstring
 
     def __init__(self, provider: Statement) -> None:
@@ -206,6 +206,9 @@ class AttributeReferencePromise(AttributeReferenceActionABC):
 
     def fulfill(self) -> None:
         # TODO: docstring
+        if self._fulfilled:
+            # already fulfilled, no need to continue
+            return
         if self._promise is not None:
             self._promise.fulfill()
         self._fulfilled = True

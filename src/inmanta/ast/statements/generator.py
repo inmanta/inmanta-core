@@ -20,7 +20,7 @@
 
 import logging
 from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
+from typing import Dict, Iterator, FrozenSet, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -36,7 +36,7 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement, RawResumer
+from inmanta.ast.statements import ConditionalPromiseABC, ConditionalPromiseBlock, DynamicStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
@@ -240,6 +240,8 @@ class If(ExpressionStatement):
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
+        self._if_promises: List[ConditionalPromiseBlock] = []
+        self._else_promises: List[ConditionalPromiseBlock] = []
         self.anchors.extend(condition.get_anchors())
         self.anchors.extend(if_branch.get_anchors())
         self.anchors.extend(else_branch.get_anchors())
@@ -247,13 +249,27 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    # TODO: overpromise for strict mode
     # TODO: document this behavior somewhere
     # TODO: think about / prove correctness and add rationale somewhere: ? circular logic always nondeterministic in terms of model (deterministic only due to compilation order, which is out of scope of the model) ?
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
+
+    def emit_progression_promises(
+        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
+    ) -> Sequence[ConditionalPromiseABC]:
+        if_block: ConditionalPromiseBlock
+        else_block: ConditionalPromiseBlock
+        if_block, else_block = (
+            branch.emit_progression_promises(resolver, queue, in_scope=in_scope, root=False)
+            for branch in (self.if_branch, self.else_branch)
+        )
+        # TODO: not very efficient: method gets called for each distinct wrapping scope so promise blocks keep stacking up
+        #       and are currently never cleaned up => when branch is picked, a lot of already fulfilled promises are iterated
+        self._if_promises.append(if_block)
+        self._else_promises.append(if_block)
+        return [self._if_promises, self._else_promises]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.condition.requires_emit(resolver, queue)
@@ -271,6 +287,13 @@ class If(ExpressionStatement):
             e.set_statement(self)
             e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
             raise e
+        # resolve progression promises
+        picked, dropped = (self._if_promises, self._else_promises) if cond else (self._else_promises, self._if_promises)
+        for p in picked:
+            p.pick()
+        for d in dropped:
+            d.drop()
+        # schedule appropriate branch body
         branch: BasicBlock = self.if_branch if cond else self.else_branch
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
         xc.emit(queue)
