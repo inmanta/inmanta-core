@@ -60,24 +60,25 @@ async def test_added_last_non_deploying_status_column(
 
     2) Overview deploy history:
 
-                          resource_version_id             | action |  status   |            started
-       ----------------------------------------------------+--------+-----------+-------------------------------
-       std::AgentConfig[internal,agentname=localhost],v=2 | deploy | deploying | 2021-11-30 11:30:10.963913+01
-       std::AgentConfig[internal,agentname=localhost],v=2 | pull   |           | 2021-11-30 11:30:10.934362+01
-       std::AgentConfig[internal,agentname=localhost],v=2 | deploy | deployed  | 2021-11-30 11:30:10.794597+01
-       std::AgentConfig[internal,agentname=localhost],v=2 | store  |           | 2021-11-30 11:30:10.774169+01
-       std::AgentConfig[internal,agentname=localhost],v=1 | deploy | deployed  | 2021-11-30 11:30:09.127408+01
-       std::AgentConfig[internal,agentname=localhost],v=1 | pull   |           | 2021-11-30 11:30:09.106187+01
-       std::AgentConfig[internal,agentname=localhost],v=1 | deploy | deployed  | 2021-11-30 11:30:07.075124+01
-       std::AgentConfig[internal,agentname=localhost],v=1 | pull   |           | 2021-11-30 11:30:07.031912+01
-       std::AgentConfig[internal,agentname=localhost],v=1 | store  |           | 2021-11-30 11:30:06.231369+01
-       std::File[localhost,path=/tmp/test],v=2            | pull   |           | 2021-11-30 11:30:10.934522+01
-       std::File[localhost,path=/tmp/test],v=2            | deploy | failed    | 2021-11-30 11:30:10.815667+01
-       std::File[localhost,path=/tmp/test],v=2            | pull   |           | 2021-11-30 11:30:10.791918+01
-       std::File[localhost,path=/tmp/test],v=2            | store  |           | 2021-11-30 11:30:10.774169+01
-       std::File[localhost,path=/tmp/test],v=1            | deploy | failed    | 2021-11-30 11:30:08.127482+01
-       std::File[localhost,path=/tmp/test],v=1            | pull   |           | 2021-11-30 11:30:08.086925+01
-       std::File[localhost,path=/tmp/test],v=1            | store  |           | 2021-11-30 11:30:06.231369+01
+                      resource_version_id                 | action |  status   |            started
+       ---------------------------------------------------+--------+-----------+-------------------------------
+       std::AgentConfig[internal,agentname=localhost],v=1 | store  |           | 2022-03-15 16:35:02.557191+01
+       std::AgentConfig[internal,agentname=localhost],v=1 | pull   |           | 2022-03-15 16:35:03.466918+01
+       std::AgentConfig[internal,agentname=localhost],v=1 | pull   |           | 2022-03-15 16:35:05.591205+01
+       std::AgentConfig[internal,agentname=localhost],v=1 | deploy | deployed  | 2022-03-15 16:35:05.592065+01
+       std::AgentConfig[internal,agentname=localhost],v=1 | deploy | deployed  | 2022-03-15 16:35:08.387699+01
+       std::AgentConfig[internal,agentname=localhost],v=2 | store  |           | 2022-03-15 16:35:14.918778+01
+       std::AgentConfig[internal,agentname=localhost],v=2 | deploy | deployed  | 2022-03-15 16:35:14.942906+01
+       std::AgentConfig[internal,agentname=localhost],v=2 | pull   |           | 2022-03-15 16:35:15.166585+01
+       std::AgentConfig[internal,agentname=localhost],v=2 | deploy | deployed  | 2022-03-15 16:35:18.647132+01
+       std::AgentConfig[internal,agentname=localhost],v=2 | deploy | deploying | 2022-03-15 16:35:19.647132+01
+       std::File[localhost,path=/tmp/test],v=1            | store  |           | 2022-03-15 16:35:02.557191+01
+       std::File[localhost,path=/tmp/test],v=1            | pull   |           | 2022-03-15 16:35:06.625448+01
+       std::File[localhost,path=/tmp/test],v=1            | deploy | failed    | 2022-03-15 16:35:09.313108+01
+       std::File[localhost,path=/tmp/test],v=2            | store  |           | 2022-03-15 16:35:14.918778+01
+       std::File[localhost,path=/tmp/test],v=2            | pull   |           | 2022-03-15 16:35:14.940534+01
+       std::File[localhost,path=/tmp/test],v=2            | pull   |           | 2022-03-15 16:35:18.645797+01
+       std::File[localhost,path=/tmp/test],v=2            | deploy | failed    | 2022-03-15 16:35:18.647344+01
     """
 
     # Assert state before running the DB migration script
