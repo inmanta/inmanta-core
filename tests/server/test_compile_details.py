@@ -22,6 +22,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import Report
+from utils import parse_datetime_to_utc
 
 
 def compile_ids(compile_objects):
@@ -83,10 +84,6 @@ async def env_with_compiles(client, environment):
     ).insert()
 
     return environment, ids, compile_requested_timestamps
-
-
-def parse_datetime_to_utc(time: str) -> datetime.datetime:
-    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
 
 
 async def test_compile_details(server, client, env_with_compiles):
