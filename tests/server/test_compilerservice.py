@@ -56,12 +56,7 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
     await cs.prestart(server)
     await cs.start()
     server.add_slice(cs)
-    notification_service = NotificationService()
-    await notification_service.prestart(server)
-    await notification_service.start()
     yield cs
-    await notification_service.prestop()
-    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -118,7 +113,7 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
 
-async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
+async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog, async_finalizer):
     """Test the scheduler part in isolation, mock out compile runner and listen to state updates"""
 
     class Collector(CompileStateListener):
@@ -194,10 +189,9 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    async_finalizer.add(cs.prestop)
+    async_finalizer.add(cs.stop)
     server.add_slice(cs)
-    notification_service = NotificationService()
-    await notification_service.prestart(server)
-    await notification_service.start()
     collector = Collector()
     cs.add_listener(collector)
 
@@ -279,8 +273,6 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await retry_limited(lambda: len(collector.preseen) == 2, 1)
 
     # test server restart
-    await notification_service.prestop()
-    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -295,6 +287,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    async_finalizer.add(cs.prestop)
+    async_finalizer.add(cs.stop)
     collector = Collector()
     cs.add_listener(collector)
 
