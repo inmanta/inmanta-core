@@ -3322,7 +3322,7 @@ class Compile(BaseDocument):
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
-        ) SELECT * FROM compiledetails;
+        ) SELECT * FROM compiledetails ORDER BY report_started ASC;
         """
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
