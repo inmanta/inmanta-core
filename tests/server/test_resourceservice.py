@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import datetime
 import uuid
 
 import pytest
@@ -258,9 +259,15 @@ async def test_events_resource_without_dependencies(server, client, environment,
     assert not result.result["data"]
 
 
-async def test_last_non_deploying_status_field_on_resource(client, environment, clienthelper, resource_deployer) -> None:
+@pytest.mark.parametrize("endpoint_to_use", ["deployment_endpoint", "resource_action_update"])
+async def test_last_non_deploying_status_field_on_resource(
+    client, environment, clienthelper, resource_deployer, agent, endpoint_to_use: str
+) -> None:
     """
     Test whether the `last_non_deploying_status` field is updated correctly when a deployment of a resource is done.
+
+    :param endpoint_to_use: Indicates which code path should be used to report a resource action updates.
+                            The old one (resource_action_update) or the new one (deployment_endpoint).
     """
     version = await clienthelper.get_version()
     rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
@@ -284,6 +291,38 @@ async def test_last_non_deploying_status_field_on_resource(client, environment, 
         assert rvid_to_resources[rvid_r2_v1].status is r2_status
         assert rvid_to_resources[rvid_r2_v1].last_non_deploying_status is r2_last_non_deploying_status
 
+    async def start_deployment(rvid: ResourceVersionIdStr) -> uuid.UUID:
+        if endpoint_to_use == "deployment_endpoint":
+            return await resource_deployer.start_deployment(rvid=rvid)
+        else:
+            action_id = uuid.uuid4()
+            result = await agent._client.resource_action_update(
+                tid=environment,
+                resource_ids=[rvid],
+                action_id=action_id,
+                action=const.ResourceAction.deploy,
+                started=datetime.datetime.now().astimezone(),
+                status=const.ResourceState.deploying,
+            )
+            assert result.code == 200
+            return action_id
+
+    async def deployment_finished(rvid: ResourceVersionIdStr, action_id: uuid.UUID, status: const.ResourceState) -> None:
+        if endpoint_to_use == "deployment_endpoint":
+            await resource_deployer.deployment_finished(rvid=rvid, action_id=action_id, status=status)
+        else:
+            now = datetime.datetime.now().astimezone()
+            result = await agent._client.resource_action_update(
+                tid=environment,
+                resource_ids=[rvid],
+                action_id=action_id,
+                action=const.ResourceAction.deploy,
+                started=now,
+                finished=now,
+                status=status,
+            )
+            assert result.code == 200
+
     # All resources in available state
     await assert_status_fields(
         r1_status=const.ResourceState.available,
@@ -293,7 +332,7 @@ async def test_last_non_deploying_status_field_on_resource(client, environment, 
     )
 
     # Put R1 in deploying state
-    action_id_r1 = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
+    action_id_r1 = await start_deployment(rvid=rvid_r1_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
         r1_last_non_deploying_status=const.ResourceState.available,
@@ -302,8 +341,8 @@ async def test_last_non_deploying_status_field_on_resource(client, environment, 
     )
 
     # R1 finished deployment + R2 start deployment
-    await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id_r1, status=const.ResourceState.deployed)
-    action_id_r2 = await resource_deployer.start_deployment(rvid=rvid_r2_v1)
+    await deployment_finished(rvid=rvid_r1_v1, action_id=action_id_r1, status=const.ResourceState.deployed)
+    action_id_r2 = await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.deployed,
         r1_last_non_deploying_status=const.ResourceState.deployed,
@@ -312,8 +351,8 @@ async def test_last_non_deploying_status_field_on_resource(client, environment, 
     )
 
     # R1 start deployment + R2 skipped
-    action_id_r1 = await resource_deployer.start_deployment(rvid=rvid_r1_v1)
-    await resource_deployer.deployment_finished(rvid=rvid_r2_v1, action_id=action_id_r2, status=const.ResourceState.skipped)
+    action_id_r1 = await start_deployment(rvid=rvid_r1_v1)
+    await deployment_finished(rvid=rvid_r2_v1, action_id=action_id_r2, status=const.ResourceState.skipped)
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
         r1_last_non_deploying_status=const.ResourceState.deployed,
@@ -322,8 +361,8 @@ async def test_last_non_deploying_status_field_on_resource(client, environment, 
     )
 
     # R1 failed + R2 start deployment
-    await resource_deployer.deployment_finished(rvid=rvid_r1_v1, action_id=action_id_r1, status=const.ResourceState.failed)
-    await resource_deployer.start_deployment(rvid=rvid_r2_v1)
+    await deployment_finished(rvid=rvid_r1_v1, action_id=action_id_r1, status=const.ResourceState.failed)
+    await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.failed,
         r1_last_non_deploying_status=const.ResourceState.failed,
