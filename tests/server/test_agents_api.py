@@ -85,6 +85,7 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     assert result.code == 200
     assert len(result.result["data"]) == 5
     assert all([agent["status"] == "up" for agent in result.result["data"]])
+    assert "localhost" in result.result["data"][0]["process_name"]
 
     result = await client.get_agents(environment, filter={"status": "paused"})
     assert result.code == 200

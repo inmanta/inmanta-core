@@ -2621,13 +2621,14 @@ class Agent(BaseDocument):
     def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ai.name as process_name, ai.process as process_id,
+                                    ap.hostname as process_name, ai.process as process_id,
                                     (CASE WHEN paused THEN 'paused'
                                         WHEN id_primary IS NOT NULL THEN 'up'
                                         ELSE 'down'
                                     END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
-            filter_statements=[" environment = $1 "],
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
             values=[cls._get_value(environment)],
         )
         return query_builder.build()
