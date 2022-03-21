@@ -41,7 +41,7 @@ async def migrate_v202109100_to_v202111260(
 
     # When the bootloader is started, it also executes the migration to v202111260
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 async def test_added_environment_columns(

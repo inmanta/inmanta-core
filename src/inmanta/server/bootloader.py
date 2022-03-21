@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import importlib
 import logging
 import pkgutil
@@ -82,7 +83,16 @@ class InmantaBootloader(object):
         await self.restserver.start()
         self.started = True
 
-    async def stop(self) -> None:
+    async def stop(self, timeout: Optional[int] = None) -> None:
+        """
+        :param timeout: Raises TimeoutError when the server hasn't finished stopping after
+                        this amount of seconds.
+        """
+        if not timeout:
+            await self._stop()
+        await asyncio.wait_for(self._stop(), timeout=timeout)
+
+    async def _stop(self) -> None:
         await self.restserver.stop()
         if self.feature_manager is not None:
             self.feature_manager.stop()

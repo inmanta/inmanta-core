@@ -700,7 +700,7 @@ async def server(server_pre_start):
     yield ibl.restserver
 
     try:
-        await asyncio.wait_for(ibl.stop(), 15)
+        await ibl.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 
@@ -785,7 +785,7 @@ async def server_multi(
 
     yield ibl.restserver
     try:
-        await asyncio.wait_for(ibl.stop(), 15)
+        await ibl.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 
@@ -1475,7 +1475,7 @@ async def migrate_db_from(
 
     yield migrate
 
-    await bootloader.stop()
+    await bootloader.stop(timeout=15)
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
