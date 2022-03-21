@@ -25,7 +25,7 @@ syn keyword Boolean true false
 syn keyword Identifier self
 
 " Statement
-syn keyword Conditional if else when
+syn keyword Conditional if else when elif
 syn keyword Repeat for
 syn keyword Operator in not or and matching is defined
 syn keyword Keyword entity implementation end using implement extends as index parents
