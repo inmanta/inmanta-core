@@ -33,6 +33,8 @@ def compile_ids(compile_objects):
 async def env_with_compiles(client, environment):
     compile_requested_timestamps = []
     compiles = []
+    # Make sure that timestamp is never older than 7 days,
+    # as such that the cleanup service doesn't delete them.
     now = datetime.datetime.now()
     for i in range(4):
         requested = now + datetime.timedelta(minutes=i)
