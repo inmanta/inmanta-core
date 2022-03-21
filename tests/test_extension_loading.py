@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from functools import partial
 from typing import Any, Generator
 
 import pytest
@@ -41,7 +42,6 @@ from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
-from functools import partial
 
 
 @contextmanager

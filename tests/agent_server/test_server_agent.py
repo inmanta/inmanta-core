@@ -19,9 +19,9 @@ import asyncio
 import logging
 import time
 import uuid
+from functools import partial
 from itertools import groupby
 from typing import Any, Dict, List, Optional, Tuple
-from functools import partial
 
 import psutil
 import pytest
