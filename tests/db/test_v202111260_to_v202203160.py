@@ -16,37 +16,17 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import Awaitable, Callable, List
 
 import pytest
-from asyncpg import Connection
 
-from db.common import PGRestore
 from inmanta.const import ResourceState
 from inmanta.data import Resource
-from inmanta.server.bootloader import InmantaBootloader
 
 
-@pytest.fixture
-async def migrate_v202111260_to_v202203160(
-    hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
-) -> AsyncIterator[Callable[[], Awaitable[None]]]:
-    """
-    Returns a callable that performs a v202111260 database restore and migrates to v202203160.
-    """
-    # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql"), "r") as fh:
-        await PGRestore(fh.readlines(), postgresql_client).run()
-
-    ibl = InmantaBootloader()
-
-    # When the bootloader is started, it also executes the migration to v202111260
-    yield ibl.start
-    await ibl.stop()
-
-
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql"))
 async def test_added_last_non_deploying_status_column(
-    migrate_v202111260_to_v202203160: Callable[[], Awaitable[None]],
+    migrate_db_from: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
     get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
 ) -> None:
@@ -86,7 +66,7 @@ async def test_added_last_non_deploying_status_column(
     assert "non_deploying_resource_state" not in (await get_custom_postgresql_types())
 
     # Migrate DB schema
-    await migrate_v202111260_to_v202203160()
+    await migrate_db_from()
 
     # Assert state after running the DB migration script
     assert "last_non_deploying_status" in (await get_columns_in_db_table("resource"))
