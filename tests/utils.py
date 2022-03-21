@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 import inspect
 import json
 import logging
@@ -324,3 +325,6 @@ def mark_only_for_version_higher_than(version: str) -> "MarkDecorator":
         product_version_lower_or_equal_than(version),
         reason=f"This test is only intended for version larger than {version} currently at {current}",
     )
+
+def parse_datetime_to_utc(time: str) -> datetime.datetime:
+    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
