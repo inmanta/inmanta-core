@@ -86,11 +86,13 @@ class InmantaBootloader(object):
     async def stop(self, timeout: Optional[int] = None) -> None:
         """
         :param timeout: Raises TimeoutError when the server hasn't finished stopping after
-                        this amount of seconds.
+                        this amount of seconds. This argument should only be used by test
+                        cases.
         """
         if not timeout:
             await self._stop()
-        await asyncio.wait_for(self._stop(), timeout=timeout)
+        else:
+            await asyncio.wait_for(self._stop(), timeout=timeout)
 
     async def _stop(self) -> None:
         await self.restserver.stop()
