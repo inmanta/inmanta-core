@@ -1,5 +1,3 @@
 description: Add highlighting for the elif keyword for vim
 change-type: minor
 destination-branches: [master, iso5]
-sections:
-    feature: "{{description}}"
