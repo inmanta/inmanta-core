@@ -796,6 +796,8 @@ class Field(Generic[T]):
         return self._is_many
 
     def _validate_single(self, name: str, value: object) -> object:
+        """ Validate a single value against the types in this field.
+        """
         if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
             raise TypeError(
                 "Field %s should have the correct type (%s instead of %s)"
@@ -804,6 +806,8 @@ class Field(Generic[T]):
         return value
 
     def validate(self, name: str, value: object) -> object:
+        """ Validate the value against the constraint in this field. Treat value as list when is_many is true
+        """
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
@@ -818,6 +822,8 @@ class Field(Generic[T]):
         return self._validate_single(name, value)
 
     def from_db(self, name: str, value: object) -> object:
+        """ Load values from database. Treat value as a list when is_many is true
+        """
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
@@ -832,13 +838,15 @@ class Field(Generic[T]):
         return self._from_db_single(name, value)
 
     def _from_db_single(self, name: str, value: object) -> object:
+        """ Load a single database value
+        """
         if value.__class__ is self.field_type or isinstance(value, self.field_type):
             return value
 
-        # pgasync does not convert a jsonb field to a dict
+        # asyncpg does not convert a jsonb field to a dict
         if isinstance(value, str) and self.field_type is dict:
             return json.loads(value)
-        # pgasync does not convert a enum field to a enum type
+        # asyncpg does not convert an enum field to an enum type
         if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
             return self.field_type[value]
         # decode typed json
