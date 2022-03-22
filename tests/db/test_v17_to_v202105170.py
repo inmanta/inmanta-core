@@ -47,7 +47,7 @@ async def migrate_v17_to_v202105170(
 
     # When the bootloader is started, it also executes the migration to v202105170
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 async def test_timestamp_timezones(

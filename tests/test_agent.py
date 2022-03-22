@@ -108,7 +108,7 @@ async def startable_server(server_config):
     bootloader = InmantaBootloader()
     yield bootloader
     try:
-        await asyncio.wait_for(bootloader.stop(), 15)
+        await bootloader.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 

@@ -19,6 +19,7 @@ import asyncio
 import logging
 import time
 import uuid
+from functools import partial
 from itertools import groupby
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -217,7 +218,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
 
 
 async def test_server_restart(
-    resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff
+    resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff, async_finalizer
 ):
     """
     Test if agent reconnects correctly after server restart
@@ -226,9 +227,11 @@ async def test_server_restart(
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
-    await server.stop()
+    await asyncio.wait_for(server.stop(), timeout=15)
     ibl = InmantaBootloader()
     server = ibl.restserver
+    async_finalizer.add(agent.stop)
+    async_finalizer.add(partial(ibl.stop, timeout=15))
     await ibl.start()
 
     env_id = environment
@@ -287,9 +290,6 @@ async def test_server_restart(
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
-
-    await agent.stop()
-    await ibl.stop()
 
 
 async def test_spontaneous_deploy(
@@ -1476,7 +1476,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     await assert_session_state({"agent1": AgentStatus.up, "agent2": AgentStatus.down}, ["agent1", "agent2"])
 
     # Stop server
-    await server.stop()
+    await asyncio.wait_for(server.stop(), timeout=15)
 
     current_process = psutil.Process()
     children = current_process.children(recursive=True)

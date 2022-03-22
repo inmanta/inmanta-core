@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import logging
 
 from agent_server.conftest import get_agent
@@ -38,7 +39,7 @@ async def test_agent_disconnect(resource_container, environment, server, client,
     agent = await get_agent(server, environment, "agent1")
     async_finalizer.add(agent.stop)
 
-    await server.stop()
+    await asyncio.wait_for(server.stop(), timeout=15)
 
     def disconnected():
         return not agent._instances["agent1"]._enabled
