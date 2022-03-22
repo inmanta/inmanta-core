@@ -40,7 +40,7 @@ async def migrate_v4_to_v5(
     await ibl.start()
     # When the bootloader is started, it also executes the migration to v5
     yield
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 async def test_db_migration_compile_data(migrate_v4_to_v5, postgresql_client: Connection) -> None:

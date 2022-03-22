@@ -2906,13 +2906,14 @@ class Agent(BaseDocument):
     def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ai.name as process_name, ai.process as process_id,
+                                    ap.hostname as process_name, ai.process as process_id,
                                     (CASE WHEN paused THEN 'paused'
                                         WHEN id_primary IS NOT NULL THEN 'up'
                                         ELSE 'down'
                                     END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
-            filter_statements=[" environment = $1 "],
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
             values=[cls._get_value(environment)],
         )
         return query_builder.build()
@@ -3322,7 +3323,7 @@ class Compile(BaseDocument):
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
-        ) SELECT * FROM compiledetails;
+        ) SELECT * FROM compiledetails ORDER BY report_started ASC;
         """
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
@@ -3838,6 +3839,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
+    :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -3858,6 +3860,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = Field(field_type=dict)
     attribute_hash: str = Field(field_type=str)
     status: const.ResourceState = Field(field_type=const.ResourceState, default=const.ResourceState.available)
+    last_non_deploying_status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -3865,22 +3868,24 @@ class Resource(BaseDocument):
     provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
     @classmethod
-    async def get_resource_state_for_dependencies(
+    async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id"
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
-        Return the ResourceState for each dependency of the given resource.
+        Return the last state of each dependency of the given resource that was not 'deploying'.
         """
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
-        query = f"""
-            SELECT r1.resource_version_id, r1.status
-            FROM {cls.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=$2 AND (
-                                                            SELECT (r2.attributes->'requires')::jsonb
-                                                            FROM {cls.table_name()} AS r2
-                                                            WHERE r2.environment=$1 AND r2.resource_version_id=$3
-                                                         ) ? r1.resource_version_id
+        query = """
+            SELECT r1.resource_version_id, r1.last_non_deploying_status
+            FROM resource AS r1
+            WHERE r1.environment=$1
+                  AND r1.model=$2
+                  AND (
+                      SELECT (r2.attributes->'requires')::jsonb
+                      FROM resource AS r2
+                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
+                  ) ? r1.resource_version_id
         """
         values = [
             cls._get_value(environment),
@@ -3888,7 +3893,7 @@ class Resource(BaseDocument):
             resource_version_id.resource_version_str(),
         ]
         result = await cls._fetch_query(query, *values)
-        return {r["resource_version_id"]: const.ResourceState(r["status"]) for r in result}
+        return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = "|".join(

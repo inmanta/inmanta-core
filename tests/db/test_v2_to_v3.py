@@ -37,7 +37,7 @@ async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client:
 
     await ibl.start()
     yield
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 @pytest.mark.slowtest

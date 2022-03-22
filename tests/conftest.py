@@ -301,7 +301,7 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.disconnect()
 
 
-async def postgress_get_custom_types(postgresql_client):
+async def postgress_get_custom_types(postgresql_client) -> List[str]:
     # Query extracted from CLI
     # psql -E
     # \dT
@@ -419,6 +419,19 @@ def get_tables_in_db(postgresql_client):
         return [r["table_name"] for r in result]
 
     return _get_tables_in_db
+
+
+@pytest.fixture(scope="function")
+def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
+    """
+    Fixture that returns an async callable that returns all the custom types defined
+    in the PostgreSQL database.
+    """
+
+    async def f() -> List[str]:
+        return await postgress_get_custom_types(postgresql_client)
+
+    return f
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -700,7 +713,7 @@ async def server(server_pre_start):
     yield ibl.restserver
 
     try:
-        await asyncio.wait_for(ibl.stop(), 15)
+        await ibl.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 
@@ -785,7 +798,7 @@ async def server_multi(
 
     yield ibl.restserver
     try:
-        await asyncio.wait_for(ibl.stop(), 15)
+        await ibl.stop(timeout=15)
     except concurrent.futures.TimeoutError:
         logger.exception("Timeout during stop of the server in teardown")
 
@@ -1475,7 +1488,7 @@ async def migrate_db_from(
 
     yield migrate
 
-    await bootloader.stop()
+    await bootloader.stop(timeout=15)
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)

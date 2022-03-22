@@ -22,6 +22,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
+from functools import partial
 
 import pytest
 from dateutil import parser
@@ -689,9 +690,10 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-async def test_server_logs_address(server_config, caplog):
+async def test_server_logs_address(server_config, caplog, async_finalizer):
     with caplog.at_level(logging.INFO):
         ibl = InmantaBootloader()
+        async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
 
         client = Client("client")
@@ -699,7 +701,6 @@ async def test_server_logs_address(server_config, caplog):
         assert result.code == 200
         address = "127.0.0.1"
 
-        await ibl.stop()
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
@@ -934,18 +935,21 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
+        last_non_deploying_status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
