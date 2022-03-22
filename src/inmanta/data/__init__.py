@@ -3558,7 +3558,7 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(rvid in ${offset + 1})>0) unnested
+                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
                     """
         values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
         return query, values
