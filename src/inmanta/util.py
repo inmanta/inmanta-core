@@ -32,7 +32,7 @@ from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from collections import defaultdict
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -104,8 +104,8 @@ def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
 
 
 def ensure_future_and_handle_exception(
-    logger: Logger, msg: str, action: Coroutine[None, None, None], notify_done_callback: Callable[[asyncio.Task], None]
-) -> asyncio.Task:
+    logger: Logger, msg: str, action: Awaitable[None], notify_done_callback: Callable[[asyncio.Task[None]], None]
+) -> asyncio.Task[None]:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
@@ -123,6 +123,9 @@ def ensure_future_and_handle_exception(
     return future
 
 
+TaskMethod = Callable[[], Awaitable[None]]
+
+
 class Scheduler(object):
     """
     An event scheduler class
@@ -134,9 +137,9 @@ class Scheduler(object):
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
-        self._in_flight_tasks: Dict[Callable, List[asyncio.Task]] = defaultdict(list)
+        self._in_flight_tasks: Dict[TaskMethod, List[asyncio.Task[None]]] = defaultdict(list)
 
-    def _add_in_flight_task(self, action: Callable, task: asyncio.Task) -> None:
+    def _add_in_flight_task(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
         """
         Add an in-flight task to `self._in_flight_tasks`.
         """
@@ -144,7 +147,7 @@ class Scheduler(object):
             LOGGER.warning("More than one execution of background task %s in flight", action.__name__)
         self._in_flight_tasks[action].append(task)
 
-    def _notify_done(self, action: Callable, task: asyncio.Task) -> None:
+    def _notify_done(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
         """
         Called by the callback function of an in-flight task when the task has finished executing.
         """
@@ -156,7 +159,7 @@ class Scheduler(object):
 
     def add_action(
         self,
-        action: Union[Callable[[], None], Coroutine[None, None, None]],
+        action: TaskMethod,
         interval: float,
         initial_delay: Optional[float] = None,
     ) -> None:
