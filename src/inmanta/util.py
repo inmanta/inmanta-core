@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import asyncio
 import datetime
 import enum
@@ -31,6 +30,7 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from collections import defaultdict
 from logging import Logger
 from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
@@ -103,7 +103,9 @@ def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
     return code == 200
 
 
-def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[Coroutine]) -> None:
+def ensure_future_and_handle_exception(
+    logger: Logger, msg: str, action: Coroutine[None, None, None], notify_done_callback: Callable[[asyncio.Task], None]
+) -> asyncio.Task:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
@@ -114,8 +116,11 @@ def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[C
                 logger.exception(msg, exc_info=exc)
         except CancelledError:
             pass
+        finally:
+            notify_done_callback(future)
 
     future.add_done_callback(handler)
+    return future
 
 
 class Scheduler(object):
@@ -127,6 +132,27 @@ class Scheduler(object):
         self.name = name
         self._scheduled: Dict[Callable, object] = {}
         self._stopped = False
+        # Keep track of all tasks that are currently executing to be
+        # able to cancel them when the scheduler is stopped.
+        self._in_flight_tasks: Dict[Callable, List[asyncio.Task]] = defaultdict(list)
+
+    def _add_in_flight_task(self, action: Callable, task: asyncio.Task) -> None:
+        """
+        Add an in-flight task to `self._in_flight_tasks`.
+        """
+        if action in self._in_flight_tasks and self._in_flight_tasks[action]:
+            LOGGER.warning("More than one execution of background task %s in flight", action.__name__)
+        self._in_flight_tasks[action].append(task)
+
+    def _notify_done(self, action: Callable, task: asyncio.Task) -> None:
+        """
+        Called by the callback function of an in-flight task when the task has finished executing.
+        """
+        if action in self._in_flight_tasks:
+            try:
+                self._in_flight_tasks[action].remove(task)
+            except ValueError:
+                pass
 
     def add_action(
         self,
@@ -156,7 +182,13 @@ class Scheduler(object):
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
-                    ensure_future_and_handle_exception(LOGGER, "Uncaught exception while executing scheduled action", action())
+                    task = ensure_future_and_handle_exception(
+                        logger=LOGGER,
+                        msg="Uncaught exception while executing scheduled action",
+                        action=action(),
+                        notify_done_callback=functools.partial(self._notify_done, action),
+                    )
+                    self._add_in_flight_task(action, task)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -187,6 +219,11 @@ class Scheduler(object):
                 IOLoop.current().remove_timeout(handle)
         except KeyError:
             pass
+
+        # Cancel all in-flight tasks
+        for action, tasks in self._in_flight_tasks.items():
+            for task in tasks:
+                task.cancel()
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
