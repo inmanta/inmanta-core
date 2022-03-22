@@ -2933,17 +2933,9 @@ class Agent(BaseDocument):
     id_primary: Optional[uuid.UUID] = None
     unpause_on_resume: Optional[bool] = None
 
-    # TODO(bart): Remove -> update_fields / update_primary bug!
-    def set_primary(self, primary: uuid.UUID) -> None:
-        self.id_primary = primary
-
-    def get_primary(self) -> Optional[uuid.UUID]:
+    @property
+    def primary(self) -> Optional[uuid.UUID]:
         return self.id_primary
-
-    def del_primary(self) -> None:
-        del self.id_primary
-
-    primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
