@@ -21,7 +21,13 @@ from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Opt
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import ConditionalPromiseABC, ConditionalPromiseBlock, DefinitionStatement, DynamicStatement, Statement
+from inmanta.ast.statements import (
+    ConditionalPromiseABC,
+    ConditionalPromiseBlock,
+    DefinitionStatement,
+    DynamicStatement,
+    Statement,
+)
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:

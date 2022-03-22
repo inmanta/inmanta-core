@@ -21,10 +21,25 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement, VariableResumer, AttributeReferenceHelperABC
+from inmanta.ast.statements import (
+    AssignStatement,
+    AttributeReferenceHelperABC,
+    ExpressionStatement,
+    RawResumer,
+    Statement,
+    VariableResumer,
+)
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import Instance, ProgressionPromise, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import (
+    Instance,
+    ProgressionPromise,
+    QueueScheduler,
+    RawUnit,
+    Resolver,
+    ResultCollector,
+    ResultVariable,
+)
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
@@ -107,9 +122,7 @@ class VariableReader(VariableResumer, Generic[T]):
     variable. Optionally subscribes a result collector to intermediate values.
     """
 
-    def __init__(
-        self, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]
-    ) -> None:
+    def __init__(self, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]) -> None:
         super().__init__()
         self.target: ResultVariable[T] = target
         self.resultcollector: Optional[ResultCollector[T]] = resultcollector
@@ -146,6 +159,7 @@ class VariableReadResumer(RawResumer):
     """
     Resumes execution when the variable is complete.
     """
+
     def __init__(self, reader: VariableReader) -> None:
         self.reader: VariableReader = reader
 

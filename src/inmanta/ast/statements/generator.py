@@ -20,7 +20,7 @@
 
 import logging
 from itertools import chain
-from typing import Dict, Iterator, FrozenSet, List, Optional, Sequence, Set, Tuple
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -38,7 +38,13 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ConditionalPromiseABC, ConditionalPromiseBlock, DynamicStatement, ExpressionStatement, RawResumer
+from inmanta.ast.statements import (
+    ConditionalPromiseABC,
+    ConditionalPromiseBlock,
+    DynamicStatement,
+    ExpressionStatement,
+    RawResumer,
+)
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph

@@ -22,7 +22,15 @@ from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, ProgressionPromiseABC, QueueScheduler, Resolver, ResultCollector, ResultVariable, Typeorvalue
+from inmanta.execute.runtime import (
+    ExecutionUnit,
+    ProgressionPromiseABC,
+    QueueScheduler,
+    Resolver,
+    ResultCollector,
+    ResultVariable,
+    Typeorvalue,
+)
 
 try:
     from typing import TYPE_CHECKING
@@ -78,6 +86,7 @@ class ConditionalPromiseABC(ProgressionPromiseABC):
     Promise for progression that might or might not be made depending on a condition. Can be either picked or dropped when the
     condition becomes known.
     """
+
     # TODO: docstring
 
     def pick(self) -> None:
@@ -266,6 +275,7 @@ class Resumer(ExpressionStatement):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
+
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
@@ -274,6 +284,7 @@ class RawResumer(ExpressionStatement):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
+
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
@@ -285,7 +296,10 @@ class VariableReferenceHook(RawResumer):
     """
 
     def __init__(
-        self, instance: Optional[Reference], name: str, variable_resumer: "VariableResumer",
+        self,
+        instance: Optional[Reference],
+        name: str,
+        variable_resumer: "VariableResumer",
     ) -> None:
         super().__init__()
         self.instance: Optional[Reference] = instance
@@ -315,10 +329,14 @@ class VariableReferenceHook(RawResumer):
             instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
 
             if isinstance(instance, list):
-                raise RuntimeException(self, "can not get a attribute %s, %s is not an entity but a list" % (self.name, instance))
+                raise RuntimeException(
+                    self, "can not get a attribute %s, %s is not an entity but a list" % (self.name, instance)
+                )
             if not isinstance(instance, Instance):
                 raise RuntimeException(
-                    self, "can not get a attribute %s, %s is not an entity but a %s with value %s" % (self.name, type(instance), instance)
+                    self,
+                    "can not get a attribute %s, %s is not an entity but a %s with value %s"
+                    % (self.name, type(instance), instance),
                 )
 
             # get the attribute result variable

@@ -36,7 +36,15 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, Resumer, Statement, VariableReferenceHook, VariableResumer
+from inmanta.ast.statements import (
+    AssignStatement,
+    ConditionalPromiseABC,
+    ExpressionStatement,
+    Resumer,
+    Statement,
+    VariableReferenceHook,
+    VariableResumer,
+)
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,

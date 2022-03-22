@@ -571,6 +571,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         # of the scheduler. We know the order in which those types can be frozen safely.
         return len(self.waiters) - len(self.listeners) + int(self.attribute.has_relation_precedence_rules())
 
+
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
     """
     Variable to hold the value for an optional relation (arity [0:1])
