@@ -3560,7 +3560,7 @@ class ResourceAction(BaseDocument):
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
                     WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
                     """
-        values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
+        values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
 
     @classmethod
