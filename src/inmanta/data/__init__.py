@@ -34,7 +34,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Generator,
     Generic,
     Iterable,
     List,
