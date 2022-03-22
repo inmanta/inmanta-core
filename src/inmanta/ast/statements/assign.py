@@ -51,6 +51,7 @@ from inmanta.execute.runtime import (
     HangUnit,
     Instance,
     ListLiteral,
+    ProgressionPromise,
     QueueScheduler,
     Resolver,
     ResultCollector,

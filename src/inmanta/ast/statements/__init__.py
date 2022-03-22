@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 from dataclasses import dataclass
-from itertools import chain
 from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
@@ -24,8 +23,10 @@ from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Nam
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
+    Instance,
     ProgressionPromiseABC,
     QueueScheduler,
+    RawUnit,
     Resolver,
     ResultCollector,
     ResultVariable,
@@ -300,14 +301,12 @@ class VariableReferenceHook(RawResumer):
             instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
 
             if isinstance(instance, list):
-                raise RuntimeException(
-                    self, "can not get a attribute %s, %s is not an entity but a list" % (self.name, instance)
-                )
+                raise RuntimeException(self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance))
             if not isinstance(instance, Instance):
                 raise RuntimeException(
                     self,
-                    "can not get a attribute %s, %s is not an entity but a %s with value %s"
-                    % (self.name, type(instance), instance),
+                    "can not get attribute %s, %s is not an entity but a %s with value %s"
+                    % (self.name, self.instance, type(instance), instance),
                 )
 
             # get the attribute result variable
@@ -333,7 +332,7 @@ class VariableResumer(Locatable):
 
     def resume(
         self,
-        variable: ResultVariable[T],
+        variable: ResultVariable,
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:

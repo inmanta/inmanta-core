@@ -27,7 +27,7 @@ from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatem
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import AttributeReferenceHelperABC, IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, RawUnit, Resolver, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable
 
 
 class InvalidNumberOfArgumentsException(Exception):

@@ -20,26 +20,11 @@ import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import (
-    AssignStatement,
-    AttributeReferenceHelperABC,
-    ExpressionStatement,
-    RawResumer,
-    Statement,
-    VariableResumer,
-)
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, VariableReferenceHook, VariableResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import (
-    Instance,
-    ProgressionPromise,
-    QueueScheduler,
-    RawUnit,
-    Resolver,
-    ResultCollector,
-    ResultVariable,
-)
+from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
@@ -171,7 +156,7 @@ class VariableReadResumer(RawResumer):
         return self.reader.target_value(requires[self.reader])
 
 
-class IsDefinedGradual(AttributeReferenceRead[bool], ResultCollector[object]):
+class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
     """
     Fill target variable with is defined result as soon as it gets known.
     """
@@ -179,7 +164,7 @@ class IsDefinedGradual(AttributeReferenceRead[bool], ResultCollector[object]):
     __slots__ = ("target", "resultcollector")
 
     def __init__(self, target: ResultVariable) -> None:
-        AttributeReferenceRead.__init__(self, target, resultcollector=self)
+        VariableReader.__init__(self, target, resultcollector=self)
 
     def receive_result(self, value: object, location: Location) -> None:
         # TODO: docstring
@@ -242,11 +227,11 @@ class AttributeReference(Reference):
         temp = ResultVariable()
 
         # construct waiter
-        reader: AttributeReferenceRead = AttributeReferenceRead(target=temp, resultcollector=resultcollector)
-        resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
+        reader: VariableReader = VariableReader(target=temp, resultcollector=resultcollector)
+        resumer: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
-            action=reader,
+            resumer=reader,
         )
         self.copy_location(reader)
         self.copy_location(resumer)

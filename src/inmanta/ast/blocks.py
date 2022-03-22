@@ -17,7 +17,7 @@
 """
 
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
