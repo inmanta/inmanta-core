@@ -2474,7 +2474,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert len(resource_actions) == 11
 
     # Get everything that starts with "/etc/file"
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/file%")
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/file")
     assert len(resource_actions) == 5
 
     # Get all files
