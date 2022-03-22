@@ -23,9 +23,9 @@ from typing import Dict, List, Optional, Type
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
-from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer
+from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer, VariableReferenceHook
 from inmanta.ast.type import Bool, create_function
-from inmanta.ast.variables import AttributeReferenceHelperABC, IsDefinedGradual, Reference
+from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable
 
@@ -79,14 +79,14 @@ class IsDefined(ReferenceStatement):
         temp = ResultVariable()
         # construct waiter
         gradual_helper: IsDefinedGradual = IsDefinedGradual(target=temp)
-        resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
+        hook: VariableReferenceHook = VariableReferenceHook(
             instance=self.attr,
             attribute=self.name,
-            action=gradual_helper,
+            resumer=gradual_helper,
         )
         self.copy_location(gradual_helper)
-        self.copy_location(resumer)
-        resumer.schedule(resolver, queue)
+        self.copy_location(hook)
+        hook.schedule(resolver, queue)
 
         # wait for the attribute value
         return {self: temp}

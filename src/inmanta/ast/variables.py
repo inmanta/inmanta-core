@@ -228,14 +228,14 @@ class AttributeReference(Reference):
 
         # construct waiter
         reader: VariableReader = VariableReader(target=temp, resultcollector=resultcollector)
-        resumer: VariableReferenceHook = VariableReferenceHook(
+        hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
             resumer=reader,
         )
         self.copy_location(reader)
-        self.copy_location(resumer)
-        resumer.schedule(resolver, queue)
+        self.copy_location(hook)
+        hook.schedule(resolver, queue)
 
         # wait for the attribute value
         return {self: temp}
