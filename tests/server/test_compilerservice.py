@@ -770,7 +770,7 @@ async def server_with_frequent_cleanups(server_pre_start, server_config, async_f
     ibl = InmantaBootloader()
     await ibl.start()
     yield ibl.restserver
-    await asyncio.wait_for(ibl.stop(), 15)
+    await ibl.stop(timeout=15)
 
 
 @pytest.fixture(scope="function")
