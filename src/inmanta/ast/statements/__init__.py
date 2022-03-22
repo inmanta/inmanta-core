@@ -81,14 +81,11 @@ class Statement(Namespaced):
 
 
 # TODO: move up or down?
-# TODO: inherit from ProgressionPromise. Requires new ProgressionPromise subclass for owner and provider
 class ConditionalPromiseABC(ProgressionPromiseABC):
     """
     Promise for progression that might or might not be made depending on a condition. Can be either picked or dropped when the
     condition becomes known.
     """
-
-    # TODO: docstring
 
     def pick(self) -> None:
         """
@@ -129,7 +126,6 @@ class ConditionalPromiseBlock(ConditionalPromiseABC):
         """
         Fulfills all promises in the block without recursing on nested blocks.
         """
-        # TODO: document why this behavior
         for promise in self.sub_promises:
             promise.fulfill()
         self.fulfill()
