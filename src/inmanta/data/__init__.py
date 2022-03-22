@@ -747,6 +747,17 @@ class Field(Generic[T]):
         default: object = default_unset,
         **kwargs: object,
     ) -> None:
+        """ A field in a document/record in the database. This class holds the metadata one how the data layer should handle
+            the field.
+
+            :param field_type: The python type of the field. This type should work with isinstance
+            :param required: Is this value required
+            :param is_many: Set to true when this is a list type
+            :param part_of_primary_key: Set to true when the field is part of the primary key.
+            :param ignore: Should this field be ignored when saving it to the database. This can be used to add a field to a
+                           a class that should not be saved in the database.
+            :param default: The default value for this field.
+        """
 
         self._field_type = field_type
         self._required = required
