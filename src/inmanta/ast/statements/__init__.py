@@ -112,7 +112,7 @@ class ConditionalPromiseABC(ProgressionPromiseABC):
 class ConditionalPromiseBlock(ConditionalPromiseABC):
     """
     Conditional promise for a whole block. Contains promises for statements in the block. Dropping a block means dropping
-    everything below it while picking a block means fulfilling the immediate promises of this block while leaving nested
+    everything below it while picking a block means fulfilling the immediate promises of this block and leaving nested
     conditional block promises hanging (their condition isn't known yet).
     """
 
@@ -158,55 +158,26 @@ class DynamicStatement(Statement):
         """List of all variable names used by this statement"""
         raise NotImplementedError()
 
-    # TODO: contract has changed: for nested blocks it no longer returns just the newly acquired promises but all promises that
-    #       are held. This is required for deeply nested promises that are dropped by another scope than the one that acquired
-    #       them
-    # TODO: implement in If, For, SubConstructor
+    # TODO: implement in For, Implement/SubConstructor
     # TODO: name: emit_eager_promises? emit_conditional_promises?
-    # TODO: caller: set root appropriately
     def emit_progression_promises(
         self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
     ) -> Sequence[ConditionalPromiseABC]:
-        # TODO: mention that this may be called multiple times with different scopes
-        # TODO: double check docstring correctness when final
-        # TODO: docstring is complete chaos now
         """
         Emits progression promises for this statement if emitting it would make progression towards any of the in scope
         variables' completeness and returns these promises. The caller is responsible for fulfilling each of these promises,
         either by picking them or by dropping them.
 
-        :param root: If true, this statement lives in the root reference scope, in which case only promises for nested blocks
-            should be emitted.
-
-        reached on whether or not the block will be emitted. Promises are acquired on any attribute assignments on any variables
-        that have not been declared out of scope. This allows to emit promises only relative to a certain parent context,
-        excluding sibling and/or intermediate parent (shadowed) declarations.
-
-        Expected to be called after normalization and before emit.
+        Expected to be called after normalization and before emit. May be called multiple times with different scopes.
 
         :param resolver: Resolver for the parent context promises should be acquired on.
-        :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired for these
-            variables or their attributes.
+        :param in_scope: Set of variables that are considered in scope. Promises will only be acquired for these variables or
+            their attributes. This allows to emit promises only relative to a certain parent context, excluding sibling and/or
+            intermediate parent (shadowed) declarations.
+        :param root: If true, this statement lives in the root reference scope, in which case the in scope names are considered
+            siblings and only promises for nested blocks should be emitted.
         """
-        # TODO: update docs out_of_scope -> in_scope
         return []
-
-    # TODO: can be removed? Parts of docstring may have  to be moved to other method
-    # TODO: can this be made 1 method? If not, add it to BasicBlock as well and/or clean up implementation in if statement.
-    def emit_progression_promise(
-        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str]
-    ) -> Optional[ConditionalPromiseABC]:
-        # TODO: better to make AttributeReferencePromise a child of ProgressionPromise or something generic like that.
-        """
-        Emits a progression promise for this statement if emitting it would make progression towards a variable's completeness
-        and returns it. If emitting this statement would make no such progression, returns None.
-
-        :param resolver: Resolver for the parent context promises should be acquired on.
-        :param out_of_scope: Set of variables that are considered out of scope. No promises will be acquired on their or their
-            attribute's variables.
-        """
-        # TODO: update docs out_of_scope -> in_scope
-        return None
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
@@ -302,7 +273,7 @@ class VariableReferenceHook(RawResumer):
         variable_resumer: "VariableResumer",
     ) -> None:
         super().__init__()
-        self.instance: Optional[Reference"] = instance
+        self.instance: Optional["Reference"] = instance
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
@@ -313,7 +284,7 @@ class VariableReferenceHook(RawResumer):
         RawUnit(
             queue_scheduler,
             resolver,
-            # TODO: instance could be None, why does this not fail test cases -> add tests?
+            # TODO: instance could be None, why does this not fail test cases -> add tests for is defined on local var / implicit self?
             # TODO: shouldn't we do gradual execution on self.instance as well?
             self.instance.requires_emit(resolver, queue_scheduler) if self.instance is not None else {},
             self,
@@ -342,7 +313,6 @@ class VariableReferenceHook(RawResumer):
             # get the attribute result variable
             variable = instance.get_attribute(self.name)
         else:
-            # TODO: what if this is not an RV?
             obj: Typeorvalue = resolver.lookup(self.name)
             if not isinstance(obj, ResultVariable):
                 raise RuntimeException(self, "can not get variable %s, it is a type" % self.name)

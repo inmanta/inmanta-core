@@ -68,6 +68,7 @@ def test_slots_rt():
 
     assert_slotted(ResultVariable())
     assert_slotted(AttributeVariable(None, None))
+    # TODO: assert other classes' slots?
     assert_slotted(ProgressionPromise(None, None))
     assert_slotted(SetPromise(None, None))
     assert_slotted(ListVariable(r, i, qs))

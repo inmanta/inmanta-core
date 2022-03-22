@@ -204,7 +204,6 @@ class ConditionalPromise(VariableResumer, ConditionalPromiseABC):
         super().__init__()
         self.provider: Statement = provider
         self._promise: Optional[ProgressionPromise] = None
-        # TODO: add single responsible per block for this?
         self._fulfilled: bool = False
 
     def resume(
@@ -213,7 +212,6 @@ class ConditionalPromise(VariableResumer, ConditionalPromiseABC):
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
-        # TODO: docstring
         if self._fulfilled:
             # already fulfilled, no need to acquire additional promises
             return
@@ -275,7 +273,7 @@ class SetAttribute(AssignStatement, Resumer):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
-        # TODO: optionally refacto this to use VariableResumer
+        # TODO: optionally refactor this to use VariableResumer
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(

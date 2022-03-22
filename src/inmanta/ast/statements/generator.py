@@ -258,7 +258,7 @@ class If(ExpressionStatement):
         return "If"
 
     # TODO: document this behavior somewhere
-    # TODO: think about / prove correctness and add rationale somewhere: ? circular logic always nondeterministic in terms of model (deterministic only due to compilation order, which is out of scope of the model) ?
+    # TODO: add rationale somewhere: ? circular logic always nondeterministic in terms of model (deterministic only due to compilation order, which is out of scope of the model) ?
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
