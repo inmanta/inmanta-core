@@ -3735,6 +3735,7 @@ class ResourceAction(BaseDocument):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        resource_id_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
         action_id: Optional[uuid.UUID] = None,
@@ -3761,8 +3762,13 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
+            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            values.append(cls._get_value(attribute))
             values.append(cls._get_value(attribute_value))
+            parameter_index += 2
+        if resource_id_value:
+            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id_value))
             parameter_index += 1
         if log_severity:
             # <@ Is contained by

@@ -77,7 +77,6 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 
     rid = r"""exec::Run[agent1,command=sh -c "git clone \"https://code.inmanta.com/training/day_2_bis.git\"  && chown -R centos:centos "]"""
     rid_r1_v1 = ResourceIdStr(rid)
-    # rid_r1_v1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1_v1},v={version}")
     rid_r2_v1 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
     rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2_v1},v={version}")
