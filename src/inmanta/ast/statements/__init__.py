@@ -297,12 +297,12 @@ class VariableReferenceHook(RawResumer):
 
     def __init__(
         self,
-        instance: Optional[Reference],
+        instance: Optional["Reference"],
         name: str,
         variable_resumer: "VariableResumer",
     ) -> None:
         super().__init__()
-        self.instance: Optional[Reference] = instance
+        self.instance: Optional[Reference"] = instance
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
