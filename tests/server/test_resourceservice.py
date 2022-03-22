@@ -75,7 +75,9 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     """
     version = await clienthelper.get_version()
 
-    rid_r1_v1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
+    rid = r"""exec::Run[agent1,command=sh -c "git clone \"https://code.inmanta.com/training/day_2_bis.git\"  && chown -R centos:centos "]"""
+    rid_r1_v1 = ResourceIdStr(rid)
+    # rid_r1_v1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1_v1},v={version}")
     rid_r2_v1 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
     rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2_v1},v={version}")
@@ -90,7 +92,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     await clienthelper.put_version_simple(resources, version)
 
     result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
-    assert result.code == 400
+    assert result.code == 400, result.result
     assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
     result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 400

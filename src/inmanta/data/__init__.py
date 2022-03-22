@@ -3761,10 +3761,9 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
-            values.append(cls._get_value(attribute))
+            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
             values.append(cls._get_value(attribute_value))
-            parameter_index += 2
+            parameter_index += 1
         if log_severity:
             # <@ Is contained by
             query += f" AND ${parameter_index} <@ ANY(messages)"
