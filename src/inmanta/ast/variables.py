@@ -231,7 +231,7 @@ class AttributeReference(Reference):
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
-            resumer=reader,
+            variable_resumer=reader,
         )
         self.copy_location(reader)
         self.copy_location(hook)

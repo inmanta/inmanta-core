@@ -82,7 +82,7 @@ class IsDefined(ReferenceStatement):
         hook: VariableReferenceHook = VariableReferenceHook(
             instance=self.attr,
             attribute=self.name,
-            resumer=gradual_helper,
+            variable_resumer=gradual_helper,
         )
         self.copy_location(gradual_helper)
         self.copy_location(hook)

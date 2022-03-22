@@ -264,7 +264,7 @@ class SetAttribute(AssignStatement, Resumer):
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             self.attribute_name,
-            resumer=promise,
+            variable_resumer=promise,
         )
         self.copy_location(promise)
         self.copy_location(hook)
