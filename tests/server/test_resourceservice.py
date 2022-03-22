@@ -369,3 +369,27 @@ async def test_last_non_deploying_status_field_on_resource(
         r2_status=const.ResourceState.deploying,
         r2_last_non_deploying_status=const.ResourceState.skipped,
     )
+
+
+async def test_log_deploy_start(server, client, environment, clienthelper, agent, resource_deployer):
+    """
+    Ensure that a message is logged when starting a deploy.
+    """
+    # Version 1
+    version = await clienthelper.get_version()
+    rid_r1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    resources = [
+        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+    ]
+    await clienthelper.put_version_simple(resources, version)
+
+    # Start new deployment for r1
+    await resource_deployer.start_deployment(rvid=rvid_r1_v1)
+
+    result = await client.resource_logs(environment, rid_r1)
+    assert result.code == 200
+    deploy_started_message = next(
+        (log_message for log_message in result.result["data"] if "Resource deploy started on agent" in log_message["msg"]), None
+    )
+    assert deploy_started_message
