@@ -1,0 +1,6 @@
+description: The logger now correctly reports the endpoints that will be removed from a session
+change-type: patch
+destination-branches: [master, iso4, iso5]
+sections: {
+  bugfix: "{{description}}"
+}

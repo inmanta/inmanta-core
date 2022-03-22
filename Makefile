@@ -26,7 +26,7 @@ pep8:
 	flake8 src tests tests_common
 
 .PHONY: mypy mypy-diff mypy-save
-RUN_MYPY=MYPYPATH=stubs:src python -m mypy --html-report mypy -p inmanta
+RUN_MYPY=MYPYPATH=stubs:src python -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta
 
 mypy:
 	$(RUN_MYPY)

@@ -25,6 +25,7 @@ import time
 from typing import Dict, List, Optional, Set, Tuple
 
 from inmanta import config, const, module, postgresproc, protocol
+from inmanta.config import Config
 from inmanta.server import config as server_opts
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
@@ -101,6 +102,8 @@ class Deploy(object):
 [database]
 name=postgres
 port=%(postgres_port)s
+host=localhost
+username=postgres
 
 [config]
 state-dir=%(state_dir)s
@@ -108,18 +111,23 @@ log-dir=%(log_dir)s
 
 [server]
 bind-port=%(server_port)s
+bind-address=127.0.0.1
 
 [agent_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [compiler_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [client_rest_transport]
 port=%(server_port)s
+host=localhost
 
 [cmdline_rest_transport]
 port=%(server_port)s
+host=localhost
 """
             % vars_in_configfile
         )
@@ -136,7 +144,19 @@ port=%(server_port)s
             fd.write(config_file)
 
         log_file = os.path.join(log_dir, "inmanta.log")
-        args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "--log-file", log_file, "server"]
+        args = [
+            sys.executable,
+            "-m",
+            "inmanta.app",
+            "-vvv",
+            "-c",
+            server_config,
+            "--config-dir",
+            Config._config_dir if Config._config_dir is not None else "",
+            "--log-file",
+            log_file,
+            "server",
+        ]
 
         self._server_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -314,6 +334,8 @@ port=%(server_port)s
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
         cmd = inmanta_path + [
+            "--config-dir",
+            Config._config_dir if Config._config_dir is not None else "",
             "-vvv",
             "export",
             "-e",
