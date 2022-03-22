@@ -22,7 +22,7 @@ from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, ProgressionPromiseABC, QueueScheduler, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, ProgressionPromiseABC, QueueScheduler, Resolver, ResultCollector, ResultVariable, Typeorvalue
 
 try:
     from typing import TYPE_CHECKING
@@ -263,13 +263,95 @@ class ExpressionStatement(DynamicStatement):
 
 
 class Resumer(ExpressionStatement):
+    """
+    Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
+    """
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
 
 class RawResumer(ExpressionStatement):
+    """
+    Resume on a set of requirement variables when they become ready (i.e. they are complete).
+    """
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
+
+
+class VariableReferenceHook(RawResumer):
+    """
+    Generic helper class for adding a hook to a variable (ResultVariable) object. Supports both plain variables and instance
+    attributes. Calls variable resumer with the variable object as soon as it's available.
+    """
+
+    def __init__(
+        self, instance: Optional[Reference], name: str, variable_resumer: "VariableResumer",
+    ) -> None:
+        super().__init__()
+        self.instance: Optional[Reference] = instance
+        self.name: str = name
+        self.variable_resumer: "VariableResumer" = variable_resumer
+
+    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+        """
+        Schedules this instance for execution. Waits for the variable's requirements before resuming.
+        """
+        RawUnit(
+            queue_scheduler,
+            resolver,
+            # TODO: instance could be None, why does this not fail test cases -> add tests?
+            # TODO: shouldn't we do gradual execution on self.instance as well?
+            self.instance.requires_emit(resolver, queue_scheduler) if self.instance is not None else {},
+            self,
+        )
+
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+        """
+        Fetches the variable when it's available and calls variable resumer.
+        """
+        variable: ResultVariable[object]
+        if self.instance is not None:
+            # get the Instance
+            instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
+
+            if isinstance(instance, list):
+                raise RuntimeException(self, "can not get a attribute %s, %s is not an entity but a list" % (self.name, instance))
+            if not isinstance(instance, Instance):
+                raise RuntimeException(
+                    self, "can not get a attribute %s, %s is not an entity but a %s with value %s" % (self.name, type(instance), instance)
+                )
+
+            # get the attribute result variable
+            variable = instance.get_attribute(self.name)
+        else:
+            # TODO: what if this is not an RV?
+            obj: Typeorvalue = resolver.lookup(self.name)
+            if not isinstance(obj, ResultVariable):
+                raise RuntimeException(self, "can not get variable %s, it is a type" % self.name)
+            variable = obj
+
+        self.variable_resumer.resume(variable, resolver, queue_scheduler)
+
+    # TODO: execute method implementation required -> return None? Don't implement? Why even is RawResumer(ExpressionStatement)?
+
+    # TODO: str and repr
+
+
+# TODO: is Locatable required?
+class VariableResumer(Locatable):
+    """
+    Resume execution on a variable object when it becomes available (i.e. it exists).
+    """
+
+    def resume(
+        self,
+        variable: ResultVariable[T],
+        resolver: Resolver,
+        queue_scheduler: QueueScheduler,
+    ) -> None:
+        raise NotImplementedError()
+
+    # TODO: str and repr
 
 
 class ReferenceStatement(ExpressionStatement):

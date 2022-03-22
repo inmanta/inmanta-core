@@ -36,7 +36,7 @@ from inmanta.ast import (
     TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, Resumer, Statement
+from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, Resumer, Statement, VariableReferenceHook, VariableResumer
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -60,7 +60,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
-    from inmanta.ast.variables import AttributeReferenceHelperABC, AttributeReferencePromise, Reference  # noqa: F401
+    from inmanta.ast.variables import Reference  # noqa: F401
 
 T = TypeVar("T")
 
@@ -187,6 +187,43 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
+class ConditionalPromise(VariableResumer, ConditionalPromiseABC):
+    """
+    Acquire a conditional promise on variable when it becomes available.
+    """
+
+    def __init__(self, provider: Statement) -> None:
+        super().__init__()
+        self.provider: Statement = provider
+        self._promise: Optional[ProgressionPromise] = None
+        # TODO: add single responsible per block for this?
+        self._fulfilled: bool = False
+
+    def resume(
+        self,
+        variable: ResultVariable,
+        resolver: Resolver,
+        queue_scheduler: QueueScheduler,
+    ) -> None:
+        # TODO: docstring
+        if self._fulfilled:
+            # already fulfilled, no need to acquire additional promises
+            return
+        # TODO: raise exception if self._promise already set?
+        self._promise = variable.get_progression_promise(self.provider)
+
+    def fulfill(self) -> None:
+        """
+        Fulfill the acquired promise, if any, and makes sure no new promise is acquired when the variable becomes available.
+        """
+        if self._fulfilled:
+            # already fulfilled, no need to continue
+            return
+        if self._promise is not None:
+            self._promise.fulfill()
+        self._fulfilled = True
+
+
 class SetAttribute(AssignStatement, Resumer):
     """
     Set an attribute of a given instance to a given value
@@ -215,24 +252,22 @@ class SetAttribute(AssignStatement, Resumer):
         # TODO: this check is a temporary hack, clean it up!
         if "::" in self.instance.name or self.instance.name.split(".", 1)[0] not in in_scope:
             return []
-        # TODO: clean up import -> causing import cycle
-        # TODO: refactor SetAttribute to have AttributeReference, then add AttributeReference.acquire_promise etc
-        #       => use same mechanism for attr read, attr promise, attr assign, ...
-        from inmanta.ast.variables import AttributeReferenceHelperABC, AttributeReferencePromise
-        promise: AttributeReferencePromise = AttributeReferencePromise(provider=self)
-        resumer: AttributeReferenceHelperABC = AttributeReferenceHelperABC(
+
+        promise: ConditionalPromise = ConditionalPromise(provider=self)
+        hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             self.attribute_name,
-            action=promise,
+            resumer=promise,
         )
         self.copy_location(promise)
-        self.copy_location(resumer)
-        resumer.schedule(resolver, queue)
+        self.copy_location(hook)
+        hook.schedule(resolver, queue)
         return [promise]
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
+        # TODO: optionally refacto this to use VariableResumer
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(

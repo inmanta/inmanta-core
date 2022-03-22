@@ -21,7 +21,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Locatable, LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import AssignStatement, ConditionalPromiseABC, ExpressionStatement, RawResumer, Statement
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement, VariableResumer, AttributeReferenceHelperABC
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, ProgressionPromise, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -98,132 +98,14 @@ class Reference(ExpressionStatement):
         return self.name
 
 
-# TODO: name, perhaps AttributeResumer? Might also need to move to be able to inherit both here and in as.statements.assign
-#       or VariableResumer? Perhaps move to inmanta.execute.runtime? Locatable inheritance might be an issue -> required?
-class AttributeReferenceActionABC(Locatable):
-    # TODO: docstring
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    # TODO: name
-    def resolve(
-        self,
-        attribute: ResultVariable,
-        requires: Dict[object, ResultVariable],
-        resolver: Resolver,
-        queue_scheduler: QueueScheduler,
-    ) -> None:
-        # TODO
-        pass
-
-    # TODO: str and repr
-
-
-# TODO: not only attribute, instance ref is optional -> rename?
-# TODO; is this even an ABC anymore? Looks pretty concrete to me
-class AttributeReferenceHelperABC(RawResumer):
-    # TODO: docstring
-    """
-    Generic helper class for accessing an instance attribute. Triggers action with the attribute's ResultVariable
-    as soon as it's available.
-    """
-    # TODO: this might not work: different subscribers have different resolvers => single action
-
-    def __init__(
-        # TODO: can we make this non-optional?
-        self, instance: Optional[Reference], attribute: str, action: AttributeReferenceActionABC,
-    ) -> None:
-        super().__init__()
-        self.instance: Optional[Reference] = instance
-        self.attribute: str = attribute
-        # TODO: name
-        self.action: AttributeReferenceActionABC = action
-
-    # TODO: method still required?
-    def _fetch_variable(
-        self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
-    ) -> ResultVariable:
-        """
-        Fetches the referred variable
-        """
-        if self.instance:
-            # get the Instance
-            obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
-
-            if isinstance(obj, list):
-                raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
-            if not isinstance(obj, Instance):
-                raise RuntimeException(self, "can not get a attribute %s, %s not an entity" % (self.attribute, obj))
-
-            # get the attribute result variable
-            return obj.get_attribute(self.attribute)
-        else:
-            # TODO: what if this is not an RV?
-            return resolver.lookup(self.attribute)
-
-    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        RawUnit(
-            queue_scheduler,
-            resolver,
-            # TODO: shouldn't we do gradual execution on self.instance as well?
-            self.instance.requires_emit(resolver, queue_scheduler) if self.instance is not None else {},
-            self,
-        )
-
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        # TODO: update docstring
-        """
-        Instance is ready to execute, do it and see if the variable is already present
-        """
-        self.action.resolve(self._fetch_variable(requires, resolver, queue_scheduler), requires, resolver, queue_scheduler)
-
-    # TODO: execute method implementation required -> return None? Don't implement? Why even is RawResumer(ExpressionStatement)?
-
-    # TODO: str and repr
-
-
-class AttributeReferencePromise(AttributeReferenceActionABC, ConditionalPromiseABC):
-    # TODO: docstring
-
-    def __init__(self, provider: Statement) -> None:
-        super().__init__()
-        self.provider: Statement = provider
-        self._promise: Optional[ProgressionPromise] = None
-        # TODO: add single responsible per block for this?
-        self._fulfilled: bool = False
-
-    def resolve(
-        self,
-        attribute: ResultVariable,
-        requires: Dict[object, ResultVariable],
-        resolver: Resolver,
-        queue_scheduler: QueueScheduler,
-    ) -> None:
-        # TODO: docstring
-        if self._fulfilled:
-            # already fulfilled, no need to acquire additional promises
-            return
-        # TODO: raise exception if self._promise already set?
-        # TODO: get_progression_promise only exists on DRV
-        self._promise = attribute.get_progression_promise(self.provider)
-
-    def fulfill(self) -> None:
-        # TODO: docstring
-        if self._fulfilled:
-            # already fulfilled, no need to continue
-            return
-        if self._promise is not None:
-            self._promise.fulfill()
-        self._fulfilled = True
-
-
 T = TypeVar("T")
 
 
-# TODO: name
-class AttributeReferenceRead(AttributeReferenceActionABC, RawResumer, Generic[T]):
-    # TODO: docstring (mention resultcollector)
+class VariableReader(VariableResumer, Generic[T]):
+    """
+    Resumes execution on a variable when it becomes avaiable, then waits for its completeness and copies its value to a target
+    variable. Optionally subscribes a result collector to intermediate values.
+    """
 
     def __init__(
         self, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]
@@ -231,51 +113,56 @@ class AttributeReferenceRead(AttributeReferenceActionABC, RawResumer, Generic[T]
         super().__init__()
         self.target: ResultVariable[T] = target
         self.resultcollector: Optional[ResultCollector[T]] = resultcollector
-        # attribute cache
-        self.attribute: Optional[ResultVariable[T]] = None
 
-    def target_value(self) -> T:
+    def write_target(self, variable: ResultVariable[object]) -> None:
         """
-        Returns the target value based on the attribute variable's value
+        Writes the target variable based on the complete variable's value.
         """
-        # TODO: can we get rid of these assertions?
-        assert self.attribute
-        assert self.attribute.is_ready()
-        return self.attribute.get_value()
+        self.target.set_value(self.target_value(variable), self.location)
 
-    def resolve(
+    def target_value(self, variable: ResultVariable[object]) -> T:
+        """
+        Returns the target value based on the complete variable's value.
+        """
+        return variable.get_value()
+
+    def resume(
         self,
-        attribute: ResultVariable[T],
-        requires: Dict[object, ResultVariable],
+        variable: ResultVariable[T],
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
-        self.attribute = attribute
-
         if self.resultcollector:
-            self.attribute.listener(self.resultcollector, self.location)
+            variable.listener(self.resultcollector, self.location)
 
-        if self.attribute.is_ready():
-            self.target.set_value(self.target_value(), self.location)
+        if variable.is_ready():
+            self.write_target(variable)
         else:
-            # reschedule on the attribute's completeness
-            RawUnit(queue_scheduler, resolver, {self: self.attribute}, self)
+            # reschedule on the variable's completeness
+            RawUnit(queue_scheduler, resolver, {self: variable}, VariableReadResumer(self))
+
+
+class VariableReadResumer(RawResumer):
+    """
+    Resumes execution when the variable is complete.
+    """
+    def __init__(self, reader: VariableReader) -> None:
+        self.reader: VariableReader = reader
 
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        # TODO: docstring
-        # TODO: assert / raise exception for self.attribute is None
-        self.target.set_value(self.target_value(), self.location)
+        self.reader.write_target(self.requires[self.reader])
 
-    # TODO: does this ever get called?
+    # TODO: does this ever get called? Can we get rid of it?
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:
-        assert self.attribute
-        assert self.attribute.is_ready()
-        # Attribute is ready, return it,
-        return self.attribute.get_value()
+        return self.reader.target_value(requires[self.reader])
 
 
 class IsDefinedGradual(AttributeReferenceRead[bool], ResultCollector[object]):
-    # TODO: docstring
+    """
+    Fill target variable with is defined result as soon as it gets known.
+    """
+
+    __slots__ = ("target", "resultcollector")
 
     def __init__(self, target: ResultVariable) -> None:
         AttributeReferenceRead.__init__(self, target, resultcollector=self)
@@ -284,7 +171,7 @@ class IsDefinedGradual(AttributeReferenceRead[bool], ResultCollector[object]):
         # TODO: docstring
         self.target.set_value(True, self.location)
 
-    def target_value(self) -> bool:
+    def target_value(self, variable: ResultVariable[object]) -> bool:
         """
         Returns the target value based on the attribute variable's value or absence of a value.
 
@@ -292,10 +179,8 @@ class IsDefinedGradual(AttributeReferenceRead[bool], ResultCollector[object]):
         been set already. This shouldn't affect performance but the potential double set acts as a guard against inconsistent
         internal state (if `receive_result` receives a result the eventual result of this method must be True).
         """
-        assert self.attribute
-        assert self.attribute.is_ready()
         try:
-            value = self.attribute.get_value()
+            value = variable.get_value()
             if isinstance(value, list):
                 return len(value) != 0
             elif isinstance(value, NoneValue):
