@@ -747,16 +747,16 @@ class Field(Generic[T]):
         default: object = default_unset,
         **kwargs: object,
     ) -> None:
-        """ A field in a document/record in the database. This class holds the metadata one how the data layer should handle
-            the field.
+        """A field in a document/record in the database. This class holds the metadata one how the data layer should handle
+        the field.
 
-            :param field_type: The python type of the field. This type should work with isinstance
-            :param required: Is this value required
-            :param is_many: Set to true when this is a list type
-            :param part_of_primary_key: Set to true when the field is part of the primary key.
-            :param ignore: Should this field be ignored when saving it to the database. This can be used to add a field to a
-                           a class that should not be saved in the database.
-            :param default: The default value for this field.
+        :param field_type: The python type of the field. This type should work with isinstance
+        :param required: Is this value required
+        :param is_many: Set to true when this is a list type
+        :param part_of_primary_key: Set to true when the field is part of the primary key.
+        :param ignore: Should this field be ignored when saving it to the database. This can be used to add a field to a
+                       a class that should not be saved in the database.
+        :param default: The default value for this field.
         """
 
         self._field_type = field_type
@@ -807,8 +807,7 @@ class Field(Generic[T]):
         return self._is_many
 
     def _validate_single(self, name: str, value: object) -> object:
-        """ Validate a single value against the types in this field.
-        """
+        """Validate a single value against the types in this field."""
         if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
             raise TypeError(
                 "Field %s should have the correct type (%s instead of %s)"
@@ -817,8 +816,7 @@ class Field(Generic[T]):
         return value
 
     def validate(self, name: str, value: object) -> object:
-        """ Validate the value against the constraint in this field. Treat value as list when is_many is true
-        """
+        """Validate the value against the constraint in this field. Treat value as list when is_many is true"""
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
@@ -833,8 +831,7 @@ class Field(Generic[T]):
         return self._validate_single(name, value)
 
     def from_db(self, name: str, value: object) -> object:
-        """ Load values from database. Treat value as a list when is_many is true
-        """
+        """Load values from database. Treat value as a list when is_many is true"""
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
@@ -849,8 +846,7 @@ class Field(Generic[T]):
         return self._from_db_single(name, value)
 
     def _from_db_single(self, name: str, value: object) -> object:
-        """ Load a single database value
-        """
+        """Load a single database value"""
         if value.__class__ is self.field_type or isinstance(value, self.field_type):
             return value
 
