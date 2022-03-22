@@ -33,16 +33,19 @@ def compile_ids(compile_objects):
 async def env_with_compiles(client, environment):
     compile_requested_timestamps = []
     compiles = []
+    # Make sure that timestamp is never older than 7 days,
+    # as such that the cleanup service doesn't delete them.
+    now = datetime.datetime.now()
     for i in range(4):
-        requested = datetime.datetime.strptime(f"2021-09-09T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+        requested = now + datetime.timedelta(minutes=i)
         compile_requested_timestamps.append(requested)
         compile = data.Compile(
             id=uuid.uuid4(),
             remote_id=uuid.uuid4(),
             environment=uuid.UUID(environment),
             requested=requested,
-            started=requested.replace(second=20),
-            completed=requested.replace(second=40),
+            started=requested + datetime.timedelta(seconds=20),
+            completed=requested + datetime.timedelta(seconds=40),
             do_export=True,
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
