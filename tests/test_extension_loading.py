@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from functools import partial
 from typing import Any, Generator
 
 import pytest
@@ -162,7 +163,7 @@ async def test_startup_failure(async_finalizer, server_config):
         config.server_enabled_extensions.set("badplugin")
 
         ibl = InmantaBootloader()
-        async_finalizer.add(ibl.stop)
+        async_finalizer.add(partial(ibl.stop, timeout=15))
         with pytest.raises(Exception) as e:
             await ibl.start()
 
@@ -228,7 +229,7 @@ def test_load_feature_file(tmp_path):
 
 
 async def test_custom_feature_manager(
-    tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory
+    tmp_path, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, async_finalizer
 ):
     with splice_extension_in("test_module_path"):
         state_dir = str(tmp_path)
@@ -250,6 +251,7 @@ async def test_custom_feature_manager(
         config.server_enabled_extensions.set("testfm")
 
         ibl = InmantaBootloader()
+        async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
         server = ibl.restserver
 
@@ -257,5 +259,3 @@ async def test_custom_feature_manager(
 
         assert not fm.enabled(None)
         assert not fm.enabled("a")
-
-        await ibl.stop()

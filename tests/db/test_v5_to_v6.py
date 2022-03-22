@@ -40,7 +40,7 @@ async def migrate_v5_to_v6(
     await ibl.start()
     # When the bootloader is started, it also executes the migration to v6
     yield
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 async def test_add_on_delete_cascade_constraint(migrate_v5_to_v6, postgresql_client: Connection) -> None:

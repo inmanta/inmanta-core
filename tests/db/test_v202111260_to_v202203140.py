@@ -40,7 +40,7 @@ async def migrate_v202111260_to_v202203140(
 
     # When the bootloader is started, it also executes the migration to v202203140
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
 async def test_added_notification_table(
