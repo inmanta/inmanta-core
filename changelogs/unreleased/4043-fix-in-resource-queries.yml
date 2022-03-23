@@ -1,0 +1,8 @@
+description: Fix handling of '_' in resource_logs and get_resource_events api endpoints
+change-type: patch
+issue-nr: 4043
+destination-branches:
+  - iso5
+  - master
+sections:
+    bugfix: "{{description}}"
