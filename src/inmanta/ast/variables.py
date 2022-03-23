@@ -149,7 +149,7 @@ class VariableReadResumer(RawResumer):
         self.reader: VariableReader = reader
 
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        self.reader.write_target(self.requires[self.reader])
+        self.reader.write_target(requires[self.reader])
 
     # TODO: does this ever get called? Can we get rid of it?
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:

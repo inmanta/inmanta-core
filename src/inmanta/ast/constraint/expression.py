@@ -81,7 +81,7 @@ class IsDefined(ReferenceStatement):
         gradual_helper: IsDefinedGradual = IsDefinedGradual(target=temp)
         hook: VariableReferenceHook = VariableReferenceHook(
             instance=self.attr,
-            attribute=self.name,
+            name=self.name,
             variable_resumer=gradual_helper,
         )
         self.copy_location(gradual_helper)
