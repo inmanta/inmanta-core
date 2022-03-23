@@ -1055,3 +1055,49 @@ async def test_notification_on_failed_exporting_compile(server, client, environm
     compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]
+
+
+async def test_notification_on_failed_pull_during_compile(
+    server, client, environment_factory: EnvironmentFactory, tmp_path
+) -> None:
+    env = await environment_factory.create_environment("")
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env.id))
+
+    compilerservice = server.get_slice(SLICE_COMPILER)
+
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    # Do a compile
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
+    # Change the remote to an invalid value
+    subprocess.check_output(["git", "remote", "set-url", "origin", str(tmp_path)], cwd=project_dir)
+
+    # During the next compile, the pull should fail
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+
+    await retry_limited(compile_done, timeout=10)
+
+    async def notification_logged() -> bool:
+        result = await client.list_notifications(env.id)
+        assert result.code == 200
+        return len(result.result["data"]) > 0
+
+    await retry_limited(notification_logged, timeout=10)
+
+    # Check if the correct notification was created
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    compile_failed_notification = next(
+        (item for item in result.result["data"] if item["title"] == "Pulling updates during compile failed"), None
+    )
+    assert compile_failed_notification
+    assert str(compile_id) in compile_failed_notification["uri"]
