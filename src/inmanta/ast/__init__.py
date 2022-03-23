@@ -136,6 +136,17 @@ class Range(Location):
     def __str__(self) -> str:
         return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Range):
+            return (
+                self.file == other.file
+                and self.lnr == other.lnr
+                and self.start_char == other.start_char
+                and self.end_lnr == other.end_lnr
+                and self.end_char == other.end_char
+            )
+        return False
+
 
 class Locatable(object):
 
@@ -160,7 +171,7 @@ class LocatableString(object):
     A string with an attached source location.
 
     It is not a subtype of str, as str is not a normal class
-    As such, it is very important to unwrap strings ad this object is not an actual string.
+    As such, it is very important to unwrap strings as this object is not an actual string.
 
     All identifiers produced by the parser are of this type.
 
@@ -169,7 +180,7 @@ class LocatableString(object):
     2. in the constructors of other statements
     """
 
-    def __init__(self, value: str, location: Range, lexpos: "int", namespace: "Namespace") -> None:
+    def __init__(self, value: str, location: Range, lexpos: int, namespace: "Namespace") -> None:
         self.value = value
         self.location = location
 
@@ -596,6 +607,12 @@ class CompilerDeprecationWarning(CompilerRuntimeWarning):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
+class HyphenDeprecationWarning(CompilerDeprecationWarning):
+    def __init__(self, stmt: LocatableString) -> None:
+        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
+
+
 class VariableShadowWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
@@ -627,7 +644,7 @@ class ExternalException(RuntimeException):
     it is wrapped in an ExternalException to make it conform to the expected interface
     """
 
-    def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
+    def __init__(self, stmt: Optional[Locatable], msg: str, cause: Exception) -> None:
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
         self.__cause__ = cause
@@ -657,7 +674,7 @@ class ExplicitPluginException(ExternalException):
     Base exception for wrapping an explicit :py:class:`inmanta.plugins.PluginException` raised from a plugin call.
     """
 
-    def __init__(self, stmt: Locatable, msg: str, cause: "PluginException") -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: "PluginException") -> None:
         ExternalException.__init__(self, stmt, msg, cause)
         self.__cause__: PluginException
 
@@ -679,7 +696,7 @@ class ExplicitPluginException(ExternalException):
 class WrappingRuntimeException(RuntimeException):
     """Baseclass for RuntimeExceptions wrapping other CompilerException"""
 
-    def __init__(self, stmt: Locatable, msg: str, cause: CompilerException) -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, cause: CompilerException) -> None:
         if stmt is None and isinstance(cause, RuntimeException):
             stmt = cause.stmt
 

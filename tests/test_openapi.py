@@ -188,7 +188,6 @@ def api_methods_fixture(clean_reset):
         return ""
 
 
-@pytest.mark.asyncio
 async def test_generate_openapi_definition(server: Server, feature_manager: FeatureManager, patch_openapi_spec_validator: None):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)
@@ -670,7 +669,6 @@ def test_get_operation_partial_documentation(api_methods_fixture):
     assert operation.responses["200"].description == ""
 
 
-@pytest.mark.asyncio
 async def test_openapi_endpoint(client, patch_openapi_spec_validator: None):
     result = await client.get_api_docs("openapi")
     assert result.code == 200
@@ -678,13 +676,11 @@ async def test_openapi_endpoint(client, patch_openapi_spec_validator: None):
     openapi_v3_spec_validator.validate(openapi_spec)
 
 
-@pytest.mark.asyncio
 async def test_swagger_endpoint(client):
     result = await client.get_api_docs()
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_tags(server, feature_manager):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)

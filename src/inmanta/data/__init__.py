@@ -81,11 +81,19 @@ class QueryType(str, enum.Enum):
         """
         return name.lower()
 
-    EQUALS = enum.auto()
-    CONTAINS = enum.auto()
-    IS_NOT_NULL = enum.auto()
-    CONTAINS_PARTIAL = enum.auto()
-    RANGE = enum.auto()
+    EQUALS = enum.auto()  # The filter value equals the value in the database
+    CONTAINS = enum.auto()  # Any of the filter values are equal to the value in the database (exact match)
+    IS_NOT_NULL = enum.auto()  # The value is NULL in the database
+    CONTAINS_PARTIAL = enum.auto()  # Any of the filter values are equal to the value in the database (partial match)
+    RANGE = enum.auto()  # The values in the database are in the range described by the filter values and operators
+    NOT_CONTAINS = enum.auto()  # None of the filter values are equal to the value in the database (exact match)
+    COMBINED = enum.auto()  # The value describes a combination of other query types
+
+
+class InvalidQueryType(Exception):
+    def __init__(self, message: str) -> None:
+        super(InvalidQueryType, self).__init__(message)
+        self.message = message
 
 
 class RangeOperator(enum.Enum):
@@ -476,6 +484,21 @@ class FactOrder(DatabaseOrder):
         return Parameter
 
 
+class NotificationOrder(DatabaseOrder):
+    """Represents the ordering by which notifications should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            "created": datetime.datetime,
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Notification
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -811,13 +834,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
 
     @classmethod
     def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
         """
         Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
         """
+        # Make pypi happy
+        assert cls._connection_pool is not None
         return cls._connection_pool.acquire()
 
     @classmethod
@@ -919,7 +944,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             cls._connection_pool.terminate()
         finally:
             cls._connection_pool = None
@@ -997,12 +1022,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
     async def _fetchrow(cls, query: str, *values: object) -> Record:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
@@ -1010,7 +1035,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> List[Record]:
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await con.fetch(query, *values)
         return await connection.fetch(query, *values)
 
@@ -1020,7 +1045,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     ) -> str:
         if connection:
             return await connection.execute(query, *values)
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1040,7 +1065,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -1285,7 +1310,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values = []
         index_count = max(1, offset)
         for key, value in query.items():
-            (filter_statement, value) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
+            cls.validate_field_name(key)
+            name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
+            (filter_statement, value) = cls._get_filter(name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(value)
             index_count += len(value)
@@ -1293,12 +1320,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
+    def _get_filter(cls, name: str, value: Any, index: int) -> Tuple[str, List[object]]:
         if value is None:
             return (name + " IS NULL", [])
         filter_statement = name + "=$" + str(index)
-        if col_name_prefix is not None:
-            filter_statement = col_name_prefix + "." + filter_statement
         value = cls._get_value(value)
         return (filter_statement, [value])
 
@@ -1332,28 +1357,38 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            if query_type == QueryType.EQUALS:
-                (filter_statement, filter_values) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.IS_NOT_NULL:
-                (filter_statement, filter_values) = cls.get_is_not_null_filter(key, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.CONTAINS:
-                (filter_statement, filter_values) = cls.get_contains_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.CONTAINS_PARTIAL:
-                (filter_statement, filter_values) = cls.get_contains_partial_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.RANGE:
-                (filter_statement, filter_values) = cls.get_range_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-
+            cls.validate_field_name(key)
+            name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
+            filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(filter_values)
             index_count += len(filter_values)
 
         return (filter_statements, values)
+
+    @classmethod
+    def get_filter_for_query_type(
+        cls, query_type: QueryType, key: str, value: object, index_count: int
+    ) -> Tuple[str, List[object]]:
+        if query_type == QueryType.EQUALS:
+            (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+        elif query_type == QueryType.IS_NOT_NULL:
+            (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+        elif query_type == QueryType.CONTAINS:
+            (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+        elif query_type == QueryType.CONTAINS_PARTIAL:
+            (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+        elif query_type == QueryType.RANGE:
+            (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+        elif query_type == QueryType.NOT_CONTAINS:
+            (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+        elif query_type == QueryType.COMBINED:
+            (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                key, cast(Dict[QueryType, object], value), index_count
+            )
+        else:
+            raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
+        return (filter_statement, filter_values)
 
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
@@ -1369,47 +1404,65 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return filter_statement
 
     @classmethod
-    def get_is_not_null_filter(cls, name: str, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
+    def get_is_not_null_filter(cls, name: str) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not null.
         """
-        cls.validate_field_name(name)
         filter_statement = f"{name} IS NOT NULL"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         return (filter_statement, [])
 
     @classmethod
-    def get_contains_filter(
-        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
-    ) -> Tuple[str, List[object]]:
+    def get_contains_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
         collection.
         """
-        cls.validate_field_name(name)
         filter_statement = f"{name} = ANY (${str(index)})"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         return (filter_statement, [value])
 
     @classmethod
-    def get_contains_partial_filter(
-        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
+    def get_filter_for_combined_query_type(
+        cls, name: str, combined_value: Dict[QueryType, object], index: int
     ) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter a single column
+        based on the defined query types
+        """
+        filters = []
+        for query_type, value in combined_value.items():
+            filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index)
+            filters.append((filter_statement, filter_values))
+            index += len(filter_values)
+        (filter_statement, values) = cls._combine_filter_statements(filters)
+
+        return (filter_statement, values)
+
+    @classmethod
+    def get_not_contains_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not contained in a given
+        collection.
+        """
+        filter_statement = f"NOT ({name} = ANY (${str(index)}))"
+        value = cls._get_value(value)
+        return (filter_statement, [value])
+
+    @classmethod
+    def get_contains_partial_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
         collection.
         """
-        cls.validate_field_name(name)
+
         filter_statement = f"{name} ILIKE ANY (${str(index)})"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         value = [f"%{v}%" for v in value]
         return (filter_statement, [value])
 
     @classmethod
     def get_range_filter(
-        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int, col_name_prefix: Optional[str] = None
+        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
@@ -1419,10 +1472,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values: List[object]
         (filter_statement, values) = cls._combine_filter_statements(
             (
-                cls._add_column_name_prefix_if_needed(
-                    f"{name} {operator.pg_value} ${str(index + i)}",
-                    col_name_prefix,
-                ),
+                f"{name} {operator.pg_value} ${str(index + i)}",
                 [cls._get_value(bound)],
             )
             for i, (operator, bound) in enumerate(value)
@@ -1618,7 +1668,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 return result
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 return await perform_query(con)
         return await perform_query(connection)
 
@@ -1734,6 +1784,7 @@ SERVER_COMPILE = "server_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
+NOTIFICATION_RETENTION = "notification_retention"
 
 
 class Setting(object):
@@ -1970,6 +2021,13 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
         ),
+        NOTIFICATION_RETENTION: Setting(
+            name=NOTIFICATION_RETENTION,
+            default=365,
+            typ="int",
+            validator=convert_int,
+            doc="The number of days to retain notifications for",
+        ),
     }
 
     _renamed_settings_map = {
@@ -2069,6 +2127,7 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
+            await Notification.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
@@ -2785,6 +2844,25 @@ class Agent(BaseDocument):
         return sorted([r["name"] for r in result])
 
     @classmethod
+    async def set_unpause_on_resume(
+        cls,
+        env: uuid.UUID,
+        endpoint: Optional[str],
+        should_be_unpaused_on_resume: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values, connection=connection)
+
+    @classmethod
     async def update_primary(
         cls,
         env: uuid.UUID,
@@ -2828,13 +2906,14 @@ class Agent(BaseDocument):
     def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ai.name as process_name, ai.process as process_id,
+                                    ap.hostname as process_name, ai.process as process_id,
                                     (CASE WHEN paused THEN 'paused'
                                         WHEN id_primary IS NOT NULL THEN 'up'
                                         ELSE 'down'
                                     END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
-            filter_statements=[" environment = $1 "],
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
             values=[cls._get_value(environment)],
         )
         return query_builder.build()
@@ -3244,7 +3323,7 @@ class Compile(BaseDocument):
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
-        ) SELECT * FROM compiledetails;
+        ) SELECT * FROM compiledetails ORDER BY report_started ASC;
         """
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
@@ -3436,7 +3515,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3456,37 +3535,13 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    def validate_field_name(cls, name: str) -> ColumnNameStr:
-        """Check if the name is a valid database column name for the current type"""
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if name not in valid_field_names:
-            raise InvalidFieldNameException(f"{name} is not valid for a query on {cls.table_name()}")
-        return ColumnNameStr(name)
-
-    @classmethod
-    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
-        """Validate the correct values for order ('ASC' or 'DESC') and if the order column is an existing column name
-        :param order_by_column: The name of the column to order by
-        :param order: The sorting order.
-        :return:
-        """
-        for o in order.split(" "):
-            possible = ["ASC", "DESC"]
-            if o not in possible:
-                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
-
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if order_by_column not in valid_field_names:
-            raise RuntimeError(f"{order_by_column} is not a valid field name.")
-
-        return ColumnNameStr(order_by_column), PagingOrder[order]
+    def get_valid_field_names(cls) -> List[str]:
+        return list(cls._fields.keys()) + ["timestamp", "level", "msg"]
 
     @classmethod
     def _get_resource_logs_base_query(
@@ -3503,9 +3558,9 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1}) unnested
+                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
                     """
-        values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
+        values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
 
     @classmethod
@@ -3680,6 +3735,7 @@ class ResourceAction(BaseDocument):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        resource_id_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
         action_id: Optional[uuid.UUID] = None,
@@ -3706,10 +3762,14 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
             values.append(cls._get_value(attribute))
             values.append(cls._get_value(attribute_value))
             parameter_index += 2
+        if resource_id_value:
+            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
         if log_severity:
             # <@ Is contained by
             query += f" AND ${parameter_index} <@ ANY(messages)"
@@ -3749,7 +3809,7 @@ class ResourceAction(BaseDocument):
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3784,6 +3844,7 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
+    :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
     """
 
     environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
@@ -3804,6 +3865,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = Field(field_type=dict)
     attribute_hash: str = Field(field_type=str)
     status: const.ResourceState = Field(field_type=const.ResourceState, default=const.ResourceState.available)
+    last_non_deploying_status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -3811,22 +3873,24 @@ class Resource(BaseDocument):
     provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
 
     @classmethod
-    async def get_resource_state_for_dependencies(
+    async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id"
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
-        Return the ResourceState for each dependency of the given resource.
+        Return the last state of each dependency of the given resource that was not 'deploying'.
         """
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
-        query = f"""
-            SELECT r1.resource_version_id, r1.status
-            FROM {cls.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=$2 AND (
-                                                            SELECT (r2.attributes->'requires')::jsonb
-                                                            FROM {cls.table_name()} AS r2
-                                                            WHERE r2.environment=$1 AND r2.resource_version_id=$3
-                                                         ) ? r1.resource_version_id
+        query = """
+            SELECT r1.resource_version_id, r1.last_non_deploying_status
+            FROM resource AS r1
+            WHERE r1.environment=$1
+                  AND r1.model=$2
+                  AND (
+                      SELECT (r2.attributes->'requires')::jsonb
+                      FROM resource AS r2
+                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
+                  ) ? r1.resource_version_id
         """
         values = [
             cls._get_value(environment),
@@ -3834,7 +3898,7 @@ class Resource(BaseDocument):
             resource_version_id.resource_version_str(),
         ]
         result = await cls._fetch_query(query, *values)
-        return {r["resource_version_id"]: const.ResourceState(r["status"]) for r in result}
+        return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = "|".join(
@@ -3909,7 +3973,7 @@ class Resource(BaseDocument):
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -3956,7 +4020,7 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
@@ -3984,7 +4048,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -4031,24 +4095,61 @@ class Resource(BaseDocument):
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
+        # Emulate a loose index scan with a recursive common table expression (CTE),
+        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
+        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
+        # btree index efficiently; rather than scanning all equal values of a key,
+        # as soon as a new value is found, restart the search by looking for a larger value"
+        # In this case we don't scan all equal values of a resource_id
+        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
+        # and move on to the next resource_id
         return (
             f"""
-            {select_clause}
-            FROM (
-                SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.environment,
-                    (CASE WHEN
-                            (SELECT r.model < MAX(public.configurationmodel.version)
-                            FROM public.configurationmodel
-                            WHERE public.configurationmodel.released=TRUE
-                            AND environment=${offset})
+            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+            /* The cm_version CTE finds the maximum released version number in the environment  */
+            WITH RECURSIVE cm_version AS (
+                  SELECT
+                    MAX(public.configurationmodel.version) as max_version
+                    FROM public.configurationmodel
+                WHERE public.configurationmodel.released=TRUE
+                AND environment=${offset}
+                ),
+            /* emulate a loose (or skip) index scan */
+            cte AS (
+               (
+               /* specify the necessary columns */
+               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
+                        THEN 'orphaned' -- use the CTE to check the status
+                    ELSE r.status::text END) as status
+               FROM   resource r
+               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+               WHERE  r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY resource_id, model DESC
+               LIMIT  1
+               )
+               UNION ALL
+               SELECT r.*
+               FROM   cte c
+               CROSS JOIN LATERAL
+               /* specify the same columns in the recursive part */
+                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
-                FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.environment=${offset}
-                    ORDER BY r.resource_id, r.model DESC)
-            as res
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
+               /* One result from the recursive call is the latest released version of one specific resource.
+                  We always start looking for this based on the previous resource_id. */
+               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY r.resource_id, r.model DESC
+               LIMIT  1) r
+               )
+            {select_clause}
+            FROM   cte
             """,
             environment_db_value,
         )
@@ -4210,7 +4311,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4264,7 +4365,7 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
@@ -4693,7 +4794,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
-        return super().get_valid_field_names() + ["status"]
+        return super().get_valid_field_names() + ["status", "model"]
 
     @property
     def done(self) -> int:
@@ -4833,7 +4934,7 @@ class ConfigurationModel(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
@@ -4850,7 +4951,7 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self) -> None:
-        async with self._connection_pool.acquire() as con:
+        async with self.get_connection() as con:
             async with con.transaction():
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
@@ -4959,7 +5060,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
         if connection is None:
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 await do_query_exclusive(con)
         else:
             await do_query_exclusive(connection)
@@ -5322,6 +5423,149 @@ class DryRun(BaseDocument):
         )
 
 
+class Notification(BaseDocument):
+    """
+    A notification in an environment
+
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    created: datetime.datetime = Field(field_type=datetime.datetime, required=True)
+    title: str = Field(field_type=str, required=True)
+    message: str = Field(field_type=str, required=True)
+    severity: const.NotificationSeverity = Field(
+        field_type=const.NotificationSeverity, default=const.NotificationSeverity.message
+    )
+    uri: str = Field(field_type=str, required=True)
+    read: bool = Field(field_type=bool, default=False)
+    cleared: bool = Field(field_type=bool, default=False)
+
+    @classmethod
+    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT n.*""",
+            from_clause=f" FROM {cls.table_name()} as n",
+            filter_statements=[" environment = $1 "],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_notifications_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def list_notifications(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Notification]:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
+            order == PagingOrder.DESC and (start is not None or first_id)
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        notification_records = cast(Iterable[Record], notification_records)
+        dtos = [
+            m.Notification(
+                id=notification["id"],
+                title=notification["title"],
+                message=notification["message"],
+                severity=notification["severity"],
+                created=notification["created"],
+                read=notification["read"],
+                cleared=notification["cleared"],
+                uri=notification["uri"],
+                environment=notification["environment"],
+            )
+            for notification in notification_records
+        ]
+        return dtos
+
+    @classmethod
+    async def clean_up_notifications(cls) -> None:
+        environments = await Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
+            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
+            LOGGER.info(
+                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
+            )
+            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
+            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+
+    def to_dto(self) -> m.Notification:
+        return m.Notification(
+            id=self.id,
+            title=self.title,
+            message=self.message,
+            severity=self.severity,
+            created=self.created,
+            read=self.read,
+            cleared=self.cleared,
+            uri=self.uri,
+            environment=self.environment,
+        )
+
+
 _classes = [
     Project,
     Environment,
@@ -5337,6 +5581,7 @@ _classes = [
     DryRun,
     Compile,
     Report,
+    Notification,
 ]
 
 

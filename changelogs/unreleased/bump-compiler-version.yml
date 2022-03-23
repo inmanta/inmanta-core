@@ -1,0 +1,7 @@
+description: Bumped the compiler version
+change-type: patch
+issue-repo: inmanta-service-orchestrator
+issue-nr: 273
+destination-branches:
+  - iso5
+  - master

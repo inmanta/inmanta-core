@@ -41,10 +41,9 @@ async def migrate_v202105170_to_v202106080(
 
     # When the bootloader is started, it also executes the migration to v202105170
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_timestamp_timezones(
     migrate_v202105170_to_v202106080: Callable[[], Awaitable[None]],
     postgresql_client: Connection,

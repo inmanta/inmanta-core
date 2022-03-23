@@ -1,0 +1,4 @@
+description: Add not equals status filter to resource list endpoint
+issue-nr: 3845
+change-type: minor
+destination-branches: [master, iso5]

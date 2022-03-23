@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 from abc import abstractmethod
 from typing import Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
@@ -50,6 +49,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, RawResumer, Resumer, Statement
     from inmanta.compiler import Compiler
+    from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
 
 
 T = TypeVar("T")
@@ -173,7 +173,15 @@ class ResultVariable(ResultCollector[T], IPromise[T]):
         return self._node
 
 
-class AttributeVariable(ResultVariable["Instance"]):
+class RelationAttributeVariable:
+    """
+    Abstract base class for variables associated with a relation attribute.
+    """
+
+    __slots__ = ()
+
+
+class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
     """
     a result variable for a relation with arity 1
 
@@ -216,7 +224,7 @@ class DelayedResultVariable(ResultVariable[T]):
     When the freeze method is called, no more values will be accepted and
     the DelayedResultVariable will behave as a normal ResultVariable.
 
-    When a DelayedResultVariable is definitely full, it is freeze itself.
+    When a DelayedResultVariable is definitely full, it freezes itself.
 
     DelayedResultVariable are queued with the scheduler at the point at which they might be complete.
     The scheduler can decide when to freeze them. A DelayedResultVariable  can be complete when
@@ -261,7 +269,7 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
-        return len(self.waiters)
+        raise NotImplementedError()
 
 
 ListValue = Union["Instance", List["Instance"]]
@@ -372,10 +380,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
 
-    def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
-        return len(self.waiters) - len(self.listeners)
-
     def receive_result(self, value: ListValue, location: Location) -> None:
         self.set_value(value, location)
 
@@ -392,18 +396,34 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return "BaseListVariable %s" % (self.value)
 
 
-class TempListVariable(BaseListVariable):
+class ListLiteral(BaseListVariable):
+    """
+    Transient variable to represent a list (of either constants or instances) literal (not a variable).
+    Requires all providers to acquire a promise before the first gets fulfilled and in return provides accurate promise
+    tracking and freezing. Instances of this class should never require forceful freezing.
+    """
 
     __slots__ = ()
 
     def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
+        """
+        Set a promised value with 100% accurate promise tracking. Because of this class' invariant that all promises are
+        acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
+        """
         super().set_promised_value(promis, value, location, recur)
-        # 100% accurate promisse tracking
         if len(self.promisses) == len(self.done_promisses):
             self.freeze()
 
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        # A ListLiteral is never associated with an Entity, so it cannot have a relation precedence rule.
+        return len(self.waiters) - len(self.listeners)
 
-class ListVariable(BaseListVariable):
+
+class ListVariable(BaseListVariable, RelationAttributeVariable):
+    """
+    ResultVariable that represents a list of instances associated with a relation attribute.
+    """
 
     value: "List[Instance]"
 
@@ -411,8 +431,8 @@ class ListVariable(BaseListVariable):
 
     def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.attribute: "RelationAttribute" = attribute
-        self.myself = instance
-        super().__init__(queue)
+        self.myself: "Instance" = instance
+        BaseListVariable.__init__(self, queue)
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if isinstance(value, NoneValue):
@@ -459,17 +479,26 @@ class ListVariable(BaseListVariable):
     def __str__(self) -> str:
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
+        # of the scheduler. We know the order in which those types can be frozen safely.
+        return len(self.waiters) - len(self.listeners) + int(self.attribute.has_relation_precedence_rules())
 
-class OptionVariable(DelayedResultVariable["Instance"]):
+
+class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
 
     __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        DelayedResultVariable.__init__(self, queue)
         self.value = None
-        self.attribute = attribute
-        self.myself = instance
+        self.attribute: "RelationAttribute" = attribute
+        self.myself: "Instance" = instance
         self.location = None
+        # Only call super after initialization of the above-mentioned attributes
+        # because the self.queue() operation in DelayedResultVariable requires
+        # self.attribute and self.myself to be set.
+        DelayedResultVariable.__init__(self, queue)
 
     def _get_null_value(self) -> object:
         return None
@@ -527,6 +556,10 @@ class OptionVariable(DelayedResultVariable["Instance"]):
     def __str__(self) -> str:
         return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
+    def get_progress_potential(self) -> int:
+        """How many are actually waiting for us"""
+        return len(self.waiters) + int(self.attribute.has_relation_precedence_rules())
+
 
 class DeprecatedOptionVariable(OptionVariable):
     """
@@ -568,7 +601,7 @@ class QueueScheduler(object):
         self,
         compiler: "Compiler",
         runqueue: "Deque[Waiter]",
-        waitqueue: Deque[DelayedResultVariable],
+        waitqueue: "PrioritisedDelayedResultVariableQueue",
         types: Dict[str, Type],
         allwaiters: "Set[Waiter]",
     ) -> None:
@@ -939,12 +972,15 @@ class Instance(ExecutionContext):
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
-        self.slots: Dict[str, ResultVariable] = {
-            n: mytype.get_attribute(n).get_new_result_variable(self, queue)
-            # prune duplicates first because get_new_result_variable() has side effects
-            for n in set(mytype.get_all_attribute_names())
-        }
-
+        self.slots: Dict[str, ResultVariable] = {}
+        for attr_name in mytype.get_all_attribute_names():
+            if attr_name in self.slots:
+                # prune duplicates because get_new_result_variable() has side effects
+                # don't use set for pruning because side effects drive control flow and set iteration is nondeterministic
+                continue
+            attribute = mytype.get_attribute(attr_name)
+            assert attribute is not None  # Make mypy happy
+            self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
         self.dataflow_graph: Optional[DataflowGraph] = None
@@ -1011,6 +1047,7 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
+                    assert attr is not None  # Make mypy happy
                     if attr.is_multi():
                         low = attr.low
                         # none for list attributes

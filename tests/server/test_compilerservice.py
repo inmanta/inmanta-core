@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, List, Optional, Tuple
 
 import pytest
 from pytest import approx
@@ -42,6 +42,7 @@ from inmanta.server import protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
+from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
@@ -54,7 +55,13 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
     cs = CompilerService()
     await cs.prestart(server)
     await cs.start()
+    server.add_slice(cs)
+    notification_service = NotificationService()
+    await notification_service.prestart(server)
+    await notification_service.start()
     yield cs
+    await notification_service.prestop()
+    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -111,7 +118,6 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
 
-@pytest.mark.asyncio
 async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
     """Test the scheduler part in isolation, mock out compile runner and listen to state updates"""
 
@@ -188,6 +194,10 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     cs = HookedCompilerService()
     await cs.prestart(server)
     await cs.start()
+    server.add_slice(cs)
+    notification_service = NotificationService()
+    await notification_service.prestart(server)
+    await notification_service.start()
     collector = Collector()
     cs.add_listener(collector)
 
@@ -269,6 +279,8 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await retry_limited(lambda: len(collector.preseen) == 2, 1)
 
     # test server restart
+    await notification_service.prestop()
+    await notification_service.stop()
     await cs.prestop()
     await cs.stop()
 
@@ -297,7 +309,6 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     await report_db_index_usage()
 
 
-@pytest.mark.asyncio
 @pytest.mark.slowtest
 async def test_compile_runner(environment_factory: EnvironmentFactory, server, client, tmpdir):
     testmarker_env = "TESTMARKER"
@@ -427,7 +438,6 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert "inmanta-core" in output
 
 
-@pytest.mark.asyncio
 @pytest.mark.slowtest
 async def test_compilerservice_compile_data(environment_factory: EnvironmentFactory, client, server) -> None:
     async def get_compile_data(main: str) -> model.CompileData:
@@ -464,7 +474,6 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
     assert error.message == "value set twice:\n\told value: 0\n\t\tset at ./main.cf:1\n\tnew value: 1\n\t\tset at ./main.cf:1\n"
 
 
-@pytest.mark.asyncio
 async def test_e2e_recompile_failure(compilerservice: CompilerService):
     project = data.Project(name="test")
     await project.insert()
@@ -516,7 +525,6 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -628,7 +636,6 @@ async def run_compile_and_wait_until_compile_is_done(
     await retry_limited(_is_compile_finished, timeout=10)
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, server, client, environment):
     """
     Test the inspection of the compile queue. The compile runner is mocked out so the "started" field does not have the
@@ -730,7 +737,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
     config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
@@ -759,12 +765,12 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
 
 @pytest.fixture(scope="function")
 async def server_with_frequent_cleanups(server_pre_start, server_config, async_finalizer):
-    config.Config.set("server", "compiler-report-retention", "2")
+    config.Config.set("server", "compiler-report-retention", "60")
     config.Config.set("server", "cleanup-compiler-reports_interval", "1")
     ibl = InmantaBootloader()
     await ibl.start()
     yield ibl.restserver
-    await asyncio.wait_for(ibl.stop(), 15)
+    await ibl.stop(timeout=15)
 
 
 @pytest.fixture(scope="function")
@@ -791,17 +797,24 @@ async def environment_for_cleanup(client_for_cleanup, server_with_frequent_clean
 
 
 @pytest.fixture
-async def old_compile_report(server_with_frequent_cleanups, environment_for_cleanup):
+async def old_and_new_compile_report(server_with_frequent_cleanups, environment_for_cleanup) -> Tuple[uuid.UUID, uuid.UUID]:
+    """
+    This fixture creates two compile reports. One for a compile that started
+    and finished 30 days ago and one that started and finished now.
+
+    This fixture return a tuple containing the id of the old and the new compile report
+    respectively.
+    """
     now = datetime.datetime.now()
-    time_of_compile = now - datetime.timedelta(days=30)
-    compile_id = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
+    time_of_old_compile = now - datetime.timedelta(days=30)
+    compile_id_old = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
     old_compile = {
-        "id": compile_id,
+        "id": compile_id_old,
         "remote_id": uuid.UUID("c9a10da1-9bf6-4152-8461-98adc02c4cee"),
         "environment": uuid.UUID(environment_for_cleanup),
-        "requested": time_of_compile,
-        "started": time_of_compile,
-        "completed": time_of_compile,
+        "requested": time_of_old_compile,
+        "started": time_of_old_compile,
+        "completed": time_of_old_compile,
         "do_export": True,
         "force_update": True,
         "metadata": {"type": "api", "message": "Recompile trigger through API call"},
@@ -811,80 +824,66 @@ async def old_compile_report(server_with_frequent_cleanups, environment_for_clea
         "version": 1,
     }
     await Compile(**old_compile).insert()
-    new_compile = {**old_compile, "id": uuid.uuid4(), "requested": now, "started": now, "completed": now}
+    compile_id_new = uuid.uuid4()
+    new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
     await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
-        "started": time_of_compile,
-        "completed": time_of_compile,
+        "started": time_of_old_compile,
+        "completed": time_of_old_compile,
         "command": "",
         "name": "Init",
         "errstream": "",
         "outstream": "Using extra environment variables during compile \n",
         "returncode": 0,
-        "compile": compile_id,
+        "compile": compile_id_old,
     }
     report2 = {
         **report1,
         "id": uuid.UUID("2a86d2a0-666f-4cca-b0a8-13e0379128d5"),
         "command": "python -m inmanta.app -vvv export -X",
         "name": "Recompiling configuration model",
+        "compile": compile_id_new,
     }
     await Report(**report1).insert()
     await Report(**report2).insert()
-    yield compile_id
+    yield compile_id_old, compile_id_new
 
 
-@pytest.mark.asyncio
 async def test_compileservice_cleanup(
-    server_with_frequent_cleanups, client_for_cleanup, environment_for_cleanup, old_compile_report
+    server_with_frequent_cleanups,
+    client_for_cleanup,
+    environment_for_cleanup,
+    old_and_new_compile_report: Tuple[uuid.UUID, uuid.UUID],
 ):
-    # There is a new and an older report in the database
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 2
+    """
+    Ensure that the process to cleanup old compile reports works correctly.
 
-    result = await client_for_cleanup.get_report(old_compile_report)
-    assert result.code == 200
-    assert len(result.result["report"]["reports"]) > 0
+    The `old_and_new_compile_report` fixture creates a compile report for a compile that is 30 days
+    old and one for a compile that happened now. The `server_with_frequent_cleanups` fixture
+    sets the `compiler-report-retention` config option to 60 seconds. This test case verifies
+    that one old report is cleaned up and the new one is retained.
+    """
+    compile_id_old, compile_id_new = old_and_new_compile_report
 
-    compilerslice: CompilerService = server_with_frequent_cleanups.get_slice(SLICE_COMPILER)
-    await compilerslice._cleanup()
+    async def report_cleanup_finished_successfully() -> bool:
+        result = await client_for_cleanup.get_reports(environment_for_cleanup)
+        assert result.code == 200
+        return len(result.result["reports"]) == 1
 
-    # The old report is deleted after cleanup
-    result = await client_for_cleanup.get_report(old_compile_report)
+    # Cleanup happens every second. A timeout of four seconds should be sufficient
+    await retry_limited(report_cleanup_finished_successfully, timeout=4)
+
+    result = await client_for_cleanup.get_report(compile_id_old)
     assert result.code == 404
-    reports_after_cleanup = await Report.get_list(compile=old_compile_report)
-    assert len(reports_after_cleanup) == 0
-
-    # The new report is still there
+    result = await client_for_cleanup.get_report(compile_id_new)
+    assert result.code == 200
     result = await client_for_cleanup.get_reports(environment_for_cleanup)
     assert result.code == 200
     assert len(result.result["reports"]) == 1
 
 
-@pytest.mark.slowtest
-@pytest.mark.asyncio
-async def test_compileservice_cleanup_on_trigger(client_for_cleanup, environment_for_cleanup, old_compile_report):
-    # Two reports are in the table
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 2
-
-    result = await client_for_cleanup.get_report(old_compile_report)
-    assert result.code == 200
-    assert len(result.result["report"]["reports"]) > 0
-
-    await asyncio.sleep(3)
-
-    # Both reports should be deleted after the triggered cleanup
-    result = await client_for_cleanup.get_reports(environment_for_cleanup)
-    assert result.code == 200
-    assert len(result.result["reports"]) == 0
-
-
-@pytest.mark.asyncio
 async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
     env = await environment_factory.create_environment(main="")
 
@@ -914,7 +913,6 @@ async def test_issue_2361(environment_factory: EnvironmentFactory, server, clien
     assert compile_data is None
 
 
-@pytest.mark.asyncio
 async def test_git_uses_environment_variables(environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch):
     """
     Make sure that the git clone command on the compilerservice takes into account the environment variables
@@ -947,7 +945,6 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
-@pytest.mark.asyncio(timeout=90)
 async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block, server, client, environment, caplog):
     """
     Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
@@ -991,7 +988,6 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
         )
 
 
-@pytest.mark.asyncio
 async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
     """
     Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
@@ -1022,7 +1018,6 @@ async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_serv
     assert waiting_time == 0
 
 
-@pytest.mark.asyncio
 async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
@@ -1031,3 +1026,32 @@ async def test_compileservice_api(client, environment):
 
     result = await client.get_reports(environment, limit=APILIMIT)
     assert result.code == 200
+
+
+async def test_notification_on_failed_exporting_compile(server, client, environment: str) -> None:
+    compilerservice = server.get_slice(SLICE_COMPILER)
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
+    async def notification_logged() -> bool:
+        result = await client.list_notifications(env.id)
+        assert result.code == 200
+        return len(result.result["data"]) > 0
+
+    await retry_limited(notification_logged, timeout=10)
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
+    assert compile_failed_notification
+    assert str(compile_id) in compile_failed_notification["uri"]

@@ -79,7 +79,7 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn: protocol.Client, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
     res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -419,7 +419,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn: protocol.Client, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())
@@ -456,20 +456,20 @@ class Exporter(object):
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        res = conn.stat_files(files=hashes)
+        result = conn.stat_files(files=hashes)
 
-        if res.code != 200:
+        if result.code != 200:
             raise Exception("Unable to check status of files at server")
 
-        to_upload = res.result["files"]
+        to_upload = result.result["files"]
 
         LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
         for hash_id in to_upload:
             content = self._file_store[hash_id]
 
-            res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+            result = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
-            if res.code != 200:
+            if result.code != 200:
                 LOGGER.error("Unable to upload file with hash %s" % hash_id)
             else:
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
@@ -482,7 +482,7 @@ class Exporter(object):
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        res = conn.put_version(
+        result = conn.put_version(
             tid=tid,
             version=version,
             resources=resources,
@@ -492,9 +492,9 @@ class Exporter(object):
             compiler_version=get_compiler_version(),
         )
 
-        if res.code != 200:
-            LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
-            raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
+        if result.code != 200:
+            LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
+            raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """

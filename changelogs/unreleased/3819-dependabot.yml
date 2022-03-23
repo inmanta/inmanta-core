@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump ruamel-yaml from 0.17.20 to 0.17.21
+destination-branches:
+- master
+- iso5
+sections: {}

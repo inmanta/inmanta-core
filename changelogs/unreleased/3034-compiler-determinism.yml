@@ -1,0 +1,8 @@
+description: Fixed an instance of nondeterministic behavior in the compiler
+change-type: patch
+destination-branches:
+  - iso4
+  - iso5
+  - master
+sections:
+  bugfix: "{{description}}"

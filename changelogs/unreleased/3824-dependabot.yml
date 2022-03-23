@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump importlib-metadata from 4.10.0 to 4.11.1
+destination-branches:
+- master
+- iso5
+sections: {}

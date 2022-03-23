@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import logging
 import typing
+import uuid
 from asyncio import subprocess
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
@@ -142,7 +143,6 @@ def assert_state_agents_retry(
     return func
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_primary_selection(server, environment):
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
@@ -227,7 +227,6 @@ async def test_primary_selection(server, environment):
     assert not am.is_primary(env, ts2.id, "agent3")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_api(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -490,7 +489,6 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents)
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_expire_all_sessions_in_db(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -612,7 +610,6 @@ async def assert_agent_db_state(
     await retry_limited(is_db_state_reached, 10)
 
 
-@pytest.mark.asyncio
 async def test_session_renewal(init_dataclasses_and_load_schema):
     """
     Agent got timeout but agent process was still running (e.g, network connectivity was disrupted).
@@ -659,7 +656,6 @@ async def test_session_renewal(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
-@pytest.mark.asyncio
 async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     """
     When the database connection is lost, the agent session information might get
@@ -723,7 +719,6 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
-@pytest.mark.asyncio
 async def test_session_creation_fails(server, environment, async_finalizer, caplog):
     """
     Verify that:
@@ -776,7 +771,6 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     assert len(session_manager._sessions) == 0
 
 
-@pytest.mark.asyncio
 async def test_agent_actions(server, client, async_finalizer):
     """
     Test the agent_action() and the all_agents_action() API call.
@@ -961,7 +955,101 @@ async def test_agent_actions(server, client, async_finalizer):
     await assert_agents_halt_state(env2_id, {"agent1": False}, False)
 
 
-@pytest.mark.asyncio
+async def test_agent_on_resume_actions(server, environment, client, agent_factory) -> None:
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2", "agent3"],
+    )
+
+    env_id = uuid.UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent2")
+    await agent_manager.ensure_agent_registered(env=env, nodename="agent3")
+    # The keep_paused_on_resume and unpause_on_resume actions are only allowed when the environment is halted
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 403
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 403
+
+    result = await client.agent_action(environment, name="agent1", action="unknown_action")
+    assert result.code == 400
+
+    result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
+    assert result.code == 200
+
+    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]) -> None:
+        for agent_name, on_resume in agent_states.items():
+            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert agent_from_db.unpause_on_resume is on_resume
+
+    async def assert_agents_paused_state(agent_states: Dict[str, bool]) -> None:
+        for agent_name, paused in agent_states.items():
+            agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
+            assert agent_from_db.paused is paused
+
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
+    await assert_agents_paused_state({"agent1": False, "agent2": True, "agent3": False})
+
+    # Halt the environment and check the on_resume state
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_on_resume_state({"agent1": True, "agent2": False, "agent3": True})
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": True})
+
+    result = await client.agent_action(environment, name="agent1", action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 200
+
+    result = await client.agent_action(environment, name="agent2", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+
+    # The on_resume actions don't start the agents immediately, just manipulate the 'unpause_on_resume' flag
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": True})
+    await assert_agents_on_resume_state({"agent1": False, "agent2": True, "agent3": True})
+
+    result = await client.resume_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_paused_state({"agent1": True, "agent2": False, "agent3": False})
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
+
+    # The keep_paused_on_resume and unpause_on_resume actions are only allowed when the environment is halted
+    result = await client.all_agents_action(environment, action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 403
+    result = await client.all_agents_action(environment, action=AgentAction.unpause_on_resume.value)
+    assert result.code == 403
+
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": True, "agent3": True})
+
+    result = await client.all_agents_action(environment, action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": True, "agent2": True, "agent3": True})
+
+    result = await client.all_agents_action(environment, action=AgentAction.keep_paused_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": False, "agent3": False})
+
+    result = await client.agent_action(environment, name="agent3", action=AgentAction.unpause_on_resume.value)
+    assert result.code == 200
+    await assert_agents_on_resume_state({"agent1": False, "agent2": False, "agent3": True})
+
+    result = await client.resume_environment(environment)
+    assert result.code == 200
+
+    await assert_agents_paused_state({"agent1": True, "agent2": True, "agent3": False})
+    await assert_agents_on_resume_state({"agent1": None, "agent2": None, "agent3": None})
+
+
 async def test_process_already_terminated(server, environment):
     """
     This test case tests whether the termination of autostarted agents (processes) happens correctly,
@@ -981,7 +1069,6 @@ async def test_process_already_terminated(server, environment):
     await autostarted_agent_manager._terminate_agents()
 
 
-@pytest.mark.asyncio
 async def test_exception_occurs_while_processing_session_action(server, environment, async_finalizer, monkeypatch, caplog):
     """
     This test verifies that the consumer of the _session_listener_actions queue keeps working
@@ -1023,7 +1110,6 @@ async def test_exception_occurs_while_processing_session_action(server, environm
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
 
-@pytest.mark.asyncio
 async def test_restart_on_environment_setting(server, client, environment, caplog):
     with caplog.at_level(logging.DEBUG):
         response = await client.environment_settings_set(tid=environment, id="autostart_agent_deploy_interval", value=300)
@@ -1044,7 +1130,6 @@ async def test_restart_on_environment_setting(server, client, environment, caplo
         )
 
 
-@pytest.mark.asyncio
 async def test_failover_doesnt_make_paused_agent_primary(server, client, environment, agent_factory):
     """
     This test verifies that:
@@ -1094,7 +1179,6 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
     assert len(agentmanager.tid_endpoint_to_session) == 0
 
 
-@pytest.mark.asyncio
 async def test_add_internal_agent_when_missing_in_agent_map(server, environment, postgresql_client):
     """
     The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
@@ -1124,7 +1208,6 @@ async def test_add_internal_agent_when_missing_in_agent_map(server, environment,
     assert "internal" in autostart_agent_map
 
 
-@pytest.mark.asyncio
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777

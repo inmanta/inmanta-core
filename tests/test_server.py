@@ -22,6 +22,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
+from functools import partial
 
 import pytest
 from dateutil import parser
@@ -50,7 +51,6 @@ from utils import log_contains, log_doesnt_contain, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart(server, client, environment, caplog):
     """
@@ -103,7 +103,6 @@ async def test_autostart(server, client, environment, caplog):
     log_doesnt_contain(caplog, "inmanta.server.agentmanager", logging.WARNING, "Agent processes did not close in time")
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_dual_env(client, server):
     """
@@ -143,7 +142,6 @@ async def test_autostart_dual_env(client, server):
     assert len(sessionendpoint._sessions) == 2
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_batched(client, server, environment):
     """
@@ -183,7 +181,6 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
 
-@pytest.mark.asyncio(timeout=10)
 async def test_version_removal(client, server):
     """
     Test auto removal of older deploy model versions
@@ -209,7 +206,6 @@ async def test_version_removal(client, server):
         assert versions.result["count"] <= opt.server_version_to_keep.get() + 1
 
 
-@pytest.mark.asyncio(timeout=30)
 @pytest.mark.slowtest
 async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
     """
@@ -339,7 +335,6 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=10)
 async def test_get_environment(client, clienthelper, server, environment):
     for i in range(10):
         version = await clienthelper.get_version()
@@ -377,7 +372,6 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-@pytest.mark.asyncio
 async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
     """
     Test updating resources and logging
@@ -478,7 +472,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
@@ -523,7 +516,6 @@ async def test_clear_environment(client, server, clienthelper, environment):
     assert len(result.result["environment"]["versions"]) == 0
 
 
-@pytest.mark.asyncio
 async def test_tokens(server_multi, client_multi, environment_multi):
     # Test using API tokens
     test_token = client_multi._transport_instance.token
@@ -555,7 +547,6 @@ def make_source(collector, filename, module, source, req):
     return collector
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_code_upload(server, client, agent, environment):
     """Test upload of a single code definition"""
     version = (await client.reserve_version(environment)).result["data"]
@@ -596,7 +587,6 @@ async def test_code_upload(server, client, agent, environment):
     assert res.result["sources"] == sources
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
@@ -633,7 +623,6 @@ async def test_batched_code_upload(
             assert info.requires == code[3]
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server, client, environment):
     version = (await client.reserve_version(environment)).result["data"]
     resources = [
@@ -670,7 +659,6 @@ async def test_resource_action_log(server, client, environment):
         parser.parse(f"{parts[0]} {parts[1]}")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_invalid_sid(server, client, environment):
     """
     Test the server to manage the updates on a model during agent deploy
@@ -681,7 +669,6 @@ async def test_invalid_sid(server, client, environment):
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_get_param(server, client, environment):
     metadata = {"key1": "val1", "key2": "val2"}
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -703,10 +690,10 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-@pytest.mark.asyncio(timeout=30)
-async def test_server_logs_address(server_config, caplog):
+async def test_server_logs_address(server_config, caplog, async_finalizer):
     with caplog.at_level(logging.INFO):
         ibl = InmantaBootloader()
+        async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
 
         client = Client("client")
@@ -714,11 +701,9 @@ async def test_server_logs_address(server_config, caplog):
         assert result.code == 200
         address = "127.0.0.1"
 
-        await ibl.stop()
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
-@pytest.mark.asyncio
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
     Test querying resource actions via the API
@@ -796,7 +781,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert len(result.result["data"]) == 2
 
 
-@pytest.mark.asyncio
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
     """Test querying resource actions via the API, including the pagination links."""
     project = data.Project(name="test")
@@ -926,7 +910,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
 
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_start", "resource_action_update"])
-@pytest.mark.asyncio
 async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
     """
     Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
@@ -952,18 +935,21 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
+        last_non_deploying_status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -1005,7 +991,6 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["change"] is None
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_start_error_handling(server, client, environment, agent):
     """
     Test the error handling of the `resource_deploy_start` API endpoint.
@@ -1026,7 +1011,6 @@ async def test_resource_deploy_start_error_handling(server, client, environment,
     assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
     """
     Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
@@ -1068,7 +1052,6 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
 
 
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
-@pytest.mark.asyncio
 async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
     """
     Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
@@ -1234,7 +1217,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert result.code == 409, result.result
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_done_invalid_state(server, client, environment, agent, caplog):
     """
     Ensure proper error handling when a transient state is passed to the `resource_deploy_done` endpoint.
@@ -1276,7 +1258,6 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
     assert "No transient state can be used to mark a deployment as done" in result.result["message"]
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_done_error_handling(server, client, environment, agent):
     env_id = uuid.UUID(environment)
 
@@ -1325,7 +1306,6 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     assert result.code == 404, result.result
 
 
-@pytest.mark.asyncio
 async def test_start_location_no_redirect(server):
     """
     Ensure that there is no redirection for the "start" location. (issue #3497)

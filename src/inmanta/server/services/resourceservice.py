@@ -23,6 +23,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
+from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
@@ -486,7 +487,9 @@ class ResourceService(protocol.ServerSlice):
                 if not keep_increment_cache:
                     self.clear_env_cache(env)
 
-                await resource.update_fields(last_deploy=finished, status=status, connection=connection)
+                await resource.update_fields(
+                    last_deploy=finished, status=status, last_non_deploying_status=status, connection=connection
+                )
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
@@ -652,11 +655,22 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
+                async def update_fields_resource(
+                    resource: data.Resource, connection: Optional[Connection] = None, **kwargs: object
+                ) -> None:
+                    """
+                    This method ensures that the `last_non_deploying_status` field in the database
+                    is updated correctly when the `status` field of a resource is updated.
+                    """
+                    if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
+                        kwargs["last_non_deploying_status"] = kwargs["status"]
+                    await resource.update_fields(**kwargs, connection=connection)
+
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            await res.update_fields(status=status, connection=connection)
+                            await update_fields_resource(res, status=status, connection=connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -668,7 +682,7 @@ class ResourceService(protocol.ServerSlice):
 
                         model_version = None
                         for res in resources:
-                            await res.update_fields(last_deploy=finished, status=status, connection=connection)
+                            await update_fields_resource(res, last_deploy=finished, status=status, connection=connection)
                             model_version = res.model
 
                             if (
@@ -730,7 +744,9 @@ class ResourceService(protocol.ServerSlice):
 
         self.clear_env_cache(env)
 
-        return await data.Resource.get_resource_state_for_dependencies(environment=env.id, resource_version_id=resource_id)
+        return await data.Resource.get_last_non_deploying_state_for_dependencies(
+            environment=env.id, resource_version_id=resource_id
+        )
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
@@ -834,8 +850,7 @@ class ResourceService(protocol.ServerSlice):
                 environment=env.id,
                 resource_type=resource_id.get_entity_type(),
                 agent=resource_id.get_agent_name(),
-                attribute=resource_id.get_attribute(),
-                attribute_value=resource_id.get_attribute_value(),
+                resource_id_value=resource_id.get_attribute_value(),
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
                 action=const.ResourceAction.deploy,

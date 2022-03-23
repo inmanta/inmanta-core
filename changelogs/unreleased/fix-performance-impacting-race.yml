@@ -1,0 +1,8 @@
+---
+description: Fix performance impacting race condition in deploy handler method
+issue-nr: 433
+issue-repo: lsm
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  bugfix: "{{description}}"
