@@ -55,12 +55,6 @@ class Statement(Namespaced):
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
 
-    def copy_location(self, statement: Locatable) -> None:
-        """
-        Copy the location of this statement in the given statement
-        """
-        statement.set_location(self.location)
-
     def get_namespace(self) -> "Namespace":
         return self.namespace
 

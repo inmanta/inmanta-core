@@ -163,6 +163,12 @@ class Locatable(object):
         assert self._location is not None
         return self._location
 
+    def copy_location(self, other: "Locatable") -> None:
+        """
+        Copy the location of this locatable to the given locatable
+        """
+        other.set_location(self.location)
+
     location = property(get_location, set_location)
 
 

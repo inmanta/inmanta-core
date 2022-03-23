@@ -137,7 +137,9 @@ class VariableReader(VariableResumer, Generic[T]):
             self.write_target(variable)
         else:
             # reschedule on the variable's completeness
-            RawUnit(queue_scheduler, resolver, {self: variable}, VariableReadResumer(self))
+            resumer: RawResumer = VariableReadResumer(self)
+            self.copy_location(resumer)
+            RawUnit(queue_scheduler, resolver, {self: variable}, resumer)
 
 
 class VariableReadResumer(RawResumer):
