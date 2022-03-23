@@ -47,7 +47,7 @@ async def test_scheduler_remove(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
-    assert not sched._in_flight_tasks[action]
+    assert not sched._executing_tasks[action]
     no_error_in_logs(caplog)
 
 
@@ -75,7 +75,7 @@ async def test_scheduler_stop(caplog):
     caplog.clear()
     sched.add_action(action, 0.05, 0)
     assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
-    assert not sched._in_flight_tasks[action]
+    assert not sched._executing_tasks[action]
 
 
 async def test_scheduler_async_run_fail(caplog):
@@ -98,7 +98,7 @@ async def test_scheduler_async_run_fail(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
-    assert not sched._in_flight_tasks[action]
+    assert not sched._executing_tasks[action]
 
     print(caplog.messages)
 
@@ -123,13 +123,13 @@ async def test_scheduler_run_async(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
-    assert not sched._in_flight_tasks[action]
+    assert not sched._executing_tasks[action]
     no_error_in_logs(caplog)
 
 
-async def test_scheduler_cancel_in_flight_task() -> None:
+async def test_scheduler_cancel_executing_tasks() -> None:
     """
-    Verify that in-flight tasks are cancelled when the scheduler is stopped.
+    Verify that executing tasks are cancelled when the scheduler is stopped.
     """
 
     @dataclasses.dataclass
@@ -152,10 +152,10 @@ async def test_scheduler_cancel_in_flight_task() -> None:
     await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
     assert task_status.task_is_executing
     assert not task_status.task_was_cancelled
-    assert sched._in_flight_tasks[action]
+    assert sched._executing_tasks[action]
     sched.stop()
     await util.retry_limited(lambda: task_status.task_was_cancelled, timeout=10)
-    assert not sched._in_flight_tasks[action]
+    assert not sched._executing_tasks[action]
 
 
 async def test_ensure_future_and_handle_exception(caplog):

@@ -137,23 +137,23 @@ class Scheduler(object):
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
-        self._in_flight_tasks: Dict[TaskMethod, List[asyncio.Task[None]]] = defaultdict(list)
+        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[None]]] = defaultdict(list)
 
-    def _add_in_flight_task(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
         """
-        Add an in-flight task to `self._in_flight_tasks`.
+        Add task that is currently executing to `self._executing_tasks`.
         """
-        if action in self._in_flight_tasks and self._in_flight_tasks[action]:
-            LOGGER.warning("More than one execution of background task %s in flight", action.__name__)
-        self._in_flight_tasks[action].append(task)
+        if action in self._executing_tasks and self._executing_tasks[action]:
+            LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
+        self._executing_tasks[action].append(task)
 
     def _notify_done(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
         """
-        Called by the callback function of an in-flight task when the task has finished executing.
+        Called by the callback function of executing task when the task has finished executing.
         """
-        if action in self._in_flight_tasks:
+        if action in self._executing_tasks:
             try:
-                self._in_flight_tasks[action].remove(task)
+                self._executing_tasks[action].remove(task)
             except ValueError:
                 pass
 
@@ -191,7 +191,7 @@ class Scheduler(object):
                         action=action(),
                         notify_done_callback=functools.partial(self._notify_done, action),
                     )
-                    self._add_in_flight_task(action, task)
+                    self._add_to_executing_tasks(action, task)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -223,8 +223,8 @@ class Scheduler(object):
         except KeyError:
             pass
 
-        # Cancel all in-flight tasks
-        for action, tasks in self._in_flight_tasks.items():
+        # Cancel all tasks that are already executing
+        for action, tasks in self._executing_tasks.items():
             for task in tasks:
                 task.cancel()
 
