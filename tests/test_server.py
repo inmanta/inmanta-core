@@ -985,7 +985,6 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
@@ -1104,7 +1103,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
