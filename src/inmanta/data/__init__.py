@@ -3558,9 +3558,9 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1}) unnested
+                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
                     """
-        values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
+        values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
 
     @classmethod
@@ -3735,6 +3735,7 @@ class ResourceAction(BaseDocument):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        resource_id_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
         action_id: Optional[uuid.UUID] = None,
@@ -3761,10 +3762,14 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
             values.append(cls._get_value(attribute))
             values.append(cls._get_value(attribute_value))
             parameter_index += 2
+        if resource_id_value:
+            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
         if log_severity:
             # <@ Is contained by
             query += f" AND ${parameter_index} <@ ANY(messages)"
