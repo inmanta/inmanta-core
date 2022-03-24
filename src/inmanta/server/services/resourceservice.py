@@ -733,6 +733,13 @@ class ResourceService(protocol.ServerSlice):
                     action_id=action_id,
                     action=const.ResourceAction.deploy,
                     started=datetime.datetime.now().astimezone(),
+                    messages=[
+                        data.LogLine.log(
+                            logging.INFO,
+                            "Resource deploy started on agent %(agent)s, setting status to deploying",
+                            agent=resource_id.agent_name,
+                        )
+                    ],
                     status=const.ResourceState.deploying,
                 )
                 try:
@@ -850,8 +857,7 @@ class ResourceService(protocol.ServerSlice):
                 environment=env.id,
                 resource_type=resource_id.get_entity_type(),
                 agent=resource_id.get_agent_name(),
-                attribute=resource_id.get_attribute(),
-                attribute_value=resource_id.get_attribute_value(),
+                resource_id_value=resource_id.get_attribute_value(),
                 first_timestamp=first_timestamp,
                 last_timestamp=last_timestamp,
                 action=const.ResourceAction.deploy,

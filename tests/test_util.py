@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import dataclasses
 import datetime
 import logging
 import uuid
@@ -46,6 +47,7 @@ async def test_scheduler_remove(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not sched._executing_tasks[action]
     no_error_in_logs(caplog)
 
 
@@ -73,6 +75,7 @@ async def test_scheduler_stop(caplog):
     caplog.clear()
     sched.add_action(action, 0.05, 0)
     assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
+    assert not sched._executing_tasks[action]
 
 
 async def test_scheduler_async_run_fail(caplog):
@@ -95,6 +98,7 @@ async def test_scheduler_async_run_fail(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not sched._executing_tasks[action]
 
     print(caplog.messages)
 
@@ -119,7 +123,39 @@ async def test_scheduler_run_async(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not sched._executing_tasks[action]
     no_error_in_logs(caplog)
+
+
+async def test_scheduler_cancel_executing_tasks() -> None:
+    """
+    Verify that executing tasks are cancelled when the scheduler is stopped.
+    """
+
+    @dataclasses.dataclass
+    class TaskStatus:
+        task_is_executing: bool = False
+        task_was_cancelled: bool = False
+
+    task_status = TaskStatus()
+
+    async def action():
+        task_status.task_is_executing = True
+        try:
+            await asyncio.sleep(1000)
+        except asyncio.CancelledError:
+            task_status.task_was_cancelled = True
+            raise
+
+    sched = util.Scheduler("xxx")
+    sched.add_action(action, interval=1000, initial_delay=0)
+    await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
+    assert task_status.task_is_executing
+    assert not task_status.task_was_cancelled
+    assert sched._executing_tasks[action]
+    sched.stop()
+    await util.retry_limited(lambda: task_status.task_was_cancelled, timeout=10)
+    assert not sched._executing_tasks[action]
 
 
 async def test_ensure_future_and_handle_exception(caplog):
@@ -132,8 +168,8 @@ async def test_ensure_future_and_handle_exception(caplog):
         LOGGER.info("Fail")
         raise Exception("message F")
 
-    ensure_future_and_handle_exception(LOGGER, "marker 1", success())
-    ensure_future_and_handle_exception(LOGGER, "marker 2", fail())
+    ensure_future_and_handle_exception(LOGGER, "marker 1", success(), notify_done_callback=lambda x: None)
+    ensure_future_and_handle_exception(LOGGER, "marker 2", fail(), notify_done_callback=lambda x: None)
 
     await asyncio.sleep(0.2)
 

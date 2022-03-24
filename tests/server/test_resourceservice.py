@@ -75,7 +75,9 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     """
     version = await clienthelper.get_version()
 
-    rid_r1_v1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
+    # a name that is hard to parse
+    rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
+    rid_r1_v1 = ResourceIdStr(rid)
     rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1_v1},v={version}")
     rid_r2_v1 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
     rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2_v1},v={version}")
@@ -90,7 +92,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     await clienthelper.put_version_simple(resources, version)
 
     result = await agent._client.get_resource_events(tid=environment, rvid=rvid_r1_v1)
-    assert result.code == 400
+    assert result.code == 400, result.result
     assert "Fetching resource events only makes sense when the resource is currently deploying" in result.result["message"]
     result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 400
@@ -369,3 +371,27 @@ async def test_last_non_deploying_status_field_on_resource(
         r2_status=const.ResourceState.deploying,
         r2_last_non_deploying_status=const.ResourceState.skipped,
     )
+
+
+async def test_log_deploy_start(server, client, environment, clienthelper, agent, resource_deployer):
+    """
+    Ensure that a message is logged when starting a deploy.
+    """
+    # Version 1
+    version = await clienthelper.get_version()
+    rid_r1 = ResourceIdStr("std::File[agent1,path=/etc/file1]")
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    resources = [
+        {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
+    ]
+    await clienthelper.put_version_simple(resources, version)
+
+    # Start new deployment for r1
+    await resource_deployer.start_deployment(rvid=rvid_r1_v1)
+
+    result = await client.resource_logs(environment, rid_r1)
+    assert result.code == 200
+    deploy_started_message = next(
+        (log_message for log_message in result.result["data"] if "Resource deploy started on agent" in log_message["msg"]), None
+    )
+    assert deploy_started_message

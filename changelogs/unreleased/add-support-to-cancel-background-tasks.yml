@@ -1,0 +1,4 @@
+---
+description: Add support to cancel background tasks when the scheduler is stopped
+change-type: patch
+destination-branches: [master, iso5]
