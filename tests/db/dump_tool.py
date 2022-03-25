@@ -39,7 +39,9 @@ def check_result(result):
 async def test_dump_db(server, client, postgres_db, database_name):
     """
     Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
-
+    The line 'SET default_table_access_method = heap;' should also be removed
+    (present only when creating a dump with a later postgresql version than 12)
+    Also be careful that the IDE doesn't remove trailing whitespace from the dump file.
     """
 
     if False:
