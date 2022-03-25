@@ -1,0 +1,6 @@
+change-type: patch
+description: set up dependabot to ignore all extensions on all named iso branches
+issue-nr : 274
+destination-branches:
+- master
+sections: {}

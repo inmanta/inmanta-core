@@ -9,3 +9,18 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+- package-ecosystem: pip
+  target-branch: iso5
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  allow:
+    # Allow both direct and indirect updates for all packages
+    - dependency-type: "all"
+  ignore:
+    - dependency-name: "inmanta-core"
+    - dependency-name: "inmanta-license"
+    - dependency-name: "inmanta-lsm"
+    - dependency-name: "inmanta-support"
+    - dependency-name: "inmanta-ui"
