@@ -1,5 +1,5 @@
 change-type: patch
-description: set up dependabot to ignore all extensions on all named iso branches
+description: set up dependabot for iso5
 issue-nr : 274
 destination-branches:
 - master
