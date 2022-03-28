@@ -1,0 +1,7 @@
+change-type: patch
+description: set up dependabot for iso5
+issue-nr : 274
+issue-repo: inmanta-service-orchestrator
+destination-branches:
+- master
+sections: {}
