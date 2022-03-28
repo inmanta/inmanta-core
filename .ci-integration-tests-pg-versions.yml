@@ -3,3 +3,4 @@ repo_name: inmanta-core
 postgresql_versions:
     - 10 # The iso module still uses postgresql 10
     - 13
+    - 14
