@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump click from 8.0.4 to 8.1.0
+destination-branches:
+- iso5
+sections: {}
