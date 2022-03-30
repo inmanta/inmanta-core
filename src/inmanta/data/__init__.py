@@ -751,7 +751,7 @@ class Field(Generic[T]):
         the field.
 
         :param field_type: The python type of the field. This type should work with isinstance
-        :param required: Is this value required
+        :param required: Is this value required. This means that it is not optional and it cannot be None
         :param is_many: Set to true when this is a list type
         :param part_of_primary_key: Set to true when the field is part of the primary key.
         :param ignore: Should this field be ignored when saving it to the database. This can be used to add a field to a
@@ -806,16 +806,15 @@ class Field(Generic[T]):
     def is_many(self) -> bool:
         return self._is_many
 
-    def _validate_single(self, name: str, value: object) -> object:
+    def _validate_single(self, name: str, value: object) -> None:
         """Validate a single value against the types in this field."""
         if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
             raise TypeError(
                 "Field %s should have the correct type (%s instead of %s)"
                 % (name, self.field_type.__name__, type(value).__name__)
             )
-        return value
 
-    def validate(self, name: str, value: object) -> object:
+    def validate(self, name: str, value: T) -> None:
         """Validate the value against the constraint in this field. Treat value as list when is_many is true"""
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
@@ -827,11 +826,12 @@ class Field(Generic[T]):
             if not isinstance(value, List):
                 TypeError("Field %s should be a list, but got %s" % (name, type(value).__name__))
             else:
-                return [self._validate_single(name, v) for v in value]
-        return self._validate_single(name, value)
+                [self._validate_single(name, v) for v in value]
+        else:
+            self._validate_single(name, value)
 
     def from_db(self, name: str, value: object) -> object:
-        """Load values from database. Treat value as a list when is_many is true"""
+        """Load values from database. Treat value as a list when is_many is true. Converts database representation to appropriately typed object."""
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
@@ -846,7 +846,7 @@ class Field(Generic[T]):
         return self._from_db_single(name, value)
 
     def _from_db_single(self, name: str, value: object) -> object:
-        """Load a single database value"""
+        """Load a single database value. Converts database representation to appropriately typed object."""
         if value.__class__ is self.field_type or isinstance(value, self.field_type):
             return value
 
@@ -1089,7 +1089,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
             field = fields[name]
             if not from_postgres:
-                value = field.validate(name, value)
+                field.validate(name, value)
             elif not field.ignore:
                 value = field.from_db(name, value)
             else:
@@ -1158,7 +1158,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if name in fields:
             field = fields[name]
             # validate
-            value = field.validate(name, value)
+            field.validate(name, value)
             object.__setattr__(self, name, value)
             return
 
