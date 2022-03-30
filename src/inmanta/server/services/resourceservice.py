@@ -595,7 +595,9 @@ class ResourceService(protocol.ServerSlice):
                 if aclient is not None:
                     if change is None:
                         change = const.Change.nochange
-                    await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                    self.add_background_task(
+                        aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                    )
 
         return 200
 
