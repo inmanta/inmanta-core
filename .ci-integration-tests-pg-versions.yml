@@ -1,2 +1,6 @@
 pipeline_template: ci/inmanta-extensions/Jenkinsfile-integration-tests-all-postgres-versions
 repo_name: inmanta-core
+postgresql_versions:
+    - 10 # The iso module still uses postgresql 10
+    - 13
+    - 14

@@ -16,4 +16,4 @@
     Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2022.1"
+COMPILER_VERSION = "2022.2"

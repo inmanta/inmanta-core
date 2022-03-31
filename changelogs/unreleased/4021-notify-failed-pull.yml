@@ -1,0 +1,6 @@
+description: Create a notification when a git pull fails during compile
+issue-nr: 4021
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"

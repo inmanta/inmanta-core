@@ -64,14 +64,28 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         await data.Notification.clean_up_notifications()
 
     async def compile_done(self, compile: data.Compile) -> None:
-        if not compile.success and compile.do_export:
-            await self.notify(
-                compile.environment,
-                title="Compilation failed",
-                message="An exporting compile has failed",
-                severity=const.NotificationSeverity.error,
-                uri=f"/api/v2/compilereport/{compile.id}",
+        if not compile.success:
+            compile_report = await data.Compile.get_report(compile_id=compile.id)
+            reports = compile_report["reports"] if compile_report else []
+            failed_pull_stage = next(
+                (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
+            if failed_pull_stage:
+                await self.notify(
+                    compile.environment,
+                    title="Pulling updates during compile failed",
+                    message=failed_pull_stage["errstream"],
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif compile.do_export:
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message="An exporting compile has failed",
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
 
     async def notify(
         self,

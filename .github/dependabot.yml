@@ -1,7 +1,16 @@
 version: 2
 updates:
-- package-ecosystem: pip
-  target-branch: master
+- target-branch: master
+  package-ecosystem: pip
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  allow:
+    # Allow both direct and indirect updates for all packages
+    - dependency-type: "all"
+- target-branch: iso5
+  package-ecosystem: pip
   directory: "/"
   schedule:
     interval: daily

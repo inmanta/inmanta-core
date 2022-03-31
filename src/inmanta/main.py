@@ -19,6 +19,7 @@
 import datetime
 import logging
 import os
+import shutil
 import uuid
 from collections import defaultdict
 from time import sleep
@@ -161,7 +162,7 @@ class Client(object):
 
 
 def print_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> None:
-    width, _ = click.get_terminal_size()
+    width, _ = shutil.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
     table.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
