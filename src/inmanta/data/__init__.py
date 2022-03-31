@@ -831,7 +831,8 @@ class Field(Generic[T]):
             self._validate_single(name, value)
 
     def from_db(self, name: str, value: object) -> object:
-        """Load values from database. Treat value as a list when is_many is true. Converts database representation to appropriately typed object."""
+        """Load values from database. Treat value as a list when is_many is true. Converts database
+        representation to appropriately typed object."""
         if value is None and self.required:
             raise TypeError("%s field is required" % name)
 
