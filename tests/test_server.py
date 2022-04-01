@@ -428,9 +428,9 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     logs = {x["action"]: x for x in result.result["logs"]}
 
     assert "deploy" in logs
-    assert "finished" not in logs["deploy"]
-    assert "messages" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["messages"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Send some logs
     result = await aclient.resource_action_update(
@@ -452,8 +452,8 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     assert "messages" in logs["deploy"]
     assert len(logs["deploy"]["messages"]) == 1
     assert logs["deploy"]["messages"][0]["msg"] == "Test log a b"
-    assert "finished" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Finish the deploy
     now = datetime.now()
@@ -1109,7 +1109,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert "last_deploy" not in result.result["resource"]
+    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
