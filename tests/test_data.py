@@ -151,7 +151,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         await agi2.insert()
 
         agent = data.Agent(
-            environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id
+            environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id
         )
         await agent.insert()
 
@@ -263,7 +263,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
     await agi2.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
+    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id)
     await agent.insert()
 
     version = int(time.time())
@@ -582,7 +582,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     await agi1.insert()
 
     agent1 = data.Agent(
-        environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id
+        environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id
     )
     await agent1.insert()
     agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
@@ -2341,8 +2341,9 @@ async def test_update_to_none_value(init_dataclasses_and_load_schema):
     await env.update(repo_url=None)
     # Assert None value
     assert env.repo_url is None
+
     env = await data.Environment.get_by_id(env.id)
-    assert env.repo_url is None
+    assert env.repo_url == ""
 
 
 async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):

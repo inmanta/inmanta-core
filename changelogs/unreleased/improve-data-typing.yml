@@ -1,0 +1,5 @@
+description: Improve typing of the data layer
+change-type: patch
+destination-branches:
+  - iso5
+  - master
