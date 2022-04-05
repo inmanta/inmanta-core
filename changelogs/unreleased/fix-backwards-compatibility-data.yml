@@ -1,0 +1,5 @@
+description: add default None value to version in Compile class to keep backwards compatibility
+change-type: patch
+destination-branches:
+    - iso5
+    - master
