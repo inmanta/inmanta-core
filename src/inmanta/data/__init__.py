@@ -3285,7 +3285,7 @@ class Compile(BaseDocument):
 
     success: Optional[bool]
     handled: bool = False
-    version: Optional[int]
+    version: Optional[int] = None
 
     # Compile queue might be collapsed if it contains similar compile requests.
     # In that case, substitute_compile_id will reference the actually compiled request.
