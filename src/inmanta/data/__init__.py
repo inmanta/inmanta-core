@@ -2225,7 +2225,7 @@ class Environment(BaseDocument):
         ),
         AVAILABLE_VERSIONS_TO_KEEP: Setting(
             name=AVAILABLE_VERSIONS_TO_KEEP,
-            default=10,
+            default=100,
             typ="int",
             validator=convert_int,
             doc="The number of versions to keep stored in the database",
