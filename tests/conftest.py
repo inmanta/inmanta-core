@@ -896,9 +896,9 @@ class SnippetCompilationTest(KeepOnFail):
                 """
             name: snippet test
             modulepath: %s
-            downloadpath: %s
-            version: 1.0
-            repo: ['%s']"""
+            repo: ['%s']
+            requires:
+                - std~=2.1.10"""
                 % (module_path, self.libs, self.repo)
             )
         self.main = os.path.join(self.project_dir, "main.cf")
