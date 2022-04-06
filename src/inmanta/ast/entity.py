@@ -143,13 +143,13 @@ class Entity(EntityLike, NamedType):
                     raise exception
 
         # check for duplicate relations in parent entities
-        for name, attribute in self.get_attributes().items():
-            if isinstance(attribute, inmanta.ast.attribute.RelationAttribute):
+        for name, my_attribute in self.get_attributes().items():
+            if isinstance(my_attribute, inmanta.ast.attribute.RelationAttribute):
                 for parent in self.parent_entities:
                     parent_attr = parent.get_attribute(name)
                     if parent_attr is not None:
                         raise DuplicateException(
-                            attribute,
+                            my_attribute,
                             parent_attr,
                             f"Attribute name {name} is already defined in {parent_attr.entity.name}, unable to define relationship",
                         )
