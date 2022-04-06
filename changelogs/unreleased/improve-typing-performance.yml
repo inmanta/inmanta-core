@@ -1,0 +1,5 @@
+description: Improve performance of duplicate detection in compiler typing
+change-type: patch
+destination-branches:
+  - iso5
+  - master

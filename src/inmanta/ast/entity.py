@@ -36,7 +36,6 @@ from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast.type import NamedType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
-from inmanta.util import memoize
 
 try:
     from typing import TYPE_CHECKING
@@ -45,11 +44,13 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast import Namespaced
-    from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.attribute import Attribute, RelationAttribute  # noqa: F401
     from inmanta.ast.statements import ExpressionStatement, Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
 
+
+import inmanta.ast.attribute
 
 class EntityLike(NamedType):
 
@@ -140,6 +141,18 @@ class Entity(EntityLike, NamedType):
                         exception.set_statement(attribute)
                         exception.location = attribute.location
                     raise exception
+
+        # check for duplicate relations in parent entities
+        for name, attribute in self.get_attributes().items():
+            if isinstance(attribute, inmanta.ast.attribute.RelationAttribute):
+                for parent in self.parent_entities:
+                    parent_attr = parent.get_attribute(name)
+                    if parent_attr is not None:
+                        raise DuplicateException(
+                            attribute,
+                            parent_attr,
+                            f"Attribute name {name} is already defined in {parent_attr.entity.name}, unable to define relationship",
+                        )
 
         for d in self.implementations:
             d.normalize()
@@ -272,39 +285,6 @@ class Entity(EntityLike, NamedType):
                 attr = parent.get_attribute(name)
                 if attr is not None:
                     return attr
-        return None
-
-    @memoize
-    def __get_related(self) -> "Set[Entity]":
-        # down
-        all_children = [self]  # type: List[Entity]
-        done = set()  # type: Set[Entity]
-        while len(all_children) != 0:
-            current = all_children.pop()
-            if current not in done:
-                all_children.extend(current.child_entities)
-                done.add(current)
-        # up
-        parents = set()  # type: Set[Entity]
-        work = list(done)
-        while len(work) != 0:
-            current = work.pop()
-            if current not in parents:
-                work.extend(current.parent_entities)
-                parents.add(current)
-
-        return parents
-
-    def get_attribute_from_related(self, name: str) -> "Attribute":
-        """
-        Get the attribute with the given name, in both parents and children
-        (for type checking)
-        """
-
-        for parent in self.__get_related():
-            if name in parent._attributes:
-                return parent._attributes[name]
-
         return None
 
     def has_attribute(self, attribute: str) -> bool:
