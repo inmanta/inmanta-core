@@ -49,8 +49,8 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.define import DefineAttribute, DefineImport  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
 
-
 import inmanta.ast.attribute
+
 
 class EntityLike(NamedType):
 
@@ -151,7 +151,8 @@ class Entity(EntityLike, NamedType):
                         raise DuplicateException(
                             my_attribute,
                             parent_attr,
-                            f"Attribute name {name} is already defined in {parent_attr.entity.name}, unable to define relationship",
+                            f"Attribute name {name} is already defined in {parent_attr.entity.name},"
+                            " unable to define relationship",
                         )
 
         for d in self.implementations:
