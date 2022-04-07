@@ -650,7 +650,6 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
 
 class RegularVirtualEnv(ActiveEnv):
     def __init__(self, env_path: str) -> None:
-        print("REGULAR")
         super(RegularVirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None

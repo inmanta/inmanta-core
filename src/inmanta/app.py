@@ -789,7 +789,7 @@ def app() -> None:
         venv_var = os.environ.get("VIRTUAL_ENV", None)
     if venv_var:
         venv = RegularVirtualEnv(venv_var)
-        if venv.exists():
+        if venv.exists() and os.path.normpath(venv.python_path) != os.path.normpath(sys.executable):
             venv.use_virtual_env()
 
     try:
