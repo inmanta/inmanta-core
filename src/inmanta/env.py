@@ -648,32 +648,28 @@ def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[st
     process_env.__init__(python_path=python_path, env_path=env_path)  # type: ignore
 
 
-@stable_api
-class VirtualEnv(ActiveEnv):
-    """
-    Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
-    """
-
+class RegularVirtualEnv(ActiveEnv):
     def __init__(self, env_path: str) -> None:
-        LOGGER.info("Creating new virtual environment in %s", env_path)
-        super(VirtualEnv, self).__init__(env_path=env_path)
+        print("REGULAR")
+        super(RegularVirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
-        self.__using_venv: bool = False
+        self._using_venv: bool = False
         self._parent_python: Optional[str] = None
-        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     def exists(self) -> bool:
         """
         Returns True iff the venv exists on disk.
         """
-        return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
+        return os.path.exists(self.python_path)
 
     def init_env(self) -> None:
         """
         Initialize the virtual environment.
         """
         self._parent_python = sys.executable
+        # set the path to the python and the pip executables
+        self.virtual_python = self.python_path
 
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
@@ -700,7 +696,90 @@ class VirtualEnv(ActiveEnv):
                         msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
                         "is different from the Python version of this process."
                     )
+        else:
+            raise VenvActivationFailedError(f"No venv found at {self.env_path}")
 
+    def is_using_virtual_env(self) -> bool:
+        return self._using_venv
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        if self._using_venv:
+            raise Exception(f"Already using venv {self.env_path}.")
+
+        self.init_env()
+        self._activate_that()
+        mock_process_env(python_path=self.python_path)
+
+        # patch up pkg
+        self.notify_change()
+
+        self._using_venv = True
+
+    def _update_sys_path(self) -> None:
+        """
+        Updates sys.path by adding self.site_packages_dir. This method ensures
+        that .pth files are processed.
+        """
+        prev_sys_path = list(sys.path)
+        site.addsitedir(self.site_packages_dir)
+        # Move the added items to the front of the path
+        new_sys_path = [e for e in list(sys.path) if e not in prev_sys_path]
+        new_sys_path += prev_sys_path
+        # Set sys.path
+        sys.path = new_sys_path
+
+    def _activate_that(self) -> None:
+        # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
+        # MIT license
+        # Copyright (c) 2007 Ian Bicking and Contributors
+        # Copyright (c) 2009 Ian Bicking, The Open Planning Project
+        # Copyright (c) 2011-2016 The virtualenv developers
+
+        binpath: str = os.path.dirname(self.python_path)
+        base: str = os.path.dirname(binpath)
+        old_os_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = binpath + os.pathsep + old_os_path
+
+        sys.real_prefix = sys.prefix
+        sys.prefix = base
+        self._update_sys_path()
+
+        # Also set the python path environment variable for any subprocess
+        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
+        os.environ["VIRTUAL_ENV"] = self.env_path
+
+
+@stable_api
+class VirtualEnv(RegularVirtualEnv):
+    """
+    Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
+    """
+
+    def __init__(self, env_path: str) -> None:
+        LOGGER.info("Creating new virtual environment in %s", env_path)
+        super(VirtualEnv, self).__init__(env_path=env_path)
+        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+
+    def exists(self) -> bool:
+        """
+        Returns True iff the venv exists on disk.
+        """
+        return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
+
+    def init_env(self) -> None:
+        """
+        Initialize the virtual environment.
+        """
+        self._parent_python = sys.executable
+        # set the path to the python and the pip executables
+        self.virtual_python = self.python_path
+
+        # check if the virtual env exists
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+            super(VirtualEnv, self).init_env()
         else:
             path = os.path.realpath(self.env_path)
             try:
@@ -714,32 +793,9 @@ class VirtualEnv(ActiveEnv):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         if not os.path.exists(self._path_pth_file):
-
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
-
-        # set the path to the python and the pip executables
-        self.virtual_python = self.python_path
-
-    def is_using_virtual_env(self) -> bool:
-        return self.__using_venv
-
-    def use_virtual_env(self) -> None:
-        """
-        Activate the virtual environment.
-        """
-        if self.__using_venv:
-            raise Exception(f"Already using venv {self.env_path}.")
-
-        self.init_env()
-        self._activate_that()
-        mock_process_env(python_path=self.python_path)
-
-        # patch up pkg
-        self.notify_change()
-
-        self.__using_venv = True
 
     def _write_pip_binary(self) -> None:
         """
@@ -783,38 +839,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         with open(self._path_pth_file, "w", encoding="utf-8") as fd:
             fd.write(script_as_oneliner)
 
-    def _update_sys_path(self) -> None:
-        """
-        Updates sys.path by adding self.site_packages_dir. This method ensures
-        that .pth files are processed.
-        """
-        prev_sys_path = list(sys.path)
-        site.addsitedir(self.site_packages_dir)
-        # Move the added items to the front of the path
-        new_sys_path = [e for e in list(sys.path) if e not in prev_sys_path]
-        new_sys_path += prev_sys_path
-        # Set sys.path
-        sys.path = new_sys_path
-
-    def _activate_that(self) -> None:
-        # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
-        # MIT license
-        # Copyright (c) 2007 Ian Bicking and Contributors
-        # Copyright (c) 2009 Ian Bicking, The Open Planning Project
-        # Copyright (c) 2011-2016 The virtualenv developers
-
-        binpath: str = os.path.dirname(self.python_path)
-        base: str = os.path.dirname(binpath)
-        old_os_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = binpath + os.pathsep + old_os_path
-
-        sys.real_prefix = sys.prefix
-        sys.prefix = base
-        self._update_sys_path()
-
-        # Also set the python path environment variable for any subprocess
-        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-
     def install_from_index(
         self,
         requirements: List[Requirement],
@@ -823,7 +847,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
             requirements,
@@ -834,7 +858,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
@@ -845,7 +869,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 

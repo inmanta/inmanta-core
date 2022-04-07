@@ -60,6 +60,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
+from inmanta.env import RegularVirtualEnv
 from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
@@ -628,6 +629,14 @@ def cmd_parser() -> argparse.ArgumentParser:
         default=False,
         required=False,
     )
+    parser.add_argument(
+        "--no-adopt-venv",
+        dest="adoptvenv",
+        help="Don't use the active venv, but the one the compiler is installed in",
+        action="store_false",
+        default=True,
+    )
+
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
@@ -775,6 +784,13 @@ def app() -> None:
             helpmsg = ExplainerFactory().explain_and_format(e, plain=not _is_on_tty())
             if helpmsg is not None:
                 print(helpmsg)
+
+    if options.adoptvenv:
+        venv_var = os.environ.get("VIRTUAL_ENV", None)
+    if venv_var:
+        venv = RegularVirtualEnv(venv_var)
+        if venv.exists():
+            venv.use_virtual_env()
 
     try:
         options.func(options)
