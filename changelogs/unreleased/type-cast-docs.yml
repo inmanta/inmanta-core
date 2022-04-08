@@ -1,0 +1,9 @@
+description: Added documentation for primitive type casts to the language reference
+change-type: patch
+sections:
+  feature: "{{description}}"
+  bugfix: "Fixed type cast behavior for `null` and unknown values"
+destination-branches:
+  - master
+  - iso5
+  - iso4
