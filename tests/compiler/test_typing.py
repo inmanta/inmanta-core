@@ -152,6 +152,7 @@ w = int(tests::unknown())
     assert Integer().validate(z)
     assert isinstance(w, Unknown)
 
+
 def test_cast_to_string(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
