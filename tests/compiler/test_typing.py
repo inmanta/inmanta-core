@@ -26,6 +26,7 @@ from inmanta.ast import AttributeException, Namespace, TypingException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.type import Bool, Integer, Number, String
+from inmanta.execute.util import Unknown
 
 
 def test_lnr_on_double_is_defined(snippetcompiler):
@@ -136,6 +137,8 @@ y = int(true)
 y = 1
 z = int(false)
 z = 0
+import tests
+w = int(tests::unknown())
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -143,10 +146,11 @@ z = 0
     x = root.lookup("x").get_value()
     y = root.lookup("y").get_value()
     z = root.lookup("z").get_value()
+    w = root.lookup("w").get_value()
     assert Integer().validate(x)
     assert Integer().validate(y)
     assert Integer().validate(z)
-
+    assert isinstance(w, Unknown)
 
 def test_cast_to_string(snippetcompiler):
     snippetcompiler.setup_for_snippet(

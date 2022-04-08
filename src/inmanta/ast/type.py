@@ -32,7 +32,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
 )
-from inmanta.execute.util import AnyType, NoneValue
+from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
 try:
@@ -201,6 +201,10 @@ class Primitive(Type):
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
         exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+
+        if isinstance(value, Unknown):
+            # propagate unknowns
+            return value
 
         for cast in self.try_cast_functions:
             try:
