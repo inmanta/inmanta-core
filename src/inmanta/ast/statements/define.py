@@ -592,12 +592,8 @@ class DefineRelation(BiStatement):
 
         assert isinstance(left, Entity), "%s is not an entity" % left
 
-        if left.get_attribute_from_related(str(self.right[1])) is not None:
-            raise DuplicateException(
-                self,
-                left.get_attribute_from_related(str(self.right[1])),
-                ("Attribute name %s is already defined in %s, unable to define relationship") % (str(self.right[1]), left.name),
-            )
+        # Duplicate checking is in entity.normalize
+        # Because here we don't know if all entities have been defined
 
         try:
             right = self.namespace.get_type(self.right[0])
@@ -613,13 +609,8 @@ class DefineRelation(BiStatement):
             )
 
         assert isinstance(right, Entity), "%s is not an entity" % right
-
-        if right.get_attribute_from_related(str(self.left[1])) is not None:
-            raise DuplicateException(
-                self,
-                right.get_attribute_from_related(str(self.left[1])),
-                ("Attribute name %s is already defined in %s, unable to define relationship") % (str(self.left[1]), right.name),
-            )
+        # Duplicate checking is in entity.normalize
+        # Because here we don't know if all entities have been defined
 
         left_end: Optional[RelationAttribute]
         if self.left[1] is not None:
