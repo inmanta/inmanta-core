@@ -1,0 +1,8 @@
+description: Added documentation for primitive type casts to the language reference
+change-type: patch
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - master
+  - iso5
+  - iso4
