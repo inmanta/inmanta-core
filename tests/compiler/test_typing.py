@@ -26,6 +26,7 @@ from inmanta.ast import AttributeException, Namespace, TypingException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.type import Bool, Integer, Number, String
+from inmanta.execute.util import Unknown
 
 
 def test_lnr_on_double_is_defined(snippetcompiler):
@@ -136,6 +137,8 @@ y = int(true)
 y = 1
 z = int(false)
 z = 0
+import tests
+w = int(tests::unknown())
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -143,9 +146,11 @@ z = 0
     x = root.lookup("x").get_value()
     y = root.lookup("y").get_value()
     z = root.lookup("z").get_value()
+    w = root.lookup("w").get_value()
     assert Integer().validate(x)
     assert Integer().validate(y)
     assert Integer().validate(z)
+    assert isinstance(w, Unknown)
 
 
 def test_cast_to_string(snippetcompiler):
@@ -184,6 +189,12 @@ v = bool("false")
 v = true
 w = bool("")
 w = false
+p = bool(null)
+p = false
+q = bool([])
+q = false
+r = bool([1])
+r = true
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -194,12 +205,18 @@ w = false
     u = root.lookup("u").get_value()
     v = root.lookup("v").get_value()
     w = root.lookup("w").get_value()
+    p = root.lookup("p").get_value()
+    q = root.lookup("q").get_value()
+    r = root.lookup("r").get_value()
     assert Bool().validate(x)
     assert Bool().validate(y)
     assert Bool().validate(z)
     assert Bool().validate(u)
     assert Bool().validate(v)
     assert Bool().validate(w)
+    assert Bool().validate(p)
+    assert Bool().validate(q)
+    assert Bool().validate(r)
 
 
 def test_cast_exception_kwargs(snippetcompiler):
