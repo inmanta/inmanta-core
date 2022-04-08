@@ -188,6 +188,12 @@ v = bool("false")
 v = true
 w = bool("")
 w = false
+p = bool(null)
+p = false
+q = bool([])
+q = false
+r = bool([1])
+r = true
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -198,12 +204,18 @@ w = false
     u = root.lookup("u").get_value()
     v = root.lookup("v").get_value()
     w = root.lookup("w").get_value()
+    p = root.lookup("p").get_value()
+    q = root.lookup("q").get_value()
+    r = root.lookup("r").get_value()
     assert Bool().validate(x)
     assert Bool().validate(y)
     assert Bool().validate(z)
     assert Bool().validate(u)
     assert Bool().validate(v)
     assert Bool().validate(w)
+    assert Bool().validate(p)
+    assert Bool().validate(q)
+    assert Bool().validate(r)
 
 
 def test_cast_exception_kwargs(snippetcompiler):
