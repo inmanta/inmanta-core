@@ -4,7 +4,8 @@ from os import path
 requires = [
     "asyncpg",
     "click-plugins",
-    "click",
+    # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
+    "click>=8.0,<8.2",
     "colorlog",
     "cookiecutter",
     "cryptography",
