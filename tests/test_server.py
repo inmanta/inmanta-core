@@ -229,37 +229,75 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
 
 
-async def test_version_removal(client, server):
+async def test_n_versions_env_setting_scope(client, server):
     """
-    Test auto removal of older deploy model versions
+    The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
+    This test checks that a specific environment setting can be set for each environment
     """
+
+    n_versions_to_keep_env1 = 5
+    n_versions_to_keep_env2 = 2
+
+    n_many_versions = n_versions_to_keep_env1 + n_versions_to_keep_env2
+
+    # Create project
     result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
+    # Create environments
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_1_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
+    assert result.code == 200
 
-    await check_n_versions_kept(client, server, project_id, env_id)
+    result = await client.create_environment(project_id=project_id, name="env_2")
+    env_2_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
 
+    # Create a lot of versions in both environments
+    for _ in range(n_many_versions):
 
-async def check_n_versions_kept(client, server, project_id, env_id, n_versions_to_create=20):
-    for _ in range(n_versions_to_create):
-        version = (await client.reserve_version(env_id)).result["data"]
+        env1_version = (await client.reserve_version(env_1_id)).result["data"]
+        env2_version = (await client.reserve_version(env_2_id)).result["data"]
 
-        await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
         res = await client.put_version(
-            tid=env_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id,
+            version=env1_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
         )
         assert res.code == 200
-        result = await client.get_project(id=project_id)
 
-        result = await client.get_setting(tid=env_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
-        assert result.code == 200
-        n_versions_to_keep = result.result["value"]
+        res = await client.put_version(
+            tid=env_2_id,
+            version=env2_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
 
-        versions = await client.list_versions(tid=env_id)
-        assert versions.result["count"] <= n_versions_to_keep + 1
+    # Before cleanup we have too many versions in both envs
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_many_versions
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_many_versions
+
+    # Cleanup
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # After cleanup each env should have its specific number of version
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_keep_env1
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_versions_to_keep_env2
 
 
 @pytest.mark.slowtest
