@@ -301,6 +301,9 @@ class Bool(Primitive):
             return True
         raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
 
+    def cast(self, value: Optional[object]) -> object:
+        return super().cast(value if not isinstance(value, NoneValue) else None)
+
     def type_string(self) -> str:
         return "bool"
 
