@@ -136,6 +136,10 @@ The basic primitive types are ``string``, ``number``, ``int`` or ``bool``. These
     assert = bool(1.2) == true
     assert = bool(0) == false
     assert = bool(null) == false
+    assert = bool("x") == true
+    # like in Python, only empty strings are considered false
+    assert = bool("false") == true
+    assert = bool("") == false
     assert = string(true) == "true"
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
