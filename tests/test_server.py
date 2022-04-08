@@ -181,44 +181,52 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
 
-async def test_environment_setting_n_versions(client, server):
+@pytest.mark.parametrize(
+    "n_versions_to_keep, n_versions_to_create",
+    [
+        (2, 4),
+        (4, 2),
+        (2, 2),
+    ],
+)
+async def test_create_too_many_versions(client, server, n_versions_to_keep, n_versions_to_create):
     """
-    This test creates two environments with different values for the environment
-    setting AVAILABLE_VERSIONS_TO_KEEP and checks that the number of versions is
-    in line with the desired setting
+    - set AVAILABLE_VERSIONS_TO_KEEP environment setting to <n_versions_to_keep>
+    - create <n_versions_to_create> versions
+    - check the actual number of versions before and after cleanup
     """
-
-    env_1_expected_value = 30
-    env_2_expected_value = 100
 
     # Create project
     result = await client.create_project("env-test")
-    assert result.code == 200, result.result
+    assert result.code == 200
     project_id = result.result["project"]["id"]
 
-    # Create environment 1
-    # AVAILABLE_VERSIONS_TO_KEEP is set to 30
+    # Create environment
     result = await client.create_environment(project_id=project_id, name="env_1")
     env_1_id = result.result["environment"]["id"]
-    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=30)
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
     assert result.code == 200
 
-    # Create environment 2
-    # AVAILABLE_VERSIONS_TO_KEEP is set to 100 (by default)
-    result = await client.create_environment(project_id=project_id, name="env_2")
-    env_2_id = result.result["environment"]["id"]
-
-    # Check values
+    # Check value was set
     result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
     assert result.code == 200
-    assert result.result["value"] == env_1_expected_value
+    assert result.result["value"] == n_versions_to_keep
 
-    result = await client.get_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
-    assert result.code == 200
-    assert result.result["value"] == env_2_expected_value
+    for _ in range(n_versions_to_create):
+        version = (await client.reserve_version(env_1_id)).result["data"]
 
-    await check_n_versions_kept(client, server, project_id, env_1_id, max(env_1_expected_value, env_2_expected_value))
-    await check_n_versions_kept(client, server, project_id, env_2_id, max(env_1_expected_value, env_2_expected_value))
+        res = await client.put_version(
+            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+        )
+        assert res.code == 200
+
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_create
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
 
 
 async def test_version_removal(client, server):
