@@ -32,7 +32,7 @@ from inmanta.ast import (
     RuntimeException,
     TypeNotFoundException,
 )
-from inmanta.execute.util import AnyType, NoneValue
+from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 
 try:
@@ -202,6 +202,10 @@ class Primitive(Type):
         """
         exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
 
+        if isinstance(value, Unknown):
+            # propagate unknowns
+            return value
+
         for cast in self.try_cast_functions:
             try:
                 return cast(value)
@@ -300,6 +304,9 @@ class Bool(Primitive):
         if isinstance(value, bool):
             return True
         raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+
+    def cast(self, value: Optional[object]) -> object:
+        return super().cast(value if not isinstance(value, NoneValue) else None)
 
     def type_string(self) -> str:
         return "bool"
