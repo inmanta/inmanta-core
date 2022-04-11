@@ -306,7 +306,7 @@ class RemoteResourceAction(ResourceActionBase):
                 if "logs" in result.result and len(result.result["logs"]) > 0:
                     log = result.result["logs"][0]
 
-                    if "change" in log and log["change"]:
+                    if "change" in log and log["change"] is not None:
                         self.change = const.Change[log["change"]]
                     else:
                         self.change = const.Change.nochange
