@@ -22,11 +22,14 @@ import typing
 from itertools import chain
 
 import inmanta.execute.dataflow as dataflow
+import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
+    HyphenDeprecationWarning,
     KeyException,
     LocatableString,
+    Location,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
@@ -38,18 +41,18 @@ from inmanta.execute.runtime import (
     ExecutionUnit,
     HangUnit,
     Instance,
+    ListLiteral,
     QueueScheduler,
     Resolver,
     ResultCollector,
     ResultVariable,
-    TempListVariable,
 )
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
 
 try:
-    from typing import TYPE_CHECKING, Dict, Optional
+    from typing import TYPE_CHECKING, Dict, Optional, TypeVar
 except ImportError:
     TYPE_CHECKING = False
 
@@ -58,10 +61,12 @@ if TYPE_CHECKING:
     from inmanta.ast.statements.generator import WrappedKwargs  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
+T = TypeVar("T")
+
 
 class CreateList(ReferenceStatement):
     """
-    Create list of values
+    Represents a list literal statement which might contain any type of value (constants and/or instances).
     """
 
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
@@ -79,10 +84,12 @@ class CreateList(ReferenceStatement):
         # to get more accurate gradual execution
         # temp variable is required get all heuristics right
 
-        # ListVariable to hold all the stuff
-        temp = TempListVariable(queue)
+        # ListVariable to hold all the stuff. Used as a proxy for gradual execution and to track promises.
+        # Freezes itself once all promises have been fulfilled, at which point it represents the full list literal created by
+        # this statement.
+        temp = ListLiteral(queue)
 
-        # add listener
+        # add listener for gradual execution
         temp.listener(resultcollector, self.location)
 
         # Assignments, wired for gradual
@@ -218,7 +225,9 @@ class SetAttribute(AssignStatement, Resumer):
             # gradual only for multi
             # to preserve order on lists used in attributes
             # while allowing gradual execution on relations
-            reqs = self.value.requires_emit_gradual(resolver, queue, var)
+            reqs = self.value.requires_emit_gradual(
+                resolver, queue, GradualSetAttributeHelper(self, instance, self.attribute_name, var)
+            )
         else:
             reqs = self.value.requires_emit(resolver, queue)
 
@@ -231,7 +240,35 @@ class SetAttribute(AssignStatement, Resumer):
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
 
 
+class GradualSetAttributeHelper(ResultCollector[T]):
+    """
+    A result collector wrapper that ensures that exceptions that happen during assignment
+    are attributed to the correct statement
+    """
+
+    __slots__ = ("stmt", "next", "instance", "attribute_name")
+
+    def __init__(self, stmt: "Statement", instance: "Instance", attribute_name: str, next: ResultCollector[T]) -> None:
+        self.stmt = stmt
+        self.instance = instance
+        self.next = next
+        self.attribute_name = attribute_name
+
+    def receive_result(self, value: T, location: Location) -> None:
+        try:
+            self.next.receive_result(value, location)
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
+            raise
+        except RuntimeException as e:
+            e.set_statement(self.stmt, False)
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
+
+
 class SetAttributeHelper(ExecutionUnit):
+
+    __slots__ = ("stmt", "instance", "attribute_name")
+
     def __init__(
         self,
         queue_scheduler: QueueScheduler,
@@ -251,6 +288,9 @@ class SetAttributeHelper(ExecutionUnit):
     def execute(self) -> None:
         try:
             ExecutionUnit._unsafe_execute(self)
+        except AttributeException as e:
+            e.set_statement(self.stmt, False)
+            raise
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
@@ -270,26 +310,28 @@ class Assign(AssignStatement):
     provides:      variable
     """
 
-    def __init__(self, name: str, value: ExpressionStatement) -> None:
+    def __init__(self, name: LocatableString, value: ExpressionStatement) -> None:
         AssignStatement.__init__(self, None, value)
         self.name = name
         self.value = value
+        if "-" in str(self.name):
+            inmanta_warnings.warn(HyphenDeprecationWarning(self.name))
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
             return
-        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(self.name)
+        node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(str(self.name))
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
-        target = resolver.lookup(self.name)
+        target = resolver.lookup(str(self.name))
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
     def declared_variables(self) -> typing.Iterator[str]:
-        yield self.name
+        yield str(self.name)
 
     def pretty_print(self) -> str:
         return f"{self.name} = {self.value.pretty_print()}"

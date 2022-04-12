@@ -1,0 +1,5 @@
+---
+description: Add documentation regarding the relation precedence policy feature to the troubleshooting documentation
+issue-nr: 3945
+change-type: minor
+destination-branches: [master, iso5]

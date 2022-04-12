@@ -1,0 +1,4 @@
+---
+description: Ensure that the test suite uses a timeout when stopping the Inmanta server
+change-type: patch
+destination-branches: [master, iso5]

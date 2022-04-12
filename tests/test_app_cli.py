@@ -136,7 +136,6 @@ def test_module_help(inmanta_config, capsys):
     assert info.value.args[0].startswith("A subcommand is required.")
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize_any("add_types", [True, False])
 async def test_export_to_json(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, add_types):
     workspace = tmpdir.mkdir("tmp")
@@ -186,7 +185,6 @@ std::ConfigFile(host=vm1, path="/test", content="")
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.parametrize_any("set_server", [True, False])
 @pytest.mark.parametrize_any("set_port", [True, False])
-@pytest.mark.asyncio
 async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -272,7 +270,6 @@ std::ConfigFile(host=vm1, path="/test", content="")
     shutil.rmtree(workspace)
 
 
-@pytest.mark.asyncio
 async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -409,7 +406,6 @@ vm1.name = "other"
 
 
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
-@pytest.mark.asyncio
 async def test_export_without_environment(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")

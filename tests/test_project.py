@@ -31,7 +31,6 @@ from inmanta.server.services.environmentservice import EnvironmentAction, Enviro
 from utils import log_contains
 
 
-@pytest.mark.asyncio
 async def test_project_api_v1(client):
     result = await client.create_project("project-test")
     assert result.code == 200
@@ -81,7 +80,6 @@ async def test_project_api_v1(client):
     assert response.code == 404
 
 
-@pytest.mark.asyncio
 async def test_project_api_v2(client_v2):
     result = await client_v2.project_create("project-test")
     assert result.code == 200
@@ -178,7 +176,6 @@ async def test_project_api_v2(client_v2):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_modify_environment_project(client_v2):
     """Test modifying the project of an environment"""
 
@@ -224,7 +221,6 @@ async def test_modify_environment_project(client_v2):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_env_api(client):
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -273,7 +269,6 @@ async def test_env_api(client):
     assert len(result.result["environments"]) == 0
 
 
-@pytest.mark.asyncio
 async def test_project_cascade(client):
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -288,7 +283,6 @@ async def test_project_cascade(client):
     assert len(result.result["environments"]) == 0
 
 
-@pytest.mark.asyncio
 async def test_create_with_id(client):
     project_id = uuid.uuid4()
     result = await client.create_project(name="test_project", project_id=project_id)
@@ -304,7 +298,6 @@ async def test_create_with_id(client):
     assert result.code == 500
 
 
-@pytest.mark.asyncio
 async def test_environment_listener(server, client_v2, caplog):
     class EnvironmentListenerCounter(EnvironmentListener):
         def __init__(self):
@@ -418,7 +411,6 @@ def environment_icons() -> Dict[str, str]:
     return icon_dict
 
 
-@pytest.mark.asyncio
 async def test_environment_icon_description(client_v2, environment_icons: Dict[str, str]):
     """Test creating an environment with an icon and description"""
 
@@ -533,7 +525,6 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     assert result.code == 400
 
 
-@pytest.mark.asyncio
 async def test_environment_icon_with_details_only(client_v2, environment_icons: Dict[str, str]):
     """Test that the icon for an environment is only returned when explicitly requested"""
     result = await client_v2.project_create("dev-project")

@@ -1,0 +1,4 @@
+description: Create a notification when an exporting compile fails
+issue-nr: 3983
+change-type: minor
+destination-branches: [master, iso5]

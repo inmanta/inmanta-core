@@ -1,0 +1,7 @@
+description: Constrained click dependency to known compatible range because of backwards incompatible minor
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso5

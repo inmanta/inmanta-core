@@ -4,7 +4,8 @@ from os import path
 requires = [
     "asyncpg",
     "click-plugins",
-    "click",
+    # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
+    "click>=8.0,<8.2",
     "colorlog",
     "cookiecutter",
     "cryptography",
@@ -41,7 +42,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "6.0.1"
+version = "6.1.0"
 
 setup(
     version=version,
@@ -62,9 +63,10 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={

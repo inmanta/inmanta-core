@@ -510,16 +510,18 @@ An if statement allows to branch on a condition.
 .. code-block:: inmanta
 
     if nodecount > 1:
-        self.cluster_mode = true
+        self.cluster_mode = "multi"
+    elif node == 1:
+        self.cluster_mode = "single"
     else:
-        self.cluster_mode = false
+        self.cluster_mode = "off"
     end
 
 The syntax is:
 
 .. code-block:: antlr
 
-    if : 'if' condition ':' statement* ('else' ':' statement*)? 'end';
+    if : 'if' condition ':' statement* ('elif' condition ':' statement*)* ('else' ':' statement*)? 'end';
 
 The :ref:`lang-conditions` section describes allowed forms for the condition.
 

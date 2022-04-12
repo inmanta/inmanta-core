@@ -43,10 +43,9 @@ async def migrate_v202106210_to_v202109100(
 
     # When the bootloader is started, it also executes the migration to v202105170
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_valid_loglevels(migrate_v202106210_to_v202109100: Callable[[], Awaitable[None]]) -> None:
     """
     Test whether the value column was added to the resource table.

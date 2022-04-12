@@ -17,6 +17,7 @@
 """
 import asyncio
 import configparser
+import datetime
 import inspect
 import json
 import logging
@@ -566,3 +567,7 @@ def v1_module_from_template(
             )
     with open(config_file, "r") as fd:
         return module.ModuleV1Metadata.parse(fd)
+
+
+def parse_datetime_to_utc(time: str) -> datetime.datetime:
+    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)

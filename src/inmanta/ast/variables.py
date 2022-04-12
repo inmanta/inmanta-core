@@ -20,24 +20,29 @@ import logging
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, RuntimeException
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
+from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
 
+@stable_api
 class Reference(ExpressionStatement):
     """
     This class represents a reference to a value
+
+    :ivar name: The name of the Reference as a string.
     """
 
     def __init__(self, name: LocatableString) -> None:
         ExpressionStatement.__init__(self)
+        self.locatable_name = name
         self.name = str(name)
         self.full_name = str(name)
 
@@ -71,7 +76,7 @@ class Reference(ExpressionStatement):
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
             raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
-        return Assign(self.name, value)
+        return Assign(self.locatable_name, value)
 
     def root_in_self(self) -> "Reference":
         if self.name == "self":
@@ -79,7 +84,7 @@ class Reference(ExpressionStatement):
         else:
             ref = Reference("self")
             self.copy_location(ref)
-            attr_ref = AttributeReference(ref, self.name)
+            attr_ref = AttributeReference(ref, self.locatable_name)
             self.copy_location(attr_ref)
             return attr_ref
 
@@ -233,8 +238,18 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
-        self.attribute = str(attribute)
+        range: Range = Range(
+            instance.locatable_name.location.file,
+            instance.locatable_name.lnr,
+            instance.locatable_name.start,
+            attribute.elnr,
+            attribute.end,
+        )
+        reference: LocatableString = LocatableString(
+            "%s.%s" % (instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
+        )
+        Reference.__init__(self, reference)
+        self.attribute = attribute
 
         # a reference to the instance
         self.instance = instance
@@ -255,7 +270,7 @@ class AttributeReference(Reference):
         temp.set_provider(self)
 
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
+        resumer = AttributeReferenceHelper(temp, self.instance, str(self.attribute), resultcollector)
         self.copy_location(resumer)
 
         # wait for the instance
@@ -267,16 +282,16 @@ class AttributeReference(Reference):
         return requires[self]
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
-        return SetAttribute(self.instance, self.attribute, value, list_only)
+        return SetAttribute(self.instance, str(self.attribute), value, list_only)
 
     def root_in_self(self) -> Reference:
-        out = AttributeReference(self.instance.root_in_self(), self.attribute)
+        out = AttributeReference(self.instance.root_in_self(), str(self.attribute))
         self.copy_location(out)
         return out
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AttributeNodeReference:
         assert self.instance is not None
-        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), self.attribute)
+        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance), self.attribute)
+        return "%s.%s" % (repr(self.instance), str(self.attribute))

@@ -42,6 +42,19 @@ class Test2(resources.PurgeableResource):
     fields = ("name", "agent", "mydict", "mylist")
 
 
+@resources.resource("exp::Test3", id_attribute="name", agent="name")
+class Test3(resources.PurgeableResource):
+
+    fields = (
+        "name",
+        "real_name",
+    )
+
+    @staticmethod
+    def get_real_name(_, entity):
+        return entity.names[entity.name]
+
+
 @resources.resource("exp::RequiresTest", agent="agent", id_attribute="name")
 class RequiresTest(resources.PurgeableResource):
 

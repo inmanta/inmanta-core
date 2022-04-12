@@ -1,0 +1,6 @@
+description: Add notification service
+issue-nr: 3981
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"

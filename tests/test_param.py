@@ -18,12 +18,9 @@
 import logging
 import uuid
 
-import pytest
-
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio(timeout=60)
 async def test_param(client, environment):
     """
     Test creating and updating forms

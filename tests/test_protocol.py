@@ -83,7 +83,6 @@ def make_random_file(size=0):
     return (hash, content, body)
 
 
-@pytest.mark.asyncio
 async def test_client_files(client):
     (hash, content, body) = make_random_file()
 
@@ -102,7 +101,6 @@ async def test_client_files(client):
     assert result.result["content"] == body
 
 
-@pytest.mark.asyncio
 async def test_client_files_lost(client):
     (hash, content, body) = make_random_file()
 
@@ -111,7 +109,6 @@ async def test_client_files_lost(client):
     assert result.code == 404
 
 
-@pytest.mark.asyncio
 async def test_sync_client_files(client):
     # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
     asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -152,7 +149,6 @@ async def test_sync_client_files(client):
     assert len(done) > 0
 
 
-@pytest.mark.asyncio
 async def test_client_files_stat(client):
 
     file_names = []
@@ -173,7 +169,6 @@ async def test_client_files_stat(client):
     assert len(result.result["files"]) == len(other_files)
 
 
-@pytest.mark.asyncio
 async def test_diff(client):
     ca = "Hello world\n".encode()
     ha = hash_file(ca)
@@ -198,7 +193,6 @@ async def test_diff(client):
     assert len(diff.result["diff"]) == 4
 
 
-@pytest.mark.asyncio
 async def test_client_files_bad(server, client):
     (hash, content, body) = make_random_file()
     # Create the file
@@ -206,7 +200,6 @@ async def test_client_files_bad(server, client):
     assert result.code == 400
 
 
-@pytest.mark.asyncio
 async def test_client_files_corrupt(client):
     (hash, content, body) = make_random_file()
     # Create the file
@@ -237,7 +230,6 @@ async def test_client_files_corrupt(client):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_gzip_encoding(server):
     """
     Test if the server accepts gzipped encoding and returns gzipped encoding.
@@ -285,7 +277,6 @@ async def app(unused_tcp_port):
     await server.close_all_connections()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_timeout_error(app):
     """
     Test test verifies that the protocol client can handle requests that timeout. This means it receives a http error
@@ -308,7 +299,6 @@ async def test_timeout_error(app):
     assert "message" in x.result
 
 
-@pytest.mark.asyncio
 async def test_method_properties():
     """
     Test method properties decorator and helper functions
@@ -326,7 +316,6 @@ async def test_method_properties():
     assert props.get_call_url({}) == "/x/v2/test"
 
 
-@pytest.mark.asyncio
 async def test_invalid_client_type():
     """
     Test invalid client ype
@@ -342,7 +331,6 @@ async def test_invalid_client_type():
         assert "Invalid client type invalid specified for function" in str(e)
 
 
-@pytest.mark.asyncio
 async def test_call_arguments_defaults():
     """
     Test processing RPC messages
@@ -369,7 +357,6 @@ def test_create_client():
         protocol.Client("agent", "120")
 
 
-@pytest.mark.asyncio
 async def test_pydantic():
     """
     Test validating pydantic objects
@@ -434,7 +421,6 @@ def test_pydantic_json():
     assert project is not new
 
 
-@pytest.mark.asyncio
 async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Round trip test on aliased object
@@ -497,7 +483,6 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
     await roundtrip(projectt)
 
 
-@pytest.mark.asyncio
 async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test return none but pushing warnings
@@ -535,7 +520,6 @@ async def test_return_non_warnings(unused_tcp_port, postgres_db, database_name, 
     assert "error1" in response.result["metadata"]["warnings"]
 
 
-@pytest.mark.asyncio
 async def test_invalid_handler():
     """
     Handlers should be async
@@ -554,7 +538,6 @@ async def test_invalid_handler():
                 return
 
 
-@pytest.mark.asyncio
 async def test_return_value(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
@@ -593,7 +576,6 @@ async def test_return_value(unused_tcp_port, postgres_db, database_name, async_f
     assert "name" in result.result
 
 
-@pytest.mark.asyncio
 async def test_return_model(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
@@ -654,7 +636,6 @@ async def test_return_model(unused_tcp_port, postgres_db, database_name, async_f
     assert result.code == 500
 
 
-@pytest.mark.asyncio
 async def test_data_envelope(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test the use and validation of methods that use common.ReturnValue
@@ -741,7 +722,6 @@ async def test_data_envelope(unused_tcp_port, postgres_db, database_name, async_
     assert "name" in result.result["project"]
 
 
-@pytest.mark.asyncio
 async def test_invalid_paths():
     """
     Test path validation
@@ -763,7 +743,6 @@ async def test_invalid_paths():
     assert str(e.value).startswith("Variable othername in path /test/<othername> is not defined in function")
 
 
-@pytest.mark.asyncio
 async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test overlapping path definition"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -808,7 +787,6 @@ async def test_nested_paths(unused_tcp_port, postgres_db, database_name, async_f
     assert "test_method2" == result.result["data"]["name"]
 
 
-@pytest.mark.asyncio
 async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test list of basemodel arguments and primitive types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -842,7 +820,6 @@ async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert "test_method" == result.result["data"]["name"]
 
 
-@pytest.mark.asyncio
 async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test dict of basemodel arguments and primitive types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -876,7 +853,6 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
     assert "test_method" == result.result["data"]["name"]
 
 
-@pytest.mark.asyncio
 async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test dict which may have None as a value"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -932,7 +908,6 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test list of basemodel arguments"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -976,7 +951,6 @@ async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name,
     assert "test_method" == result.result["data"][0]
 
 
-@pytest.mark.asyncio
 async def test_method_definition():
     """
     Test typed methods with wrong annotations
@@ -1048,7 +1022,6 @@ def test_optional():
         """Delete an existing service type."""
 
 
-@pytest.mark.asyncio
 async def test_union_types(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test use of union types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1107,7 +1080,6 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     assert 5 == result.result["data"][0]
 
 
-@pytest.mark.asyncio
 async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test validation of basemodel arguments and return, and how they are reported"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1154,7 +1126,6 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name,
     assert "data validation error" in result.result["message"]
 
 
-@pytest.mark.asyncio
 async def test_ACOA_header(server):
     """
     Test if the server accepts gzipped encoding and returns gzipped encoding.
@@ -1174,7 +1145,6 @@ async def test_ACOA_header(server):
     assert response.headers.get("Access-Control-Allow-Origin") == "*"
 
 
-@pytest.mark.asyncio
 async def test_multi_version_method(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test multi version methods"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1253,7 +1223,6 @@ async def test_multi_version_method(unused_tcp_port, postgres_db, database_name,
     assert "data" in response.result
 
 
-@pytest.mark.asyncio
 async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test multi version methods"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1297,7 +1266,6 @@ async def test_multi_version_handler(unused_tcp_port, postgres_db, database_name
     assert response.result["data"]["name"] == "v2"
 
 
-@pytest.mark.asyncio
 async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test methods with simple return types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1325,7 +1293,6 @@ async def test_simple_return_type(unused_tcp_port, postgres_db, database_name, a
     assert response.result["data"] == "x"
 
 
-@pytest.mark.asyncio
 async def test_html_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with a text/html content-type work."""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1355,7 +1322,6 @@ async def test_html_content_type(unused_tcp_port, postgres_db, database_name, as
     assert response.result == html_content
 
 
-@pytest.mark.asyncio
 async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with a "text/html; charset=UTF-8" content-type work."""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1386,7 +1352,6 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
     assert response.result == html_content
 
 
-@pytest.mark.asyncio
 async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with an application/octet-stream content-type work."""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1416,7 +1381,6 @@ async def test_octet_stream_content_type(unused_tcp_port, postgres_db, database_
     assert response.result == byte_stream
 
 
-@pytest.mark.asyncio
 async def test_zip_content_type(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """Test whether API endpoints with an application/zip content-type work."""
     configure(unused_tcp_port, database_name, postgres_db.port)
@@ -1471,7 +1435,6 @@ def options_request(unused_tcp_port):
     )
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("auth_enabled, auth_header_allowed", [(True, True), (False, False)])
 async def test_auth_enabled_options_method(
     auth_enabled,
@@ -1496,14 +1459,12 @@ async def test_auth_enabled_options_method(
     assert ("Authorization" in response.headers.get("Access-Control-Allow-Headers")) == auth_header_allowed
 
 
-@pytest.mark.asyncio
 async def test_required_header_not_present(server):
     client = AsyncHTTPClient()
     response = await client.fetch(f"http://localhost:{server_bind_port.get()}/api/v2/environment_settings", raise_error=False)
     assert response.code == 400
 
 
-@pytest.mark.asyncio
 async def test_malformed_json(server):
     """
     Tests sending malformed json to the server
@@ -1521,7 +1482,6 @@ async def test_malformed_json(server):
     )
 
 
-@pytest.mark.asyncio
 async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1561,7 +1521,6 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
     assert json.loads(response.body)["message"] == "Invalid request: Field 'tid' is required."
 
 
-@pytest.mark.asyncio
 async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1585,7 +1544,6 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
     assert request.url == "/api/v1/test/1/monty?age=42"
 
 
-@pytest.mark.asyncio(timeout=5)
 async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
     async def _id(x: object, dct: Dict[str, str]) -> object:
         return x
@@ -1636,7 +1594,6 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
-@pytest.mark.asyncio
 async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
     @protocol.typedmethod(
         path="/typedtestmethod",
@@ -1679,7 +1636,6 @@ def test_method_strict_exception() -> None:
             pass
 
 
-@pytest.mark.asyncio
 async def test_method_nonstrict_allowed(async_finalizer) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
@@ -1744,7 +1700,6 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
         (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
     ],
 )
-@pytest.mark.asyncio
 async def test_dict_list_get_roundtrip(
     unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, param_value, expected_url
 ):
@@ -1777,7 +1732,6 @@ async def test_dict_list_get_roundtrip(
     assert response.result["data"] == param_value
 
 
-@pytest.mark.asyncio
 async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1812,7 +1766,6 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
     assert response.result["data"] == ""
 
 
-@pytest.mark.asyncio
 async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1862,7 +1815,6 @@ async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, datab
         (List[List[str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
     ],
 )
-@pytest.mark.asyncio
 async def test_dict_list_get_invalid(
     unused_tcp_port, postgres_db, database_name, async_finalizer, param_type, expected_error_message
 ):
@@ -1882,7 +1834,6 @@ async def test_dict_list_get_invalid(
         assert expected_error_message in str(e)
 
 
-@pytest.mark.asyncio
 async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1928,7 +1879,6 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
     assert request.url == f"/api/v1/test_uuid/1?sort={uuids[0]}&sort={uuids[1]}"
 
 
-@pytest.mark.asyncio
 async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -1962,7 +1912,6 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
     assert response.result["data"] == "a,c,x"
 
 
-@pytest.mark.asyncio
 async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 
@@ -2048,7 +1997,6 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
     assert response.code == 200
 
 
-@pytest.mark.asyncio
 async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
@@ -2120,7 +2068,6 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
         response = await request(now.replace(tzinfo=None))
 
 
-@pytest.mark.asyncio
 async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_finalizer):
     """
     Test API input and output conversion for timestamps. Objects should be either timezone-aware or implicit UTC.
@@ -2153,7 +2100,6 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
     assert result.result["data"] == {"test": [{"attr": 1}, {"attr": 5}]}
 
 
-@pytest.mark.asyncio
 async def test_return_value_with_meta(unused_tcp_port, postgres_db, database_name, async_finalizer):
     configure(unused_tcp_port, database_name, postgres_db.port)
 

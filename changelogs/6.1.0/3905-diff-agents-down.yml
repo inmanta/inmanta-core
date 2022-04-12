@@ -1,0 +1,4 @@
+description: Handle resources with agents down in dryrun diff
+issue-nr: 3905
+change-type: minor
+destination-branches: [master, iso5]

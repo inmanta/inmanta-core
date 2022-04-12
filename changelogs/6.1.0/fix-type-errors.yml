@@ -1,0 +1,6 @@
+description: Fix a number of typing errors in the paging code
+change-type: patch
+destination-branches:
+  - iso4
+  - iso5
+  - master
