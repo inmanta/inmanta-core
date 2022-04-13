@@ -1999,6 +1999,7 @@ RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
+AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 
 
 class Setting(object):
@@ -2221,6 +2222,13 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain resource-action logs",
+        ),
+        AVAILABLE_VERSIONS_TO_KEEP: Setting(
+            name=AVAILABLE_VERSIONS_TO_KEEP,
+            default=100,
+            typ="int",
+            validator=convert_int,
+            doc="The number of versions to keep stored in the database",
         ),
         PURGE_ON_DELETE: Setting(
             name=PURGE_ON_DELETE,
