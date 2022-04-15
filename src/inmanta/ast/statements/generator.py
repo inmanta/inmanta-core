@@ -76,6 +76,9 @@ class SubConstructor(ExpressionStatement):
     """
     This statement selects an implementation for a given object and
     imports the statements
+
+    :ivar type: The specific entity type of an instance this subconstructor applies to, i.e. the actual instance type, not a
+        supertype.
     """
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
