@@ -42,7 +42,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "6.0.1"
+version = "6.0.2"
 
 setup(
     version=version,
