@@ -93,6 +93,11 @@ def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
     moduletool.ModuleTool().v1tov2(None)
     assert_v2_module(module_name, tmpdir)
 
+    setup_cfg_file = os.path.join(tmpdir, "setup.cfg")
+    parser = configparser.ConfigParser()
+    parser.read(setup_cfg_file)
+    assert parser.has_option("options.packages.find", "include")
+
     with pytest.raises(ModuleVersionException):
         moduletool.ModuleTool().v1tov2(None)
 
