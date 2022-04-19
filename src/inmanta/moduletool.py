@@ -1132,5 +1132,6 @@ build-backend = "setuptools.build_meta"
         config["options"]["zip_safe"] = "False"
         config["options"]["include_package_data"] = "True"
         config["options"]["packages"] = "find_namespace:"
+        config["options.packages.find"]["include"] = "inmanta_plugins"
 
         return config
