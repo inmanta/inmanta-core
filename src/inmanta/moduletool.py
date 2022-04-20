@@ -1119,6 +1119,7 @@ build-backend = "setuptools.build_meta"
         config = self._module.metadata.to_v2().to_config(config_in)
 
         config.add_section("options")
+        config.add_section("options.packages.find")
 
         # add requirements
         module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
@@ -1132,5 +1133,6 @@ build-backend = "setuptools.build_meta"
         config["options"]["zip_safe"] = "False"
         config["options"]["include_package_data"] = "True"
         config["options"]["packages"] = "find_namespace:"
+        config["options.packages.find"]["include"] = "inmanta_plugins*"
 
         return config
