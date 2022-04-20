@@ -327,12 +327,20 @@ class VariableResumer(Locatable):
     # TODO: str and repr
 
 
+@dataclass(frozen=True)
 class StaticEagerPromise:
     """
     Static representation of an eager promise for an attribute assignment.
+
+    :ivar instance: The reference to the instance on which to acquire a promise. Might differ from the assign statement's
+        reference due to scoping differences between the context where the statement is executed and the one where the promise
+        is acquired.
+    :ivar attribute: The attribute name for which to acquire a promise.
+    :ivar statement: The assignment statement that led to this promise.
     """
-    def __init__(self, assignment: "SetAttribute") -> None:
-        self.assignment: "SetAttribute" = assignment
+    instance: "Reference" = instance
+    attribute: str = attribute
+    statement: "SetAttribute" = statement
 
     def get_root_variable(self) -> str:
         """
@@ -351,8 +359,8 @@ class StaticEagerPromise:
         """
         dynamic: "EagerPromise" = EagerPromise(self, responsible)
         hook: VariableReferenceHook = VariableReferenceHook(
-            self.assignment.instance,
-            self.assignment.attribute_name,
+            self.instance,
+            self.attribute_name,
             variable_resumer=dynamic,
         )
         # TODO: clean up copy_location

@@ -207,7 +207,7 @@ class SetAttribute(AssignStatement, Resumer):
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
-        self.eager_promises = [StaticEagerPromise(self)]
+        self.eager_promises = [StaticEagerPromise(self.instance, self.attribute_name, self)]
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:

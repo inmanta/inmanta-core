@@ -88,9 +88,11 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
 
     def normalize(self) -> None:
-        injected_variables: Set[str] = {"self"}.union(self.type.get_attributes().keys())
+        injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
         self.eager_promises = [
-            promise
+            # implementations live in the namespace's context rather than the constructor's context so for promises that cross
+            # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
+            promise.replace(instance=promise.instance.fully_qualified())
             for block in self.implements.implementations.statements
             for promise in block.get_eager_promises()
             if promise.get_root_variable() not in injected_variables

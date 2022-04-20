@@ -32,6 +32,10 @@ from inmanta.stable_api import stable_api
 LOGGER = logging.getLogger(__name__)
 
 
+
+R = TypeVar("R", bound="Reference")
+
+
 @stable_api
 class Reference(ExpressionStatement):
     """
@@ -78,6 +82,21 @@ class Reference(ExpressionStatement):
         Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
         """
         return self
+
+    def fully_qualified(self: R) -> R:
+        """
+        If this reference is already fully qualified, returns it unchanged. Otherwise, returns a new fully qualified reference
+        to this name in this reference's namespace.
+        This fully qualified reference is not guaranteed to resolve to the same object. It is the caller's responsibility to
+        only request a fully qualified name when appropriate.
+        """
+        if "::" in self.name:
+            return self
+        fully_qualified_name: str = f"{self.namespace.name}::{self.name}"
+        locatable: LocatableString = LocatableString(
+            fully_qualified_name, Range("__internal__", 1, 1, 1, 1), -1, self.namespace
+        )
+        return cls(locatable)
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
