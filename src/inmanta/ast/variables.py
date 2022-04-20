@@ -73,6 +73,12 @@ class Reference(ExpressionStatement):
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
 
+    def get_root_variable(self) -> "Reference":
+        """
+        Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
+        """
+        return self
+
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
             raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
@@ -245,6 +251,12 @@ class AttributeReference(Reference):
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
+
+    def get_root_variable(self) -> "Reference":
+        """
+        Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
+        """
+        return self.instance.get_root_variable()
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         return SetAttribute(self.instance, str(self.attribute), value, list_only)

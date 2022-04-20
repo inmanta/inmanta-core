@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
@@ -31,18 +31,15 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     Typeorvalue,
+    ProgressionPromise,
 )
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
 
 
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import AttributeReferencePromise, Reference  # noqa: F401
+    from inmanta.ast.assign import SetAttribute  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -54,6 +51,8 @@ class Statement(Namespaced):
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
+        # TODO: perhaps this could move to DynamicStatement?
+        self.eager_promises: Sequence["StaticEagerPromise"] = []
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
@@ -74,7 +73,7 @@ class Statement(Namespaced):
         return iter(())
 
 
-# TODO: move up or down?
+# TODO: remove
 class ConditionalPromiseABC(ProgressionPromiseABC):
     """
     Promise for progression that might or might not be made depending on a condition. Can be either picked or dropped when the
@@ -149,6 +148,7 @@ class DynamicStatement(Statement):
         """List of all variable names used by this statement"""
         raise NotImplementedError()
 
+    # TODO: remove
     # TODO: implement in For, Implement/SubConstructor
     # TODO: name: emit_eager_promises? emit_conditional_promises?
     def emit_progression_promises(
@@ -264,11 +264,11 @@ class VariableReferenceHook(RawResumer):
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
-    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> RawUnit:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
-        RawUnit(
+        return RawUnit(
             queue_scheduler,
             resolver,
             # TODO: instance could be None, why does this not fail test cases -> add tests for is defined on local var / implicit self?
@@ -325,6 +325,92 @@ class VariableResumer(Locatable):
         raise NotImplementedError()
 
     # TODO: str and repr
+
+
+class StaticEagerPromise:
+    """
+    Static representation of an eager promise for an attribute assignment.
+    """
+    def __init__(self, assignment: "SetAttribute") -> None:
+        self.assignment: "SetAttribute" = assignment
+
+    def get_root_variable(self) -> str:
+        """
+        Returns the name of the variable at the start of the attribute traversal chain. e.g. for a.b.c.d, returns "a". Includes
+        namespace information if specified in the original reference.
+        """
+        return self.assignment.instance.get_root_variable().name
+
+    def schedule(self, responsible: Statement, resolver: Resolver, queue_scheduler: QueueScheduler) -> "EagerPromise":
+        """
+        Schedule the acquisition of this promise in a given dynamic context: set up a waiter to wait for the referenced
+        ResultVariable to exist, then acquire the promise.
+
+        :param responsible: The statement responsible for this eager promise, i.e. the statement that will fulfill it once it
+            will make no further progression.
+        """
+        dynamic: "EagerPromise" = EagerPromise(self, responsible)
+        hook: VariableReferenceHook = VariableReferenceHook(
+            self.assignment.instance,
+            self.assignment.attribute_name,
+            variable_resumer=dynamic,
+        )
+        # TODO: clean up copy_location
+        self.assignment.copy_location(dynamic)
+        self.assignment.copy_location(hook)
+        waiter: Waiter = hook.schedule(resolver, queue)
+        dynamic.set_waiter(waiter)
+
+
+class EagerPromise(VariableResumer):
+    """
+    Dynamic node for eager promising (stateful). Eagerly acquires a progression promise on a variable when it becomes available.
+    Fulfilling this promise aborts the waiter if it has not finished yet, otherwise it fulfills the acquired progression
+    promise.
+    """
+
+    def __init__(self, static: StaticEagerPromise, responsible: Statement) -> None:
+        super().__init__()
+        self.static: StaticEagerPromise = static
+        self.responsible: Statement = responsible
+        self._waiter: Optional[Waiter] = None
+        self._promise: Optional[ProgressionPromise] = None
+        self._fulfilled: bool = False
+
+    def set_waiter(self, waiter: Waiter) -> None:
+        self._waiter = waiter
+
+    def _acquire(self, variable: ResultVariable) -> None:
+        """
+        Entry point for the ResultVariable waiter: actually acquire the promise
+        """
+        if self._fulfilled:
+            # already fulfilled, no need to acquire progression promise anymore
+            return
+        assert self._promise is None
+        self._promise = variable.get_progression_promise(self.provider)
+
+    def fulfill(self) -> None:
+        """
+        If a promise was already acquired, fulfills it, otherwise cancels the waiter so no new promise is acquired when the
+        variable becomes available.
+        """
+        if self._fulfilled:
+            # already fulfilled, no need to continue
+            return
+        if self._waiter is not None:
+            self._waiter.queue.remove_from_all(self._waiter)
+        if self._promise is not None:
+            self._promise.fulfill()
+        self._fulfilled = True
+
+    def resume(
+        self,
+        variable: ResultVariable,
+        resolver: Resolver,
+        queue_scheduler: QueueScheduler,
+    ) -> None:
+        self._acquire(variable)
 
 
 class ReferenceStatement(ExpressionStatement):

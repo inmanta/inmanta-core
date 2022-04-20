@@ -42,8 +42,9 @@ from inmanta.ast.statements import (
     ExpressionStatement,
     Resumer,
     Statement,
+    StaticEagerPromise,
     VariableReferenceHook,
-    VariableResumer,
+    EagerPromise,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -51,7 +52,6 @@ from inmanta.execute.runtime import (
     HangUnit,
     Instance,
     ListLiteral,
-    ProgressionPromise,
     QueueScheduler,
     Resolver,
     ResultCollector,
@@ -196,41 +196,6 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
-class ConditionalPromise(VariableResumer, ConditionalPromiseABC):
-    """
-    Acquire a conditional promise on variable when it becomes available.
-    """
-
-    def __init__(self, provider: Statement) -> None:
-        super().__init__()
-        self.provider: Statement = provider
-        self._promise: Optional[ProgressionPromise] = None
-        self._fulfilled: bool = False
-
-    def resume(
-        self,
-        variable: ResultVariable,
-        resolver: Resolver,
-        queue_scheduler: QueueScheduler,
-    ) -> None:
-        if self._fulfilled:
-            # already fulfilled, no need to acquire additional promises
-            return
-        # TODO: raise exception if self._promise already set?
-        self._promise = variable.get_progression_promise(self.provider)
-
-    def fulfill(self) -> None:
-        """
-        Fulfill the acquired promise, if any, and makes sure no new promise is acquired when the variable becomes available.
-        """
-        if self._fulfilled:
-            # already fulfilled, no need to continue
-            return
-        if self._promise is not None:
-            self._promise.fulfill()
-        self._fulfilled = True
-
-
 class SetAttribute(AssignStatement, Resumer):
     """
     Set an attribute of a given instance to a given value
@@ -242,6 +207,7 @@ class SetAttribute(AssignStatement, Resumer):
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
+        self.eager_promises = [StaticEagerPromise(self)]
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
@@ -260,7 +226,7 @@ class SetAttribute(AssignStatement, Resumer):
         if "::" in self.instance.name or self.instance.name.split(".", 1)[0] not in in_scope:
             return []
 
-        promise: ConditionalPromise = ConditionalPromise(provider=self)
+        promise: EagerPromise = EagerPromise(provider=self)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             self.attribute_name,

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Opt
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import (
+    StaticEagerPromise,
     ConditionalPromiseABC,
     ConditionalPromiseBlock,
     DefinitionStatement,
@@ -88,6 +89,21 @@ class BasicBlock(object):
 
     #     def get_requires(self) -> List[str]:
     #         return self.external
+
+    def get_eager_promises(self) -> Sequence[StaticEagerPromise]:
+        """
+        Returns the collection of eager promises for this block, i.e. promises parent scopes should acquire as a result of
+        attribute assignments in or below this block.
+
+        Should only be called after normalization.
+        """
+        declared_variables: Set[str] = set(self.get_variables())
+        return [
+            promise
+            for statement in self.get_stmts()
+            for promise in statement.eager_promises
+            if promise.get_root_variable() not in declared_variables
+        ]
 
     def emit_progression_promises(
         self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str] = frozenset(), root: bool = False

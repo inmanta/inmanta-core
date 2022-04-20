@@ -88,8 +88,13 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
 
     def normalize(self) -> None:
-        # done in define type
-        pass
+        injected_variables: Set[str] = {"self"}.union(self.type.get_attributes().keys())
+        self.eager_promises = [
+            promise
+            for block in self.implements.implementations.statements
+            for promise in block.get_eager_promises()
+            if promise.get_root_variable() not in injected_variables
+        ]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         try:
@@ -191,6 +196,7 @@ class For(DynamicStatement):
         # self.loop_var.normalize(resolver)
         self.module.normalize()
         self.module.add_var(self.loop_var, self)
+        self.eager_promises = self.module.get_eager_promises()
 
     def requires(self) -> List[str]:
         base = self.base.requires()
@@ -266,6 +272,7 @@ class If(ExpressionStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
+        self.eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
 
     def emit_progression_promises(
         self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
@@ -513,6 +520,12 @@ class Constructor(ExpressionStatement):
                 self._indirect_attributes[k] = v
             else:
                 self._direct_attributes[k] = v
+
+        self.eager_promises = list(
+            chain.from_iterable(
+                subconstructor.eager_promises for subconstructor in self.type.get_entity().get_sub_constructor()
+            )
+        )
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
