@@ -32,6 +32,7 @@ from inmanta.execute.runtime import (
     ResultVariable,
     Typeorvalue,
     ProgressionPromise,
+    Waiter,
 )
 
 
@@ -264,7 +265,7 @@ class VariableReferenceHook(RawResumer):
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
-    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> RawUnit:
+    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> Waiter:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
