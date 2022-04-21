@@ -52,8 +52,6 @@ class Statement(Namespaced):
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
-        # TODO: perhaps this could move to DynamicStatement?
-        self.eager_promises: Sequence["StaticEagerPromise"] = []
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
@@ -141,6 +139,7 @@ class DynamicStatement(Statement):
 
     def __init__(self) -> None:
         Statement.__init__(self)
+        self.eager_promises: Sequence["StaticEagerPromise"] = []
 
     def normalize(self) -> None:
         raise NotImplementedError()
@@ -185,26 +184,23 @@ class DynamicStatement(Statement):
         return iter(())
 
 
-class ExpressionStatement(DynamicStatement):
-    def __init__(self) -> None:
-        DynamicStatement.__init__(self)
-
+class RequiresEmitStatement(DynamicStatement):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        """
+        Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
+        schedulred promise objects in the waiter's requires in order to pass it on to the execute method.
+        """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
+        promises: ResultVariable = ResultVariable()
+        promises.set_value(self.schedule_eager_promises())
+        reqs[EagerPromise] = promises
         ExecutionUnit(queue, resolver, target, reqs, self)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
         returns a dict of the result variables required, names are an opaque identifier
         may emit statements to break execution is smaller segments
-        """
-        raise NotImplementedError()
-
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        """
-        execute the expression, give the values provided in the requires dict.
-        These values correspond to the values requested via requires_emit
         """
         raise NotImplementedError()
 
@@ -217,6 +213,24 @@ class ExpressionStatement(DynamicStatement):
         """
         return self.requires_emit(resolver, queue)
 
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        execute the statement, give the values provided in the requires dict.
+        These values correspond to the values requested via requires_emit
+        """
+        promises: Sequence["EagerPromise"] = requires[EagerPromise]
+        for promise in promises:
+            promise.fulfill()
+        return None
+
+    def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
+        """
+        Schedules this statement's eager promises to be acquired in the given dynamic context.
+        """
+        return [promise.schedule(self, resolver, queue) for promise in self.eager_promises]
+
+
+class ExpressionStatement(RequiresEmitStatement):
     def as_constant(self) -> object:
         """
         Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
@@ -350,7 +364,7 @@ class StaticEagerPromise:
         """
         return self.assignment.instance.get_root_variable().name
 
-    def schedule(self, responsible: Statement, resolver: Resolver, queue_scheduler: QueueScheduler) -> "EagerPromise":
+    def schedule(self, responsible: DynamicStatement, resolver: Resolver, queue_scheduler: QueueScheduler) -> "EagerPromise":
         """
         Schedule the acquisition of this promise in a given dynamic context: set up a waiter to wait for the referenced
         ResultVariable to exist, then acquire the promise.
@@ -378,10 +392,10 @@ class EagerPromise(VariableResumer):
     promise.
     """
 
-    def __init__(self, static: StaticEagerPromise, responsible: Statement) -> None:
+    def __init__(self, static: StaticEagerPromise, responsible: DynamicStatement) -> None:
         super().__init__()
         self.static: StaticEagerPromise = static
-        self.responsible: Statement = responsible
+        self.responsible: DynamicStatement = responsible
         self._waiter: Optional[Waiter] = None
         self._promise: Optional[ProgressionPromise] = None
         self._fulfilled: bool = False
@@ -435,6 +449,7 @@ class ReferenceStatement(ExpressionStatement):
     def normalize(self) -> None:
         for c in self.children:
             c.normalize()
+        # TODO: acquire promises + test? What about child classes? Add to design document
 
     def requires(self) -> List[str]:
         return [req for v in self.children for req in v.requires()]
@@ -492,6 +507,7 @@ class Literal(ExpressionStatement):
         return {}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute()
         return self.value
 
     def execute_direct(self, requires: Dict[object, object]) -> object:

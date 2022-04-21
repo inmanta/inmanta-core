@@ -41,9 +41,9 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import (
     ConditionalPromiseABC,
     ConditionalPromiseBlock,
-    DynamicStatement,
     ExpressionStatement,
     RawResumer,
+    RequiresEmitStatement,
 )
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
@@ -111,6 +111,7 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
+        super().execute()
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
@@ -176,7 +177,7 @@ class GradualFor(ResultCollector[object]):
         xc.emit(self.queue)
 
 
-class For(DynamicStatement):
+class For(RequiresEmitStatement):
     """
     A for loop
     """
@@ -206,11 +207,6 @@ class For(DynamicStatement):
         ext = self.module.requires
         return list(set(base).union(ext) - set(var))
 
-    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        target = ResultVariable()
-        reqs = self.requires_emit(resolver, queue)
-        ExecutionUnit(queue, resolver, target, reqs, self)
-
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """Not an actual expression, but following the pattern"""
 
@@ -229,6 +225,7 @@ class For(DynamicStatement):
         """
         Evaluate this statement.
         """
+        super().execute()
         var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
@@ -298,6 +295,7 @@ class If(ExpressionStatement):
         """
         Evaluate this statement.
         """
+        super().execute()
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
             return None
@@ -344,6 +342,7 @@ class ConditionalExpression(ExpressionStatement):
         self.condition.normalize()
         self.if_expression.normalize()
         self.else_expression.normalize()
+        # TODO: acquire promises + test
 
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
@@ -361,6 +360,7 @@ class ConditionalExpression(ExpressionStatement):
         return {self: result}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute()
         return requires[self]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -561,6 +561,7 @@ class Constructor(ExpressionStatement):
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+        super().execute()
 
         # the type to construct
         type_class = self.type.get_entity()
@@ -723,6 +724,7 @@ class WrappedKwargs(ExpressionStatement):
 
     def normalize(self) -> None:
         self.dictionary.normalize()
+        # TODO: acquire promises + test
 
     def requires(self) -> List[str]:
         return self.dictionary.requires()
@@ -731,6 +733,7 @@ class WrappedKwargs(ExpressionStatement):
         return self.dictionary.requires_emit(resolver, queue)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
+        super().execute()
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

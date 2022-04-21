@@ -97,6 +97,7 @@ class FunctionCall(ReferenceStatement):
         return {self: temp}
 
     def execute(self, requires, resolver, queue):
+        super().execute()
         return requires[self]
 
     def execute_direct(self, requires):

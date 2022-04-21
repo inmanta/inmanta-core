@@ -70,6 +70,7 @@ class Reference(ExpressionStatement):
         return out
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute()
         return requires[self.name]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -180,6 +181,7 @@ class VariableReadResumer(RawResumer):
 
     # TODO: does this ever get called? Can we get rid of it?
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:
+        super().execute()
         return self.reader.target_value(requires[self.reader])
 
 
@@ -268,6 +270,7 @@ class AttributeReference(Reference):
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute()
         # helper returned: return result
         return requires[self]
 
