@@ -17,14 +17,12 @@
 """
 
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, Sequence
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import (
     StaticEagerPromise,
-    ConditionalPromiseABC,
-    ConditionalPromiseBlock,
     DefinitionStatement,
     DynamicStatement,
     Statement,
@@ -105,40 +103,7 @@ class BasicBlock(object):
             if promise.get_root_variable() not in declared_variables
         ]
 
-    def emit_progression_promises(
-        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str] = frozenset(), root: bool = False
-    ) -> ConditionalPromiseBlock:
-        """
-        Emits and returns a block promise for this block, collecting any progression promises for its statements.
-        The caller is responsible for fulfilling this top level block promise, either by picking or by dropping it.
-        If picked, responsibility for any nested block promises is left to the nested callers.
-
-        Expected to be called after normalization and before emit. May be called multiple times with different scopes.
-
-        :param resolver: Resolver for the parent context promises should be acquired on.
-        :param in_scope: Set of variables that are considered in scope. Promises will only be acquired for these variables or
-            their attributes. This allows to emit promises only relative to a certain parent context, excluding sibling and/or
-            intermediate parent (shadowed) declarations.
-        :param root: If true, this block is considered the root reference for this nested promise emit and promises are
-            acquired on this block's variables (`in_scope` may be empty). If false, this block's variables are considered out
-            of scope in addiiton to the ones declared in the out_of_scope parameter.
-        """
-        if root and in_scope:
-            raise ValueError("This block is considered the root scope but explicit in scope names are supplied.")
-        # if this block is not the root reference, make sure statements don't acquire promises on this block's variables
-        declared_vars: FrozenSet[str] = frozenset(self.get_variables())
-        in_scope_block: FrozenSet[str] = declared_vars if root else in_scope.difference(declared_vars)
-        sub_promises: List[ConditionalPromiseABC] = []
-        for s in self.__stmts:
-            try:
-                sub_promises.extend(s.emit_progression_promises(resolver, queue, in_scope=in_scope_block, root=root))
-            except RuntimeException as e:
-                e.set_statement(s)
-                raise e
-        return ConditionalPromiseBlock(sub_promises=sub_promises)
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        self.emit_progression_promises(resolver, queue, root=True)
         for s in self.__stmts:
             try:
                 s.emit(resolver, queue)

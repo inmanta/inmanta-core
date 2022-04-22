@@ -72,65 +72,6 @@ class Statement(Namespaced):
         return iter(())
 
 
-# TODO: remove
-class ConditionalPromiseABC(ProgressionPromiseABC):
-    """
-    Promise for progression that might or might not be made depending on a condition. Can be either picked or dropped when the
-    condition becomes known.
-    """
-
-    def pick(self) -> None:
-        """
-        Fulfills this promise with the additional context that further progression will be made by newly emitted statements
-        and/or promises.
-        """
-        # for simple conditional promises the context is irrelevant, just fulfill the promise
-        self.fulfill()
-
-    def drop(self) -> None:
-        """
-        Fulfills this promise with the additional context that the potential progression for this promise will never occur.
-        """
-        # for simple conditional promises the context is irrelevant, just fulfill the promise
-        self.fulfill()
-
-
-# TODO: could be a lot cleaner if this is mutable so classes don't need to store a list of blocks that differ only in reference
-#       scope, but how to merge? Might need a different data structure alltogether. First make it work with this one, then clean
-#       up
-@dataclass(frozen=True)
-class ConditionalPromiseBlock(ConditionalPromiseABC):
-    """
-    Conditional promise for a whole block. Contains promises for statements in the block. Dropping a block means dropping
-    everything below it while picking a block means fulfilling the immediate promises of this block and leaving nested
-    conditional block promises hanging (their condition isn't known yet).
-    """
-
-    sub_promises: Sequence[ConditionalPromiseABC]
-
-    def fulfill(self) -> None:
-        """
-        Fulfills this promise without fulfilling any of its sub promises.
-        """
-        pass
-
-    def pick(self) -> None:
-        """
-        Fulfills all promises in the block without recursing on nested blocks.
-        """
-        for promise in self.sub_promises:
-            promise.fulfill()
-        self.fulfill()
-
-    def drop(self) -> None:
-        """
-        Drops all promises in the block, recursing on nested blocks.
-        """
-        for promise in self.sub_promises:
-            promise.drop()
-        self.fulfill()
-
-
 class DynamicStatement(Statement):
     """
     This class represents all statements that have dynamic properties.
@@ -147,28 +88,6 @@ class DynamicStatement(Statement):
     def requires(self) -> List[str]:
         """List of all variable names used by this statement"""
         raise NotImplementedError()
-
-    # TODO: remove
-    # TODO: implement in For, Implement/SubConstructor
-    # TODO: name: emit_eager_promises? emit_conditional_promises?
-    def emit_progression_promises(
-        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
-    ) -> Sequence[ConditionalPromiseABC]:
-        """
-        Emits progression promises for this statement if emitting it would make progression towards any of the in scope
-        variables' completeness and returns these promises. The caller is responsible for fulfilling each of these promises,
-        either by picking them or by dropping them.
-
-        Expected to be called after normalization and before emit. May be called multiple times with different scopes.
-
-        :param resolver: Resolver for the parent context promises should be acquired on.
-        :param in_scope: Set of variables that are considered in scope. Promises will only be acquired for these variables or
-            their attributes. This allows to emit promises only relative to a certain parent context, excluding sibling and/or
-            intermediate parent (shadowed) declarations.
-        :param root: If true, this statement lives in the root reference scope, in which case the in scope names are considered
-            siblings and only promises for nested blocks should be emitted.
-        """
-        return []
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
@@ -353,16 +272,16 @@ class StaticEagerPromise:
     :ivar attribute: The attribute name for which to acquire a promise.
     :ivar statement: The assignment statement that led to this promise.
     """
-    instance: "Reference" = instance
-    attribute: str = attribute
-    statement: "SetAttribute" = statement
+    instance: "Reference"
+    attribute: str
+    statement: "SetAttribute"
 
     def get_root_variable(self) -> str:
         """
         Returns the name of the variable at the start of the attribute traversal chain. e.g. for a.b.c.d, returns "a". Includes
         namespace information if specified in the original reference.
         """
-        return self.assignment.instance.get_root_variable().name
+        return self.instance.get_root_variable().name
 
     def schedule(self, responsible: DynamicStatement, resolver: Resolver, queue_scheduler: QueueScheduler) -> "EagerPromise":
         """
@@ -379,8 +298,8 @@ class StaticEagerPromise:
             variable_resumer=dynamic,
         )
         # TODO: clean up copy_location
-        self.assignment.copy_location(dynamic)
-        self.assignment.copy_location(hook)
+        self.statement.copy_location(dynamic)
+        self.statement.copy_location(hook)
         waiter: Waiter = hook.schedule(resolver, queue)
         dynamic.set_waiter(waiter)
 

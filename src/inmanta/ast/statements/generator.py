@@ -39,8 +39,6 @@ from inmanta.ast import (
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import (
-    ConditionalPromiseABC,
-    ConditionalPromiseBlock,
     ExpressionStatement,
     RawResumer,
     RequiresEmitStatement,
@@ -93,8 +91,8 @@ class SubConstructor(ExpressionStatement):
             # implementations live in the namespace's context rather than the constructor's context so for promises that cross
             # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
             promise.replace(instance=promise.instance.fully_qualified())
-            for block in self.implements.implementations.statements
-            for promise in block.get_eager_promises()
+            for implementation in self.implements.implementations
+            for promise in implementation.statements.get_eager_promises()
             if promise.get_root_variable() not in injected_variables
         ]
 
@@ -256,8 +254,6 @@ class If(ExpressionStatement):
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
-        self._if_promises: List[ConditionalPromiseBlock] = []
-        self._else_promises: List[ConditionalPromiseBlock] = []
         self.anchors.extend(condition.get_anchors())
         self.anchors.extend(if_branch.get_anchors())
         self.anchors.extend(else_branch.get_anchors())
@@ -272,21 +268,6 @@ class If(ExpressionStatement):
         self.if_branch.normalize()
         self.else_branch.normalize()
         self.eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
-
-    def emit_progression_promises(
-        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = False
-    ) -> Sequence[ConditionalPromiseABC]:
-        if_block: ConditionalPromiseBlock
-        else_block: ConditionalPromiseBlock
-        if_block, else_block = (
-            branch.emit_progression_promises(resolver, queue, in_scope=in_scope, root=False)
-            for branch in (self.if_branch, self.else_branch)
-        )
-        # TODO: not very efficient: method gets called for each distinct wrapping scope so promise blocks keep stacking up
-        #       and are currently never cleaned up => when branch is picked, a lot of already fulfilled promises are iterated
-        self._if_promises.append(if_block)
-        self._else_promises.append(if_block)
-        return [*self._if_promises, *self._else_promises]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.condition.requires_emit(resolver, queue)
@@ -305,12 +286,6 @@ class If(ExpressionStatement):
             e.set_statement(self)
             e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
             raise e
-        # resolve progression promises
-        picked, dropped = (self._if_promises, self._else_promises) if cond else (self._else_promises, self._if_promises)
-        for p in picked:
-            p.pick()
-        for d in dropped:
-            d.drop()
         # schedule appropriate branch body
         branch: BasicBlock = self.if_branch if cond else self.else_branch
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))

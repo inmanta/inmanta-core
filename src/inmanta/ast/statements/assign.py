@@ -38,13 +38,10 @@ from inmanta.ast import (
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
     AssignStatement,
-    ConditionalPromiseABC,
     ExpressionStatement,
     Resumer,
     Statement,
     StaticEagerPromise,
-    VariableReferenceHook,
-    EagerPromise,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -216,28 +213,6 @@ class SetAttribute(AssignStatement, Resumer):
             return
         node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
         node.assign(self.value.get_dataflow_node(graph), self, graph)
-
-    def emit_progression_promises(
-        self, resolver: Resolver, queue: QueueScheduler, *, in_scope: FrozenSet[str], root: bool = True
-    ) -> Sequence[ConditionalPromiseABC]:
-        if root:
-            return []
-        # TODO: handle explicit namespace references, are they always in scope (think not)? If so, add to parent docstring.
-        #       If not, how to deal with them?
-        # TODO: this check is a temporary hack, clean it up!
-        if "::" in self.instance.name or self.instance.name.split(".", 1)[0] not in in_scope:
-            return []
-
-        promise: EagerPromise = EagerPromise(provider=self)
-        hook: VariableReferenceHook = VariableReferenceHook(
-            self.instance,
-            self.attribute_name,
-            variable_resumer=promise,
-        )
-        self.copy_location(promise)
-        self.copy_location(hook)
-        hook.schedule(resolver, queue)
-        return [promise]
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
