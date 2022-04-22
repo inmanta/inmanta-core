@@ -1,5 +1,6 @@
 description: Remove pytest.ini and move its content to pyproject.toml
 issue-nr: 1071
+issue-repo: irt
 change-type: patch
 destination-branches: [iso5, master]
 sections: {
