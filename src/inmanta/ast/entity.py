@@ -141,9 +141,7 @@ class Entity(EntityLike, NamedType):
                         exception.location = attribute.location
                     raise exception
 
-        for d in self.implementations:
-            d.normalize()
-
+        # normalize implements but not implementations because they contain subblocks that require full type normalization first
         for i in self.implements:
             i.normalize()
 

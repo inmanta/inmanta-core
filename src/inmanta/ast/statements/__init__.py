@@ -112,7 +112,7 @@ class RequiresEmitStatement(DynamicStatement):
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
         promises: ResultVariable = ResultVariable()
-        promises.set_value(self.schedule_eager_promises())
+        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
         reqs[EagerPromise] = promises
         ExecutionUnit(queue, resolver, target, reqs, self)
 
@@ -198,27 +198,27 @@ class VariableReferenceHook(RawResumer):
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
-    def schedule(self, resolver: Resolver, queue_scheduler: QueueScheduler) -> Waiter:
+    def schedule(self, resolver: Resolver, queue: QueueScheduler) -> Waiter:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
         return RawUnit(
-            queue_scheduler,
+            queue,
             resolver,
             # TODO: instance could be None, why does this not fail test cases -> add tests for is defined on local var / implicit self?
             # TODO: shouldn't we do gradual execution on self.instance as well?
-            self.instance.requires_emit(resolver, queue_scheduler) if self.instance is not None else {},
+            self.instance.requires_emit(resolver, queue) if self.instance is not None else {},
             self,
         )
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
         variable: ResultVariable[object]
         if self.instance is not None:
             # get the Instance
-            instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
+            instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
 
             if isinstance(instance, list):
                 raise RuntimeException(self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance))
@@ -237,7 +237,7 @@ class VariableReferenceHook(RawResumer):
                 raise RuntimeException(self, "can not get variable %s, it is a type" % self.name)
             variable = obj
 
-        self.variable_resumer.resume(variable, resolver, queue_scheduler)
+        self.variable_resumer.resume(variable, resolver, queue)
 
     # TODO: execute method implementation required -> return None? Don't implement? Why even is RawResumer(ExpressionStatement)?
 
@@ -254,7 +254,7 @@ class VariableResumer(Locatable):
         self,
         variable: ResultVariable,
         resolver: Resolver,
-        queue_scheduler: QueueScheduler,
+        queue: QueueScheduler,
     ) -> None:
         raise NotImplementedError()
 
@@ -283,7 +283,7 @@ class StaticEagerPromise:
         """
         return self.instance.get_root_variable().name
 
-    def schedule(self, responsible: DynamicStatement, resolver: Resolver, queue_scheduler: QueueScheduler) -> "EagerPromise":
+    def schedule(self, responsible: DynamicStatement, resolver: Resolver, queue: QueueScheduler) -> "EagerPromise":
         """
         Schedule the acquisition of this promise in a given dynamic context: set up a waiter to wait for the referenced
         ResultVariable to exist, then acquire the promise.
@@ -294,7 +294,7 @@ class StaticEagerPromise:
         dynamic: "EagerPromise" = EagerPromise(self, responsible)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
-            self.attribute_name,
+            self.attribute,
             variable_resumer=dynamic,
         )
         # TODO: clean up copy_location
@@ -350,7 +350,7 @@ class EagerPromise(VariableResumer):
         self,
         variable: ResultVariable,
         resolver: Resolver,
-        queue_scheduler: QueueScheduler,
+        queue: QueueScheduler,
     ) -> None:
         self._acquire(variable)
 
@@ -426,7 +426,7 @@ class Literal(ExpressionStatement):
         return {}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         return self.value
 
     def execute_direct(self, requires: Dict[object, object]) -> object:

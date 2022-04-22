@@ -114,7 +114,7 @@ class CreateList(ReferenceStatement):
         """
         Create this list
         """
-        super().execute()
+        super().execute(requires, resolver, queue)
 
         # gradual case, everything is in placeholder
         if self in requires:
@@ -176,7 +176,7 @@ class CreateDict(ReferenceStatement):
         """
         Create this list
         """
-        super().execute()
+        super().execute(requires, resolver, queue)
         qlist = {}
 
         for i in range(len(self.items)):
@@ -366,7 +366,7 @@ class MapLookup(ReferenceStatement):
         self.location = themap.get_location().merge(key.location)
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         mapv = self.themap.execute(requires, resolver, queue)
         if not isinstance(mapv, dict):
             raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
@@ -431,7 +431,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         )
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -525,7 +525,7 @@ class StringFormat(ReferenceStatement):
         self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)

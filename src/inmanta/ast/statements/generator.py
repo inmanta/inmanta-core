@@ -109,7 +109,7 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
-        super().execute()
+        super().execute(requires, resolver, queue)
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
@@ -223,7 +223,7 @@ class For(RequiresEmitStatement):
         """
         Evaluate this statement.
         """
-        super().execute()
+        super().execute(requires, resolver, queue)
         var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
@@ -276,7 +276,7 @@ class If(ExpressionStatement):
         """
         Evaluate this statement.
         """
-        super().execute()
+        super().execute(requires, resolver, queue)
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
             return None
@@ -335,7 +335,7 @@ class ConditionalExpression(ExpressionStatement):
         return {self: result}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -536,7 +536,7 @@ class Constructor(ExpressionStatement):
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
-        super().execute()
+        super().execute(requires, resolver, queue)
 
         # the type to construct
         type_class = self.type.get_entity()
@@ -708,7 +708,7 @@ class WrappedKwargs(ExpressionStatement):
         return self.dictionary.requires_emit(resolver, queue)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
-        super().execute()
+        super().execute(requires, resolver, queue)
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

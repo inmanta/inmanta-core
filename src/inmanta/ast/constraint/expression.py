@@ -92,7 +92,7 @@ class IsDefined(ReferenceStatement):
         return {self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         # helper returned: return result
         return requires[self]
 
@@ -142,7 +142,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         return self.__name
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute()
+        super().execute(requires, resolver, queue)
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -263,7 +263,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
-        super().execute()
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def _is_final(self, result: bool) -> bool:
