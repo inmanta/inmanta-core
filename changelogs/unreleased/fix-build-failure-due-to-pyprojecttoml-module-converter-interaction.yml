@@ -1,0 +1,4 @@
+change-type: patch
+description: fix build failure caused by interaction between pyproject.toml and module converter
+destination-branches: [master, iso5]
+sections: {}
