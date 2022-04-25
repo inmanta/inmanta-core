@@ -99,7 +99,7 @@ class BasicBlock(object):
         return [
             promise
             for statement in self.get_stmts()
-            for promise in statement.eager_promises
+            for promise in statement.get_all_eager_promises()
             if promise.get_root_variable() not in declared_variables
         ]
 

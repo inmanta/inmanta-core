@@ -87,7 +87,7 @@ class SubConstructor(ExpressionStatement):
 
     def normalize(self) -> None:
         injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
-        self.eager_promises = [
+        self._own_eager_promises = [
             # implementations live in the namespace's context rather than the constructor's context so for promises that cross
             # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
             promise.replace(instance=promise.instance.fully_qualified())
@@ -183,7 +183,7 @@ class For(RequiresEmitStatement):
 
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
         super().__init__()
-        self.base = variable
+        self.base: ExpressionStatement = variable
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
         self.module = module
@@ -198,8 +198,10 @@ class For(RequiresEmitStatement):
         # self.loop_var.normalize(resolver)
         self.module.normalize()
         self.module.add_var(self.loop_var, self)
-        # TODO: self.base could have control flow as well (`[A(), A()]`), same for `if`, `when`, ...?
-        self.eager_promises = self.module.get_eager_promises()
+        self._own_eager_promises = self.module.get_eager_promises()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         base = self.base.requires()
@@ -263,13 +265,15 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    # TODO: document this behavior somewhere
-    # TODO: add rationale somewhere: ? circular logic always nondeterministic in terms of model (deterministic only due to compilation order, which is out of scope of the model) ?
+    # TODO: document eager promising somewhere
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
-        self.eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
+        self._own_eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return {**super().requires_emit(resolver, queue), **self.condition.requires_emit(resolver, queue)}
@@ -319,7 +323,10 @@ class ConditionalExpression(ExpressionStatement):
         self.condition.normalize()
         self.if_expression.normalize()
         self.else_expression.normalize()
-        # TODO: acquire promises + test
+        self._own_eager_promises = self.if_expression.get_all_eager_promises() + self.else_expression.get_all_eager_promises()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
@@ -501,10 +508,16 @@ class Constructor(ExpressionStatement):
             else:
                 self._direct_attributes[k] = v
 
-        self.eager_promises = list(
+        self._own_eager_promises = list(
             chain.from_iterable(
                 subconstructor.eager_promises for subconstructor in self.type.get_entity().get_sub_constructor()
             )
+        )
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(
+            super().get_all_eager_promises(),
+            *(subexpr.get_all_eager_promises() for subexpr in chain(self.attributes.values(), self.wrapped_kwargs))
         )
 
     def requires(self) -> List[str]:
@@ -704,6 +717,9 @@ class WrappedKwargs(ExpressionStatement):
     def normalize(self) -> None:
         self.dictionary.normalize()
         # TODO: acquire promises + test
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.dictionary.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         return self.dictionary.requires()

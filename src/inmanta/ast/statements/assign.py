@@ -83,6 +83,7 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> typing.Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit_gradual(resolver, queue, resultcollector)
 
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
@@ -108,7 +109,7 @@ class CreateList(ReferenceStatement):
             temp.freeze()
 
         # pass temp
-        return {self: temp}
+        return {**parent_req, self: temp}
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -206,7 +207,11 @@ class SetAttribute(AssignStatement, Resumer):
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
-        self.eager_promises = [StaticEagerPromise(self.instance, self.attribute_name, self)]
+        self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        # propagate this attribute assignment's promise to parent blocks
+        return chain(super().get_all_eager_promises(), [self._assignment_promise])
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
@@ -214,7 +219,6 @@ class SetAttribute(AssignStatement, Resumer):
         node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
-    # TODO: if this does not pass EagerPromise, execute should be overridden to not access it
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
@@ -408,7 +412,6 @@ class IndexLookup(ReferenceStatement, Resumer):
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
-        # TODO: acquire promises + test?
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
         parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)

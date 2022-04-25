@@ -75,7 +75,7 @@ class IsDefined(ReferenceStatement):
         self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -90,7 +90,7 @@ class IsDefined(ReferenceStatement):
         hook.schedule(resolver, queue)
 
         # wait for the attribute value
-        return {**parent_req, self: temp}
+        return {**promises, self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -219,15 +219,23 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
 
+    def normalize(self) -> None:
+        super().normalize()
+        # lazy execution: we don't immediately emit the second operator so we need to hold its promises until we do
+        self._own_eager_promises = self.children[1].get_all_eager_promises()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
+
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
 
         # wait for the lhs
         HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
-        return {**parent_req, self: temp}
+        return {**promises, self: temp}
 
     def _validate_value(self, value: object, side: int) -> None:
         try:
@@ -245,6 +253,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         result = self.children[0].execute(requires, resolver, queue)
         self._validate_value(result, 0)
         assert isinstance(result, bool)
+        # second operand will get emitted now or never, no need to hold its promises any longer
+        self._fulfill_promises(requires)
         if self._is_final(result):
             target.set_value(result, self.location)
         else:
@@ -264,8 +274,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
             return rhs
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        # no need to fulfill promises, already done in resume
         # helper returned: return result
-        super().execute(requires, resolver, queue)
         return requires[self]
 
     def _is_final(self, result: bool) -> bool:

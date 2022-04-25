@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from itertools import chain
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
@@ -24,7 +25,6 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
     Instance,
-    ProgressionPromiseABC,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -80,7 +80,20 @@ class DynamicStatement(Statement):
 
     def __init__(self) -> None:
         Statement.__init__(self)
-        self.eager_promises: Sequence["StaticEagerPromise"] = []
+        self._own_eager_promises: Sequence["StaticEagerPromise"] = []
+
+    def get_own_eager_promises(self) -> Sequence["StaticEagerPromise"]:
+        """
+        Returns all eager promises this statement itself is responsible for.
+        """
+        return self._own_eager_promises
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        """
+        Returns all eager promises for this statement, including eager promises on sub-expressions in case of composition.
+        These are the promises that should be acquired by parent blocks.
+        """
+        return iter(self._own_eager_promises)
 
     def normalize(self) -> None:
         raise NotImplementedError()
@@ -119,14 +132,9 @@ class RequiresEmitStatement(DynamicStatement):
         break execution is smaller segments.
         Additionally schedules this statement's eager promises and includes them (wrapped in a result variable) in the requires
         dict in order to pass it on to the execution phase.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
         """
-        promises: ResultVariable = ResultVariable()
-        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
-        # TODO: this key might not suffice: will conflict with sub-requires_emit calls, go with (self, EagerPromise)?
-        #   or turn around so parent always overrides child
-        # TODO: think about sub-requires_emit and whether they will always be able to resolve promises (reach an execute)
-        #   If so, add to this docstring that calling requires_emit is a contract to call execute later on
-        return {EagerPromise: promises}
+        return self._requires_emit_promises(resolver, queue)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
@@ -134,25 +142,40 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
         """
-        # TODO: when called this will also acquire promises
-        return self.requires_emit(resolver, queue)
+        return self._requires_emit_promises(resolver, queue)
+
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        """
+        Acquires eager promises this statement is responsible for and returns them, wrapped in a result variable, in a requires
+        dict.
+        """
+        promises: ResultVariable = ResultVariable()
+        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
+        return {(self, EagerPromise): promises}
+
+    def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
+        """
+        Schedules this statement's eager promises to be acquired in the given dynamic context.
+        """
+        return [promise.schedule(self, resolver, queue) for promise in self.get_own_eager_promises()]
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         execute the statement, give the values provided in the requires dict.
         These values correspond to the values requested via requires_emit
         """
-        promises: Sequence["EagerPromise"] = requires[EagerPromise]
-        for promise in promises:
-            promise.fulfill()
+        self._fulfill_promises(requires)
         return None
 
-    def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
+    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
         """
-        Schedules this statement's eager promises to be acquired in the given dynamic context.
+        Given a requires dict, fulfills this statements dynamic promises
         """
-        return [promise.schedule(self, resolver, queue) for promise in self.eager_promises]
+        promises: Sequence["EagerPromise"] = requires[(self, EagerPromise)]
+        for promise in promises:
+            promise.fulfill()
 
 
 class ExpressionStatement(RequiresEmitStatement):
@@ -368,13 +391,18 @@ class ReferenceStatement(ExpressionStatement):
 
     def __init__(self, children: List[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
-        self.children = children
+        self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self) -> None:
         for c in self.children:
             c.normalize()
-        # TODO: acquire promises + test? What about child classes? Add to design document
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(
+            super().get_all_eager_promises(),
+            *(subexpr.get_all_eager_promises() for subexpr in self.children)
+        )
 
     def requires(self) -> List[str]:
         return [req for v in self.children for req in v.requires()]
@@ -401,6 +429,9 @@ class AssignStatement(DynamicStatement):
 
     def normalize(self) -> None:
         self.rhs.normalize()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.lhs.get_all_eager_promises(), self.rhs.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         out = self.lhs.requires()  # type : List[str]

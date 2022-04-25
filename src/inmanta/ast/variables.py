@@ -57,18 +57,19 @@ class Reference(ExpressionStatement):
         return [self.full_name]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        # FIXME: may be done more efficient?
         parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
+        # FIXME: may be done more efficient?
         out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return {**parent_req, **out}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit_gradual(resolver, queue, resultcollector)
         var = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
         out = {self.name: var}  # type : Dict[object, ResultVariable]
-        return out
+        return {**parent_req, **out}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -246,12 +247,13 @@ class AttributeReference(Reference):
         return self.instance.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
-        return {**parent_req, **self.requires_emit_gradual(resolver, queue, None)}
+        return self.requires_emit_gradual(resolver, queue, None)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> Dict[object, ResultVariable]:
+        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
@@ -269,7 +271,7 @@ class AttributeReference(Reference):
         hook.schedule(resolver, queue)
 
         # wait for the attribute value
-        return {self: temp}
+        return {**promises, self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
