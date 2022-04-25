@@ -58,8 +58,9 @@ class Reference(ExpressionStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # FIXME: may be done more efficient?
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
         out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
-        return out
+        return {**parent_req, **out}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
@@ -245,7 +246,8 @@ class AttributeReference(Reference):
         return self.instance.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.requires_emit_gradual(resolver, queue, None)
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
+        return {**parent_req, **self.requires_emit_gradual(resolver, queue, None)}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]

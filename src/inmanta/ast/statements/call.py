@@ -90,11 +90,12 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
+        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
         FunctionUnit(queue, resolver, temp, sub, self)
-        return {self: temp}
+        return {**parent_req, self: temp}
 
     def execute(self, requires, resolver, queue):
         super().execute(requires, resolver, queue)

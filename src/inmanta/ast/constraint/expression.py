@@ -75,6 +75,7 @@ class IsDefined(ReferenceStatement):
         self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -89,7 +90,7 @@ class IsDefined(ReferenceStatement):
         hook.schedule(resolver, queue)
 
         # wait for the attribute value
-        return {self: temp}
+        return {**parent_req, self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -219,13 +220,14 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         Operator.__init__(self, name, [op1, op2])
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
 
         # wait for the lhs
         HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
-        return {self: temp}
+        return {**parent_req, self: temp}
 
     def _validate_value(self, value: object, side: int) -> None:
         try:

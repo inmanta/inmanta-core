@@ -97,9 +97,10 @@ class SubConstructor(ExpressionStatement):
         ]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
         try:
             resv = resolver.for_namespace(self.implements.constraint.namespace)
-            return self.implements.constraint.requires_emit(resv, queue)
+            return {**parent_req, **self.implements.constraint.requires_emit(resv, queue)}
         except NotFoundException as e:
             e.set_statement(self.implements)
             raise e
@@ -197,6 +198,7 @@ class For(RequiresEmitStatement):
         # self.loop_var.normalize(resolver)
         self.module.normalize()
         self.module.add_var(self.loop_var, self)
+        # TODO: self.base could have control flow as well (`[A(), A()]`), same for `if`, `when`, ...?
         self.eager_promises = self.module.get_eager_promises()
 
     def requires(self) -> List[str]:
@@ -207,6 +209,7 @@ class For(RequiresEmitStatement):
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """Not an actual expression, but following the pattern"""
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
 
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
@@ -215,9 +218,8 @@ class For(RequiresEmitStatement):
         helperwrapped.set_value(helper, self.location)
 
         basereq = self.base.requires_emit_gradual(resolver, queue, helper)
-        basereq[self] = helperwrapped
 
-        return basereq
+        return {**parent_req, **basereq, self: helperwrapped}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -270,7 +272,7 @@ class If(ExpressionStatement):
         self.eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.condition.requires_emit(resolver, queue)
+        return {**super().requires_emit(resolver, queue), **self.condition.requires_emit(resolver, queue)}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -323,6 +325,7 @@ class ConditionalExpression(ExpressionStatement):
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
         # This ResultVariable will receive the result of this expression
         result: ResultVariable = ResultVariable()
 
@@ -332,7 +335,7 @@ class ConditionalExpression(ExpressionStatement):
         RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
 
         # Wait for the result variable to be populated
-        return {self: result}
+        return {**parent_req, self: result}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -511,6 +514,7 @@ class Constructor(ExpressionStatement):
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
@@ -529,7 +533,7 @@ class Constructor(ExpressionStatement):
             for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
-        return direct_requires
+        return {**parent_req, **direct_requires}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
@@ -705,7 +709,7 @@ class WrappedKwargs(ExpressionStatement):
         return self.dictionary.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.dictionary.requires_emit(resolver, queue)
+        return {**super().requires_emit(resolver, queue), **self.dictionary.requires_emit(resolver, queue)}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
         super().execute(requires, resolver, queue)

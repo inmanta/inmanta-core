@@ -111,17 +111,22 @@ class RequiresEmitStatement(DynamicStatement):
         """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
-        promises: ResultVariable = ResultVariable()
-        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
-        reqs[EagerPromise] = promises
         ExecutionUnit(queue, resolver, target, reqs, self)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
-        returns a dict of the result variables required, names are an opaque identifier
-        may emit statements to break execution is smaller segments
+        Returns a dict of the result variables required for execution. Names are an opaque identifier. May emit statements to
+        break execution is smaller segments.
+        Additionally schedules this statement's eager promises and includes them (wrapped in a result variable) in the requires
+        dict in order to pass it on to the execution phase.
         """
-        raise NotImplementedError()
+        promises: ResultVariable = ResultVariable()
+        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
+        # TODO: this key might not suffice: will conflict with sub-requires_emit calls, go with (self, EagerPromise)?
+        #   or turn around so parent always overrides child
+        # TODO: think about sub-requires_emit and whether they will always be able to resolve promises (reach an execute)
+        #   If so, add to this docstring that calling requires_emit is a contract to call execute later on
+        return {EagerPromise: promises}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
@@ -130,6 +135,7 @@ class RequiresEmitStatement(DynamicStatement):
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
         """
+        # TODO: when called this will also acquire promises
         return self.requires_emit(resolver, queue)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -374,8 +380,11 @@ class ReferenceStatement(ExpressionStatement):
         return [req for v in self.children for req in v.requires()]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return {rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()}
-
+        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
+        own_req: Mapping[object, ResultVariable] = {
+            rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()
+        }
+        return {**parent_req, **own_req}
 
 class AssignStatement(DynamicStatement):
     """
@@ -421,9 +430,6 @@ class Literal(ExpressionStatement):
 
     def requires(self) -> List[str]:
         return []
-
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return {}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)

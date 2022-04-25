@@ -214,6 +214,7 @@ class SetAttribute(AssignStatement, Resumer):
         node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
+    # TODO: if this does not pass EagerPromise, execute should be overridden to not access it
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
@@ -410,11 +411,12 @@ class IndexLookup(ReferenceStatement, Resumer):
         # TODO: acquire promises + test?
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
+        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
         HangUnit(queue, resolver, sub, temp, self)
-        return {self: temp}
+        return {**parent_req, self: temp}
 
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
