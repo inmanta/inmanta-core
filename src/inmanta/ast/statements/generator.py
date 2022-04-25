@@ -510,7 +510,7 @@ class Constructor(ExpressionStatement):
 
         self._own_eager_promises = list(
             chain.from_iterable(
-                subconstructor.eager_promises for subconstructor in self.type.get_entity().get_sub_constructor()
+                subconstructor.get_all_eager_promises() for subconstructor in self.type.get_entity().get_sub_constructor()
             )
         )
 

@@ -18,6 +18,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 from typing import Dict, List, Optional, Type
 
 import inmanta.execute.dataflow as dataflow

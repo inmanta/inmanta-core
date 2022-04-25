@@ -19,8 +19,9 @@
 # pylint: disable-msg=W0613
 
 import typing
+from collections.abc import Iterator
 from itertools import chain
-from typing import Dict, FrozenSet, Optional, Sequence, TypeVar
+from typing import Dict, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
