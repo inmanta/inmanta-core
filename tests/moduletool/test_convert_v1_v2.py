@@ -70,12 +70,13 @@ def test_issue_3159_conversion_std_module_add_self_to_dependencies(tmpdir):
     doesn't include the std module as a requirement in the setup.cfg file.
     """
     clone_dir = os.path.join(tmpdir, "std")
+    v2_dir = os.path.join(tmpdir, "std_v2")
     subprocess.check_call(["git", "clone", "https://github.com/inmanta/std.git", clone_dir])
     dummyproject = DummyProject()
     module_in = ModuleV1(dummyproject, clone_dir)
-    ModuleConverter(module_in).convert_in_place()
+    ModuleConverter(module_in).convert(v2_dir)
 
-    setup_cfg_file = os.path.join(clone_dir, "setup.cfg")
+    setup_cfg_file = os.path.join(v2_dir, "setup.cfg")
     parser = configparser.ConfigParser()
     parser.read(setup_cfg_file)
     assert parser.has_option("options", "install_requires")
