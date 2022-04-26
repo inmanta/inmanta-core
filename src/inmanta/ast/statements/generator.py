@@ -110,7 +110,7 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
-        super().execute(requires, resolver, queue)
+        super().execute(requires, instance, queue)
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
@@ -270,7 +270,9 @@ class If(ExpressionStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
-        self._own_eager_promises = self.if_branch.get_eager_promises() + self.else_branch.get_eager_promises()
+        self._own_eager_promises = [
+            *self.if_branch.get_all_eager_promises(), *self.else_branch.get_all_eager_promises()
+        ]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
@@ -323,7 +325,9 @@ class ConditionalExpression(ExpressionStatement):
         self.condition.normalize()
         self.if_expression.normalize()
         self.else_expression.normalize()
-        self._own_eager_promises = self.if_expression.get_all_eager_promises() + self.else_expression.get_all_eager_promises()
+        self._own_eager_promises = [
+            *self.if_expression.get_all_eager_promises(), *self.else_expression.get_all_eager_promises()
+        ]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())

@@ -423,8 +423,10 @@ def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
     | IMPLEMENT class_ref USING implement_ns_list MLS"""
     (inherit, implementations) = p[4]
-    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
+    when: Literal = Literal(True)
+    p[0] = DefineImplement(p[2], implementations, when, inherit=inherit, comment=p[5])
     attach_lnr(p)
+    p[0].copy_location(when)
 
 
 def p_implement_when(p: YaccProduction) -> None:

@@ -359,7 +359,7 @@ class EagerPromise(VariableResumer):
             # already fulfilled, no need to acquire progression promise anymore
             return
         assert self._promise is None
-        self._promise = variable.get_progression_promise(self.provider)
+        self._promise = variable.get_progression_promise(self.responsible)
 
     def fulfill(self) -> None:
         """
