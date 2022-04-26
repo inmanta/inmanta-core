@@ -99,7 +99,9 @@ class Reference(ExpressionStatement):
         locatable: LocatableString = LocatableString(
             fully_qualified_name, Range("__internal__", 1, 1, 1, 1), -1, self.namespace
         )
-        return self.__class__(locatable)
+        result: R = self.__class__(locatable)
+        result.location = locatable.location
+        return result
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:

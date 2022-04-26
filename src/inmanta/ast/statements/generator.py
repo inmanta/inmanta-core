@@ -84,6 +84,7 @@ class SubConstructor(ExpressionStatement):
 
     def normalize(self) -> None:
         injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
+        # TODO: implementation blocks have not normalized yet...
         self._own_eager_promises = [
             # implementations live in the namespace's context rather than the constructor's context so for promises that cross
             # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.

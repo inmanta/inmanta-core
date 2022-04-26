@@ -210,6 +210,7 @@ class RawResumer(ExpressionStatement):
         pass
 
 
+# TODO: review this and related classes with Wouter's feedback about Resumer semantics in mind
 class VariableReferenceHook(RawResumer):
     """
     Generic helper class for adding a hook to a variable (ResultVariable) object. Supports both plain variables and instance
@@ -419,10 +420,10 @@ class AssignStatement(DynamicStatement):
     This class models binary sts
     """
 
-    def __init__(self, lhs: "Reference", rhs: ExpressionStatement) -> None:
+    def __init__(self, lhs: Optional["Reference"], rhs: ExpressionStatement) -> None:
         DynamicStatement.__init__(self)
-        self.lhs = lhs
-        self.rhs = rhs
+        self.lhs: Optional["Reference"] = lhs
+        self.rhs: ExpressionStatement = rhs
         if lhs is not None:
             self.anchors.extend(lhs.get_anchors())
         self.anchors.extend(rhs.get_anchors())
@@ -431,10 +432,14 @@ class AssignStatement(DynamicStatement):
         self.rhs.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
-        return chain(super().get_all_eager_promises(), self.lhs.get_all_eager_promises(), self.rhs.get_all_eager_promises())
+        return chain(
+            super().get_all_eager_promises(),
+            (self.lhs.get_all_eager_promises() if self.lhs is not None else []),
+            self.rhs.get_all_eager_promises(),
+        )
 
     def requires(self) -> List[str]:
-        out = self.lhs.requires()  # type : List[str]
+        out = self.lhs.requires() if self.lhs is not None else []  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
 

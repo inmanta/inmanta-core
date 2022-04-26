@@ -90,18 +90,6 @@ class ISetPromise(IPromise, Generic[T]):
         pass
 
 
-class ProgressionPromiseABC(IPromise):
-    """
-    A promise to the owner to progress towards setting a value, for example by emitting additional statements.
-    """
-
-    def fulfill(self) -> None:
-        """
-        Considers this promise fulfilled. No further progression is expected. Idempotent.
-        """
-        raise NotImplementedError()
-
-
 class ProgressionPromise(IPromise):
     """
     A promise from a provider to the owner to progress towards setting a value, for example by emitting additional statements.
@@ -115,7 +103,7 @@ class ProgressionPromise(IPromise):
 
     def fulfill(self) -> None:
         """
-        Fulfills this promise by notifying the owner. Idempotent.
+        Fulfills this promise by notifying the owner. No further progression is expected. Idempotent.
         """
         self.owner.fulfill(self)
 
@@ -155,7 +143,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         # TODO: not used by plain RV, document or move down (perhaps have this method return Optional[ISetPromise] as below?)
         return self
 
-    # TODO: acquire in if-else, ... Make sure to take into account (and add test) that nested ifs might never get emitted
+    # TODO: Make sure to add test for the scenario where nested ifs might never get emitted
     #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
     def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
         """
