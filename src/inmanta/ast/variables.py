@@ -65,11 +65,11 @@ class Reference(ExpressionStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit_gradual(resolver, queue, resultcollector)
+        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
         out: Mapping[object, ResultVariable] = {self.name: var}
-        return {**parent_req, **out}
+        return {**promises, **out}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -274,7 +274,7 @@ class AttributeReference(Reference):
         return {**promises, self: temp}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+        ExpressionStatement.execute(self, requires, resolver, queue)
         # helper returned: return result
         return requires[self]
 

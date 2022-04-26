@@ -144,7 +144,7 @@ class RequiresEmitStatement(DynamicStatement):
         resultcollector as a listener to result variables.
         When this method is called, the caller must make sure to eventually call `execute` as well.
         """
-        return self._requires_emit_promises(resolver, queue)
+        return self.requires_emit(resolver, queue)
 
     def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
@@ -349,7 +349,6 @@ class EagerPromise(VariableResumer):
         self.responsible: DynamicStatement = responsible
         self._waiter: Optional[Waiter] = None
         self._promise: Optional[ProgressionPromise] = None
-        self._fulfilled: bool = False
 
     def set_waiter(self, waiter: Waiter) -> None:
         self._waiter = waiter
@@ -358,25 +357,25 @@ class EagerPromise(VariableResumer):
         """
         Entry point for the ResultVariable waiter: actually acquire the promise
         """
-        if self._fulfilled:
+        if self._waiter is None:
             # already fulfilled, no need to acquire progression promise anymore
             return
         assert self._promise is None
         self._promise = variable.get_progression_promise(self.responsible)
+        self._waiter = None
 
     def fulfill(self) -> None:
         """
         If a promise was already acquired, fulfills it, otherwise cancels the waiter so no new promise is acquired when the
         variable becomes available.
         """
-        if self._fulfilled:
+        if self._waiter is None:
             # already fulfilled, no need to continue
             return
-        if self._waiter is not None:
-            self._waiter.queue.remove_from_all(self._waiter)
+        self._waiter.queue.remove_from_all(self._waiter)
         if self._promise is not None:
             self._promise.fulfill()
-        self._fulfilled = True
+        self._waiter = None
 
     def resume(
         self,

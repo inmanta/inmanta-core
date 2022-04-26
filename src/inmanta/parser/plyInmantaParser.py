@@ -874,6 +874,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
+        ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
             attribute_offsets: Iterator[int] = accumulate(
