@@ -18,13 +18,14 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
+from itertools import chain
 from typing import Dict, List, Optional, Type
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
-from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer, VariableReferenceHook
+from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer, StaticEagerPromise, VariableReferenceHook
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
@@ -223,7 +224,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def normalize(self) -> None:
         super().normalize()
         # lazy execution: we don't immediately emit the second operator so we need to hold its promises until we do
-        self._own_eager_promises = self.children[1].get_all_eager_promises()
+        self._own_eager_promises = list(self.children[1].get_all_eager_promises())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())

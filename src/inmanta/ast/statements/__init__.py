@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
@@ -39,7 +40,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
-    from inmanta.ast.variables import AttributeReferencePromise, Reference  # noqa: F401
+    from inmanta.ast.variables import Reference  # noqa: F401
     from inmanta.ast.assign import SetAttribute  # noqa: F401
 
 
@@ -331,6 +332,7 @@ class StaticEagerPromise:
         self.statement.copy_location(hook)
         waiter: Waiter = hook.schedule(resolver, queue)
         dynamic.set_waiter(waiter)
+        return dynamic
 
 
 class EagerPromise(VariableResumer):

@@ -18,7 +18,9 @@
 
 # pylint: disable-msg=W0613,R0201
 
+import dataclasses
 import logging
+from collections.abc import Mapping
 from itertools import chain
 from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
@@ -42,6 +44,7 @@ from inmanta.ast.statements import (
     ExpressionStatement,
     RawResumer,
     RequiresEmitStatement,
+    StaticEagerPromise,
 )
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
@@ -90,7 +93,7 @@ class SubConstructor(ExpressionStatement):
         self._own_eager_promises = [
             # implementations live in the namespace's context rather than the constructor's context so for promises that cross
             # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
-            promise.replace(instance=promise.instance.fully_qualified())
+            dataclasses.replace(promise, instance=promise.instance.fully_qualified())
             for implementation in self.implements.implementations
             for promise in implementation.statements.get_eager_promises()
             if promise.get_root_variable() not in injected_variables
@@ -271,7 +274,7 @@ class If(ExpressionStatement):
         self.if_branch.normalize()
         self.else_branch.normalize()
         self._own_eager_promises = [
-            *self.if_branch.get_all_eager_promises(), *self.else_branch.get_all_eager_promises()
+            *self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()
         ]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:

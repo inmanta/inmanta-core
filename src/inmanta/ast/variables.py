@@ -17,6 +17,7 @@
 """
 
 import logging
+from collections.abc import Mapping
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
@@ -59,16 +60,16 @@ class Reference(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
+        out: Mapping[object, ResultVariable] = {self.name: resolver.lookup(self.full_name)}
         return {**parent_req, **out}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, ResultVariable]:
         parent_req: Mapping[object, ResultVariable] = super().requires_emit_gradual(resolver, queue, resultcollector)
-        var = resolver.lookup(self.full_name)
+        var: ResultVariable = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out = {self.name: var}  # type : Dict[object, ResultVariable]
+        out: Mapping[object, ResultVariable] = {self.name: var}
         return {**parent_req, **out}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -99,7 +100,7 @@ class Reference(ExpressionStatement):
         locatable: LocatableString = LocatableString(
             fully_qualified_name, Range("__internal__", 1, 1, 1, 1), -1, self.namespace
         )
-        return cls(locatable)
+        return self.__class__(locatable)
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:

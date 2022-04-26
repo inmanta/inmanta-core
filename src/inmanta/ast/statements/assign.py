@@ -19,7 +19,7 @@
 # pylint: disable-msg=W0613
 
 import typing
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from itertools import chain
 from typing import Dict, Optional, TypeVar
 
@@ -40,6 +40,7 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
     AssignStatement,
     ExpressionStatement,
+    RequiresEmitStatement,
     Resumer,
     Statement,
     StaticEagerPromise,
@@ -84,7 +85,7 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> typing.Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit_gradual(resolver, queue, resultcollector)
+        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
 
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
@@ -110,7 +111,7 @@ class CreateList(ReferenceStatement):
             temp.freeze()
 
         # pass temp
-        return {**parent_req, self: temp}
+        return {**promises, self: temp}
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Set
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, Sequence
 
