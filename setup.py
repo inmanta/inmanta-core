@@ -8,7 +8,7 @@ requires = [
     "click>=8.0,<8.2",
     "colorlog~=6.0",
     "cookiecutter~=1.0",
-    "cryptography~=36.0",
+    "cryptography>=36,<38",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.15",
     "email-validator~=1.0",
