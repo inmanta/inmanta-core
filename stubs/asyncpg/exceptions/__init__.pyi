@@ -97,9 +97,6 @@ class CaseNotFoundError(_base.PostgresError):
 class CardinalityViolationError(_base.PostgresError):
     sqlstate: str = ...
 
-class DataError(_base.PostgresError):
-    sqlstate: str = ...
-
 class ArraySubscriptError(DataError):
     sqlstate: str = ...
 

@@ -27,6 +27,7 @@ import asyncpg
 from inmanta import const, data
 from inmanta.data import (
     APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
     ENVIRONMENT_AGENT_TRIGGER_METHOD,
     PURGE_ON_DELETE,
     DesiredStateVersionOrder,
@@ -93,7 +94,7 @@ class OrchestrationService(protocol.ServerSlice):
         envs = await data.Environment.get_list()
         for env_item in envs:
             # get available versions
-            n_versions = opt.server_version_to_keep.get()
+            n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
             versions = await data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)

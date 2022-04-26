@@ -2,35 +2,36 @@ from setuptools import setup, find_packages
 from os import path
 
 requires = [
-    "asyncpg",
-    "click-plugins",
-    "click",
-    "colorlog",
-    "cookiecutter",
-    "cryptography",
+    "asyncpg~=0.25",
+    "click-plugins~=1.0",
+    # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
+    "click>=8.0,<8.2",
+    "colorlog~=6.0",
+    "cookiecutter~=1.0",
+    "cryptography~=36.0",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.14",
-    "email-validator",
-    "execnet",
-    "importlib_metadata",
-    "jinja2",
-    "more-itertools",
-    "netifaces",
-    "packaging",
+    "docstring-parser>=0.10,<0.15",
+    "email-validator~=1.0",
+    "execnet~=1.0",
+    "importlib_metadata~=4.0",
+    "jinja2~=3.0",
+    "more-itertools~=8.0",
+    "netifaces~=0.11",
+    "packaging~=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
-    "ply",
+    "ply~=3.0",
     # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic!=1.9.0a1",
-    "pyformance",
-    "PyJWT",
-    "python-dateutil",
-    "pyyaml",
-    "texttable",
-    "tornado>=6.0",
-    "typing_inspect",
-    "build",
-    "ruamel.yaml",
+    "pydantic~=1.0,!=1.9.0a1",
+    "pyformance~=0.4",
+    "PyJWT~=2.0",
+    "python-dateutil~=2.0",
+    "pyyaml~=6.0",
+    "texttable~=1.0",
+    "tornado~=6.0",
+    "typing_inspect~=0.7",
+    "build~=0.7",
+    "ruamel.yaml~=0.17",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
@@ -45,7 +46,7 @@ version = "7.0.0"
 
 setup(
     version=version,
-    python_requires=">=3.6",  # also update classifiers
+    python_requires=">=3.9",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -62,9 +63,6 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
     ],
     keywords="orchestrator orchestration configurationmanagement",
