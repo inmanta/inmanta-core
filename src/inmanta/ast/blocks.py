@@ -18,16 +18,11 @@
 
 from collections.abc import Set
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, Sequence
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import (
-    StaticEagerPromise,
-    DefinitionStatement,
-    DynamicStatement,
-    Statement,
-)
+from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:

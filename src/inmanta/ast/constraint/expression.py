@@ -25,7 +25,14 @@ from typing import Dict, List, Optional, Type
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
-from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatement, Resumer, StaticEagerPromise, VariableReferenceHook
+from inmanta.ast.statements import (
+    ExpressionStatement,
+    Literal,
+    ReferenceStatement,
+    Resumer,
+    StaticEagerPromise,
+    VariableReferenceHook,
+)
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph

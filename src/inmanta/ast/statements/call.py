@@ -17,6 +17,7 @@
 """
 
 import logging
+from collections.abc import Mapping
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 

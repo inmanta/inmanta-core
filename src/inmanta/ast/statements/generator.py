@@ -22,7 +22,7 @@ import dataclasses
 import logging
 from collections.abc import Mapping
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -40,18 +40,12 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import (
-    ExpressionStatement,
-    RawResumer,
-    RequiresEmitStatement,
-    StaticEagerPromise,
-)
+from inmanta.ast.statements import ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
-    ExecutionUnit,
     Instance,
     QueueScheduler,
     RawUnit,
@@ -273,9 +267,7 @@ class If(ExpressionStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
-        self._own_eager_promises = [
-            *self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()
-        ]
+        self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
@@ -329,7 +321,8 @@ class ConditionalExpression(ExpressionStatement):
         self.if_expression.normalize()
         self.else_expression.normalize()
         self._own_eager_promises = [
-            *self.if_expression.get_all_eager_promises(), *self.else_expression.get_all_eager_promises()
+            *self.if_expression.get_all_eager_promises(),
+            *self.else_expression.get_all_eager_promises(),
         ]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -524,7 +517,7 @@ class Constructor(ExpressionStatement):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
             super().get_all_eager_promises(),
-            *(subexpr.get_all_eager_promises() for subexpr in chain(self.attributes.values(), self.wrapped_kwargs))
+            *(subexpr.get_all_eager_promises() for subexpr in chain(self.attributes.values(), self.wrapped_kwargs)),
         )
 
     def requires(self) -> List[str]:

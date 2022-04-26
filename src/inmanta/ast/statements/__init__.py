@@ -18,7 +18,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
@@ -26,22 +26,21 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
     Instance,
+    ProgressionPromise,
     QueueScheduler,
     RawUnit,
     Resolver,
     ResultCollector,
     ResultVariable,
     Typeorvalue,
-    ProgressionPromise,
     Waiter,
 )
 
-
 if TYPE_CHECKING:
+    from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
-    from inmanta.ast.assign import SetAttribute  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -235,7 +234,8 @@ class VariableReferenceHook(RawResumer):
         return RawUnit(
             queue,
             resolver,
-            # TODO: instance could be None, why does this not fail test cases -> add tests for is defined on local var / implicit self?
+            # TODO: instance could be None, why does this not fail test cases
+            #   -> add tests for is defined on local var / implicit self?
             # TODO: shouldn't we do gradual execution on self.instance as well?
             self.instance.requires_emit(resolver, queue) if self.instance is not None else {},
             self,
@@ -302,6 +302,7 @@ class StaticEagerPromise:
     :ivar attribute: The attribute name for which to acquire a promise.
     :ivar statement: The assignment statement that led to this promise.
     """
+
     instance: "Reference"
     attribute: str
     statement: "SetAttribute"
@@ -401,10 +402,7 @@ class ReferenceStatement(ExpressionStatement):
             c.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
-        return chain(
-            super().get_all_eager_promises(),
-            *(subexpr.get_all_eager_promises() for subexpr in self.children)
-        )
+        return chain(super().get_all_eager_promises(), *(subexpr.get_all_eager_promises() for subexpr in self.children))
 
     def requires(self) -> List[str]:
         return [req for v in self.children for req in v.requires()]
@@ -415,6 +413,7 @@ class ReferenceStatement(ExpressionStatement):
             rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()
         }
         return {**parent_req, **own_req}
+
 
 class AssignStatement(DynamicStatement):
     """

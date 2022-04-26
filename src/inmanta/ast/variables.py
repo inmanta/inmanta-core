@@ -33,7 +33,6 @@ from inmanta.stable_api import stable_api
 LOGGER = logging.getLogger(__name__)
 
 
-
 R = TypeVar("R", bound="Reference")
 
 
