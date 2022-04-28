@@ -44,8 +44,8 @@ def track_dataflow() -> bool:
 feature_compiler_cache: Option[bool] = Option(
     "compiler",
     "cache",
-    False,
-    "Enables the experimental caching of compiled files.",
+    True,
+    "Enables the caching of compiled files.",
     is_bool,
 )
 

@@ -26,7 +26,7 @@ import py
 import pytest
 
 from inmanta import env
-from inmanta.app import cmd_parser, compiler_features
+from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
@@ -117,16 +117,17 @@ def test_feature_flags(inmanta_config, capsys):
     out, _ = capsys.readouterr()
 
     assert out.startswith("usage:")
-    assert "--experimental-cache" in out
+    assert "--no-cache" in out
 
     parser = cmd_parser()
 
-    assert not feature_compiler_cache.get()
-
-    options, other = parser.parse_known_args(args=["compile", "--experimental-cache"])
-    compiler_features.read_options_to_config(options)
-
+    # Check that option defaults to true
     assert feature_compiler_cache.get()
+
+    options, other = parser.parse_known_args(args=["compile", "--no-cache"])
+
+    # Check that option was set to false with --no-cache
+    assert not options.feature_compiler_cache
 
 
 def test_module_help(inmanta_config, capsys):

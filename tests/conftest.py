@@ -1200,8 +1200,6 @@ def snippetcompiler(
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
     """
-    # Test with compiler cache enabled
-    compiler.config.feature_compiler_cache.set("True")
     snippetcompiler_global.setup_func(modules_dir)
     yield snippetcompiler_global
     snippetcompiler_global.tear_down_func()
