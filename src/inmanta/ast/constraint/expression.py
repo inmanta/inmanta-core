@@ -370,12 +370,6 @@ class Regex(BinaryOperator):
     def pretty_print(self) -> str:
         return "/%s/" % self.regex.pattern
 
-    def __repr__(self) -> str:
-        """
-        Return a representation of the op
-        """
-        return self.pretty_print()
-
 
 class Equals(BinaryOperator):
     """

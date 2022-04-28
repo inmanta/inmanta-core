@@ -84,7 +84,6 @@ class SubConstructor(ExpressionStatement):
 
     def normalize(self) -> None:
         injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
-        # TODO: implementation blocks have not normalized yet...
         self._own_eager_promises = [
             # implementations live in the namespace's context rather than the constructor's context so for promises that cross
             # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
@@ -93,6 +92,10 @@ class SubConstructor(ExpressionStatement):
             for promise in implementation.statements.get_eager_promises()
             if promise.get_root_variable() not in injected_variables
         ]
+        # TODO: temporary override because implementation blocks have not normalized yet at this point, meaning the above is
+        #   inaccurate. Subconstructor requires implementation blocks but implementation blocks might require subconstructor
+        #   (this or for another entity type).
+        self._own_eager_promises = []
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
