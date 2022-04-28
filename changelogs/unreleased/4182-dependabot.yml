@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-toml from 0.10.5 to 0.10.6
+destination-branches:
+- iso5
+sections: {}
