@@ -22,7 +22,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, VariableReferenceHook, VariableResumer
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement, VariableReferenceHook, VariableResumer
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -137,8 +137,11 @@ class VariableReader(VariableResumer, Generic[T]):
     variable. Optionally subscribes a result collector to intermediate values.
     """
 
-    def __init__(self, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]) -> None:
+    def __init__(
+        self, owner: Statement, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]
+    ) -> None:
         super().__init__()
+        self.owner: Statement = owner
         self.target: ResultVariable[T] = target
         self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
@@ -152,7 +155,12 @@ class VariableReader(VariableResumer, Generic[T]):
         """
         Returns the target value based on the complete variable's value.
         """
-        return variable.get_value()
+        try:
+            return variable.get_value()
+        except OptionalValueException as e:
+            e.set_statement(self.owner)
+            e.location = self.owner.location
+            raise e
 
     def resume(
         self,
@@ -169,7 +177,7 @@ class VariableReader(VariableResumer, Generic[T]):
             # reschedule on the variable's completeness
             resumer: RawResumer = VariableReadResumer(self)
             self.copy_location(resumer)
-            RawUnit(queue_scheduler, resolver, {self: variable}, resumer)
+            RawUnit(queue_scheduler, resolver, {self: variable}, resumer, override_exception_location=False)
 
 
 class VariableReadResumer(RawResumer):
@@ -196,8 +204,8 @@ class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
 
     __slots__ = ("target", "resultcollector")
 
-    def __init__(self, target: ResultVariable) -> None:
-        VariableReader.__init__(self, target, resultcollector=self)
+    def __init__(self, owner: Statement, target: ResultVariable) -> None:
+        VariableReader.__init__(self, owner, target, resultcollector=self)
 
     def receive_result(self, value: object, location: Location) -> None:
         # TODO: docstring
@@ -262,7 +270,7 @@ class AttributeReference(Reference):
         temp = ResultVariable()
 
         # construct waiter
-        reader: VariableReader = VariableReader(target=temp, resultcollector=resultcollector)
+        reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),

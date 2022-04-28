@@ -88,7 +88,7 @@ class IsDefined(ReferenceStatement):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
-        gradual_helper: IsDefinedGradual = IsDefinedGradual(target=temp)
+        gradual_helper: IsDefinedGradual = IsDefinedGradual(owner=self, target=temp)
         hook: VariableReferenceHook = VariableReferenceHook(
             instance=self.attr,
             name=self.name,

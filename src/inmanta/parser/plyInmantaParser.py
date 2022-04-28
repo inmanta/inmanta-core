@@ -919,6 +919,7 @@ def p_constants_collect(p: YaccProduction) -> None:
 def p_wrapped_kwargs(p: YaccProduction) -> None:
     "wrapped_kwargs : '*' '*' operand"
     p[0] = WrappedKwargs(p[3])
+    attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:

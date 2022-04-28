@@ -256,8 +256,8 @@ class VariableReferenceHook(RawResumer):
             if not isinstance(instance, Instance):
                 raise RuntimeException(
                     self,
-                    "can not get attribute %s, %s is not an entity but a %s with value %s"
-                    % (self.name, self.instance, type(instance), instance),
+                    "can not get attribute %s, %s is not an entity but a %s with value '%s'"
+                    % (self.name, self.instance, type(instance).__name__, instance),
                 )
 
             # get the attribute result variable
@@ -272,7 +272,11 @@ class VariableReferenceHook(RawResumer):
 
     # TODO: execute method implementation required -> return None? Don't implement? Why even is RawResumer(ExpressionStatement)?
 
-    # TODO: str and repr
+    def __str__(self):
+        return "%s.%s" % (self.instance, self.name)
+
+    def __repr__(self):
+        return "%s(%r, %s, %r)" % (self.__class__.__name__, self.instance, self.name, self.variable_resumer)
 
 
 # TODO: is Locatable required?
@@ -288,8 +292,6 @@ class VariableResumer(Locatable):
         queue: QueueScheduler,
     ) -> None:
         raise NotImplementedError()
-
-    # TODO: str and repr
 
 
 @dataclass(frozen=True)

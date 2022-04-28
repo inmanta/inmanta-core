@@ -871,7 +871,7 @@ class RawUnit(Waiter):
     but with a map of ResultVariables instead of their values
     """
 
-    __slots__ = ("resolver", "resumer")
+    __slots__ = ("resolver", "resumer", "override_exception_location")
 
     def __init__(
         self,
@@ -879,11 +879,13 @@ class RawUnit(Waiter):
         resolver: "Resolver",
         requires: Dict[object, ResultVariable],
         resumer: "RawResumer",
+        override_exception_location: bool = True,
     ) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.resolver = resolver
         self.requires = requires
         self.resumer = resumer
+        self.override_exception_location: bool = override_exception_location
         for r in requires.values():
             self.waitfor(r)
         self.ready(self)
@@ -892,8 +894,9 @@ class RawUnit(Waiter):
         try:
             self.resumer.resume(self.requires, self.resolver, self.queue)
         except RuntimeException as e:
-            e.set_statement(self.resumer)
-            e.location = self.resumer.location
+            if self.override_exception_location:
+                e.set_statement(self.resumer)
+                e.location = self.resumer.location
             raise e
         self.done = True
 
