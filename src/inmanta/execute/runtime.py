@@ -140,11 +140,8 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         Acquire a promise to set a value for this variable. To fulfill the promise and set the promised value for this
         variable, set the value on the promise object.
         """
-        # TODO: not used by plain RV, document or move down (perhaps have this method return Optional[ISetPromise] as below?)
         return self
 
-    # TODO: Make sure to add test for the scenario where nested ifs might never get emitted
-    #   (if true: else: if true: x.a = 1 end end -> promise on x.a must be fulfilled somehow)
     def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
         """
         Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
@@ -162,9 +159,9 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
         return None
 
     def fulfill(self, promise: IPromise) -> None:
-        # TODO: mention that the promise must/is assumed to be owned/handed out by this variable
         """
-        Considers the given promise fulfilled. Idempotent.
+        Considers the given promise fulfilled. Idempotent. Should only be called with promises that were handed out by thie
+        variable.
         """
         # plain ResultVariable does not track promises -> simply return
         pass
@@ -327,11 +324,6 @@ class DelayedResultVariable(ResultVariable[T]):
         return promise
 
     def fulfill(self, promise: IPromise) -> None:
-        # TODO: mention that the promise must/is assumed to be owned/handed out by this variable
-        """
-        Considers the given promise fulfilled.
-        """
-        # TODO: better to use a set?
         self.done_promises.add(promise)
         if self.can_get():
             self.queue()
@@ -485,7 +477,6 @@ class ListLiteral(BaseListVariable):
         acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
         """
         super().fulfill(promise)
-        # TODO: still only applicable to literal lists or can this be moved to parent?
         # 100% accurate promisse tracking
         if len(self.promises) == len(self.done_promises):
             self.freeze()
