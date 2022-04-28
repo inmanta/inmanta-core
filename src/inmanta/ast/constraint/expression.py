@@ -243,8 +243,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         temp.set_type(Bool())
 
         # wait for the lhs
-        HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
-        return {**promises, self: temp}
+        HangUnit(queue, resolver, {**promises, **self.children[0].requires_emit(resolver, queue)}, temp, self)
+        return {self: temp}
 
     def _validate_value(self, value: object, side: int) -> None:
         try:
