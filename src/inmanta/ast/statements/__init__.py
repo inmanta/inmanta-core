@@ -372,13 +372,12 @@ class EagerPromise(VariableResumer):
         If a promise was already acquired, fulfills it, otherwise cancels the waiter so no new promise is acquired when the
         variable becomes available.
         """
-        if self._waiter is None:
-            # already fulfilled, no need to continue
-            return
-        self._waiter.queue.remove_from_all(self._waiter)
+        if self._waiter is not None:
+            # waiter is still waiting, remove it
+            self._waiter.queue.remove_from_all(self._waiter)
+            self._waiter = None
         if self._promise is not None:
             self._promise.fulfill()
-        self._waiter = None
 
     def resume(
         self,

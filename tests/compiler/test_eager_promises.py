@@ -16,10 +16,15 @@
     Contact: code@inmanta.com
 """
 import os
+from collections.abc import Sequence
+from typing import Optional, Union
 
 import pytest
 
 from inmanta import compiler
+from inmanta.ast import Namespace
+from inmanta.ast.type import Type
+from inmanta.execute.runtime import Instance, ListVariable, ProgressionPromise, ResultVariable
 from inmanta.module import InmantaModuleRequirement
 from utils import module_from_template
 
@@ -254,3 +259,63 @@ def test_eager_promises_paired_lists(snippetcompiler) -> None:
         """
     )
     compiler.do_compile()
+
+
+def test_eager_promises_promise_cleanup(snippetcompiler) -> None:
+    """
+    Verify that promises nested in a branch that is never taken are fulfilled.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+            entity A:
+            end
+            A.others [0:] -- A
+            implement A using std::none
+
+            a1 = A()
+            a2 = A()
+            a3 = A()
+            # condition on non-trivial statement to make sure promise waiters are executed before the condition evaluates
+            if std::count(a3.others) == 0:
+                if false:
+                    a1.others += A()
+                end
+            else:
+                if true:
+                    a2.others += A()
+                end
+            end
+        """
+    )
+    root_ns: Namespace
+    _, root_ns = compiler.do_compile()
+    config_ns: Optional[Namespace] = root_ns.get_child("__config__")
+    assert config_ns is not None
+
+    a1_var: Union[Type, ResultVariable[object]] = config_ns.lookup("a1")
+    a2_var: Union[Type, ResultVariable[object]] = config_ns.lookup("a2")
+    assert isinstance(a1_var, ResultVariable)
+    assert isinstance(a2_var, ResultVariable)
+
+    a1_instance: object = a1_var.get_value()
+    a2_instance: object = a2_var.get_value()
+    assert isinstance(a1_instance, Instance)
+    assert isinstance(a2_instance, Instance)
+
+    others1_var: ResultVariable = a1_instance.get_attribute("others")
+    others2_var: ResultVariable = a2_instance.get_attribute("others")
+    assert isinstance(others1_var, ListVariable)
+    assert isinstance(others2_var, ListVariable)
+
+    progression_promises1: Sequence[ProgressionPromise] = [
+        promise for promise in others1_var.promises if isinstance(promise, ProgressionPromise)
+    ]
+    progression_promises2: Sequence[ProgressionPromise] = [
+        promise for promise in others2_var.promises if isinstance(promise, ProgressionPromise)
+    ]
+
+    assert len(progression_promises1) == 2
+    assert len(progression_promises2) == 1
+
+    assert all(promise in others1_var.done_promises for promise in progression_promises1)
+    assert all(promise in others2_var.done_promises for promise in progression_promises2)
