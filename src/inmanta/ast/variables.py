@@ -22,7 +22,14 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer, Statement, VariableReferenceHook, VariableResumer
+from inmanta.ast.statements import (
+    AssignStatement,
+    ExpressionStatement,
+    RawResumer,
+    Statement,
+    VariableReferenceHook,
+    VariableResumer,
+)
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
@@ -137,9 +144,7 @@ class VariableReader(VariableResumer, Generic[T]):
     variable. Optionally subscribes a result collector to intermediate values.
     """
 
-    def __init__(
-        self, owner: Statement, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]
-    ) -> None:
+    def __init__(self, owner: Statement, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]) -> None:
         super().__init__()
         self.owner: Statement = owner
         self.target: ResultVariable[T] = target
