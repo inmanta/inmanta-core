@@ -26,7 +26,6 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import plugins
-from inmanta.compiler.config import feature_compiler_cache
 from inmanta.env import LocalPackagePath
 from inmanta.module import (
     DummyProject,
@@ -72,8 +71,11 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
     if editable_install:
         cache_folder = os.path.join(module_copy_dir, "model/__cfcache__")
     else:
-        cache_folder = os.path.join(snippetcompiler.project.virtualenv.site_packages_dir, "inmanta_plugins", module_name, "model/__cfcache__")
+        cache_folder = os.path.join(
+            snippetcompiler.project.virtualenv.site_packages_dir, "inmanta_plugins", module_name, "model/__cfcache__"
+        )
     assert len(os.listdir(cache_folder)) > 0
+
 
 def test_v1_and_v2_module_installed_simultaneously(
     tmpdir: py.path.local, snippetcompiler_clean, capsys, caplog, modules_dir: str
