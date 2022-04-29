@@ -28,7 +28,6 @@ import tempfile
 import time
 import zipfile
 from argparse import ArgumentParser
-from collections import OrderedDict
 from configparser import ConfigParser
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
