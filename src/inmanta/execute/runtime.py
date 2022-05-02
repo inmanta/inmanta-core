@@ -213,7 +213,7 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
 
     def listener(self, resulcollector: ResultCollector[T], location: Location) -> None:
         """
-        Add a listener to report new values to, only for lists. Explicit assigments of `null` will not be reported.
+        Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
         """
         pass
 

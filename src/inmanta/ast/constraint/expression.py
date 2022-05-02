@@ -94,7 +94,6 @@ class IsDefined(ReferenceStatement):
             name=self.name,
             variable_resumer=gradual_helper,
         )
-        self.copy_location(gradual_helper)
         self.copy_location(hook)
         hook.schedule(resolver, queue)
 

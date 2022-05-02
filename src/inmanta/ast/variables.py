@@ -154,7 +154,7 @@ class VariableReader(VariableResumer, RawResumer, Generic[T]):
         """
         Writes the target variable based on the complete variable's value.
         """
-        self.target.set_value(self.target_value(variable), self.location)
+        self.target.set_value(self.target_value(variable), self.owner.location)
 
     def target_value(self, variable: ResultVariable[object]) -> T:
         """
@@ -174,7 +174,7 @@ class VariableReader(VariableResumer, RawResumer, Generic[T]):
         queue_scheduler: QueueScheduler,
     ) -> None:
         if self.resultcollector:
-            variable.listener(self.resultcollector, self.location)
+            variable.listener(self.resultcollector, self.owner.location)
 
         if variable.is_ready():
             self.write_target(variable)
@@ -274,7 +274,6 @@ class AttributeReference(Reference):
             str(self.attribute),
             variable_resumer=reader,
         )
-        self.copy_location(reader)
         self.copy_location(hook)
         hook.schedule(resolver, queue)
 

@@ -39,7 +39,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import NamedType, Type  # noqa: F401
+    from inmanta.ast.type import NamedType  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
 
@@ -284,7 +284,7 @@ class VariableReferenceHook(RawResumer):
 
 
 # TODO: is Locatable required?
-class VariableResumer(Locatable):
+class VariableResumer:
     """
     Resume execution on a variable object when it becomes available (i.e. it exists).
     """
@@ -339,7 +339,6 @@ class StaticEagerPromise:
             variable_resumer=dynamic,
         )
         # TODO: clean up copy_location
-        self.statement.copy_location(dynamic)
         self.statement.copy_location(hook)
         waiter: Waiter = hook.schedule(resolver, queue)
         dynamic.set_waiter(waiter)
