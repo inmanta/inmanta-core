@@ -5,7 +5,7 @@ colorlog==6.6.0
 cookiecutter==1.7.3
 cryptography==37.0.1
 docstring-parser==0.14.1
-email-validator==1.2.0
+email-validator==1.2.1
 execnet==1.9.0
 importlib_metadata==4.11.3
 jinja2==3.1.2
