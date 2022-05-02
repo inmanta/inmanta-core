@@ -530,7 +530,7 @@ def export(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    if options.no_cache is True:
+    if options.feature_compiler_cache is False:
         Config.set("compiler", "cache", "false")
 
     # try to parse the metadata as json. If a normal string, create json for it.
