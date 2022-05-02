@@ -366,6 +366,7 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     ) in stdout
     assert code == 4
 
+
 @pytest.mark.parametrize("cache_cf_files", [True, False])
 def test_compiler_exception_output(snippetcompiler, cache_cf_files):
     snippetcompiler.setup_for_snippet(
