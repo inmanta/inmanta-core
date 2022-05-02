@@ -81,9 +81,8 @@ class ISetPromise(IPromise, Generic[T]):
 
     __slots__ = ()
 
-    # TODO: can recur be removed? If not, document! Might be required only for list promise
     @abstractmethod
-    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
+    def set_value(self, value: T, location: Location) -> None:
         """
         Fulfills this promise by setting the owner's value and notifying the owner of the promise's completion.
         """
@@ -176,6 +175,11 @@ class ResultVariable(ResultCollector[T], ISetPromise[T]):
             self.waiters.append(waiter)
 
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
+        """
+        Set the value for this result variable.
+
+        :param recur: If True, recur on the other side of this variable if it is part of a bidirectional relation.
+        """
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(self, None, value, location)
@@ -279,8 +283,8 @@ class SetPromise(ISetPromise[T]):
         self.provider: "Optional[Statement]" = provider
         self.owner: DelayedResultVariable[T] = owner
 
-    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
-        self.owner.set_value(value, location, recur)
+    def set_value(self, value: T, location: Location) -> None:
+        self.owner.set_value(value, location, recur=True)
         self.owner.fulfill(self)
 
 
