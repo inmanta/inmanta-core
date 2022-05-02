@@ -21,7 +21,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import Anchor, DirectExecuteException, Locatable, Location, Named, Namespace, Namespaced, RuntimeException
+from inmanta.ast import Anchor, DirectExecuteException, Location, Named, Namespace, Namespaced, RuntimeException
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -283,7 +283,6 @@ class VariableReferenceHook(RawResumer):
         return "%s(%r, %s, %r)" % (self.__class__.__name__, self.instance, self.name, self.variable_resumer)
 
 
-# TODO: is Locatable required?
 class VariableResumer:
     """
     Resume execution on a variable object when it becomes available (i.e. it exists).

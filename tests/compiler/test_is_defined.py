@@ -154,11 +154,9 @@ x = A()
         (False, "number[]?"),
         (True, "[0:1]"),
         (True, "[0:]"),
-    ]
+    ],
 )
-def test_is_defined_null(
-    snippetcompiler, capsys, condition_block, relation: bool, attr_type: str
-) -> None:
+def test_is_defined_null(snippetcompiler, capsys, condition_block, relation: bool, attr_type: str) -> None:
     """
     Verify that the compiler's gradual execution mechanism for `is defined` does not interpret an explicit `null` assignment as
     assigning a value. Explicitly assigning `null` should result in `is defined == false`.
