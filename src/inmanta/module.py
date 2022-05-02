@@ -2261,7 +2261,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise ValueError("Can only get module's AST in the context of a project.")
 
         # Check local cache
-        if hit := self._ast_cache_cache.get(name, None) is not None:
+        if hit := self._ast_cache.get(name, None) is not None:
             return hit
 
         if name == self.name:
