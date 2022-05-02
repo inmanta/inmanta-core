@@ -28,7 +28,6 @@ import tempfile
 import time
 import zipfile
 from argparse import ArgumentParser
-from collections import OrderedDict
 from configparser import ConfigParser
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
@@ -72,28 +71,6 @@ else:
 
 
 LOGGER = logging.getLogger(__name__)
-
-
-def set_yaml_order_preserving() -> None:
-    """
-    Set yaml modules to be order preserving.
-
-    !!! Big Side-effect !!!
-
-    Library is not OO, unavoidable
-
-    Will no longer be needed in python3.7
-    """
-    _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
-
-    def dict_representer(dumper, data):
-        return dumper.represent_dict(data.items())
-
-    def dict_constructor(loader, node):
-        return OrderedDict(loader.construct_pairs(node))
-
-    yaml.add_representer(OrderedDict, dict_representer)
-    yaml.add_constructor(_mapping_tag, dict_constructor)
 
 
 class ModuleVersionException(CLIException):
@@ -260,8 +237,6 @@ compatible with the dependencies specified by the updated modules.
             operator = project.freeze_operator
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
-
-        set_yaml_order_preserving()
 
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
@@ -882,8 +857,6 @@ version: 0.0.1dev0"""
 
         for submodule in module_obj.get_all_submodules():
             freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
-
-        set_yaml_order_preserving()
 
         with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
