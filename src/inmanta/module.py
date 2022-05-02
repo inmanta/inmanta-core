@@ -2261,7 +2261,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise ValueError("Can only get module's AST in the context of a project.")
 
         # Check local cache
-        if hit := self._ast_cache.get(name, None) is not None:
+        hit = self._ast_cache.get(name, None)
+        if hit is not None:
             return hit
 
         if name == self.name:
@@ -2310,7 +2311,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     def get_imports(self, name: str) -> List[DefineImport]:
         # Check local cache
-        if hit := self._import_cache.get(name, None) is not None:
+        hit = self._import_cache.get(name, None)
+        if hit is not None:
             return hit
 
         if self._project is None:
