@@ -210,11 +210,12 @@ class RawResumer(ExpressionStatement):
         pass
 
 
-# TODO: review this and related classes with Wouter's feedback about Resumer semantics in mind
 class VariableReferenceHook(RawResumer):
     """
     Generic helper class for adding a hook to a variable (ResultVariable) object. Supports both plain variables and instance
     attributes. Calls variable resumer with the variable object as soon as it's available.
+    This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
+    otherwise need to be implemented as custom resumer logic in each class that needs it.
     """
 
     def __init__(
@@ -235,9 +236,8 @@ class VariableReferenceHook(RawResumer):
         return RawUnit(
             queue,
             resolver,
-            # TODO: instance could be None, why does this not fail test cases
-            #   -> add tests for is defined on local var / implicit self?
-            # TODO: shouldn't we do gradual execution on self.instance as well?
+            # no need for gradual execution here because this class represents an attribute reference on self.instance,
+            # which is not allowed on multi variables (the only kind of variables that would benefit from gradual execution)
             self.instance.requires_emit(resolver, queue) if self.instance is not None else {},
             self,
         )

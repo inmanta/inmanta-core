@@ -224,7 +224,7 @@ class SetAttribute(AssignStatement, Resumer):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
-        # TODO: optionally refactor this to use VariableResumer
+        # This class still implements custom attribute resolution, rather than using the new VariableReferenceHook mechanism
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(

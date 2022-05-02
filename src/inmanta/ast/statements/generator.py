@@ -266,7 +266,6 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    # TODO: document eager promising somewhere
     def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
@@ -720,7 +719,6 @@ class WrappedKwargs(ExpressionStatement):
 
     def normalize(self) -> None:
         self.dictionary.normalize()
-        # TODO: acquire promises + test
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.dictionary.get_all_eager_promises())

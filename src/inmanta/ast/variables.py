@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range
+from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import (
     AssignStatement,
     ExpressionStatement,
@@ -203,7 +203,10 @@ class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
         VariableReader.__init__(self, owner, target, resultcollector=self)
 
     def receive_result(self, value: object, location: Location) -> None:
-        # TODO: docstring
+        """
+        Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
+        value implies that the variable is defined.
+        """
         self.target.set_value(True, self.location)
 
     def target_value(self, variable: ResultVariable[object]) -> bool:
