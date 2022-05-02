@@ -268,9 +268,13 @@ class VariableReferenceHook(RawResumer):
                 raise RuntimeException(self, "can not get variable %s, it is a type" % self.name)
             variable = obj
 
-        self.variable_resumer.resume(variable, resolver, queue)
+        self.variable_resumer.variable_resume(variable, resolver, queue)
 
-    # TODO: execute method implementation required -> return None? Don't implement? Why even is RawResumer(ExpressionStatement)?
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
     def __str__(self):
         return "%s.%s" % (self.instance, self.name)
@@ -285,12 +289,15 @@ class VariableResumer(Locatable):
     Resume execution on a variable object when it becomes available (i.e. it exists).
     """
 
-    def resume(
+    def variable_resume(
         self,
         variable: ResultVariable,
         resolver: Resolver,
         queue: QueueScheduler,
     ) -> None:
+        """
+        Resume execution with the given result variable.
+        """
         raise NotImplementedError()
 
 
@@ -379,7 +386,7 @@ class EagerPromise(VariableResumer):
         if self._promise is not None:
             self._promise.fulfill()
 
-    def resume(
+    def variable_resume(
         self,
         variable: ResultVariable,
         resolver: Resolver,

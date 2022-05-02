@@ -138,7 +138,7 @@ class Reference(ExpressionStatement):
 T = TypeVar("T")
 
 
-class VariableReader(VariableResumer, Generic[T]):
+class VariableReader(VariableResumer, RawResumer, Generic[T]):
     """
     Resumes execution on a variable when it becomes avaiable, then waits for its completeness and copies its value to a target
     variable. Optionally subscribes a result collector to intermediate values.
@@ -167,7 +167,7 @@ class VariableReader(VariableResumer, Generic[T]):
             e.location = self.owner.location
             raise e
 
-    def resume(
+    def variable_resume(
         self,
         variable: ResultVariable[T],
         resolver: Resolver,
@@ -180,26 +180,16 @@ class VariableReader(VariableResumer, Generic[T]):
             self.write_target(variable)
         else:
             # reschedule on the variable's completeness
-            resumer: RawResumer = VariableReadResumer(self)
-            self.copy_location(resumer)
-            RawUnit(queue_scheduler, resolver, {self: variable}, resumer, override_exception_location=False)
-
-
-class VariableReadResumer(RawResumer):
-    """
-    Resumes execution when the variable is complete.
-    """
-
-    def __init__(self, reader: VariableReader) -> None:
-        self.reader: VariableReader = reader
+            RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
     def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        self.reader.write_target(requires[self.reader])
+        self.write_target(requires[self])
 
-    # TODO: does this ever get called? Can we get rid of it?
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:
-        super().execute(requires, resolver, queue)
-        return self.reader.target_value(requires[self.reader])
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
 
 class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
