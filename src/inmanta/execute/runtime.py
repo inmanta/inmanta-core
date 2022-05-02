@@ -1149,8 +1149,7 @@ class Instance(ExecutionContext):
                 value = v.value
                 print("%s\t\t%s" % (n, value))
             else:
-                # TODO: v.provider no longer exists
-                print("BAD: %s\t\t%s" % (n, v.provider))
+                print("BAD: %s\t\t%s" % (n, ", ".join(repr(prom) for prom in v.promises)))
 
     def verify_done(self) -> bool:
         for v in self.slots.values():
