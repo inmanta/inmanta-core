@@ -337,7 +337,6 @@ class StaticEagerPromise:
             self.attribute,
             variable_resumer=dynamic,
         )
-        # TODO: clean up copy_location
         self.statement.copy_location(hook)
         waiter: Waiter = hook.schedule(resolver, queue)
         dynamic.set_waiter(waiter)

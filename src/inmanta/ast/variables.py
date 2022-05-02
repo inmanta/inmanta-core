@@ -197,8 +197,6 @@ class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
     Fill target variable with is defined result as soon as it gets known.
     """
 
-    __slots__ = ("target", "resultcollector")
-
     def __init__(self, owner: Statement, target: ResultVariable) -> None:
         VariableReader.__init__(self, owner, target, resultcollector=self)
 
