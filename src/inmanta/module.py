@@ -1471,7 +1471,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.project_path = path
         self.main_file = main_file
 
-        self._ast_cache = None  # Cache for expensive method calls
+        self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
@@ -2195,8 +2195,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
-        self._ast_cache = {}  # Cache for expensive method calls
-        self._import_cache = {}  # Cache for expensive method calls
+        self._ast_cache: Dict[str, Tuple[List[Statement], BasicBlock]] = {}  # Cache for expensive method calls
+        self._import_cache: Dict[str, List[DefineImport]] = {}  # Cache for expensive method calls
 
     @classmethod
     @abstractmethod
