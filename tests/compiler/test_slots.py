@@ -92,6 +92,7 @@ def test_slots_rt():
 def test_slots_ast():
     assert_slotted(Location("", 0))
     assert_slotted(Range("", 0, 0, 0, 0))
+    # TODO: all other AST nodes
 
 
 def test_slots_dataflow():
