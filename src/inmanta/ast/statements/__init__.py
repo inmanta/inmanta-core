@@ -229,11 +229,11 @@ class VariableReferenceHook(RawResumer):
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
-    def schedule(self, resolver: Resolver, queue: QueueScheduler) -> Waiter:
+    def schedule(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
-        return RawUnit(
+        RawUnit(
             queue,
             resolver,
             # no need for gradual execution here because this class represents an attribute reference on self.instance,
@@ -338,8 +338,7 @@ class StaticEagerPromise:
             variable_resumer=dynamic,
         )
         self.statement.copy_location(hook)
-        waiter: Waiter = hook.schedule(resolver, queue)
-        dynamic.set_waiter(waiter)
+        hook.schedule(resolver, queue)
         return dynamic
 
 
@@ -354,34 +353,25 @@ class EagerPromise(VariableResumer):
         super().__init__()
         self.static: StaticEagerPromise = static
         self.responsible: DynamicStatement = responsible
-        self._waiter: Optional[Waiter] = None
         self._promise: Optional[ProgressionPromise] = None
-
-    def set_waiter(self, waiter: Waiter) -> None:
-        self._waiter = waiter
+        self._fulfilled: bool = False
 
     def _acquire(self, variable: ResultVariable) -> None:
         """
         Entry point for the ResultVariable waiter: actually acquire the promise
         """
-        if self._waiter is None:
-            # already fulfilled, no need to acquire progression promise anymore
-            return
-        assert self._promise is None
-        self._promise = variable.get_progression_promise(self.responsible)
-        self._waiter = None
+        if not self._fulfilled:
+            assert self._promise is None
+            self._promise = variable.get_progression_promise(self.responsible)
 
     def fulfill(self) -> None:
         """
-        If a promise was already acquired, fulfills it, otherwise cancels the waiter so no new promise is acquired when the
-        variable becomes available.
+        If a promise was already acquired, fulfills it, otherwise makes sure that no new promise is acquired when the variable
+        becomes available.
         """
-        if self._waiter is not None:
-            # waiter is still waiting, remove it
-            self._waiter.queue.remove_from_all(self._waiter)
-            self._waiter = None
         if self._promise is not None:
             self._promise.fulfill()
+        self._fulfilled = True
 
     def variable_resume(
         self,
