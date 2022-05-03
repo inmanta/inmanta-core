@@ -141,7 +141,7 @@ async def slow_jwks(unused_tcp_port):
 
 async def test_rs256_invalid_config_timeout(tmp_path, slow_jwks):
     """
-    Test that the timeout to download the rs256 public key is taken into account
+    Test that an error is raised when the timeout to download the rs256 public key is exceeded
     """
     port = str(list(slow_jwks._sockets.values())[0].getsockname()[1])
     config_file = os.path.join(tmp_path, "auth.cfg")
