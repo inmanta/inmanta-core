@@ -114,7 +114,9 @@ validate_cert=false
         )
 
     from inmanta.config import AuthJWTConfig, Config
-
+    # Make sure the config starts from a clean slate
+    AuthJWTConfig.sections = {}
+    AuthJWTConfig.issuers = {}
     Config.load_config(config_file)
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, AuthJWTConfig.list)
@@ -163,7 +165,9 @@ validate_cert=false
         )
 
     from inmanta.config import AuthJWTConfig, Config
-
+    # Make sure the config starts from a clean slate
+    AuthJWTConfig.sections = {}
+    AuthJWTConfig.issuers = {}
     Config.load_config(config_file)
     with pytest.raises(ValueError):
         await asyncio.get_event_loop().run_in_executor(None, partial(AuthJWTConfig.get, "auth_jwt_keycloak"))
