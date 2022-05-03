@@ -55,6 +55,7 @@ class FunctionCall(ReferenceStatement):
     provides:      return value
     contributes:
     """
+    __slots__ = ("name", "arguments", "wrapped_kwargs", "location", "kwargs", "function")
 
     def __init__(
         self,

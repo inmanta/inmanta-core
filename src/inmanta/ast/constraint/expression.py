@@ -74,6 +74,8 @@ class OpMetaClass(ABCMeta):
 
 
 class IsDefined(ReferenceStatement):
+    __slots__ = ("attr", "name")
+
     def __init__(self, attr: Optional[Reference], name: LocatableString) -> None:
         if attr:
             children = [attr]
@@ -120,6 +122,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
     This class is an abstract base class for all operators that can be used in expressions
     """
+    __slots__ = ("__number_arguments", "_arguments", "__name")
 
     # A hash to lookup each handler
     __operator: Dict[str, "Type[Operator]"] = {}
@@ -195,6 +198,7 @@ class BinaryOperator(Operator):
     """
     This class represents a binary operator.
     """
+    __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
@@ -223,6 +227,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     """
     This class represents a binary boolean operator.
     """
+    __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
@@ -300,6 +305,7 @@ class UnaryOperator(Operator):
     """
     This class represents a unary operator
     """
+    __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1])
@@ -326,6 +332,7 @@ class Not(UnaryOperator):
     The negation operator
     """
 
+    __slots__ = ()
     __op = "not"
 
     def __init__(self, arg):
@@ -351,6 +358,7 @@ class Regex(BinaryOperator):
     """
     An operator that does regex matching
     """
+    __slots__ = ("regex",)
 
     def __init__(self, op1: ExpressionStatement, op2: str):
         self.regex = re.compile(op2)
@@ -375,6 +383,7 @@ class Equals(BinaryOperator):
     The equality operator
     """
 
+    __slots__ = ()
     __op = "=="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -392,6 +401,7 @@ class LessThan(BinaryOperator):
     The less than operator
     """
 
+    __slots__ = ()
     __op = "<"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -411,6 +421,7 @@ class GreaterThan(BinaryOperator):
     The more than operator
     """
 
+    __slots__ = ()
     __op = ">"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -430,6 +441,7 @@ class LessThanOrEqual(BinaryOperator):
     The less than or equal operator
     """
 
+    __slots__ = ()
     __op = "<="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -449,6 +461,7 @@ class GreaterThanOrEqual(BinaryOperator):
     The more than or equal operator
     """
 
+    __slots__ = ()
     __op = ">="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -468,6 +481,7 @@ class NotEqual(BinaryOperator):
     The not equal operator
     """
 
+    __slots__ = ()
     __op = "!="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -485,6 +499,7 @@ class And(LazyBooleanOperator):
     The and boolean operator
     """
 
+    __slots__ = ()
     __op = "and"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -499,6 +514,7 @@ class Or(LazyBooleanOperator):
     The or boolean operator
     """
 
+    __slots__ = ()
     __op = "or"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -513,6 +529,7 @@ class In(BinaryOperator):
     The in operator for iterable types and dicts
     """
 
+    __slots__ = ()
     __op = "in"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:

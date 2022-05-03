@@ -149,11 +149,10 @@ class Range(Location):
 
 
 class Locatable(object):
-
-    _location: Location
+    __slots__ = ("_location",)
 
     def __init__(self) -> None:
-        self._location = None
+        self._location: Location = None
 
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
@@ -249,6 +248,8 @@ class AttributeReferenceAnchor(Anchor):
 
 
 class Namespaced(Locatable):
+    __slots__ = ()
+
     @abstractmethod
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()

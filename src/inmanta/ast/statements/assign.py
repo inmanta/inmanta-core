@@ -78,6 +78,8 @@ class CreateList(ReferenceStatement):
     Represents a list literal statement which might contain any type of value (constants and/or instances).
     """
 
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
@@ -157,6 +159,8 @@ class CreateList(ReferenceStatement):
 
 
 class CreateDict(ReferenceStatement):
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
@@ -365,6 +369,7 @@ class MapLookup(ReferenceStatement):
     """
     Lookup a value in a dict
     """
+    __slots__ = ("themap", "key", "location")
 
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
         super(MapLookup, self).__init__([themap, key])
@@ -398,6 +403,7 @@ class IndexLookup(ReferenceStatement, Resumer):
     """
     Lookup a value in a dictionary
     """
+    __slots__ = ("index_type", "query", "wrapped_query", "type")
 
     def __init__(
         self,
@@ -458,6 +464,7 @@ class ShortIndexLookup(IndexLookup):
 
     vm.files[path="/etc/motd"]
     """
+    __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")
 
     def __init__(
         self,
@@ -525,6 +532,7 @@ class StringFormat(ReferenceStatement):
     """
     Create a new string by doing a string interpolation
     """
+    __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         ReferenceStatement.__init__(self, [k for (k, _) in variables])
