@@ -54,7 +54,7 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     Resolver,
     ResultCollector,
-    ResultVariable,
+    ResultVariable, VariableABC,
 )
 from inmanta.execute.util import Unknown
 
@@ -84,8 +84,8 @@ class CreateList(ReferenceStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> typing.Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    ) -> typing.Dict[object, VariableABC]:
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
@@ -415,8 +415,8 @@ class IndexLookup(ReferenceStatement, Resumer):
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
+        parent_req: Mapping[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)

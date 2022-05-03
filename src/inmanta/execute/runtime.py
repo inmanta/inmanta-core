@@ -107,7 +107,40 @@ class ProgressionPromise(IPromise):
         self.owner.fulfill(self)
 
 
-class ResultVariable(ResultCollector[T], ISetPromise[T]):
+class VariableABC(Generic[T]):
+    """
+    Abstract base class for variables that get passed around the AST nodes' methods via waiters.
+    """
+    __slots__ = ()
+
+    def get_value(self) -> T:
+        """
+        Returns the value object for this variable
+        """
+        raise NotImplementedError()
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        """
+        Informs this variable that a waiter waits on its value. Once the variable receives a value, it should inform the waiter.
+        """
+        raise NotImplementedError()
+
+class WrappedValueVariable(VariableABC[T]):
+    """
+    Variable that holds a single value that is known at construction. Used to wrap values where a VariableABC is expected.
+    """
+    __slots__ = ("value")
+
+    def __init__(self, value: T) -> None:
+        self.value: T = value
+
+    def get_value(self) -> T:
+        return self.value
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        waiter.ready(self)
+
+class ResultVariable(VariableABC, ResultCollector[T], ISetPromise[T]):
     """
     A ResultVariable is like a future
      - it has a list of waiters
@@ -745,7 +778,7 @@ class Waiter(object):
 
     __slots__ = ("waitcount", "queue", "done", "requires")
 
-    requires: Dict[object, ResultVariable]
+    requires: Dict[object, VariableABC]
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -792,7 +825,7 @@ class ExecutionUnit(Waiter):
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
         result: ResultVariable[object],
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         expression: "RequiresEmitStatement",
         owner: "Optional[Statement]" = None,
     ):
@@ -838,7 +871,7 @@ class HangUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         target: Optional[ResultVariable],
         resumer: "Resumer",
     ) -> None:
@@ -872,7 +905,7 @@ class RawUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         resumer: "RawResumer",
         override_exception_location: bool = True,
     ) -> None:

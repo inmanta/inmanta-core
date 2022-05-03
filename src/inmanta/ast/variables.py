@@ -32,7 +32,7 @@ from inmanta.ast.statements import (
 )
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable, VariableABC
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
@@ -63,19 +63,19 @@ class Reference(ExpressionStatement):
     def requires(self) -> List[str]:
         return [self.full_name]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        parent_req: Mapping[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        out: Mapping[object, ResultVariable] = {self.name: resolver.lookup(self.full_name)}
+        out: Mapping[object, VariableABC] = {self.name: resolver.lookup(self.full_name)}
         return {**parent_req, **out}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
-    ) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    ) -> Dict[object, VariableABC]:
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out: Mapping[object, ResultVariable] = {self.name: var}
+        out: Mapping[object, VariableABC] = {self.name: var}
         return {**promises, **out}
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -150,13 +150,13 @@ class VariableReader(VariableResumer, RawResumer, Generic[T]):
         self.target: ResultVariable[T] = target
         self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
-    def write_target(self, variable: ResultVariable[object]) -> None:
+    def write_target(self, variable: VariableABC[object]) -> None:
         """
         Writes the target variable based on the complete variable's value.
         """
         self.target.set_value(self.target_value(variable), self.owner.location)
 
-    def target_value(self, variable: ResultVariable[object]) -> T:
+    def target_value(self, variable: VariableABC[object]) -> T:
         """
         Returns the target value based on the complete variable's value.
         """
@@ -182,7 +182,7 @@ class VariableReader(VariableResumer, RawResumer, Generic[T]):
             # reschedule on the variable's completeness
             RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         self.write_target(requires[self])
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
@@ -252,13 +252,13 @@ class AttributeReference(Reference):
     def requires(self) -> List[str]:
         return self.instance.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         return self.requires_emit_gradual(resolver, queue, None)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    ) -> Dict[object, VariableABC]:
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # The tricky one!
 

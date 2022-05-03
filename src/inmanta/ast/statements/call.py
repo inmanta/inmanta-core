@@ -38,7 +38,7 @@ from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter, VariableABC
 from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()

@@ -33,7 +33,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     Typeorvalue,
-    Waiter,
+    Waiter, VariableABC, WrappedValueVariable,
 )
 
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ class RequiresEmitStatement(DynamicStatement):
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Names are an opaque identifier. May emit statements to
         break execution is smaller segments.
@@ -138,7 +138,7 @@ class RequiresEmitStatement(DynamicStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
-    ) -> Dict[object, ResultVariable]:
+    ) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
@@ -146,13 +146,12 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return self.requires_emit(resolver, queue)
 
-    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """
         Acquires eager promises this statement is responsible for and returns them, wrapped in a result variable, in a requires
         dict.
         """
-        promises: ResultVariable = ResultVariable()
-        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
+        promises: VariableABC = WrappedValueVariable(self.schedule_eager_promises(resolver, queue))
         return {(self, EagerPromise): promises}
 
     def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
@@ -206,7 +205,7 @@ class RawResumer(ExpressionStatement):
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 
@@ -242,7 +241,7 @@ class VariableReferenceHook(RawResumer):
             self,
         )
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
@@ -402,9 +401,9 @@ class ReferenceStatement(ExpressionStatement):
     def requires(self) -> List[str]:
         return [req for v in self.children for req in v.requires()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
-        own_req: Mapping[object, ResultVariable] = {
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        parent_req: Mapping[object, VariableABC] = super().requires_emit(resolver, queue)
+        own_req: Mapping[object, VariableABC] = {
             rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()
         }
         return {**parent_req, **own_req}

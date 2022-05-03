@@ -36,7 +36,7 @@ from inmanta.ast.statements import (
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable, VariableABC
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -83,8 +83,8 @@ class IsDefined(ReferenceStatement):
         self.attr = attr
         self.name = str(name)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -235,8 +235,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
