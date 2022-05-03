@@ -610,8 +610,14 @@ async def test_clear_environment(client, server, clienthelper, environment):
     assert len(result.result["environment"]["versions"]) == 0
 
 
-async def test_tokens(server_multi, client_multi, environment_multi):
+async def test_tokens(server_multi, client_multi, environment_multi, request):
     # Test using API tokens
+
+    # Check the parameters of the 'server_multi' fixture
+    if request.node.callspec.id in ["SSL", "Normal"]:
+        # Generating tokens is not allowed if auth is not enabled
+        return
+
     test_token = client_multi._transport_instance.token
     token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
     jot = token.result["token"]
@@ -633,6 +639,12 @@ async def test_tokens(server_multi, client_multi, environment_multi):
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment_multi)
     assert result.code == 401
+
+
+async def test_token_without_auth(server, client, environment):
+    """Generating a token when auth is not enabled is not allowed"""
+    token = await client.create_token(environment, ["api"], idempotent=True)
+    assert token.code == 400
 
 
 def make_source(collector, filename, module, source, req):
