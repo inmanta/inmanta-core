@@ -1,4 +1,4 @@
 description: Make sure the appropriate error message is returned when creating a token while authentication is disabled
 issue-nr: 3900
 change-type: patch
-destination-branches: [iso5, master, iso4]
+destination-branches: [iso4]
