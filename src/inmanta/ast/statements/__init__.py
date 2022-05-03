@@ -85,6 +85,8 @@ class DynamicStatement(Statement):
     def get_own_eager_promises(self) -> Sequence["StaticEagerPromise"]:
         """
         Returns all eager promises this statement itself is responsible for.
+
+        Should only be called after normalization.
         """
         return self._own_eager_promises
 
@@ -92,6 +94,8 @@ class DynamicStatement(Statement):
         """
         Returns all eager promises for this statement, including eager promises on sub-expressions in case of composition.
         These are the promises that should be acquired by parent blocks.
+
+        Should only be called after normalization.
         """
         return iter(self._own_eager_promises)
 
