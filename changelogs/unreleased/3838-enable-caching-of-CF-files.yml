@@ -1,0 +1,4 @@
+description: Set the default behaviour to caching of CF files and add option to disable it
+change-type: patch
+destination-branches: [master]
+sections: {}

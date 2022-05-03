@@ -249,10 +249,6 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-compiler_features = ExperimentalFeatureFlags()
-compiler_features.add(compiler.config.feature_compiler_cache)
-
-
 def compiler_config(parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
@@ -285,6 +281,13 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -298,7 +301,7 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
-    compiler_features.add_arguments(parser)
+
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
@@ -333,13 +336,14 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
+
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
-
-    compiler_features.read_options_to_config(options)
 
     module.Project.get(options.main_file)
 
@@ -491,7 +495,13 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
-    compiler_features.add_arguments(parser)
+    parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -520,7 +530,8 @@ def export(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    compiler_features.read_options_to_config(options)
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
