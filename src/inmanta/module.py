@@ -26,7 +26,6 @@ import subprocess
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from functools import lru_cache
 from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
 from tarfile import TarFile
@@ -692,6 +691,10 @@ class Project(ModuleLike[ProjectMetadata]):
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
 
+        self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
+        self._imports_cache: Optional[List[DefineImport]] = None  # Cache for expensive method calls
+        self._complete_ast_cache: Optional[Tuple[List[Statement], List[BasicBlock]]] = None  # Cache for expensive method calls
+
     @property
     def _install_mode(self) -> InstallMode:
         return self._metadata.install_mode
@@ -769,37 +772,40 @@ class Project(ModuleLike[ProjectMetadata]):
                 else:
                     self.load_plugins()
 
-    @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
-        return self.__load_ast()
+        if self._ast_cache is None:
+            self._ast_cache = self.__load_ast()
+        return self._ast_cache
 
-    @lru_cache()
     def get_imports(self) -> List[DefineImport]:
-        (statements, _) = self.get_ast()
-        imports = [x for x in statements if isinstance(x, DefineImport)]
-        if self.autostd:
-            std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
-            imp = DefineImport(std_locatable, std_locatable)
-            imp.location = std_locatable.location
-            imports.insert(0, imp)
-        return imports
+        if self._imports_cache is None:
+            (statements, _) = self.get_ast()
+            imports = [x for x in statements if isinstance(x, DefineImport)]
+            if self.autostd:
+                std_locatable = LocatableString("std", Range("__internal__", 1, 1, 1, 1), -1, self.root_ns)
+                imp = DefineImport(std_locatable, std_locatable)
+                imp.location = std_locatable.location
+                imports.insert(0, imp)
+            self._imports_cache = imports
+        return self._imports_cache
 
-    @lru_cache()
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
-        start = time()
-        # load ast
-        (statements, block) = self.get_ast()
-        blocks = [block]
-        statements = [x for x in statements]
+        if self._complete_ast_cache is None:
+            start = time()
+            # load ast
+            (statements, block) = self.get_ast()
+            blocks = [block]
+            statements = [x for x in statements]
 
-        for _, nstmt, nb in self.load_module_recursive():
-            statements.extend(nstmt)
-            blocks.append(nb)
+            for _, nstmt, nb in self.load_module_recursive():
+                statements.extend(nstmt)
+                blocks.append(nb)
 
-        end = time()
-        LOGGER.debug("Parsing took %f seconds", end - start)
-        cache_manager.log_stats()
-        return (statements, blocks)
+            end = time()
+            LOGGER.debug("Parsing took %f seconds", end - start)
+            cache_manager.log_stats()
+            self._complete_ast_cache = (statements, blocks)
+        return self._complete_ast_cache
 
     def __load_ast(self) -> Tuple[List[Statement], BasicBlock]:
         main_ns = Namespace("__config__", self.root_ns)
@@ -1017,6 +1023,10 @@ class Module(ModuleLike[ModuleMetadata]):
         self._project = project
         self.is_versioned()
 
+        self._ast_cache: Dict[str, Tuple[List[Statement], BasicBlock]] = {}  # Cache for expensive method calls
+        self._imports_cache: Dict[str, List[DefineImport]] = {}  # Cache for expensive method calls
+        self._python_requirements_as_list_cache: Optional[List[str]] = None  # Cache for expensive method calls
+
     def rewrite_version(self, new_version: str) -> None:
         new_version = str(new_version)  # make sure it is a string!
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
@@ -1223,8 +1233,12 @@ class Module(ModuleLike[ModuleMetadata]):
 
         return files
 
-    @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
+        # Check local cache
+        hit = self._ast_cache.get(name, None)
+        if hit is not None:
+            return hit
+
         if name == self.name:
             file = os.path.join(self._path, Module.MODEL_DIR, "_init.cf")
         else:
@@ -1239,7 +1253,10 @@ class Module(ModuleLike[ModuleMetadata]):
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 
         try:
-            return self._load_file(ns, file)
+            out = self._load_file(ns, file)
+            # Set local cache before returning
+            self._ast_cache[name] = out
+            return out
         except FileNotFoundError as e:
             raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
@@ -1262,8 +1279,11 @@ class Module(ModuleLike[ModuleMetadata]):
         # drop submodules
         return {x: v for x, v in out.items() if "::" not in x}
 
-    @lru_cache()
     def get_imports(self, name: str) -> List[DefineImport]:
+        hit = self._imports_cache.get(name, None)
+        if hit is not None:
+            return hit
+
         (statements, block) = self.get_ast(name)
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.name != "std" and self._project.autostd:
@@ -1271,6 +1291,8 @@ class Module(ModuleLike[ModuleMetadata]):
             imp = DefineImport(std_locatable, std_locatable)
             imp.location = std_locatable.location
             imports.insert(0, imp)
+
+        self._imports_cache[name] = imports
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:
@@ -1422,16 +1444,20 @@ class Module(ModuleLike[ModuleMetadata]):
         else:
             return None
 
-    @lru_cache()
     def get_python_requirements_as_list(self) -> List[str]:
+        if self._python_requirements_as_list_cache is not None:
+            return self._python_requirements_as_list_cache
         raw = self.get_python_requirements()
         if raw is None:
-            return []
+            requirements = []
         else:
             requirements_lines = [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
             requirements_lines = self._remove_comments(requirements_lines)
             requirements_lines = self._remove_line_continuations(requirements_lines)
-            return requirements_lines
+            requirements = requirements_lines
+
+        self._python_requirements_as_list_cache = requirements
+        return requirements
 
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.get_name(), self._path))
