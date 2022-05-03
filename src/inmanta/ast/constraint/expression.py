@@ -122,6 +122,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
     This class is an abstract base class for all operators that can be used in expressions
     """
+
     __slots__ = ("__number_arguments", "_arguments", "__name")
 
     # A hash to lookup each handler
@@ -198,6 +199,7 @@ class BinaryOperator(Operator):
     """
     This class represents a binary operator.
     """
+
     __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -227,6 +229,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     """
     This class represents a binary boolean operator.
     """
+
     __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -305,6 +308,7 @@ class UnaryOperator(Operator):
     """
     This class represents a unary operator
     """
+
     __slots__ = ()
 
     def __init__(self, name: str, op1: ExpressionStatement) -> None:
@@ -358,6 +362,7 @@ class Regex(BinaryOperator):
     """
     An operator that does regex matching
     """
+
     __slots__ = ("regex",)
 
     def __init__(self, op1: ExpressionStatement, op2: str):

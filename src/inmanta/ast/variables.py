@@ -50,6 +50,7 @@ class Reference(ExpressionStatement):
 
     :ivar name: The name of the Reference as a string.
     """
+
     __slots__ = ("locatable_name", "name", "full_name")
 
     def __init__(self, name: LocatableString) -> None:
@@ -144,6 +145,7 @@ class VariableReader(VariableResumer, RawResumer, Generic[T]):
     Resumes execution on a variable when it becomes avaiable, then waits for its completeness and copies its value to a target
     variable. Optionally subscribes a result collector to intermediate values.
     """
+
     __slots__ = ("owner", "target", "resultcollector")
 
     def __init__(self, owner: Statement, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]) -> None:
@@ -198,6 +200,7 @@ class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
     """
     Fill target variable with is defined result as soon as it gets known.
     """
+
     __slots__ = ()
 
     def __init__(self, owner: Statement, target: ResultVariable) -> None:
@@ -234,6 +237,7 @@ class AttributeReference(Reference):
     This variable refers to an attribute. This is mostly used to refer to
     attributes of a class or class instance.
     """
+
     __slots__ = ("attribute", "instance")
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:

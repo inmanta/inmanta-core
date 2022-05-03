@@ -33,7 +33,9 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     Typeorvalue,
-    Waiter, VariableABC, WrappedValueVariable,
+    VariableABC,
+    Waiter,
+    WrappedValueVariable,
 )
 
 if TYPE_CHECKING:
@@ -203,6 +205,7 @@ class Resumer(ExpressionStatement):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
+
     __slots__ = ()
 
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
@@ -213,6 +216,7 @@ class RawResumer(ExpressionStatement):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
+
     __slots__ = ()
 
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
@@ -226,6 +230,7 @@ class VariableReferenceHook(RawResumer):
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
     """
+
     __slots__ = ("instance", "name", "variable_resumer")
 
     def __init__(
@@ -396,6 +401,7 @@ class ReferenceStatement(ExpressionStatement):
     """
     This class models statements that refer to other statements
     """
+
     __slots__ = ("children",)
 
     def __init__(self, children: List[ExpressionStatement]) -> None:

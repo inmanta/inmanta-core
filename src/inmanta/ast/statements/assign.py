@@ -54,7 +54,8 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     Resolver,
     ResultCollector,
-    ResultVariable, VariableABC,
+    ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.util import Unknown
 
@@ -369,6 +370,7 @@ class MapLookup(ReferenceStatement):
     """
     Lookup a value in a dict
     """
+
     __slots__ = ("themap", "key", "location")
 
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
@@ -403,6 +405,7 @@ class IndexLookup(ReferenceStatement, Resumer):
     """
     Lookup a value in a dictionary
     """
+
     __slots__ = ("index_type", "query", "wrapped_query", "type")
 
     def __init__(
@@ -464,6 +467,7 @@ class ShortIndexLookup(IndexLookup):
 
     vm.files[path="/etc/motd"]
     """
+
     __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")
 
     def __init__(
@@ -532,6 +536,7 @@ class StringFormat(ReferenceStatement):
     """
     Create a new string by doing a string interpolation
     """
+
     __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:

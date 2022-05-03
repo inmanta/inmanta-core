@@ -51,7 +51,8 @@ from inmanta.execute.runtime import (
     RawUnit,
     Resolver,
     ResultCollector,
-    ResultVariable, VariableABC,
+    ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
@@ -75,6 +76,7 @@ class SubConstructor(ExpressionStatement):
     :ivar type: The specific entity type of an instance this subconstructor applies to, i.e. the actual instance type, not a
         supertype.
     """
+
     __slots__ = ("type", "location", "implements")
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
@@ -257,6 +259,7 @@ class If(ExpressionStatement):
     """
     An if Statement
     """
+
     __slots__ = ("condition", "if_branch", "else_branch")
 
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
@@ -312,6 +315,7 @@ class ConditionalExpression(ExpressionStatement):
     """
     A conditional expression similar to Python's `x if c else y`.
     """
+
     __slots__ = ("if_expression", "else_expression")
 
     def __init__(
@@ -449,6 +453,7 @@ class Constructor(ExpressionStatement):
     :param class_type: The type of the object that is created by this
         constructor call.
     """
+
     __slots__ = (
         "class_type",
         "__attributes",
@@ -727,6 +732,7 @@ class WrappedKwargs(ExpressionStatement):
     Keyword arguments wrapped in a dictionary.
     Separate AST node for the type check it provides in the execute method.
     """
+
     __slots__ = ("dictionary",)
 
     def __init__(self, dictionary: ExpressionStatement) -> None:
