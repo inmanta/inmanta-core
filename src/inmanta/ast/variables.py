@@ -205,7 +205,7 @@ class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
-        self.target.set_value(True, self.location)
+        self.target.set_value(True, self.owner.location)
 
     def target_value(self, variable: ResultVariable[object]) -> bool:
         """
