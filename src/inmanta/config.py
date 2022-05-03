@@ -587,9 +587,9 @@ class AuthJWTConfig(object):
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-
+        jwks_timeout = self._config.getfloat("jwks_request_timeout", 30.0)
         try:
-            with request.urlopen(self.jwks_uri, context=ctx) as response:
+            with request.urlopen(self.jwks_uri, timeout=jwks_timeout, context=ctx) as response:
                 key_data = json.loads(response.read().decode("utf-8"))
         except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response
