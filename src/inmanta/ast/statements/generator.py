@@ -51,7 +51,8 @@ from inmanta.execute.runtime import (
     RawUnit,
     Resolver,
     ResultCollector,
-    ResultVariable, VariableABC,
+    ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown

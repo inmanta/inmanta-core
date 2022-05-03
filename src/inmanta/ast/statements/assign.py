@@ -54,7 +54,8 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     Resolver,
     ResultCollector,
-    ResultVariable, VariableABC,
+    ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.util import Unknown
 

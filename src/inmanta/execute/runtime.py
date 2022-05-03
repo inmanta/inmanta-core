@@ -111,6 +111,7 @@ class VariableABC(Generic[T]):
     """
     Abstract base class for variables that get passed around the AST nodes' methods via waiters.
     """
+
     __slots__ = ()
 
     def get_value(self) -> T:
@@ -125,11 +126,13 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
+
 class WrappedValueVariable(VariableABC[T]):
     """
     Variable that holds a single value that is known at construction. Used to wrap values where a VariableABC is expected.
     """
-    __slots__ = ("value")
+
+    __slots__ = ("value",)
 
     def __init__(self, value: T) -> None:
         self.value: T = value
@@ -139,6 +142,7 @@ class WrappedValueVariable(VariableABC[T]):
 
     def waitfor(self, waiter: "Waiter") -> None:
         waiter.ready(self)
+
 
 class ResultVariable(VariableABC, ResultCollector[T], ISetPromise[T]):
     """

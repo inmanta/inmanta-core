@@ -38,7 +38,7 @@ from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter, VariableABC
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)

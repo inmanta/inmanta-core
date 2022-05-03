@@ -33,7 +33,9 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     Typeorvalue,
-    Waiter, VariableABC, WrappedValueVariable,
+    VariableABC,
+    Waiter,
+    WrappedValueVariable,
 )
 
 if TYPE_CHECKING:
