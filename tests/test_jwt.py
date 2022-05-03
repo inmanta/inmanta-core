@@ -114,6 +114,7 @@ validate_cert=false
         )
 
     from inmanta.config import AuthJWTConfig, Config
+
     # Make sure the config starts from a clean slate
     AuthJWTConfig.sections = {}
     AuthJWTConfig.issuers = {}
@@ -165,6 +166,7 @@ validate_cert=false
         )
 
     from inmanta.config import AuthJWTConfig, Config
+
     # Make sure the config starts from a clean slate
     AuthJWTConfig.sections = {}
     AuthJWTConfig.issuers = {}
