@@ -369,6 +369,11 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
 
 @pytest.mark.parametrize("cache_cf_files", [True, False])
 def test_compiler_exception_output(snippetcompiler, cache_cf_files):
+    """
+    This test case is also used to test the caching (issue 3838)
+    Since this is a basic smoke test for argument parsing, no assertion
+    about the caching is done here.
+    """
     snippetcompiler.setup_for_snippet(
         """
 entity Test:

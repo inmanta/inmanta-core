@@ -43,8 +43,6 @@ from utils import PipIndex, module_from_template, v1_module_from_template
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
 def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
-    # Work around caching problem in venv
-    # feature_compiler_cache.set("False")
     # Disable modules_dir
     snippetcompiler.modules_dir = None
 
@@ -85,8 +83,6 @@ def test_v1_and_v2_module_installed_simultaneously(
        * A warning is logged
        * The V2 module is loaded and not the V1 module.
     """
-    # Work around caching problem in venv
-    # feature_compiler_cache.set("False")
 
     module_name = "v1_print_plugin"
 
