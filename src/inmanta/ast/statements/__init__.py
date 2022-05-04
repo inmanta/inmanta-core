@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
@@ -141,7 +140,6 @@ class RequiresEmitStatement(DynamicStatement):
         dict in order to pass it on to the execution phase.
         When this method is called, the caller must make sure to eventually call `execute` as well.
         """
-        # TODO: try {**} vs `update` in children
         return self._requires_emit_promises(resolver, queue)
 
     def requires_emit_gradual(
@@ -426,11 +424,9 @@ class ReferenceStatement(ExpressionStatement):
         return [req for v in self.children for req in v.requires()]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        parent_req: Mapping[object, VariableABC] = super().requires_emit(resolver, queue)
-        own_req: Mapping[object, VariableABC] = {
-            rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()
-        }
-        return {**parent_req, **own_req}
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
+        return requires
 
 
 class AssignStatement(DynamicStatement):

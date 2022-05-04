@@ -17,7 +17,6 @@
 """
 
 import logging
-from collections.abc import Mapping
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
@@ -66,19 +65,19 @@ class Reference(ExpressionStatement):
         return [self.full_name]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        parent_req: Mapping[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        out: Mapping[object, VariableABC] = {self.name: resolver.lookup(self.full_name)}
-        return {**parent_req, **out}
+        requires[self.name] = resolver.lookup(self.full_name)
+        return requires
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
     ) -> Dict[object, VariableABC]:
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out: Mapping[object, VariableABC] = {self.name: var}
-        return {**promises, **out}
+        requires[self.name] = var
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -266,13 +265,12 @@ class AttributeReference(Reference):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> Dict[object, VariableABC]:
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-
         # construct waiter
         reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
         hook: VariableReferenceHook = VariableReferenceHook(
@@ -282,9 +280,10 @@ class AttributeReference(Reference):
         )
         self.copy_location(hook)
         hook.schedule(resolver, queue)
-
         # wait for the attribute value
-        return {**promises, self: temp}
+        requires[self] = temp
+
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         ExpressionStatement.execute(self, requires, resolver, queue)

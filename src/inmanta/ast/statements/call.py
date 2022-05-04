@@ -17,7 +17,6 @@
 """
 
 import logging
-from collections.abc import Mapping
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
@@ -93,12 +92,13 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
         FunctionUnit(queue, resolver, temp, sub, self)
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires, resolver, queue):
         super().execute(requires, resolver, queue)

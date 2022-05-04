@@ -18,7 +18,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, List, Optional, Type
 
@@ -86,7 +86,7 @@ class IsDefined(ReferenceStatement):
         self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -100,7 +100,8 @@ class IsDefined(ReferenceStatement):
         hook.schedule(resolver, queue)
 
         # wait for the attribute value
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -244,13 +245,14 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
 
         # wait for the lhs
-        HangUnit(queue, resolver, {**promises, **self.children[0].requires_emit(resolver, queue)}, temp, self)
+        requires.update(self.children[0].requires_emit(resolver, queue))
+        HangUnit(queue, resolver, requires, temp, self)
         return {self: temp}
 
     def _validate_value(self, value: object, side: int) -> None:

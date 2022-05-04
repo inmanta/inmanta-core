@@ -19,7 +19,7 @@
 # pylint: disable-msg=W0613
 
 import typing
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, Optional, TypeVar
 
@@ -91,7 +91,7 @@ class CreateList(ReferenceStatement):
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
 
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
@@ -114,7 +114,8 @@ class CreateList(ReferenceStatement):
             temp.freeze()
 
         # pass temp
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -425,12 +426,13 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.type = self.namespace.get_type(self.index_type)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
-        parent_req: Mapping[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+        requires: Dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
         HangUnit(queue, resolver, sub, temp, self)
-        return {**parent_req, self: temp}
+        requires[self] = temp
+        return requires
 
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
