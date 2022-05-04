@@ -416,7 +416,13 @@ def environment_delete(client: Client, environment: str) -> None:
 @environment.command(name="recompile")
 @click.argument("environment")
 @click.option(
-    "--update", "-u", is_flag=True, required=False, default=False, show_default=True, help="Update the model and its dependencies before recompiling"
+    "--update",
+    "-u",
+    is_flag=True,
+    required=False,
+    default=False,
+    show_default=True,
+    help="Update the model and its dependencies before recompiling",
 )
 @click.pass_obj
 def environment_recompile(client: Client, environment: str, update: bool) -> None:
