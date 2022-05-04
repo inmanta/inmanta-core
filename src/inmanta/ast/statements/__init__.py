@@ -49,6 +49,8 @@ class Statement(Namespaced):
     An abstract baseclass representing a statement in the configuration policy.
     """
 
+    __slots__ = ("namespace", "anchors", "lexpos")
+
     def __init__(self) -> None:
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
@@ -78,6 +80,8 @@ class DynamicStatement(Statement):
     This class represents all statements that have dynamic properties.
     These are all statements that do not define typing.
     """
+
+    __slots__ = ("_own_eager_promises",)
 
     def __init__(self) -> None:
         Statement.__init__(self)
@@ -118,6 +122,8 @@ class DynamicStatement(Statement):
 
 
 class RequiresEmitStatement(DynamicStatement):
+    __slots__ = ()
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
@@ -183,6 +189,8 @@ class RequiresEmitStatement(DynamicStatement):
 
 
 class ExpressionStatement(RequiresEmitStatement):
+    __slots__ = ()
+
     def as_constant(self) -> object:
         """
         Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
@@ -201,6 +209,8 @@ class Resumer(ExpressionStatement):
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
 
+    __slots__ = ()
+
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
@@ -209,6 +219,8 @@ class RawResumer(ExpressionStatement):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
+
+    __slots__ = ()
 
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
@@ -221,6 +233,8 @@ class VariableReferenceHook(RawResumer):
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
     """
+
+    __slots__ = ("instance", "name", "variable_resumer")
 
     def __init__(
         self,
@@ -391,6 +405,8 @@ class ReferenceStatement(ExpressionStatement):
     This class models statements that refer to other statements
     """
 
+    __slots__ = ("children",)
+
     def __init__(self, children: List[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
@@ -450,6 +466,8 @@ class AssignStatement(DynamicStatement):
 
 
 class Literal(ExpressionStatement):
+    __slots__ = ("value",)
+
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value

@@ -77,6 +77,8 @@ class SubConstructor(ExpressionStatement):
         supertype.
     """
 
+    __slots__ = ("type", "location", "implements")
+
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
         super().__init__()
         self.type = instance_type
@@ -183,6 +185,8 @@ class For(RequiresEmitStatement):
     A for loop
     """
 
+    __slots__ = ("base", "loop_var", "loop_var_loc", "module")
+
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
         super().__init__()
         self.base: ExpressionStatement = variable
@@ -256,6 +260,8 @@ class If(ExpressionStatement):
     An if Statement
     """
 
+    __slots__ = ("condition", "if_branch", "else_branch")
+
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
         super().__init__()
         self.condition: ExpressionStatement = condition
@@ -309,6 +315,8 @@ class ConditionalExpression(ExpressionStatement):
     """
     A conditional expression similar to Python's `x if c else y`.
     """
+
+    __slots__ = ("if_expression", "else_expression")
 
     def __init__(
         self, condition: ExpressionStatement, if_expression: ExpressionStatement, else_expression: ExpressionStatement
@@ -375,6 +383,8 @@ class ConditionalExpression(ExpressionStatement):
 
 
 class ConditionalExpressionResumer(RawResumer):
+    __slots__ = ("expression", "condition_value", "result")
+
     def __init__(self, expression: ConditionalExpression, result: ResultVariable) -> None:
         super().__init__()
         self.expression: ConditionalExpression = expression
@@ -443,6 +453,17 @@ class Constructor(ExpressionStatement):
     :param class_type: The type of the object that is created by this
         constructor call.
     """
+
+    __slots__ = (
+        "class_type",
+        "__attributes",
+        "__wrapped_kwarg_attributes",
+        "location",
+        "type",
+        "required_kwargs",
+        "_direct_attributes",
+        "_indirect_attributes",
+    )
 
     def __init__(
         self,
@@ -711,6 +732,8 @@ class WrappedKwargs(ExpressionStatement):
     Keyword arguments wrapped in a dictionary.
     Separate AST node for the type check it provides in the execute method.
     """
+
+    __slots__ = ("dictionary",)
 
     def __init__(self, dictionary: ExpressionStatement) -> None:
         super().__init__()
