@@ -119,6 +119,30 @@ async def test_environment(server, client, cli, tmpdir):
         assert f"environment={env_id}" in file_content
 
 
+async def test_environment_recompile(server, environment, client, cli):
+    result = await client.get_compile_reports(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    result = await cli.run("environment", "recompile", environment)
+    assert result.exit_code == 0
+    assert "Recompile triggered successfully" in result.output
+
+    result = await cli.run("environment", "recompile", environment, "--update")
+    assert result.exit_code == 0
+    assert "Update & Recompile triggered successfully" in result.output
+
+    result = await client.get_compile_reports(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+
+    await client.set_setting(environment, data.SERVER_COMPILE, False)
+    result = await cli.run("environment", "recompile", environment)
+    assert result.exit_code == 0
+    assert "Skipping compile" in result.output
+    assert "Recompile triggered successfully" not in result.output
+
+
 async def test_environment_settings(server, environment, client, cli):
     result = await cli.run("environment", "setting", "list", "-e", environment)
     assert result.exit_code == 0

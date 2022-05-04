@@ -1,0 +1,6 @@
+description: Add 'inmanta-cli environment recompile' command
+issue-nr: 4052
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+    feature: "{{description}}"
