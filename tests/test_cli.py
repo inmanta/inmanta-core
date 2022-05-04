@@ -126,11 +126,11 @@ async def test_environment_recompile(server, environment, client, cli):
 
     result = await cli.run("environment", "recompile", environment)
     assert result.exit_code == 0
-    assert "Recompile successfully triggered" in result.output
+    assert "Recompile triggered successfully" in result.output
 
     result = await cli.run("environment", "recompile", environment, "--update")
     assert result.exit_code == 0
-    assert "Update & Recompile successfully triggered" in result.output
+    assert "Update & Recompile triggered successfully" in result.output
 
     result = await client.get_compile_reports(environment)
     assert result.code == 200

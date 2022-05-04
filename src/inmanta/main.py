@@ -438,7 +438,7 @@ def environment_recompile(client: Client, environment: str, update: bool) -> Non
         ),
     )
 
-    click.echo("Update & Recompile successfully triggered" if update else "Recompile successfully triggered")
+    click.echo("Update & Recompile triggered successfully" if update else "Recompile triggered successfully")
 
 
 @environment.group("setting", help="Subcommand to manage environment settings")
