@@ -316,7 +316,7 @@ class ConditionalExpression(ExpressionStatement):
     A conditional expression similar to Python's `x if c else y`.
     """
 
-    __slots__ = ("if_expression", "else_expression")
+    __slots__ = ("condition", "if_expression", "else_expression")
 
     def __init__(
         self, condition: ExpressionStatement, if_expression: ExpressionStatement, else_expression: ExpressionStatement
