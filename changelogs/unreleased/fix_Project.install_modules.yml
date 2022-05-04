@@ -2,5 +2,5 @@ change-type: patch
 description: fix the venv loading on Project.install_modules
 destination-branches:
 - master
-- iso4
+- iso5
 sections: {}
