@@ -347,8 +347,8 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
-        self.promises: List[IPromise] = []
-        self.done_promises: Set[IPromise] = set()
+        self.promises: Optional[List[IPromise]] = []
+        self.done_promises: Optional[Set[IPromise]] = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -356,16 +356,20 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_promise(self, provider: "Statement") -> ISetPromise[T]:
         promise: ISetPromise[T] = SetPromise(self, provider)
-        self.promises.append(promise)
+        if self.promises is not None:
+            # only track the promise if this variable has not been frozen yet.
+            self.promises.append(promise)
         return promise
 
     def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
+        if self.promises is None:
+            return None
         promise: ProgressionPromise = ProgressionPromise(self, provider)
         self.promises.append(promise)
         return promise
 
     def fulfill(self, promise: IPromise) -> None:
-        if self.hasValue:
+        if self.done_promises is None:
             # already frozen, no need to track promises anymore
             return
         self.done_promises.add(promise)
@@ -397,9 +401,11 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_waiting_providers(self) -> int:
         """How many values are definitely still waiting for"""
-        if self.hasValue:
+        if self.promises is None:
+            # already frozen
             return 0
         # todo: optimize?
+        assert self.done_promises is not None
         out = len(self.promises) - len(self.done_promises)
         if out < 0:
             raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
