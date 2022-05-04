@@ -156,13 +156,11 @@ class RequiresEmitStatement(DynamicStatement):
 
     def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """
-        Acquires eager promises this statement is responsible for and returns them, wrapped in a result variable, in a requires
-        dict.
+        Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
+        Returns an empty dict if no promises were acquired (for performance reasons).
         """
-        if promises := self.schedule_eager_promises(resolver, queue):
-            variable: VariableABC = WrappedValueVariable(promises)
-            return {(self, EagerPromise): variable}
-        return {}
+        promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
+        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
 
     def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
         """
