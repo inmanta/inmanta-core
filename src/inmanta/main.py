@@ -413,6 +413,34 @@ def environment_delete(client: Client, environment: str) -> None:
     click.echo("Environment successfully deleted")
 
 
+@environment.command(name="recompile")
+@click.argument("environment")
+@click.option(
+    "--update", "-u", is_flag=True, required=False, default=False, show_default=True, help="Update the model before recompiling"
+)
+@click.pass_obj
+def environment_recompile(client: Client, environment: str, update: bool) -> None:
+    """
+    Recompile the model of this environment
+
+    ENVIRONMENT: ID or name of the environment to trigger the recompile for
+    """
+    env_id = client.to_environment_id(environment)
+    client.do_request(
+        "notify_change",
+        arguments=dict(
+            id=env_id,
+            update=update,
+            metadata={
+                "type": "cli",
+                "message": "Compile triggered from the cli",
+            },
+        ),
+    )
+
+    click.echo("Update & Recompile successfully triggered" if update else "Recompile successfully triggered")
+
+
 @environment.group("setting", help="Subcommand to manage environment settings")
 @click.pass_context
 def env_setting(ctx: click.Context) -> None:
