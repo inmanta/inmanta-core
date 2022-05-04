@@ -141,6 +141,7 @@ class RequiresEmitStatement(DynamicStatement):
         dict in order to pass it on to the execution phase.
         When this method is called, the caller must make sure to eventually call `execute` as well.
         """
+        # TODO: try {**} vs `update` in children
         return self._requires_emit_promises(resolver, queue)
 
     def requires_emit_gradual(
@@ -318,6 +319,7 @@ class VariableResumer:
         raise NotImplementedError()
 
 
+# TODO: try slots here
 @dataclass(frozen=True)
 class StaticEagerPromise:
     """
@@ -360,6 +362,7 @@ class StaticEagerPromise:
         return dynamic
 
 
+# TODO: try slots here
 class EagerPromise(VariableResumer):
     """
     Dynamic node for eager promising (stateful). Eagerly acquires a progression promise on a variable when it becomes available.
