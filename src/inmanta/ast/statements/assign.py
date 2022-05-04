@@ -88,10 +88,10 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> typing.Dict[object, VariableABC]:
-        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
+
+        promises: Mapping[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
