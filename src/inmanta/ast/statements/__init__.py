@@ -34,7 +34,6 @@ from inmanta.execute.runtime import (
     ResultVariable,
     Typeorvalue,
     VariableABC,
-    Waiter,
     WrappedValueVariable,
 )
 
