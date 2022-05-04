@@ -17,14 +17,14 @@
 """
 import os
 from collections.abc import Sequence
-from typing import Optional, Union
+from typing import Iterator, Optional, Union
 
 import pytest
 
 from inmanta import compiler
 from inmanta.ast import Namespace
 from inmanta.ast.type import Type
-from inmanta.execute.runtime import Instance, ListVariable, ProgressionPromise, ResultVariable
+from inmanta.execute.runtime import DelayedResultVariable, Instance, ListVariable, ProgressionPromise, ResultVariable
 from inmanta.module import InmantaModuleRequirement
 from utils import module_from_template
 
@@ -261,7 +261,26 @@ def test_eager_promises_paired_lists(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_eager_promises_promise_cleanup(snippetcompiler) -> None:
+@pytest.fixture
+def compiler_keep_promise_state(monkeypatch) -> Iterator[None]:
+    freeze = DelayedResultVariable.freeze
+
+    def freeze_override(self) -> None:
+        """
+        Override for DelayedResultVariable.freeze that does not clean up promises.
+        """
+        promises = self.promises
+        done_promises = self.done_promises
+        freeze(self)
+        self.promises = promises
+        self.done_promises = done_promises
+
+    monkeypatch.setattr(DelayedResultVariable, "freeze", freeze_override)
+
+    yield None
+
+
+def test_eager_promises_promise_cleanup(snippetcompiler, compiler_keep_promise_state) -> None:
     """
     Verify that promises nested in a branch that is never taken are fulfilled.
     """
