@@ -365,6 +365,9 @@ class DelayedResultVariable(ResultVariable[T]):
         return promise
 
     def fulfill(self, promise: IPromise) -> None:
+        if self.hasValue:
+            # already frozen, no need to track promises anymore
+            return
         self.done_promises.add(promise)
         if self.can_get():
             self.queue()
@@ -380,6 +383,8 @@ class DelayedResultVariable(ResultVariable[T]):
         self.waiters = None
         self.listeners = None
         self.queues = None
+        self.promises = None
+        self.done_promises = None
 
     def queue(self) -> None:
         if self.queued:
@@ -392,6 +397,8 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_waiting_providers(self) -> int:
         """How many values are definitely still waiting for"""
+        if self.hasValue:
+            return 0
         # todo: optimize?
         out = len(self.promises) - len(self.done_promises)
         if out < 0:
@@ -519,7 +526,7 @@ class ListLiteral(BaseListVariable):
         """
         super().fulfill(promise)
         # 100% accurate promisse tracking
-        if len(self.promises) == len(self.done_promises):
+        if self.get_waiting_providers() == 0:
             self.freeze()
 
     def __str__(self) -> str:
@@ -644,12 +651,6 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         if self.type is None:
             return
         self.type.validate(value)
-
-    def get_waiting_providers(self) -> int:
-        # todo: optimize?
-        if self.hasValue:
-            return 0
-        return super().get_waiting_providers()
 
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
