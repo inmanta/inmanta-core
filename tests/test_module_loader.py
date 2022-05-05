@@ -527,23 +527,32 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
     project.load_module_recursive()
     assert "minimalv2module" not in project.modules
 
-
+@pytest.mark.slowtest
 def test_project_requirements_dont_overwrite_core_requirements(
-    snippetcompiler,
+    snippetcompiler_clean,
     local_module_package_index: str,
 ) -> None:
     """
-    A Project has a requirement that that is also a requirement of core
+    A project has a requirement that is also a requirement of core
     but with another version. The requirements of core should not be
     overwritten.
     """
-    project: Project = snippetcompiler.setup_for_snippet(
-        snippet="",  # Don't import elaboratev2module
-        python_package_sources=[local_module_package_index],
+    
+    # # activate the snippetcompiler venv
+    # project: module.Project = snippetcompiler_clean.setup_for_snippet("")
+
+    # active_env : VirtualEnv = project.virtualenv
+    # packages = active_env.get_installed_packages()
+
+    project = snippetcompiler_clean.setup_for_snippet(
+        snippet="",
+        python_package_sources=["https://pypi.org/simple/"],
         python_requires=[
             ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("std==3.0.1")),
         ],
-        autostd=False,
     )
-    project.load_module_recursive()
-    assert dependency not in project.modules
+
+
+
+ inmanta.env:env.py:329 ['/tmp/tmpwk7dy2gn/bin/python', '-m', 'pip', 'install', 'inmanta-module-std==3.0.1', '/tmp/tmpynew3kqr', '--index-url', 'https://pypi.org/simple/']: ERROR: Invalid requirement: '/tmp/tmpynew3kqr'
+Hint: It looks like a path. The path does exist. The argument you provided (/tmp/tmpynew3kqr) appears to be a requirements file. If that is the case, use the '-r' flag to install the packages specified within it.
