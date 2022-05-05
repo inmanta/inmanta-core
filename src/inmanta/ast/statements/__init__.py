@@ -280,10 +280,10 @@ class VariableReferenceHook(RawResumer):
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "%s.%s" % (self.instance, self.name)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "%s(%r, %s, %r)" % (self.__class__.__name__, self.instance, self.name, self.variable_resumer)
 
 
