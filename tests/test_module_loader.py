@@ -38,7 +38,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter
+from inmanta.moduletool import ModuleConverter, ModuleTool
 from utils import PipIndex, module_from_template, v1_module_from_template
 
 
@@ -553,6 +553,7 @@ def test_project_requirements_dont_overwrite_core_requirements(
     active_env : VirtualEnv = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
     
+    import pudb;pu.db
     #install the module
     ModuleTool().install(editable=False, path=module_path)
     Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
