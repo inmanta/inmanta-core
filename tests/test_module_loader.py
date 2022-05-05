@@ -526,3 +526,24 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
     )
     project.load_module_recursive()
     assert "minimalv2module" not in project.modules
+
+
+def test_project_requirements_dont_overwrite_core_requirements(
+    snippetcompiler,
+    local_module_package_index: str,
+) -> None:
+    """
+    A Project has a requirement that that is also a requirement of core
+    but with another version. The requirements of core should not be
+    overwritten.
+    """
+    project: Project = snippetcompiler.setup_for_snippet(
+        snippet="",  # Don't import elaboratev2module
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("std==3.0.1")),
+        ],
+        autostd=False,
+    )
+    project.load_module_recursive()
+    assert dependency not in project.modules

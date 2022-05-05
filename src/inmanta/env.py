@@ -255,6 +255,7 @@ class PythonEnvironment:
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
+        LOGGER.debug("install_from_index")
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
@@ -262,11 +263,11 @@ class PythonEnvironment:
             try:
                 cmd: List[str] = PipCommandBuilder.compose_install_command(
                     python_path=self.python_path,
-                    requirements=requirements,
+                    requirements=[*requirements, filename],
                     index_urls=index_urls,
                     upgrade=upgrade,
                     allow_pre_releases=allow_pre_releases,
-                    constraints_files=[*constraint_files, filename],
+                    constraints_files=constraint_files,
                 )
                 self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
             except CalledProcessError as e:
@@ -300,12 +301,16 @@ class PythonEnvironment:
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in workingset:
-                return f"{pkg}=={workingset[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core","inmanta-lsm"
+                            "inmanta-dev-dependencies", "inmanta-ui", "inmanta-extension-template", 
+                            "inmanta-support", "inmanta-license","inmanta-dashboard","inmanta-tfplugin"
+                            "inmanta-sphinx", "inmanta-project-template"]
+        requirements: List[str] = [
+            f"{pkg}=={workingset[pkg]}"
+            for pkg in inmanta_packages
+            if pkg in workingset
+        ]
+        return "\n".join(requirements)
 
     @classmethod
     def _run_command_and_log_output(
@@ -499,6 +504,7 @@ class ActiveEnv(PythonEnvironment):
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         """
+        LOGGER.debug("install_from_list")
         if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
             return
@@ -520,6 +526,7 @@ class ActiveEnv(PythonEnvironment):
         This method is maintained for V1 modules only: V2 modules do not require this conversion. It is currently used for both
         v1 and v2 for consistency but it can be substituted by `install_from_index` once V1 support is removed.
         """
+        LOGGER.debug("_install_from_list active env")
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
             with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
@@ -845,6 +852,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
+        LOGGER.debug("_install_from_list virtual env")
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)

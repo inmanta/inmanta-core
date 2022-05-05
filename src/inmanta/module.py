@@ -517,6 +517,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+        LOGGER.debug("INSTALL")
         if not self.urls:
             raise Exception(
                 "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
@@ -1593,13 +1594,17 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
+        LOGGER.debug("verify")
         self.verify()
         # do python install
+        LOGGER.debug("collect_python_requirements")
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
+            LOGGER.debug("install_from_list")
             self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
             # installing new dependencies into the virtual environment might introduce new conflicts
+            LOGGER.debug("verify_python_environment")
             self.verify_python_environment()
 
     def load(self, install: bool = False) -> None:
@@ -1928,9 +1933,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies the integrity of the loaded project, with respect to both inter-module requirements and the Python environment.
         """
+        LOGGER.debug("1")
         self.verify_modules_cache()
+        LOGGER.debug("2")
         self.verify_module_version_compatibility()
+        LOGGER.debug("3")
         self.verify_python_requires()
+        LOGGER.debug("4")
+
 
     def verify_python_environment(self) -> None:
         """
