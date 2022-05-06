@@ -19,7 +19,7 @@
 import traceback
 from abc import abstractmethod
 from functools import lru_cache
-from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, Union  # noqa: F401
+from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
@@ -32,11 +32,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
-    from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.entity import Entity  # noqa: F401
-    from inmanta.ast.statements import AssignStatement, Statement  # noqa: F401
+    from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.compiler import Compiler
@@ -152,7 +149,7 @@ class Locatable(object):
     __slots__ = ("_location",)
 
     def __init__(self) -> None:
-        self._location: Location = None
+        self._location: Optional[Location] = None
 
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
