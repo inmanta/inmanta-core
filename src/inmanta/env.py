@@ -258,7 +258,7 @@ class PythonEnvironment:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
+        with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
             try:
                 cmd: List[str] = PipCommandBuilder.compose_install_command(
                     python_path=self.python_path,
@@ -266,7 +266,8 @@ class PythonEnvironment:
                     index_urls=index_urls,
                     upgrade=upgrade,
                     allow_pre_releases=allow_pre_releases,
-                    constraints_files=[*constraint_files, filename],
+                    constraints_files=[*constraint_files],
+                    requirements_files=[filename]
                 )
                 self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
             except CalledProcessError as e:
@@ -287,7 +288,7 @@ class PythonEnvironment:
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
+        with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
             cmd: List[str] = PipCommandBuilder.compose_install_command(
                 python_path=self.python_path,
                 paths=paths,
@@ -296,10 +297,24 @@ class PythonEnvironment:
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
+
     @functools.lru_cache(maxsize=1)
     def _get_constraint_on_inmanta_package(self) -> str:
         """
         Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        to make sure that no Inmanta packages gets overridden.
+        """
+        workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
+        for pkg in inmanta_packages:
+            if pkg in workingset:
+                return f"{pkg}=={workingset[pkg]}"
+        # No inmanta product or inmanta-core package installed -> Leave constraint empty
+        return ""
+    
+    def _get_requirements_on_inmanta_package(self) -> str:
+        """
+        Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
@@ -529,11 +544,10 @@ class ActiveEnv(PythonEnvironment):
         """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
-            with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
+            with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
                 cmd: List[str] = PipCommandBuilder.compose_install_command(
                     python_path=self.python_path,
-                    requirements_files=[requirements_file],
-                    constraints_files=[constraint_file],
+                    requirements_files=[requirements_file, filename],
                     upgrade=upgrade,
                     upgrade_strategy=upgrade_strategy,
                 )

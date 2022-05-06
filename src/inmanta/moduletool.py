@@ -61,6 +61,7 @@ from inmanta.module import (
     Project,
     gitprovider,
 )
+from subprocess import CalledProcessError
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
@@ -778,7 +779,13 @@ version: 0.0.1dev0"""
         """
 
         def install(install_path: str) -> None:
-            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            try:
+                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            except CalledProcessError as e:
+                stderr: str = e.stderr.decode()
+                if("versions have conflicting dependencies" in stderr):
+                    raise InvalidModuleException(stderr)
+                raise e
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
