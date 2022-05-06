@@ -428,11 +428,11 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
-    inmanta_requirements = Requirement.parse("inmanta-core==0.0.2")
+    inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
     with pytest.raises(CalledProcessError) as excinfo:
         tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
 
-    match = re.search(r"The conflict is caused by:\n.*The user requested inmanta-core==0\.0\.2", excinfo.value.output.decode())
+    match = re.search(r"The conflict is caused by:\n.*The user requested inmanta-core==4\.0\.0", excinfo.value.output.decode())
     assert match is not None
 
 

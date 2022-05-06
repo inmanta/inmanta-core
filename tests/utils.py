@@ -253,7 +253,6 @@ async def wait_for_version(client, environment, cnt):
     # wait for it to finish
     async def compile_done():
         compiling = await client.is_compiling(environment)
-        print(compiling.code)
         code = compiling.code
         return code == 204
 
