@@ -209,6 +209,8 @@ class SetAttribute(AssignStatement, Resumer):
     Set an attribute of a given instance to a given value
     """
 
+    __slots__ = ("instance", "attribute_name", "value", "list_only", "_assignment_promise")
+
     def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance

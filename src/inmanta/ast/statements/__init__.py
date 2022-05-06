@@ -305,6 +305,8 @@ class VariableResumer:
     Resume execution on a variable object when it becomes available (i.e. it exists).
     """
 
+    __slots__ = ()
+
     def variable_resume(
         self,
         variable: ResultVariable,
@@ -431,6 +433,8 @@ class AssignStatement(DynamicStatement):
     """
     This class models binary sts
     """
+
+    __slots__ = ("lhs", "rhs")
 
     def __init__(self, lhs: Optional["Reference"], rhs: ExpressionStatement) -> None:
         DynamicStatement.__init__(self)
