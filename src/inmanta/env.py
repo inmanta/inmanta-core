@@ -324,7 +324,8 @@ class PythonEnvironment:
             "inmanta-support",
             "inmanta-license",
             "inmanta-dashboard",
-            "inmanta-tfplugin", "inmanta-sphinx",
+            "inmanta-tfplugin",
+            "inmanta-sphinx",
             "inmanta-project-template",
         ]
         requirements: List[str] = [f"{pkg}=={workingset[pkg]}" for pkg in inmanta_packages if pkg in workingset]
