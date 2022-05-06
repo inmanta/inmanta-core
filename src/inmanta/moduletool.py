@@ -30,6 +30,7 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
+from subprocess import CalledProcessError
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
 import texttable
@@ -61,7 +62,6 @@ from inmanta.module import (
     Project,
     gitprovider,
 )
-from subprocess import CalledProcessError
 from inmanta.stable_api import stable_api
 
 if TYPE_CHECKING:
@@ -783,7 +783,7 @@ version: 0.0.1dev0"""
                 env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
             except CalledProcessError as e:
                 stderr: str = e.stderr.decode()
-                if("versions have conflicting dependencies" in stderr):
+                if "versions have conflicting dependencies" in stderr:
                     raise InvalidModuleException(stderr)
                 raise e
 

@@ -267,7 +267,7 @@ class PythonEnvironment:
                     upgrade=upgrade,
                     allow_pre_releases=allow_pre_releases,
                     constraints_files=[*constraint_files],
-                    requirements_files=[filename]
+                    requirements_files=[filename],
                 )
                 self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
             except CalledProcessError as e:
@@ -290,10 +290,7 @@ class PythonEnvironment:
         constraint_files = constraint_files if constraint_files is not None else []
         with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
             cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=self.python_path,
-                paths=paths,
-                constraints_files=constraint_files,
-                requirements_files=[filename]
+                python_path=self.python_path, paths=paths, constraints_files=constraint_files, requirements_files=[filename]
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
@@ -310,22 +307,27 @@ class PythonEnvironment:
                 return f"{pkg}=={workingset[pkg]}"
         # No inmanta product or inmanta-core package installed -> Leave constraint empty
         return ""
-    
+
     def _get_requirements_on_inmanta_package(self) -> str:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core","inmanta-lsm"
-                            "inmanta-dev-dependencies", "inmanta-ui", "inmanta-extension-template", 
-                            "inmanta-support", "inmanta-license","inmanta-dashboard","inmanta-tfplugin"
-                            "inmanta-sphinx", "inmanta-project-template"]
-        requirements: List[str] = [
-            f"{pkg}=={workingset[pkg]}"
-            for pkg in inmanta_packages
-            if pkg in workingset
+        inmanta_packages = [
+            "inmanta-service-orchestrator",
+            "inmanta",
+            "inmanta-core",
+            "inmanta-lsm" "inmanta-dev-dependencies",
+            "inmanta-ui",
+            "inmanta-extension-template",
+            "inmanta-support",
+            "inmanta-license",
+            "inmanta-dashboard",
+            "inmanta-tfplugin" "inmanta-sphinx",
+            "inmanta-project-template",
         ]
+        requirements: List[str] = [f"{pkg}=={workingset[pkg]}" for pkg in inmanta_packages if pkg in workingset]
         return "\n".join(requirements)
 
     @classmethod
