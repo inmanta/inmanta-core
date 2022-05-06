@@ -52,6 +52,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     VariableABC,
+    WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
@@ -221,13 +222,9 @@ class For(RequiresEmitStatement):
 
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
-
-        # TODO: use WrappedValueVariable
-        helperwrapped = ResultVariable()
-        helperwrapped.set_value(helper, self.location)
+        requires[self] = WrappedValueVariable(helper)
 
         requires.update(self.base.requires_emit_gradual(resolver, queue, helper))
-        requires[self] = helperwrapped
 
         return requires
 

@@ -317,7 +317,6 @@ class VariableResumer:
         raise NotImplementedError()
 
 
-# TODO: try slots here
 @dataclass(frozen=True)
 class StaticEagerPromise:
     """
@@ -360,7 +359,6 @@ class StaticEagerPromise:
         return dynamic
 
 
-# TODO: try slots here
 class EagerPromise(VariableResumer):
     """
     Dynamic node for eager promising (stateful). Eagerly acquires a progression promise on a variable when it becomes available.
