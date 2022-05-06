@@ -635,3 +635,4 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
 
     Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert Jinja2_version_before==Jinja2_version_after
+    

@@ -297,7 +297,6 @@ class PythonEnvironment:
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
-
     @functools.lru_cache(maxsize=1)
     def _get_constraint_on_inmanta_package(self) -> str:
         """
