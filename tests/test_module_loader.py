@@ -553,10 +553,10 @@ def test_project_requirements_dont_overwrite_core_requirements(
     active_env : VirtualEnv = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
     
+    print("-----------------INSTALL THE MODULE-------------")
     import pudb;pu.db
     #install the module
     ModuleTool().install(editable=False, path=module_path)
     Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
-
     assert Jinja2_version_before==Jinja2_version_after
 

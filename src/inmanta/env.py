@@ -146,6 +146,7 @@ class PipCommandBuilder:
         )
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
+        import pudb;pu.db
         return [
             python_path,
             "-m",
@@ -289,7 +290,10 @@ class PythonEnvironment:
         constraint_files = constraint_files if constraint_files is not None else []
         with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
             cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename]
+                python_path=self.python_path,
+                paths=paths,
+                constraints_files=constraint_files,
+                requirements_files=[filename]
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
@@ -300,12 +304,16 @@ class PythonEnvironment:
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in workingset:
-                return f"{pkg}=={workingset[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
+        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core","inmanta-lsm"
+                            "inmanta-dev-dependencies", "inmanta-ui", "inmanta-extension-template", 
+                            "inmanta-support", "inmanta-license","inmanta-dashboard","inmanta-tfplugin"
+                            "inmanta-sphinx", "inmanta-project-template"]
+        requirements: List[str] = [
+            f"{pkg}=={workingset[pkg]}"
+            for pkg in inmanta_packages
+            if pkg in workingset
+        ]
+        return "\n".join(requirements)
 
     @classmethod
     def _run_command_and_log_output(
@@ -391,6 +399,7 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
+        import pudb;pu.db
         if not upgrade and self.are_installed(requirements):
             return
         try:
@@ -492,7 +501,6 @@ class ActiveEnv(PythonEnvironment):
         #     if pkg in workingset
         # ]
         # return "\n".join(requirements)
-        import pudb;pu.db
         return requirements_file
 
     def install_from_list(
@@ -532,9 +540,9 @@ class ActiveEnv(PythonEnvironment):
         v1 and v2 for consistency but it can be substituted by `install_from_index` once V1 support is removed.
         """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
-        import pudb;pu.db
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
             with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
+                import pudb;pu.db
                 cmd: List[str] = PipCommandBuilder.compose_install_command(
                     python_path=self.python_path,
                     requirements_files=[requirements_file],
@@ -835,6 +843,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
+        import pudb;pu.db
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
