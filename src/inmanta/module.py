@@ -1593,17 +1593,13 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
-        LOGGER.debug("verify")
         self.verify()
         # do python install
-        LOGGER.debug("collect_python_requirements")
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            LOGGER.debug("install_from_list")
             self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
             # installing new dependencies into the virtual environment might introduce new conflicts
-            LOGGER.debug("verify_python_environment")
             self.verify_python_environment()
 
     def load(self, install: bool = False) -> None:
@@ -1935,7 +1931,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
         self.verify_python_requires()
-
 
     def verify_python_environment(self) -> None:
         """

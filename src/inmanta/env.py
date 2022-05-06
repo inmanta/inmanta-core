@@ -488,6 +488,7 @@ class ActiveEnv(PythonEnvironment):
                 module = info["url"]
 
             requirements_file += module + version_spec + markers + "\n"
+
         return requirements_file
 
     def install_from_list(
@@ -851,7 +852,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        LOGGER.debug("_install_from_list virtual env")
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
