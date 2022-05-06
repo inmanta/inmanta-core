@@ -1592,7 +1592,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
-        import pudb;pu.db
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
         LOGGER.debug("verify")
         self.verify()
