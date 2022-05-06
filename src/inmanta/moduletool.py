@@ -30,7 +30,6 @@ import zipfile
 from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import ConfigParser
-from subprocess import CalledProcessError
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
 import texttable
@@ -781,7 +780,7 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             try:
                 env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
-            except CalledProcessError as e:
+            except subprocess.CalledProcessError as e:
                 stderr: str = e.stderr.decode()
                 if "versions have conflicting dependencies" in stderr:
                     raise InvalidModuleException(stderr)
