@@ -294,20 +294,6 @@ class PythonEnvironment:
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
-    @functools.lru_cache(maxsize=1)
-    def _get_constraint_on_inmanta_package(self) -> str:
-        """
-        Returns the content of the constraint file that should be supplied to each `pip install` invocation
-        to make sure that no Inmanta packages gets overridden.
-        """
-        workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in workingset:
-                return f"{pkg}=={workingset[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
-
     def _get_requirements_on_inmanta_package(self) -> str:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
