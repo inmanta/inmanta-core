@@ -531,37 +531,6 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
 
 
 @pytest.mark.slowtest
-def test_module_requirements_dont_overwrite_core_requirements_source(
-    snippetcompiler_clean,
-    local_module_package_index: str,
-    modules_v2_dir: str,
-    tmpdir: py.path.local,
-) -> None:
-    """
-    A project has a requirement that is also a requirement of core
-    but with another version. The requirements of core should not be
-    overwritten.
-    """
-    # create the module
-    module_name: str = "minimalv2module"
-    module_path: str = str(tmpdir.join(module_name))
-    module_from_template(
-        os.path.join(modules_v2_dir, module_name), module_path, new_requirements=[Requirement.parse("Jinja2==2.11.3")]
-    )
-
-    # activate the snippetcompiler venv
-    project: Project = snippetcompiler_clean.setup_for_snippet("")
-    active_env: VirtualEnv = project.virtualenv
-    Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
-
-    # install the module
-    with pytest.raises(CalledProcessError):
-        ModuleTool().install(editable=False, path=module_path)
-    Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
-    assert Jinja2_version_before == Jinja2_version_after
-
-
-@pytest.mark.slowtest
 def test_project_requirements_dont_overwrite_core_requirements_source(
     snippetcompiler_clean,
     local_module_package_index: str,
@@ -582,7 +551,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
 
     # Activate the snippetcompiler venv
     project: module.Project = snippetcompiler_clean.setup_for_snippet("")
-    active_env: VirtualEnv = project.virtualenv
+    active_env = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
@@ -624,7 +593,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
         autostd=False,
     )
 
-    active_env: VirtualEnv = project.virtualenv
+    active_env = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install project
