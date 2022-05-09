@@ -1952,7 +1952,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def verify_module_version_compatibility(self) -> None:
         if not self._module_versions_compatible():
-            raise CompilerException("Not all module dependencies have been met. Run `inmanta modules update` to resolve this.")
+            raise CompilerException("Not all module dependencies have been met. Run `inmanta project update` to resolve this.")
 
     def verify_python_requires(self) -> None:
         """

@@ -199,7 +199,7 @@ class ProjectTool(ModuleLikeTool):
 Install all modules required for this project.
 
 This command installs missing modules in the development venv, but doesn't update already installed modules if that's not
-required to satisfy the module version constraints. Use `inmanta modules update` instead if the already installed modules need
+required to satisfy the module version constraints. Use `inmanta project update` instead if the already installed modules need
 to be updated to the latest compatible version.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible

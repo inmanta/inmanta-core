@@ -637,7 +637,7 @@ def test_project_install_incompatible_versions(
     # install project
     os.chdir(module.Project.get().path)
     with pytest.raises(
-        CompilerException, match="Not all module dependencies have been met. Run `inmanta modules update` to resolve this."
+        CompilerException, match="Not all module dependencies have been met. Run `inmanta project update` to resolve this."
     ):
         ProjectTool().execute("install", [])
 
