@@ -17,7 +17,6 @@
 """
 import contextlib
 import enum
-import functools
 import importlib.util
 import json
 import logging
