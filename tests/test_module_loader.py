@@ -549,7 +549,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     )
 
     # Activate the snippetcompiler venv
-    project: module.Project = snippetcompiler_clean.setup_for_snippet("")
+    project: Project = snippetcompiler_clean.setup_for_snippet("")
     active_env = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
@@ -584,7 +584,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     )
 
     # Setup project
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+    project: Project = snippetcompiler_clean.setup_for_snippet(
         "",
         install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
