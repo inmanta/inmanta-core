@@ -40,7 +40,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
+from inmanta.moduletool import ModuleConverter, ModuleTool
 from utils import PipIndex, module_from_template, v1_module_from_template
 
 
