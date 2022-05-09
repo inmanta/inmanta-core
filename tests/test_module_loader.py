@@ -550,7 +550,7 @@ def test_module_requirements_dont_overwrite_core_requirements_source(
     )
 
     # activate the snippetcompiler venv
-    project: module.Project = snippetcompiler_clean.setup_for_snippet("")
+    project: Project = snippetcompiler_clean.setup_for_snippet("")
     active_env: VirtualEnv = project.virtualenv
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
@@ -571,7 +571,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     """
     A project has a requirement that is also a requirement of core
     but with another version. The requirements of core should not be
-    overwritten.
+    overwritten. The module gets installed from source
     """
     # Create the module
     module_name: str = "minimalv2module"
@@ -602,7 +602,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     """
     A module from index has a requirement that is also a requirement of core
     but with another version. The requirements of core should not be
-    overwritten.
+    overwritten. The module gets installed from t
     """
     # Create the module
     module_name: str = "minimalv2module"
