@@ -361,7 +361,7 @@ class DelayedResultVariable(ResultVariable[T]):
             self.promises.append(promise)
         return promise
 
-    def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
+    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
         if self.promises is None:
             return None
         promise: ProgressionPromise = ProgressionPromise(self, provider)
