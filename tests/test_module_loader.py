@@ -554,7 +554,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
-    with pytest.raises(InvalidModuleException) as e:
+    with pytest.raises(InvalidModuleException):
         ModuleTool().install(editable=False, path=module_path)
     Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert Jinja2_version_before == Jinja2_version_after
