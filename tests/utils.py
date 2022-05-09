@@ -256,7 +256,7 @@ async def wait_for_version(client, environment, cnt):
         code = compiling.code
         return code == 204
 
-    await retry_limited(compile_done, 20)
+    await retry_limited(compile_done, 30)
 
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
