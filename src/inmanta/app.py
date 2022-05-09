@@ -617,7 +617,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         "-v",
         "--verbose",
         action="count",
-        default=0,
+        default=1,
         help="Log level for messages going to the console. Default is only errors,"
         "-v warning, -vv info and -vvv debug and -vvvv trace",
     )
