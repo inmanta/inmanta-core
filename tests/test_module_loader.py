@@ -19,7 +19,6 @@ import logging
 import os
 import shutil
 import sys
-from subprocess import CalledProcessError
 from typing import List, Optional, Set
 
 import py
