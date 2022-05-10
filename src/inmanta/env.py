@@ -299,17 +299,10 @@ class PythonEnvironment:
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = [
-            "inmanta-service-orchestrator",
-            "inmanta",
-            "inmanta-core",
-            "inmanta-lsm",
-            "inmanta-ui",
-            "inmanta-support",
-            "inmanta-license",
-            "inmanta-project-template",
-        ]
-        requirements: List[str] = [f"{pkg}=={workingset[pkg]}" for pkg in inmanta_packages if pkg in workingset]
+        requirements: List[str] = []
+        for pkg in workingset:
+            if pkg == "inmanta" or (pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-")):
+                requirements.append(f"{pkg}=={workingset[pkg]}")
         return "\n".join(requirements)
 
     @classmethod
