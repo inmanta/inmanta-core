@@ -139,7 +139,7 @@ std::print(test_string_11)
 
 def test_escaping_rules_single_vs_triple_quotes_2582(snippetcompiler, capsys):
     """
-    Visual check that new line characters are correctly interpreted in multi-line strings
+    Check that new line characters are correctly interpreted in multi-line strings
     """
     snippetcompiler.setup_for_snippet(
         r'''
