@@ -100,7 +100,6 @@ class SubConstructor(ExpressionStatement):
         #    for promise in implementation.statements.get_eager_promises()
         #    if promise.get_root_variable() not in injected_variables
         #]
-        self._own_eager_promises = []
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
