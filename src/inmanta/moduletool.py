@@ -780,7 +780,7 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             try:
                 env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
-            except env.ConflictingRequirements as e:
+            except env.ConflictingRequirements:
                 raise InvalidModuleException(stderr)
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
