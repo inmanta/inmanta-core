@@ -303,14 +303,10 @@ class PythonEnvironment:
             "inmanta-service-orchestrator",
             "inmanta",
             "inmanta-core",
-            "inmanta-lsm" "inmanta-dev-dependencies",
+            "inmanta-lsm",
             "inmanta-ui",
-            "inmanta-extension-template",
             "inmanta-support",
             "inmanta-license",
-            "inmanta-dashboard",
-            "inmanta-tfplugin",
-            "inmanta-sphinx",
             "inmanta-project-template",
         ]
         requirements: List[str] = [f"{pkg}=={workingset[pkg]}" for pkg in inmanta_packages if pkg in workingset]

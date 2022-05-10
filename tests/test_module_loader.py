@@ -570,7 +570,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     """
     A module from index has a requirement that is also a requirement of core
     but with another version. The requirements of core should not be
-    overwritten. The module gets installed from t
+    overwritten. The module gets installed from index.
     """
     # Create the module
     module_name: str = "minimalv2module"
