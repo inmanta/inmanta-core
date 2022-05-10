@@ -257,28 +257,27 @@ class PythonEnvironment:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
-            try:
-                cmd: List[str] = PipCommandBuilder.compose_install_command(
-                    python_path=self.python_path,
-                    requirements=requirements,
-                    index_urls=index_urls,
-                    upgrade=upgrade,
-                    allow_pre_releases=allow_pre_releases,
-                    constraints_files=[*constraint_files],
-                    requirements_files=[filename],
-                )
-                self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
-            except CalledProcessError as e:
-                stderr: str = e.stderr.decode()
-                not_found: List[str] = [
-                    requirement.project_name
-                    for requirement in requirements
-                    if f"No matching distribution found for {requirement.project_name}" in stderr
-                ]
-                if not_found:
-                    raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-                raise e
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        try:
+            cmd: List[str] = PipCommandBuilder.compose_install_command(
+                python_path=self.python_path,
+                requirements=[*requirements, *inmanta_requirements],
+                index_urls=index_urls,
+                upgrade=upgrade,
+                allow_pre_releases=allow_pre_releases,
+                constraints_files=[*constraint_files],
+            )
+            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        except CalledProcessError as e:
+            stderr: str = e.stderr.decode()
+            not_found: List[str] = [
+                requirement.project_name
+                for requirement in requirements
+                if f"No matching distribution found for {requirement.project_name}" in stderr
+            ]
+            if not_found:
+                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+            raise e
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         """
@@ -292,7 +291,6 @@ class PythonEnvironment:
             python_path=self.python_path,
             paths=paths,
             constraints_files=constraint_files,
-            requirements_files=[filename],
             requirements=inmanta_requirements,
         )
         self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
