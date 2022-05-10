@@ -293,17 +293,17 @@ class PythonEnvironment:
             )
             self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
-    def _get_requirements_on_inmanta_package(self) -> str:
+    def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        requirements: List[str] = []
+        requirements: Sequence[Requirement] = []
         for pkg in workingset:
             if pkg == "inmanta" or (pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-")):
-                requirements.append(f"{pkg}=={workingset[pkg]}")
-        return "\n".join(requirements)
+                requirements.append(Requirement.parse(f"{pkg}=={workingset[pkg]}"))
+        return requirements
 
     @classmethod
     def _run_command_and_log_output(
@@ -520,18 +520,18 @@ class ActiveEnv(PythonEnvironment):
         """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
-            with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
-                cmd: List[str] = PipCommandBuilder.compose_install_command(
-                    python_path=self.python_path,
-                    requirements_files=[requirements_file, filename],
-                    upgrade=upgrade,
-                    upgrade_strategy=upgrade_strategy,
-                )
-                try:
-                    self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
-                except Exception:
-                    LOGGER.error("requirements: %s", content_requirements_file)
-                    raise
+            inmanta_requirements = self._get_requirements_on_inmanta_package()
+            cmd: List[str] = PipCommandBuilder.compose_install_command(
+                python_path=self.python_path,
+                requirements_files=[requirements_file, inmanta_requirements],
+                upgrade=upgrade,
+                upgrade_strategy=upgrade_strategy,
+            )
+            try:
+                self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
+            except Exception:
+                LOGGER.error("requirements: %s", content_requirements_file)
+                raise
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
