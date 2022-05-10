@@ -551,13 +551,13 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     # Activate the snippetcompiler venv
     project: Project = snippetcompiler_clean.setup_for_snippet("")
     active_env = project.virtualenv
-    Jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
     with pytest.raises(InvalidModuleException):
         ModuleTool().install(editable=False, path=module_path)
-    Jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
-    assert Jinja2_version_before == Jinja2_version_after
+    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    assert jinja2_version_before == jinja2_version_after
 
 
 @pytest.mark.slowtest
