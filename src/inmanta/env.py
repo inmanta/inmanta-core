@@ -287,11 +287,15 @@ class PythonEnvironment:
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_requirements_on_inmanta_package()) as filename:
-            cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=self.python_path, paths=paths, constraints_files=constraint_files, requirements_files=[filename]
-            )
-            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        cmd: List[str] = PipCommandBuilder.compose_install_command(
+            python_path=self.python_path,
+            paths=paths,
+            constraints_files=constraint_files,
+            requirements_files=[filename],
+            requirements=inmanta_requirements,
+        )
+        self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
 
     def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
         """
@@ -523,7 +527,8 @@ class ActiveEnv(PythonEnvironment):
             inmanta_requirements = self._get_requirements_on_inmanta_package()
             cmd: List[str] = PipCommandBuilder.compose_install_command(
                 python_path=self.python_path,
-                requirements_files=[requirements_file, inmanta_requirements],
+                requirements_files=[requirements_file],
+                requirements=inmanta_requirements,
                 upgrade=upgrade,
                 upgrade_strategy=upgrade_strategy,
             )
