@@ -107,7 +107,44 @@ class ProgressionPromise(IPromise):
         self.owner.fulfill(self)
 
 
-class ResultVariable(ResultCollector[T], ISetPromise[T]):
+class VariableABC(Generic[T]):
+    """
+    Abstract base class for variables that get passed around the AST nodes' methods via waiters.
+    """
+
+    __slots__ = ()
+
+    def get_value(self) -> T:
+        """
+        Returns the value object for this variable
+        """
+        raise NotImplementedError()
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        """
+        Informs this variable that a waiter waits on its value. Once the variable receives a value, it should inform the waiter.
+        """
+        raise NotImplementedError()
+
+
+class WrappedValueVariable(VariableABC[T]):
+    """
+    Variable that holds a single value that is known at construction. Used to wrap values where a VariableABC is expected.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: T) -> None:
+        self.value: T = value
+
+    def get_value(self) -> T:
+        return self.value
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        waiter.ready(self)
+
+
+class ResultVariable(VariableABC, ResultCollector[T], ISetPromise[T]):
     """
     A ResultVariable is like a future
      - it has a list of waiters
@@ -310,8 +347,8 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
-        self.promises: List[IPromise] = []
-        self.done_promises: Set[IPromise] = set()
+        self.promises: Optional[List[IPromise]] = []
+        self.done_promises: Optional[Set[IPromise]] = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -319,15 +356,22 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_promise(self, provider: "Statement") -> ISetPromise[T]:
         promise: ISetPromise[T] = SetPromise(self, provider)
-        self.promises.append(promise)
+        if self.promises is not None:
+            # only track the promise if this variable has not been frozen yet.
+            self.promises.append(promise)
         return promise
 
-    def get_progression_promise(self, provider: "Statement") -> ProgressionPromise:
+    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
+        if self.promises is None:
+            return None
         promise: ProgressionPromise = ProgressionPromise(self, provider)
         self.promises.append(promise)
         return promise
 
     def fulfill(self, promise: IPromise) -> None:
+        if self.done_promises is None:
+            # already frozen, no need to track promises anymore
+            return
         self.done_promises.add(promise)
         if self.can_get():
             self.queue()
@@ -343,6 +387,8 @@ class DelayedResultVariable(ResultVariable[T]):
         self.waiters = None
         self.listeners = None
         self.queues = None
+        self.promises = None
+        self.done_promises = None
 
     def queue(self) -> None:
         if self.queued:
@@ -355,7 +401,11 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def get_waiting_providers(self) -> int:
         """How many values are definitely still waiting for"""
+        if self.promises is None:
+            # already frozen
+            return 0
         # todo: optimize?
+        assert self.done_promises is not None
         out = len(self.promises) - len(self.done_promises)
         if out < 0:
             raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
@@ -482,7 +532,7 @@ class ListLiteral(BaseListVariable):
         """
         super().fulfill(promise)
         # 100% accurate promisse tracking
-        if len(self.promises) == len(self.done_promises):
+        if self.get_waiting_providers() == 0:
             self.freeze()
 
     def __str__(self) -> str:
@@ -607,12 +657,6 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         if self.type is None:
             return
         self.type.validate(value)
-
-    def get_waiting_providers(self) -> int:
-        # todo: optimize?
-        if self.hasValue:
-            return 0
-        return super().get_waiting_providers()
 
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
@@ -745,7 +789,7 @@ class Waiter(object):
 
     __slots__ = ("waitcount", "queue", "done", "requires")
 
-    requires: Dict[object, ResultVariable]
+    requires: Dict[object, VariableABC]
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -792,7 +836,7 @@ class ExecutionUnit(Waiter):
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
         result: ResultVariable[object],
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         expression: "RequiresEmitStatement",
         owner: "Optional[Statement]" = None,
     ):
@@ -838,7 +882,7 @@ class HangUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         target: Optional[ResultVariable],
         resumer: "Resumer",
     ) -> None:
@@ -872,7 +916,7 @@ class RawUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, ResultVariable],
+        requires: Dict[object, VariableABC],
         resumer: "RawResumer",
         override_exception_location: bool = True,
     ) -> None:

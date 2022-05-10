@@ -17,7 +17,6 @@
 """
 
 import logging
-from collections.abc import Mapping
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
@@ -38,7 +37,7 @@ from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
@@ -55,6 +54,8 @@ class FunctionCall(ReferenceStatement):
     provides:      return value
     contributes:
     """
+
+    __slots__ = ("name", "arguments", "wrapped_kwargs", "location", "kwargs", "function")
 
     def __init__(
         self,
@@ -91,12 +92,13 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
         FunctionUnit(queue, resolver, temp, sub, self)
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires, resolver, queue):
         super().execute(requires, resolver, queue)

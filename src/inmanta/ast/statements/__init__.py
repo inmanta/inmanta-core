@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
@@ -33,7 +32,8 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     Typeorvalue,
-    Waiter,
+    VariableABC,
+    WrappedValueVariable,
 )
 
 if TYPE_CHECKING:
@@ -47,6 +47,8 @@ class Statement(Namespaced):
     """
     An abstract baseclass representing a statement in the configuration policy.
     """
+
+    __slots__ = ("namespace", "anchors", "lexpos")
 
     def __init__(self) -> None:
         Namespaced.__init__(self)
@@ -77,6 +79,8 @@ class DynamicStatement(Statement):
     This class represents all statements that have dynamic properties.
     These are all statements that do not define typing.
     """
+
+    __slots__ = ("_own_eager_promises",)
 
     def __init__(self) -> None:
         Statement.__init__(self)
@@ -121,6 +125,8 @@ class DynamicStatement(Statement):
 
 
 class RequiresEmitStatement(DynamicStatement):
+    __slots__ = ()
+
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
@@ -130,7 +136,7 @@ class RequiresEmitStatement(DynamicStatement):
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Names are an opaque identifier. May emit statements to
         break execution is smaller segments.
@@ -142,7 +148,7 @@ class RequiresEmitStatement(DynamicStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
-    ) -> Dict[object, ResultVariable]:
+    ) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
@@ -150,14 +156,13 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return self.requires_emit(resolver, queue)
 
-    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """
-        Acquires eager promises this statement is responsible for and returns them, wrapped in a result variable, in a requires
-        dict.
+        Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
+        Returns an empty dict if no promises were acquired (for performance reasons).
         """
-        promises: ResultVariable = ResultVariable()
-        promises.set_value(self.schedule_eager_promises(resolver, queue), self.location)
-        return {(self, EagerPromise): promises}
+        promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
+        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
 
     def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
         """
@@ -177,12 +182,18 @@ class RequiresEmitStatement(DynamicStatement):
         """
         Given a requires dict, fulfills this statements dynamic promises
         """
-        promises: Sequence["EagerPromise"] = requires[(self, EagerPromise)]
+        promises: Sequence["EagerPromise"]
+        try:
+            promises = requires[(self, EagerPromise)]
+        except KeyError:
+            return
         for promise in promises:
             promise.fulfill()
 
 
 class ExpressionStatement(RequiresEmitStatement):
+    __slots__ = ()
+
     def as_constant(self) -> object:
         """
         Returns this expression as a constant value, if possible. Otherwise, raise a RuntimeException.
@@ -201,6 +212,8 @@ class Resumer(ExpressionStatement):
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
 
+    __slots__ = ()
+
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
@@ -210,7 +223,9 @@ class RawResumer(ExpressionStatement):
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+    __slots__ = ()
+
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 
@@ -221,6 +236,8 @@ class VariableReferenceHook(RawResumer):
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
     """
+
+    __slots__ = ("instance", "name", "variable_resumer")
 
     def __init__(
         self,
@@ -233,11 +250,11 @@ class VariableReferenceHook(RawResumer):
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
 
-    def schedule(self, resolver: Resolver, queue: QueueScheduler) -> Waiter:
+    def schedule(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
-        return RawUnit(
+        RawUnit(
             queue,
             resolver,
             # no need for gradual execution here because this class represents an attribute reference on self.instance,
@@ -246,7 +263,7 @@ class VariableReferenceHook(RawResumer):
             self,
         )
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
@@ -291,6 +308,8 @@ class VariableResumer:
     """
     Resume execution on a variable object when it becomes available (i.e. it exists).
     """
+
+    __slots__ = ()
 
     def variable_resume(
         self,
@@ -342,8 +361,7 @@ class StaticEagerPromise:
             variable_resumer=dynamic,
         )
         self.statement.copy_location(hook)
-        waiter: Waiter = hook.schedule(resolver, queue)
-        dynamic.set_waiter(waiter)
+        hook.schedule(resolver, queue)
         return dynamic
 
 
@@ -358,34 +376,25 @@ class EagerPromise(VariableResumer):
         super().__init__()
         self.static: StaticEagerPromise = static
         self.responsible: DynamicStatement = responsible
-        self._waiter: Optional[Waiter] = None
         self._promise: Optional[ProgressionPromise] = None
-
-    def set_waiter(self, waiter: Waiter) -> None:
-        self._waiter = waiter
+        self._fulfilled: bool = False
 
     def _acquire(self, variable: ResultVariable) -> None:
         """
         Entry point for the ResultVariable waiter: actually acquire the promise
         """
-        if self._waiter is None:
-            # already fulfilled, no need to acquire progression promise anymore
-            return
-        assert self._promise is None
-        self._promise = variable.get_progression_promise(self.responsible)
-        self._waiter = None
+        if not self._fulfilled:
+            assert self._promise is None
+            self._promise = variable.get_progression_promise(self.responsible)
 
     def fulfill(self) -> None:
         """
-        If a promise was already acquired, fulfills it, otherwise cancels the waiter so no new promise is acquired when the
-        variable becomes available.
+        If a promise was already acquired, fulfills it, otherwise makes sure that no new promise is acquired when the variable
+        becomes available.
         """
-        if self._waiter is not None:
-            # waiter is still waiting, remove it
-            self._waiter.queue.remove_from_all(self._waiter)
-            self._waiter = None
         if self._promise is not None:
             self._promise.fulfill()
+        self._fulfilled = True
 
     def variable_resume(
         self,
@@ -400,6 +409,8 @@ class ReferenceStatement(ExpressionStatement):
     """
     This class models statements that refer to other statements
     """
+
+    __slots__ = ("children",)
 
     def __init__(self, children: List[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
@@ -416,18 +427,18 @@ class ReferenceStatement(ExpressionStatement):
     def requires(self) -> List[str]:
         return [req for v in self.children for req in v.requires()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = super().requires_emit(resolver, queue)
-        own_req: Mapping[object, ResultVariable] = {
-            rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()
-        }
-        return {**parent_req, **own_req}
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
+        return requires
 
 
 class AssignStatement(DynamicStatement):
     """
     This class models binary sts
     """
+
+    __slots__ = ("lhs", "rhs")
 
     def __init__(self, lhs: Optional["Reference"], rhs: ExpressionStatement) -> None:
         DynamicStatement.__init__(self)
@@ -460,6 +471,8 @@ class AssignStatement(DynamicStatement):
 
 
 class Literal(ExpressionStatement):
+    __slots__ = ("value",)
+
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value

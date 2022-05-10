@@ -19,7 +19,7 @@
 # pylint: disable-msg=W0613
 
 import typing
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, Optional, TypeVar
 
@@ -55,6 +55,7 @@ from inmanta.execute.runtime import (
     Resolver,
     ResultCollector,
     ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.util import Unknown
 
@@ -78,17 +79,19 @@ class CreateList(ReferenceStatement):
     Represents a list literal statement which might contain any type of value (constants and/or instances).
     """
 
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> typing.Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
-
+    ) -> typing.Dict[object, VariableABC]:
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
+
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
@@ -111,7 +114,8 @@ class CreateList(ReferenceStatement):
             temp.freeze()
 
         # pass temp
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
@@ -157,6 +161,8 @@ class CreateList(ReferenceStatement):
 
 
 class CreateDict(ReferenceStatement):
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
@@ -202,6 +208,8 @@ class SetAttribute(AssignStatement, Resumer):
     """
     Set an attribute of a given instance to a given value
     """
+
+    __slots__ = ("instance", "attribute_name", "value", "list_only", "_assignment_promise")
 
     def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
         AssignStatement.__init__(self, instance, value)
@@ -366,6 +374,8 @@ class MapLookup(ReferenceStatement):
     Lookup a value in a dict
     """
 
+    __slots__ = ("themap", "key", "location")
+
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
         super(MapLookup, self).__init__([themap, key])
         self.themap = themap
@@ -399,6 +409,8 @@ class IndexLookup(ReferenceStatement, Resumer):
     Lookup a value in a dictionary
     """
 
+    __slots__ = ("index_type", "query", "wrapped_query", "type")
+
     def __init__(
         self,
         index_type: LocatableString,
@@ -415,13 +427,14 @@ class IndexLookup(ReferenceStatement, Resumer):
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
-        parent_req: Mapping[object, ResultVariable] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
         HangUnit(queue, resolver, sub, temp, self)
-        return {**parent_req, self: temp}
+        requires[self] = temp
+        return requires
 
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
@@ -458,6 +471,8 @@ class ShortIndexLookup(IndexLookup):
 
     vm.files[path="/etc/motd"]
     """
+
+    __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")
 
     def __init__(
         self,
@@ -525,6 +540,8 @@ class StringFormat(ReferenceStatement):
     """
     Create a new string by doing a string interpolation
     """
+
+    __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         ReferenceStatement.__init__(self, [k for (k, _) in variables])

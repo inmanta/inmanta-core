@@ -18,7 +18,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, List, Optional, Type
 
@@ -36,7 +36,7 @@ from inmanta.ast.statements import (
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable, VariableABC
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -74,6 +74,8 @@ class OpMetaClass(ABCMeta):
 
 
 class IsDefined(ReferenceStatement):
+    __slots__ = ("attr", "name")
+
     def __init__(self, attr: Optional[Reference], name: LocatableString) -> None:
         if attr:
             children = [attr]
@@ -83,8 +85,8 @@ class IsDefined(ReferenceStatement):
         self.attr = attr
         self.name = str(name)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -98,7 +100,8 @@ class IsDefined(ReferenceStatement):
         hook.schedule(resolver, queue)
 
         # wait for the attribute value
-        return {**promises, self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -120,6 +123,8 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
     This class is an abstract base class for all operators that can be used in expressions
     """
+
+    __slots__ = ("__number_arguments", "_arguments", "__name")
 
     # A hash to lookup each handler
     __operator: Dict[str, "Type[Operator]"] = {}
@@ -196,6 +201,8 @@ class BinaryOperator(Operator):
     This class represents a binary operator.
     """
 
+    __slots__ = ()
+
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
 
@@ -224,6 +231,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     This class represents a binary boolean operator.
     """
 
+    __slots__ = ()
+
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
 
@@ -235,14 +244,15 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        promises: Mapping[object, ResultVariable] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
 
         # wait for the lhs
-        HangUnit(queue, resolver, {**promises, **self.children[0].requires_emit(resolver, queue)}, temp, self)
+        requires.update(self.children[0].requires_emit(resolver, queue))
+        HangUnit(queue, resolver, requires, temp, self)
         return {self: temp}
 
     def _validate_value(self, value: object, side: int) -> None:
@@ -301,6 +311,8 @@ class UnaryOperator(Operator):
     This class represents a unary operator
     """
 
+    __slots__ = ()
+
     def __init__(self, name: str, op1: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1])
 
@@ -326,6 +338,7 @@ class Not(UnaryOperator):
     The negation operator
     """
 
+    __slots__ = ()
     __op = "not"
 
     def __init__(self, arg):
@@ -352,6 +365,8 @@ class Regex(BinaryOperator):
     An operator that does regex matching
     """
 
+    __slots__ = ("regex",)
+
     def __init__(self, op1: ExpressionStatement, op2: str):
         self.regex = re.compile(op2)
         super().__init__("regex", op1, Literal(self.regex))
@@ -375,6 +390,7 @@ class Equals(BinaryOperator):
     The equality operator
     """
 
+    __slots__ = ()
     __op = "=="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -392,6 +408,7 @@ class LessThan(BinaryOperator):
     The less than operator
     """
 
+    __slots__ = ()
     __op = "<"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -411,6 +428,7 @@ class GreaterThan(BinaryOperator):
     The more than operator
     """
 
+    __slots__ = ()
     __op = ">"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -430,6 +448,7 @@ class LessThanOrEqual(BinaryOperator):
     The less than or equal operator
     """
 
+    __slots__ = ()
     __op = "<="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -449,6 +468,7 @@ class GreaterThanOrEqual(BinaryOperator):
     The more than or equal operator
     """
 
+    __slots__ = ()
     __op = ">="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -468,6 +488,7 @@ class NotEqual(BinaryOperator):
     The not equal operator
     """
 
+    __slots__ = ()
     __op = "!="
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -485,6 +506,7 @@ class And(LazyBooleanOperator):
     The and boolean operator
     """
 
+    __slots__ = ()
     __op = "and"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -499,6 +521,7 @@ class Or(LazyBooleanOperator):
     The or boolean operator
     """
 
+    __slots__ = ()
     __op = "or"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
@@ -513,6 +536,7 @@ class In(BinaryOperator):
     The in operator for iterable types and dicts
     """
 
+    __slots__ = ()
     __op = "in"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
