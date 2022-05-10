@@ -58,6 +58,10 @@ class PackageNotFound(Exception):
     pass
 
 
+class ConflictingRequirements(Exception):
+    pass
+
+
 class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
@@ -287,13 +291,19 @@ class PythonEnvironment:
             raise Exception("install_from_source requires at least one package to install")
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
-        cmd: List[str] = PipCommandBuilder.compose_install_command(
-            python_path=self.python_path,
-            paths=paths,
-            constraints_files=constraint_files,
-            requirements=inmanta_requirements,
-        )
-        self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        try:
+            cmd: List[str] = PipCommandBuilder.compose_install_command(
+                python_path=self.python_path,
+                paths=paths,
+                constraints_files=constraint_files,
+                requirements=inmanta_requirements,
+            )
+            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            stderr: str = e.stderr.decode()
+            if "versions have conflicting dependencies" in stderr:
+                raise ConflictingRequirements(stderr)
+            raise e
 
     def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
         """

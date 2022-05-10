@@ -780,11 +780,8 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             try:
                 env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
-            except subprocess.CalledProcessError as e:
-                stderr: str = e.stderr.decode()
-                if "versions have conflicting dependencies" in stderr:
-                    raise InvalidModuleException(stderr)
-                raise e
+            except env.ConflictingRequirements as e:
+                raise InvalidModuleException(stderr)
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
