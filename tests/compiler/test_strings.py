@@ -137,7 +137,7 @@ std::print(test_string_11)
     compiler.do_compile()
 
 
-def test_escaping_rules_single_vs_triple_quotes_2582(snippetcompiler):
+def test_escaping_rules_single_vs_triple_quotes_2582(snippetcompiler, capsys):
     """
     Visual check that new line characters are correctly interpreted in multi-line strings
     """
@@ -149,4 +149,11 @@ std::print(test_string_1)
 std::print(test_string_2)
 '''
     )
+    expected = r"""trippel hello
+world
+single hello
+world
+"""
     compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert expected == out
