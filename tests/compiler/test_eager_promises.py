@@ -133,7 +133,6 @@ def test_eager_promises_implementation(snippetcompiler, swap_order: bool, when: 
     Verify that eager promises are acquired on an implementation's instance.
     """
     if when:
-        # TODO: is this ok? Should we just remove it?
         pytest.xfail(
             "Limitation of the current eager promising implementation: implementations can only acquire promises when emitted"
         )
