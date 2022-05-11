@@ -607,8 +607,8 @@ def cmd_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="count",
         default=0,
-        help="Log level for messages going to the console. Default is only errors,"
-        "-v warning, -vv info and -vvv debug and -vvvv trace",
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
         "--warnings",
@@ -690,6 +690,14 @@ def _convert_to_log_level(level: int) -> int:
     return log_levels[level]
 
 
+def _convert_cli_log_level(level: int) -> int:
+    if level < 1:
+        # The minimal log level on the CLI is always WARNING
+        return logging.WARNING
+    else:
+        return _convert_to_log_level(level)
+
+
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
@@ -731,7 +739,7 @@ def app() -> None:
         if options.timed:
             formatter = _get_log_formatter_for_stream_handler(timed=True)
             stream_handler.setFormatter(formatter)
-        log_level = _convert_to_log_level(options.verbose)
+        log_level = _convert_cli_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
