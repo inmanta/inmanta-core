@@ -18,7 +18,6 @@
 
 # pylint: disable-msg=W0613,R0201
 
-import dataclasses
 import logging
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple
@@ -86,15 +85,15 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
 
     def normalize(self) -> None:
-        injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
         # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
         self._own_eager_promises = []
+        # injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
         # self._own_eager_promises = [
         #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
-        #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
+        #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor
         #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
         #     for implementation in self.implements.implementations
         #     for promise in implementation.statements.get_eager_promises()
