@@ -397,8 +397,7 @@ caused by:
 
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
-        out, err = process.communicate(timeout=30)
-        assert out.decode() == ""
+        _, err = process.communicate(timeout=30)
         assert err.decode() == output
 
     no_cache_option = [] if cache_cf_files else ["--no-cache"]
@@ -425,7 +424,6 @@ end
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=30)
-    assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:
