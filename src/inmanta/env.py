@@ -223,6 +223,7 @@ python -m pip $@
             url = None
             version = None
             marker = None
+            extras = None
             try:
                 # this will fail is an url is supplied
                 parsed_req = list(pkg_resources.parse_requirements(req_spec))
@@ -236,6 +237,8 @@ python -m pip $@
                     marker = item.marker
                     if hasattr(item, "url"):
                         url = item.url
+                    if hasattr(item, "extras") and len(item.extras) > 0:
+                        extras = sorted(item.extras)
             except InvalidRequirement:
                 url = req_spec
 
@@ -251,10 +254,14 @@ python -m pip $@
             if url is not None:
                 modules[name]["url"] = url
 
+            if extras is not None:
+                modules[name]["extras"] = extras
+
         requirements_file = ""
         for module, info in modules.items():
             version_spec = ""
             markers: str = ""
+            extras_spec: str = ""
             if len(info["version"]) > 0:
                 version_spec = " " + (", ".join(["%s %s" % (a, b) for a, b in info["version"]]))
 
@@ -264,7 +271,10 @@ python -m pip $@
             if "url" in info:
                 module = info["url"]
 
-            requirements_file += module + version_spec + markers + "\n"
+            if "extras" in info:
+                extras_spec = f"[{','.join(info['extras'])}]"
+
+            requirements_file += module + extras_spec + version_spec + markers + "\n"
 
         return requirements_file
 
