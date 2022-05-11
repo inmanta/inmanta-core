@@ -152,3 +152,21 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
+
+
+def test_gen_requirements_file_extras(tmpdir):
+    """
+    Ensure that the `env.ActiveEnv._gen_content_requirements_file` method takes into account extras.
+    """
+    active_env = env.VirtualEnv(tmpdir)
+    dependency = "dep==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep == 1.2.3"
+
+    dependency = "dep[opt]==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep[opt] == 1.2.3"
+
+    dependency = "dep[opt,dev]==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep[dev,opt] == 1.2.3"
