@@ -1951,8 +1951,38 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             )
 
     def verify_module_version_compatibility(self) -> None:
-        if not self._module_versions_compatible():
-            raise CompilerException("Not all module dependencies have been met. Run `inmanta project update` to resolve this.")
+        """
+        Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
+
+        :raises CompilerException: When one or more of the requirements of the project is not satisfied.
+        """
+        LOGGER.info("verifying project")
+        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
+
+        exc_message = ""
+        for name, spec in requirements.items():
+            if name not in self.modules:
+                # the module is in the project requirements but it is not part of the loaded AST so there is no need to verify
+                # its compatibility
+                LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
+                continue
+            module = self.modules[name]
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    exc_message += f"\n\t* requirement {r} on module {name} not fulfilled, now at version {version}."
+
+        if exc_message:
+            exc_message = f"The following requirements were not satisfied:{exc_message}"
+            if self.metadata.install_mode == InstallMode.master:
+                exc_message += (
+                    "\nThe release type of the project is set to 'master'. Set it to a value that is "
+                    "appropriate for the version constraint or remove the version constraint to resolve "
+                    "this issue."
+                )
+            else:
+                exc_message += "\nRun `inmanta project update` to resolve this."
+            raise CompilerException(exc_message)
 
     def verify_python_requires(self) -> None:
         """
@@ -2013,30 +2043,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                     )
                     result = False
         return result
-
-    def _module_versions_compatible(self) -> bool:
-        """
-        Check if all the required modules for this module have been loaded. Assumes the modules cache is valid and up to date.
-        """
-        LOGGER.info("verifying project")
-
-        good = True
-
-        requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
-        for name, spec in requirements.items():
-            if name not in self.modules:
-                # the module is in the project requirements but it is not part of the loaded AST so there is no need to verify
-                # its compatibility
-                LOGGER.warning("Module %s is present in requires but it is not used by the model.", name)
-                continue
-            module = self.modules[name]
-            version = parse_version(str(module.version))
-            for r in spec:
-                if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fulfilled, now at version %s", r, name, version)
-                    good = False
-
-        return good
 
     def is_using_virtual_env(self) -> bool:
         return self.virtualenv.is_using_virtual_env()

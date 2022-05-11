@@ -225,10 +225,7 @@ compatible with the dependencies specified by the updated modules.
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
-        try:
-            project = self.get_project(load=True)
-        except Exception:
-            raise CLIException("Could not load project", exitcode=1)
+        project = self.get_project(load=True)
 
         if recursive is None:
             recursive = project.freeze_recursive
@@ -320,7 +317,7 @@ compatible with the dependencies specified by the updated modules.
 
         attempt = 0
         done = False
-        last_failure = None
+        last_failure: Optional[CompilerException] = None
 
         while not done and attempt < MAX_UPDATE_ATTEMPT:
             LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
@@ -348,9 +345,7 @@ compatible with the dependencies specified by the updated modules.
             except CompilerException as e:
                 last_failure = e
                 # model is corrupt
-                LOGGER.info(
-                    "The model is not currently in an executable state, performing intermediate updates", stack_info=True
-                )
+                LOGGER.info("The model is not currently in an executable state, performing intermediate updates")
                 # get all specs from all already loaded modules
                 specs = my_project.collect_requirements()
 
