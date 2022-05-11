@@ -1977,8 +1977,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if self.metadata.install_mode == InstallMode.master:
                 exc_message += (
                     "\nThe release type of the project is set to 'master'. Set it to a value that is "
-                    "appropriate for the version constraint or remove the version constraint to resolve "
-                    "this issue."
+                    "appropriate for the version constraint or remove the version constraint. After that, "
+                    "run `inmanta project update` to resolve this issue."
                 )
             else:
                 exc_message += "\nRun `inmanta project update` to resolve this."
