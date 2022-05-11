@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Op
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.entity import Entity
+from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
     DefineEntity,
@@ -263,7 +263,8 @@ class Scheduler(object):
             p.normalize()
 
         # give type info to all types, to normalize blocks inside them
-        for t in types.values():
+        # normalize implementations last because they have subblocks that might depend on other type information
+        for t in sorted(types.values(), key=lambda t: isinstance(t, Implementation)):
             t.normalize()
 
         # normalize root blocks

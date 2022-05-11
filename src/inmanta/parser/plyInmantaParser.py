@@ -423,8 +423,10 @@ def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
     | IMPLEMENT class_ref USING implement_ns_list MLS"""
     (inherit, implementations) = p[4]
-    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
+    when: Literal = Literal(True)
+    p[0] = DefineImplement(p[2], implementations, when, inherit=inherit, comment=p[5])
     attach_lnr(p)
+    p[0].copy_location(when)
 
 
 def p_implement_when(p: YaccProduction) -> None:
@@ -850,6 +852,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
+        ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
             attribute_offsets: Iterator[int] = accumulate(
@@ -894,6 +897,7 @@ def p_constants_collect(p: YaccProduction) -> None:
 def p_wrapped_kwargs(p: YaccProduction) -> None:
     "wrapped_kwargs : '*' '*' operand"
     p[0] = WrappedKwargs(p[3])
+    attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:

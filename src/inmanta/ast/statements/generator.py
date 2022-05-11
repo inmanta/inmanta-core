@@ -20,7 +20,7 @@
 
 import logging
 from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple  # noqa: F401
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -38,19 +38,20 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DynamicStatement, ExpressionStatement, RawResumer
+from inmanta.ast.statements import ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
-    ExecutionUnit,
     Instance,
     QueueScheduler,
     RawUnit,
     Resolver,
     ResultCollector,
     ResultVariable,
+    VariableABC,
+    WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
@@ -70,7 +71,12 @@ class SubConstructor(ExpressionStatement):
     """
     This statement selects an implementation for a given object and
     imports the statements
+
+    :ivar type: The specific entity type of an instance this subconstructor applies to, i.e. the actual instance type, not a
+        supertype.
     """
+
+    __slots__ = ("type", "location", "implements")
 
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
         super().__init__()
@@ -79,13 +85,27 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
 
     def normalize(self) -> None:
-        # done in define type
-        pass
+        # Only track promises for implementations when they get emitted, because of limitation of current static normalization
+        # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
+        # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
+        # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
+        self._own_eager_promises = []
+        # injected_variables: Set[str] = {"self"}.union(self.type.get_all_attribute_names())
+        # self._own_eager_promises = [
+        #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
+        #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor
+        #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
+        #     for implementation in self.implements.implementations
+        #     for promise in implementation.statements.get_eager_promises()
+        #     if promise.get_root_variable() not in injected_variables
+        # ]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         try:
             resv = resolver.for_namespace(self.implements.constraint.namespace)
-            return self.implements.constraint.requires_emit(resv, queue)
+            requires.update(self.implements.constraint.requires_emit(resv, queue))
+            return requires
         except NotFoundException as e:
             e.set_statement(self.implements)
             raise e
@@ -95,6 +115,7 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
+        super().execute(requires, instance, queue)
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
@@ -156,19 +177,20 @@ class GradualFor(ResultCollector[object]):
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(loopvar, ResultVariable)
-        loopvar.set_provider(self.stmt)
         loopvar.set_value(value, self.stmt.location)
         xc.emit(self.queue)
 
 
-class For(DynamicStatement):
+class For(RequiresEmitStatement):
     """
     A for loop
     """
 
+    __slots__ = ("base", "loop_var", "loop_var_loc", "module")
+
     def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
         super().__init__()
-        self.base = variable
+        self.base: ExpressionStatement = variable
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
         self.module = module
@@ -183,6 +205,10 @@ class For(DynamicStatement):
         # self.loop_var.normalize(resolver)
         self.module.normalize()
         self.module.add_var(self.loop_var, self)
+        self._own_eager_promises = self.module.get_eager_promises()
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         base = self.base.requires()
@@ -190,29 +216,23 @@ class For(DynamicStatement):
         ext = self.module.requires
         return list(set(base).union(ext) - set(var))
 
-    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        target = ResultVariable()
-        reqs = self.requires_emit(resolver, queue)
-        ExecutionUnit(queue, resolver, target, reqs, self)
-
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         """Not an actual expression, but following the pattern"""
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
+        requires[self] = WrappedValueVariable(helper)
 
-        helperwrapped = ResultVariable()
-        helperwrapped.set_value(helper, self.location)
+        requires.update(self.base.requires_emit_gradual(resolver, queue, helper))
 
-        basereq = self.base.requires_emit_gradual(resolver, queue, helper)
-        basereq[self] = helperwrapped
-
-        return basereq
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
+        super().execute(requires, resolver, queue)
         var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
@@ -238,6 +258,8 @@ class If(ExpressionStatement):
     An if Statement
     """
 
+    __slots__ = ("condition", "if_branch", "else_branch")
+
     def __init__(self, condition: ExpressionStatement, if_branch: BasicBlock, else_branch: BasicBlock) -> None:
         super().__init__()
         self.condition: ExpressionStatement = condition
@@ -254,14 +276,21 @@ class If(ExpressionStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
+        self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.condition.requires_emit(resolver, queue)
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires.update(self.condition.requires_emit(resolver, queue))
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
+        super().execute(requires, resolver, queue)
         cond: object = self.condition.execute(requires, resolver, queue)
         if isinstance(cond, Unknown):
             return None
@@ -271,6 +300,7 @@ class If(ExpressionStatement):
             e.set_statement(self)
             e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
             raise e
+        # schedule appropriate branch body
         branch: BasicBlock = self.if_branch if cond else self.else_branch
         xc = ExecutionContext(branch, resolver.for_namespace(branch.namespace))
         xc.emit(queue)
@@ -285,6 +315,8 @@ class ConditionalExpression(ExpressionStatement):
     """
     A conditional expression similar to Python's `x if c else y`.
     """
+
+    __slots__ = ("condition", "if_expression", "else_expression")
 
     def __init__(
         self, condition: ExpressionStatement, if_expression: ExpressionStatement, else_expression: ExpressionStatement
@@ -301,14 +333,22 @@ class ConditionalExpression(ExpressionStatement):
         self.condition.normalize()
         self.if_expression.normalize()
         self.else_expression.normalize()
+        self._own_eager_promises = [
+            *self.if_expression.get_all_eager_promises(),
+            *self.else_expression.get_all_eager_promises(),
+        ]
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+
         # This ResultVariable will receive the result of this expression
         result: ResultVariable = ResultVariable()
-        result.set_provider(self)
 
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result)
@@ -316,9 +356,11 @@ class ConditionalExpression(ExpressionStatement):
         RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
 
         # Wait for the result variable to be populated
-        return {self: result}
+        requires[self] = result
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -343,13 +385,15 @@ class ConditionalExpression(ExpressionStatement):
 
 
 class ConditionalExpressionResumer(RawResumer):
+    __slots__ = ("expression", "condition_value", "result")
+
     def __init__(self, expression: ConditionalExpression, result: ResultVariable) -> None:
         super().__init__()
         self.expression: ConditionalExpression = expression
         self.condition_value: Optional[bool] = None
         self.result: ResultVariable = result
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         if self.condition_value is None:
             condition_value: object = self.expression.condition.execute(
                 {k: v.get_value() for k, v in requires.items()}, resolver, queue
@@ -411,6 +455,17 @@ class Constructor(ExpressionStatement):
     :param class_type: The type of the object that is created by this
         constructor call.
     """
+
+    __slots__ = (
+        "class_type",
+        "__attributes",
+        "__wrapped_kwarg_attributes",
+        "location",
+        "type",
+        "required_kwargs",
+        "_direct_attributes",
+        "_indirect_attributes",
+    )
 
     def __init__(
         self,
@@ -481,13 +536,26 @@ class Constructor(ExpressionStatement):
             else:
                 self._direct_attributes[k] = v
 
+        self._own_eager_promises = list(
+            chain.from_iterable(
+                subconstructor.get_all_eager_promises() for subconstructor in self.type.get_entity().get_sub_constructor()
+            )
+        )
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(
+            super().get_all_eager_promises(),
+            *(subexpr.get_all_eager_promises() for subexpr in chain(self.attributes.values(), self.wrapped_kwargs)),
+        )
+
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
         out.extend(req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires())
         out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
@@ -498,6 +566,7 @@ class Constructor(ExpressionStatement):
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
+        requires.update(direct_requires)
 
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if graph is not None:
@@ -506,13 +575,14 @@ class Constructor(ExpressionStatement):
             for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
-        return direct_requires
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+        super().execute(requires, resolver, queue)
 
         # the type to construct
         type_class = self.type.get_entity()
@@ -666,6 +736,8 @@ class WrappedKwargs(ExpressionStatement):
     Separate AST node for the type check it provides in the execute method.
     """
 
+    __slots__ = ("dictionary",)
+
     def __init__(self, dictionary: ExpressionStatement) -> None:
         super().__init__()
         self.dictionary: ExpressionStatement = dictionary
@@ -676,13 +748,19 @@ class WrappedKwargs(ExpressionStatement):
     def normalize(self) -> None:
         self.dictionary.normalize()
 
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        return chain(super().get_all_eager_promises(), self.dictionary.get_all_eager_promises())
+
     def requires(self) -> List[str]:
         return self.dictionary.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.dictionary.requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires.update(self.dictionary.requires_emit(resolver, queue))
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
+        super().execute(requires, resolver, queue)
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
