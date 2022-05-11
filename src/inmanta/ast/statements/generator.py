@@ -92,14 +92,14 @@ class SubConstructor(ExpressionStatement):
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
         # calls (even for the same type), which would require this instance to be normalized first, resulting in a loop.
         self._own_eager_promises = []
-        #self._own_eager_promises = [
-        #    # implementations live in the namespace's context rather than the constructor's context so for promises that cross
-        #    # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
-        #    dataclasses.replace(promise, instance=promise.instance.fully_qualified())
-        #    for implementation in self.implements.implementations
-        #    for promise in implementation.statements.get_eager_promises()
-        #    if promise.get_root_variable() not in injected_variables
-        #]
+        # self._own_eager_promises = [
+        #     # implementations live in the namespace's context rather than the constructor's context so for promises that cross
+        #     # the boundary we translate references so that they are resolved correctly in any context wrapping the constructor.
+        #     dataclasses.replace(promise, instance=promise.instance.fully_qualified())
+        #     for implementation in self.implements.implementations
+        #     for promise in implementation.statements.get_eager_promises()
+        #     if promise.get_root_variable() not in injected_variables
+        # ]
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
