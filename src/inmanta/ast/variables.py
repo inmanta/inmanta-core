@@ -21,15 +21,25 @@ from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, RawResumer
+from inmanta.ast.statements import (
+    AssignStatement,
+    ExpressionStatement,
+    RawResumer,
+    Statement,
+    VariableReferenceHook,
+    VariableResumer,
+)
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import Instance, QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable
+from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable, VariableABC
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
+
+
+R = TypeVar("R", bound="Reference")
 
 
 @stable_api
@@ -39,6 +49,8 @@ class Reference(ExpressionStatement):
 
     :ivar name: The name of the Reference as a string.
     """
+
+    __slots__ = ("locatable_name", "name", "full_name")
 
     def __init__(self, name: LocatableString) -> None:
         ExpressionStatement.__init__(self)
@@ -52,26 +64,52 @@ class Reference(ExpressionStatement):
     def requires(self) -> List[str]:
         return [self.full_name]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
-        return out
+        requires[self.name] = resolver.lookup(self.full_name)
+        return requires
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
-    ) -> Dict[object, ResultVariable]:
-        var = resolver.lookup(self.full_name)
+    ) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        var: ResultVariable = resolver.lookup(self.full_name)
         var.listener(resultcollector, self.location)
-        out = {self.name: var}  # type : Dict[object, ResultVariable]
-        return out
+        requires[self.name] = var
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self.name]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
         if self.name not in requires:
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
+
+    def get_root_variable(self) -> "Reference":
+        """
+        Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
+        """
+        return self
+
+    def fully_qualified(self: R) -> R:
+        """
+        If this reference is already fully qualified, returns it unchanged. Otherwise, returns a new fully qualified reference
+        to this name in this reference's namespace.
+        This fully qualified reference is not guaranteed to resolve to the same object. It is the caller's responsibility to
+        only request a fully qualified name when appropriate.
+        """
+        if "::" in self.name:
+            return self
+        fully_qualified_name: str = f"{self.namespace.name}::{self.name}"
+        locatable: LocatableString = LocatableString(
+            fully_qualified_name, Range("__internal__", 1, 1, 1, 1), -1, self.namespace
+        )
+        result: R = self.__class__(locatable)
+        result.location = locatable.location
+        return result
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         if list_only:
@@ -101,111 +139,89 @@ class Reference(ExpressionStatement):
 T = TypeVar("T")
 
 
-class AbstractAttributeReferenceHelper(RawResumer, Generic[T]):
+class VariableReader(VariableResumer, RawResumer, Generic[T]):
     """
-    Generic helper class for setting a target variable based on a Reference. Reschedules itself
+    Resumes execution on a variable when it becomes avaiable, then waits for its completeness and copies its value to a target
+    variable. Optionally subscribes a result collector to intermediate values.
     """
 
-    def __init__(
-        self, target: ResultVariable, instance: Optional[Reference], attribute: str, resultcollector: Optional[ResultCollector]
-    ) -> None:
+    __slots__ = ("owner", "target", "resultcollector")
+
+    def __init__(self, owner: Statement, target: ResultVariable[T], resultcollector: Optional[ResultCollector[T]]) -> None:
         super().__init__()
-        self.target: ResultVariable = target
-        self.instance: Optional[Reference] = instance
-        self.attribute: str = attribute
-        self.resultcollector: Optional[ResultCollector] = resultcollector
-        # attribute cache
-        self.variable: Optional[ResultVariable] = None
+        self.owner: Statement = owner
+        self.target: ResultVariable[T] = target
+        self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
-    def fetch_variable(
-        self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler
-    ) -> ResultVariable:
+    def write_target(self, variable: VariableABC[object]) -> None:
         """
-        Fetches the referred variable
+        Writes the target variable based on the complete variable's value.
         """
-        if self.instance:
-            # get the Instance
-            obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
+        self.target.set_value(self.target_value(variable), self.owner.location)
 
-            if isinstance(obj, list):
-                raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
-            if not isinstance(obj, Instance):
-                raise RuntimeException(self, "can not get a attribute %s, %s not an entity" % (self.attribute, obj))
+    def target_value(self, variable: VariableABC[object]) -> T:
+        """
+        Returns the target value based on the complete variable's value.
+        """
+        try:
+            return variable.get_value()
+        except OptionalValueException as e:
+            e.set_statement(self.owner)
+            e.location = self.owner.location
+            raise e
 
-            # get the attribute result variable
-            return obj.get_attribute(self.attribute)
-        else:
-            return resolver.lookup(self.attribute)
-
-    def is_ready(self) -> bool:
-        """
-        Returns whether this instance is ready to set the target variable
-        """
-        return self.variable is not None and self.variable.is_ready()
-
-    def target_value(self) -> T:
-        """
-        Returns the target value based on self.variable
-        """
-        raise NotImplementedError()
-
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
-        """
-        Instance is ready to execute, do it and see if the variable is already present
-        """
-        if not self.variable:
-            # this is a first time we are called, variable is not cached yet
-            self.variable = self.fetch_variable(requires, resolver, queue_scheduler)
-
+    def variable_resume(
+        self,
+        variable: ResultVariable[T],
+        resolver: Resolver,
+        queue_scheduler: QueueScheduler,
+    ) -> None:
         if self.resultcollector:
-            self.variable.listener(self.resultcollector, self.location)
+            variable.listener(self.resultcollector, self.owner.location)
 
-        if self.is_ready():
-            self.target.set_value(self.target_value(), self.location)
+        if variable.is_ready():
+            self.write_target(variable)
         else:
-            requires[self] = self.variable
-            # reschedule on the variable, XU will assign it to the target variable
-            RawUnit(queue_scheduler, resolver, requires, self)
+            # reschedule on the variable's completeness
+            RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> T:
-        assert self.is_ready()
-        assert self.variable
-        # Attribute is ready, return it,
-        return self.variable.get_value()
+    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+        self.write_target(requires[self])
 
-    def __str__(self) -> str:
-        if not self.instance:
-            return self.attribute
-        return "%s.%s" % (self.instance, self.attribute)
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def get_location(self) -> Location:
-        return self.location
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
 
-class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool], ResultCollector[object]):
+class IsDefinedGradual(VariableReader[bool], ResultCollector[object]):
     """
-    Helper class for IsDefined, reschedules itself
+    Fill target variable with is defined result as soon as it gets known.
     """
 
-    def __init__(self, target: ResultVariable, instance: Optional[Reference], attribute: str) -> None:
-        super().__init__(target, instance, attribute, None)
-        self.resultcollector = self
+    __slots__ = ()
 
-    def receive_result(self, value: T, location: Location) -> None:
-        self.target.set_value(True, self.location)
+    def __init__(self, owner: Statement, target: ResultVariable) -> None:
+        VariableReader.__init__(self, owner, target, resultcollector=self)
 
-    def target_value(self) -> bool:
+    def receive_result(self, value: object, location: Location) -> None:
         """
-        Returns the target value based on self.variable.
+        Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
+        value implies that the variable is defined.
+        """
+        self.target.set_value(True, self.owner.location)
+
+    def target_value(self, variable: ResultVariable[object]) -> bool:
+        """
+        Returns the target value based on the attribute variable's value or absence of a value.
 
         We don't override `resume` so this method is always called when `variable` gets frozen, even if the target variable has
         been set already. This shouldn't affect performance but the potential double set acts as a guard against inconsistent
         internal state (if `receive_result` receives a result the eventual result of this method must be True).
         """
-        assert self.is_ready()
-        assert self.variable
         try:
-            value = self.variable.get_value()
+            value = variable.get_value()
             if isinstance(value, list):
                 return len(value) != 0
             elif isinstance(value, NoneValue):
@@ -215,27 +231,13 @@ class IsDefinedReferenceHelper(AbstractAttributeReferenceHelper[bool], ResultCol
             return False
 
 
-class AttributeReferenceHelper(AbstractAttributeReferenceHelper[object]):
-    """
-    Helper class for AttributeReference, reschedules itself
-    """
-
-    def __init__(
-        self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: Optional[ResultCollector]
-    ) -> None:
-        super().__init__(target, instance, attribute, resultcollector)
-
-    def target_value(self) -> object:
-        assert self.is_ready()
-        assert self.variable
-        return self.variable.get_value()
-
-
 class AttributeReference(Reference):
     """
     This variable refers to an attribute. This is mostly used to refer to
     attributes of a class or class instance.
     """
+
+    __slots__ = ("attribute", "instance")
 
     def __init__(self, instance: Reference, attribute: LocatableString) -> None:
         range: Range = Range(
@@ -257,29 +259,42 @@ class AttributeReference(Reference):
     def requires(self) -> List[str]:
         return self.instance.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         return self.requires_emit_gradual(resolver, queue, None)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> Dict[object, ResultVariable]:
+    ) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-        temp.set_provider(self)
-
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, str(self.attribute), resultcollector)
-        self.copy_location(resumer)
+        reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
+        hook: VariableReferenceHook = VariableReferenceHook(
+            self.instance,
+            str(self.attribute),
+            variable_resumer=reader,
+        )
+        self.copy_location(hook)
+        hook.schedule(resolver, queue)
+        # wait for the attribute value
+        requires[self] = temp
 
-        # wait for the instance
-        RawUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)
-        return {self: temp}
+        return requires
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        ExpressionStatement.execute(self, requires, resolver, queue)
         # helper returned: return result
         return requires[self]
+
+    def get_root_variable(self) -> "Reference":
+        """
+        Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
+        """
+        return self.instance.get_root_variable()
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
         return SetAttribute(self.instance, str(self.attribute), value, list_only)

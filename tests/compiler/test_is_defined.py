@@ -147,19 +147,34 @@ x = A()
     assert "false" in out
 
 
-def test_is_defined_attribute_not_2(snippetcompiler, capsys, condition_block):
+@pytest.mark.parametrize(
+    "relation, attr_type",
+    [
+        (False, "number?"),
+        (False, "number[]?"),
+        (True, "[0:1]"),
+        (True, "[0:]"),
+    ],
+)
+def test_is_defined_null(snippetcompiler, capsys, condition_block, relation: bool, attr_type: str) -> None:
+    """
+    Verify that the compiler's gradual execution mechanism for `is defined` does not interpret an explicit `null` assignment as
+    assigning a value. Explicitly assigning `null` should result in `is defined == false`.
+    """
+    attribute_declaration: str = "" if relation else f"{attr_type} attr"
+    relation_declaration: str = f"A.attr {attr_type} -- A" if relation else ""
     snippetcompiler.setup_for_snippet(
         f"""
-
     entity A:
-        number? a
+        {attribute_declaration}
     end
+    {relation_declaration}
 
     implement A using std::none
 
-    x = A(a=null)
+    a = A(attr=null)
 
-    {condition_block("x.a")}
+    {condition_block("a.attr")}
     """
     )
     compiler.do_compile()

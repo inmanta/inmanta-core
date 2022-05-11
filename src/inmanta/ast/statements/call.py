@@ -37,7 +37,7 @@ from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, Waiter
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +54,8 @@ class FunctionCall(ReferenceStatement):
     provides:      return value
     contributes:
     """
+
+    __slots__ = ("name", "arguments", "wrapped_kwargs", "location", "kwargs", "function")
 
     def __init__(
         self,
@@ -90,13 +92,16 @@ class FunctionCall(ReferenceStatement):
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
     def requires_emit(self, resolver, queue):
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
         FunctionUnit(queue, resolver, temp, sub, self)
-        return {self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires, resolver, queue):
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def execute_direct(self, requires):
@@ -263,7 +268,6 @@ class FunctionUnit(Waiter):
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:
         Waiter.__init__(self, queue_scheduler)
         self.result = result
-        result.set_provider(self)
         # requires is used to track all required RV's
         # It can grow larger as new requires are discovered
         self.requires = requires
