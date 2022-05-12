@@ -1416,6 +1416,21 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     )
     assert resource.to_dict() == expected_resource.to_dict()
 
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=3,
+        date=datetime.datetime.now(),
+        total=2,
+        version_info={},
+        released=True,
+        deployed=True,
+    )
+    await cm.insert()
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id, "std::File", {"path": "/etc/motd1", "purge_on_delete": True}
+    )
+    assert len(resources) == 0
+
 
 async def test_model_get_resources_for_version_optional_args(init_dataclasses_and_load_schema):
     project = data.Project(name="test")

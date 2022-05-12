@@ -4193,9 +4193,9 @@ class Resource(BaseDocument):
         query = f"""
             SELECT *
             FROM {Resource.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(r2.model)
-                                                  FROM {Resource.table_name()} AS r2
-                                                  WHERE r2.environment=$1)
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
+                                                  FROM {ConfigurationModel.table_name()} AS cm
+                                                  WHERE cm.environment=$1)
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
