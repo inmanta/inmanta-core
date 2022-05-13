@@ -132,7 +132,7 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
-    value = t.value[3:-3]
+    value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
     lexer = t.lexer
     match = lexer.lexmatch[0]
     lines = match.split("\n")

@@ -23,7 +23,7 @@ import shutil
 import subprocess
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import py
 import pytest
@@ -33,7 +33,7 @@ from pkg_resources import Requirement
 from inmanta import const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.module import InstallMode, InvalidModuleException, ModuleLoadingException
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
@@ -172,7 +172,7 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
     os.chdir(coroot)
     Config.load_config()
 
-    with pytest.raises(CompilerException, match="Not all module dependencies have been met"):
+    with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
         ProjectTool().execute("install", [])
 
 
@@ -636,17 +636,17 @@ def test_project_install_incompatible_versions(
 
     # install project
     os.chdir(module.Project.get().path)
-    with pytest.raises(
-        CompilerException, match="Not all module dependencies have been met. Run `inmanta modules update` to resolve this."
-    ):
+    with pytest.raises(CompilerException) as excinfo:
         ProjectTool().execute("install", [])
 
-    log_messages: Set[str] = {rec.message for rec in caplog.records}
-    expected: Set[str] = {
-        f"requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}",
-        f"requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}",
-    }
-    assert expected.issubset(log_messages)
+    assert f"""
+The following requirements were not satisfied:
+\t* requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}.
+\t* requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}.
+Run `inmanta project update` to resolve this.
+    """.strip() in str(
+        excinfo.value
+    )
 
 
 @pytest.mark.slowtest
@@ -865,4 +865,33 @@ import custom_mod_two
 | std            | v1   | yes      | 3.0.15         | 3.0.15         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
+    )
+
+
+def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippetcompiler, modules_repo, capsys) -> None:
+    """
+    Ensure that an appropriate exception message is returned when a module installed in a project is not in-line with
+    the version constraint on the project and the install_mode of the project is set to master.
+    """
+    mod_with_multiple_version = os.path.join(modules_repo, "mod11")
+    mod_with_multiple_version_copy = os.path.join(tmpdir, "mod11")
+    shutil.copytree(mod_with_multiple_version, mod_with_multiple_version_copy)
+    snippetcompiler.setup_for_snippet(
+        snippet="import mod11",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[str(tmpdir)],
+        project_requires=[InmantaModuleRequirement(Requirement.parse("mod11==3.2.1"))],
+        install_mode=InstallMode.master,
+    )
+
+    with pytest.raises(CompilerException) as excinfo:
+        ProjectTool().execute("update", [])
+
+    assert """
+The following requirements were not satisfied:
+\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.0.
+The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
+    """.strip() in str(
+        excinfo.value
     )

@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,5 +15,19 @@
 
     Contact: code@inmanta.com
 """
+import math
 
-COMPILER_VERSION = "2022.3"
+from inmanta.plugins import PluginException, plugin
+
+
+@plugin
+def power(base: "int", exponent: "int") -> "int":
+    return base**exponent
+
+
+@plugin
+def root(square: "int") -> "int":
+    result: float = math.sqrt(square)
+    if not result.is_integer():
+        raise PluginException("%d is not a square of an integer" % square)
+    return int(result)

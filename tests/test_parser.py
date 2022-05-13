@@ -170,9 +170,9 @@ end
     assert str(stmt.attributes[1].name) == "bar"
     assert str(stmt.attributes[2].name) == "ten"
 
-    assert stmt.attributes[1].default.execute(None, None, None)
+    assert stmt.attributes[1].default.execute_direct(None)
 
-    assert stmt.attributes[2].default.execute(None, None, None) == 5
+    assert stmt.attributes[2].default.execute_direct(None) == 5
 
 
 def test_relation():

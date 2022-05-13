@@ -474,3 +474,20 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     _assert_install("inmanta-module-elaboratev2module<1.2.4", installed=True)
     _assert_install("inmanta-module-elaboratev2module>1.2.3", installed=False)
     _assert_install("inmanta-module-elaboratev2module==1.2.4", installed=False)
+
+
+def test_gen_content_requirements_file_extras():
+    """
+    Ensure that the `env.ActiveEnv._gen_content_requirements_file` method takes into account extras.
+    """
+    dependency = "dep==1.2.3"
+    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
+    assert content.strip() == "dep == 1.2.3"
+
+    dependency = "dep[opt]==1.2.3"
+    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
+    assert content.strip() == "dep[opt] == 1.2.3"
+
+    dependency = "dep[opt,dev]==1.2.3"
+    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
+    assert content.strip() == "dep[dev,opt] == 1.2.3"
