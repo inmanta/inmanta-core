@@ -349,6 +349,26 @@ value = {expected_value}
             7,
         ),
         (
+            "bool? CRC18=null",
+            7,
+        ),
+        (
+            "bool[] CRC18",
+            8,
+        ),
+        (
+            "bool[] CRC18=[false]",
+            8,
+        ),
+        (
+            "bool[]? CRC18",
+            9,
+        ),
+        (
+            "bool[]? CRC18=null",
+            9,
+        ),
+        (
             "int CRC18=null",
             5,
         ),
