@@ -32,7 +32,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
-from functools import lru_cache
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
 from itertools import chain
@@ -1472,6 +1471,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.project_path = path
         self.main_file = main_file
 
+        self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.module_source: ModuleV2Source = ModuleV2Source(
             [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
@@ -1592,6 +1592,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
+        if not self.is_using_virtual_env():
+            self.use_virtual_env()
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
         self.verify()
         # do python install
@@ -1631,9 +1633,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.modules = {}
         self.loaded = False
 
-    @lru_cache()
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
-        return self.__load_ast()
+        if self._ast_cache is None:
+            self._ast_cache = self.__load_ast()
+        return self._ast_cache
 
     def get_imports(self) -> List[DefineImport]:
         (statements, _) = self.get_ast()
@@ -2194,6 +2197,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
+        self._ast_cache: Dict[str, Tuple[List[Statement], BasicBlock]] = {}  # Cache for expensive method calls
+        self._import_cache: Dict[str, List[DefineImport]] = {}  # Cache for expensive method calls
+
     @classmethod
     @abstractmethod
     def from_path(cls, path: str) -> Optional["Module"]:
@@ -2252,10 +2258,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if not os.path.exists(os.path.join(self.path, ".git")):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible.", self.name)
 
-    @lru_cache()
     def get_ast(self, name: str) -> Tuple[List[Statement], BasicBlock]:
         if self._project is None:
             raise ValueError("Can only get module's AST in the context of a project.")
+
+        # Check local cache
+        hit = self._ast_cache.get(name, None)
+        if hit is not None:
+            return hit
 
         if name == self.name:
             file = os.path.join(self.model_dir, "_init.cf")
@@ -2271,7 +2281,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 
         try:
-            return self._load_file(ns, file)
+            out = self._load_file(ns, file)
+            # Set local cache before returning
+            self._ast_cache[name] = out
+            return out
         except FileNotFoundError as e:
             raise InvalidModuleException("could not locate module with name: %s" % name) from e
 
@@ -2298,8 +2311,12 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         # drop submodules
         return {x: v for x, v in out.items() if "::" not in x}
 
-    @lru_cache()
     def get_imports(self, name: str) -> List[DefineImport]:
+        # Check local cache
+        hit = self._import_cache.get(name, None)
+        if hit is not None:
+            return hit
+
         if self._project is None:
             raise ValueError("Can only get module's imports in the context of a project.")
 
@@ -2310,6 +2327,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             imp = DefineImport(std_locatable, std_locatable)
             imp.location = std_locatable.location
             imports.insert(0, imp)
+
+        # Set local cache before returning
+        self._import_cache[name] = imports
         return imports
 
     def _get_model_files(self, curdir: str) -> List[str]:

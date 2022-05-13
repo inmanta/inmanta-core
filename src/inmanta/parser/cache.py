@@ -83,7 +83,7 @@ class CacheManager:
                 return result
         except Exception:
             self.failures += 1
-            LOGGER.exception("Compile cache loading failure, ignoring cache entry for %s", filename)
+            LOGGER.warning("Compile cache loading failure, ignoring cache entry for %s", filename, exc_info=True)
             return None
 
     def cache(self, filename: str, statements: List[Statement]) -> None:
@@ -96,7 +96,7 @@ class CacheManager:
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(statements)
         except Exception:
-            LOGGER.exception("Compile cache failure, failed to cache statements for %s", filename)
+            LOGGER.warning("Compile cache failure, failed to cache statements for %s", filename, exc_info=True)
 
     def log_stats(self) -> None:
         if not self.cache_enabled.get():
