@@ -270,9 +270,7 @@ class PythonEnvironment:
                 raise ConflictingRequirements(stderr)
             raise e
         except Exception:
-            with requirements_txt_file(content=requirements_files) as requirements_file:
-                LOGGER.error("requirements: %s", requirements_file)
-                raise
+            raise
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -566,13 +564,20 @@ class ActiveEnv(PythonEnvironment):
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
             inmanta_requirements = self._get_requirements_on_inmanta_package()
-            self._run_pip_install_command(
-                python_path=self.python_path,
-                requirements_files=[requirements_file],
-                requirements=inmanta_requirements,
-                upgrade=upgrade,
-                upgrade_strategy=upgrade_strategy,
-            )
+            try:
+                self._run_pip_install_command(
+                    python_path=self.python_path,
+                    requirements_files=[requirements_file],
+                    requirements=inmanta_requirements,
+                    upgrade=upgrade,
+                    upgrade_strategy=upgrade_strategy,
+                )
+            except Exception:
+                import pudb
+
+                pu.db
+                LOGGER.error("requirements: %s", content_requirements_file)
+                raise
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
