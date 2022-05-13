@@ -573,9 +573,6 @@ class ActiveEnv(PythonEnvironment):
                     upgrade_strategy=upgrade_strategy,
                 )
             except Exception:
-                import pudb
-
-                pu.db
                 LOGGER.error("requirements: %s", content_requirements_file)
                 raise
 
