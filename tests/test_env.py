@@ -429,10 +429,15 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
-    with pytest.raises(CalledProcessError) as excinfo:
+    with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
+    import pudb
 
-    match = re.search(r"The conflict is caused by:\n.*The user requested inmanta-core==4\.0\.0", excinfo.value.output.decode())
+    pu.db
+    match = re.search(
+        r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=*because these package versions have conflicting dependencies",
+        excinfo.value.args[0],
+    )
     assert match is not None
 
 
