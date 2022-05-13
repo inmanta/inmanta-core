@@ -400,7 +400,7 @@ value = {expected_value}
 )
 def test_attributes_starting_with_capital_letter(snippetcompiler, erroneous_statement, error_at_char):
     expected_error = (
-        "Syntax error: Invalid identifier: Variable names must start with a lower case character "
+        "Syntax error: Invalid identifier: attribute names must start with a lower case character "
         "({dir}/main.cf:3:"
         f"{error_at_char})"
     )

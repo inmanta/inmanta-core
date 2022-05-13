@@ -354,7 +354,9 @@ def p_attr_err(p: YaccProduction) -> None:
     | attr_type CID '=' constant
     | attr_type CID '=' constant_list
     | attr_type CID '=' UNDEF"""
-    raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Variable names must start with a lower case character")
+    raise ParserException(
+        p[2].location, str(p[2]), "Invalid identifier: attribute names must start with a lower case character"
+    )
 
 
 def p_attr(p: YaccProduction) -> None:
@@ -377,17 +379,15 @@ def p_attr_undef(p: YaccProduction) -> None:
 
 
 def p_attr_dict_err(p: YaccProduction) -> None:
-    """attr : DICT CID empty
-    | DICT CID '=' map_def
-    | DICT CID '=' NULL
+    """attr : DICT empty CID empty
+    | DICT empty CID '=' map_def
+    | DICT empty CID '=' NULL
     | DICT '?' CID empty
     | DICT '?'  CID '=' map_def
     | DICT '?'  CID '=' NULL"""
-    if p[2] == "?":
-        raise ParserException(
-            p[3].location, str(p[3]), "Invalid identifier: Variable names must start with a lower case character"
-        )
-    raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Variable names must start with a lower case character")
+    raise ParserException(
+        p[3].location, str(p[3]), "Invalid identifier: attribute names must start with a lower case character"
+    )
 
 
 def p_attr_dict(p: YaccProduction) -> None:
