@@ -31,6 +31,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
+    InvalidModuleException,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV1,
@@ -38,7 +39,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter
+from inmanta.moduletool import ModuleConverter, ModuleTool
 from utils import PipIndex, module_from_template, v1_module_from_template
 
 
@@ -526,3 +527,77 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
     )
     project.load_module_recursive()
     assert "minimalv2module" not in project.modules
+
+
+@pytest.mark.slowtest
+def test_project_requirements_dont_overwrite_core_requirements_source(
+    snippetcompiler_clean,
+    local_module_package_index: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    A project has a requirement that is also a requirement of core
+    but with another version. The requirements of core should not be
+    overwritten. The module gets installed from source
+    """
+    # Create the module
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name), module_path, new_requirements=[Requirement.parse("Jinja2==2.11.3")]
+    )
+
+    # Activate the snippetcompiler venv
+    project: Project = snippetcompiler_clean.setup_for_snippet("")
+    active_env = project.virtualenv
+    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+
+    # Install the module
+    with pytest.raises(InvalidModuleException):
+        ModuleTool().install(editable=False, path=module_path)
+    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    assert jinja2_version_before == jinja2_version_after
+
+
+@pytest.mark.slowtest
+def test_project_requirements_dont_overwrite_core_requirements_index(
+    snippetcompiler_clean,
+    local_module_package_index: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    A module from index has a requirement that is also a requirement of core
+    but with another version. The requirements of core should not be
+    overwritten. The module gets installed from index.
+    """
+    # Create the module
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+        new_requirements=[Requirement.parse("Jinja2==2.11.3")],
+        publish_index=index,
+    )
+
+    # Setup project
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "",
+        install_project=False,
+        python_package_sources=[index.url, "https://pypi.org/simple"],
+        python_requires=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name))],
+        autostd=False,
+    )
+
+    active_env = project.virtualenv
+    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+
+    # Install project
+    with pytest.raises(InvalidModuleException):
+        project.install_modules()
+
+    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    assert jinja2_version_before == jinja2_version_after

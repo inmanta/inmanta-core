@@ -17,7 +17,6 @@
 """
 import contextlib
 import enum
-import functools
 import importlib.util
 import json
 import logging
@@ -56,6 +55,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PackageNotFound(Exception):
+    pass
+
+
+class ConflictingRequirements(Exception):
     pass
 
 
@@ -229,6 +232,46 @@ class PythonEnvironment:
             )
         )
 
+    def _run_pip_install_command(
+        self,
+        python_path: str,
+        requirements: Optional[List[Requirement]] = None,
+        paths: Optional[List[LocalPackagePath]] = None,
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        allow_pre_releases: bool = False,
+        constraints_files: Optional[List[str]] = None,
+        requirements_files: Optional[List[str]] = None,
+    ) -> None:
+        try:
+            cmd: List[str] = PipCommandBuilder.compose_install_command(
+                python_path=python_path,
+                requirements=requirements,
+                paths=paths,
+                index_urls=index_urls,
+                upgrade=upgrade,
+                upgrade_strategy=upgrade_strategy,
+                allow_pre_releases=allow_pre_releases,
+                constraints_files=constraints_files,
+                requirements_files=requirements_files,
+            )
+            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        except CalledProcessError as e:
+            stderr: str = e.stderr.decode()
+            not_found: List[str] = [
+                requirement.project_name
+                for requirement in requirements
+                if f"No matching distribution found for {requirement.project_name}" in stderr
+            ]
+            if not_found:
+                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+            if "versions have conflicting dependencies" in stderr:
+                raise ConflictingRequirements(stderr)
+            raise e
+        except Exception:
+            raise
+
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
         """
@@ -258,27 +301,15 @@ class PythonEnvironment:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
-            try:
-                cmd: List[str] = PipCommandBuilder.compose_install_command(
-                    python_path=self.python_path,
-                    requirements=requirements,
-                    index_urls=index_urls,
-                    upgrade=upgrade,
-                    allow_pre_releases=allow_pre_releases,
-                    constraints_files=[*constraint_files, filename],
-                )
-                self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
-            except CalledProcessError as e:
-                stderr: str = e.stderr.decode()
-                not_found: List[str] = [
-                    requirement.project_name
-                    for requirement in requirements
-                    if f"No matching distribution found for {requirement.project_name}" in stderr
-                ]
-                if not_found:
-                    raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-                raise e
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        self._run_pip_install_command(
+            python_path=self.python_path,
+            requirements=[*requirements, *inmanta_requirements],
+            index_urls=index_urls,
+            upgrade=upgrade,
+            allow_pre_releases=allow_pre_releases,
+            constraints_files=[*constraint_files],
+        )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
         """
@@ -287,25 +318,25 @@ class PythonEnvironment:
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         constraint_files = constraint_files if constraint_files is not None else []
-        with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as filename:
-            cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=self.python_path, paths=paths, constraints_files=[*constraint_files, filename]
-            )
-            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+        inmanta_requirements = self._get_requirements_on_inmanta_package()
+        self._run_pip_install_command(
+            python_path=self.python_path,
+            paths=paths,
+            constraints_files=constraint_files,
+            requirements=inmanta_requirements,
+        )
 
-    @functools.lru_cache(maxsize=1)
-    def _get_constraint_on_inmanta_package(self) -> str:
+    def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
         """
-        Returns the content of the constraint file that should be supplied to each `pip install` invocation
+        Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        inmanta_packages = ["inmanta-service-orchestrator", "inmanta", "inmanta-core"]
-        for pkg in inmanta_packages:
-            if pkg in workingset:
-                return f"{pkg}=={workingset[pkg]}"
-        # No inmanta product or inmanta-core package installed -> Leave constraint empty
-        return ""
+        requirements: Sequence[Requirement] = []
+        for pkg in workingset:
+            if pkg == "inmanta" or (pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-")):
+                requirements.append(Requirement.parse(f"{pkg}=={workingset[pkg]}"))
+        return requirements
 
     @classmethod
     def _run_command_and_log_output(
@@ -538,19 +569,18 @@ class ActiveEnv(PythonEnvironment):
         """
         content_requirements_file = self._gen_content_requirements_file(requirements_list)
         with requirements_txt_file(content=content_requirements_file) as requirements_file:
-            with requirements_txt_file(content=self._get_constraint_on_inmanta_package()) as constraint_file:
-                cmd: List[str] = PipCommandBuilder.compose_install_command(
+            inmanta_requirements = self._get_requirements_on_inmanta_package()
+            try:
+                self._run_pip_install_command(
                     python_path=self.python_path,
                     requirements_files=[requirements_file],
-                    constraints_files=[constraint_file],
+                    requirements=inmanta_requirements,
                     upgrade=upgrade,
                     upgrade_strategy=upgrade_strategy,
                 )
-                try:
-                    self._run_command_and_log_output(cmd, stderr=subprocess.STDOUT)
-                except Exception:
-                    LOGGER.error("requirements: %s", content_requirements_file)
-                    raise
+            except Exception:
+                LOGGER.error("requirements: %s", content_requirements_file)
+                raise
 
     @classmethod
     def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
