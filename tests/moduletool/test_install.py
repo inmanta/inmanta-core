@@ -669,14 +669,14 @@ def test_project_install_incompatible_dependencies(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod1"),
         new_name="v2mod1",
-        new_requirements=[Requirement.parse("more-itertools~=7.0")],
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
         publish_index=index,
     )
     v2mod2: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod2"),
         new_name="v2mod2",
-        new_requirements=[Requirement.parse("more-itertools~=8.0")],
+        new_requirements=[Requirement.parse("lorem~=0.1.1")],
         publish_index=index,
     )
 
@@ -707,7 +707,7 @@ def test_project_install_incompatible_dependencies(
         ProjectTool().execute("install", [])
 
     assert any(
-        re.match("Incompatibility between constraint more-itertools~=[78].0 and installed version [78]\\..*", rec.message)
+        re.match("Incompatibility between constraint lorem~=(0.1.1|0.0.1) and installed version (0.1.1|0.0.1)", rec.message)
         is not None
         for rec in caplog.records
     )
@@ -814,7 +814,7 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=2.0,<2.1.11"),
+            module.InmantaModuleRequirement.parse("std~=3.0,<3.0.16"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -836,7 +836,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
+| std            | v1   | yes      | 3.0.15         | 3.0.15         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -862,7 +862,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
+| std            | v1   | yes      | 3.0.15         | 3.0.15         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
