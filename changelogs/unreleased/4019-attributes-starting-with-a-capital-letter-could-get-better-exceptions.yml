@@ -2,4 +2,5 @@ description: Improve syntax error reporting when defining an attribute starting 
 change-type: patch
 destination-branches: [master, iso5, iso4]
 sections: {
+  bugfix: "{{description}}"
 }
