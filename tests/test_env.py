@@ -216,9 +216,9 @@ def test_process_env_install_from_index_conflicting_reqs(
     package remains uninstalled.
     """
     package_name: str = "more-itertools"
-    with pytest.raises(subprocess.CalledProcessError) as e:
+    with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
-    assert "conflicting dependencies" in e.value.stderr.decode()
+    assert "conflicting dependencies" in e.value.args[0]
     assert package_name not in env.process_env.get_installed_packages()
 
 
@@ -428,11 +428,14 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
-    inmanta_requirements = Requirement.parse("inmanta-core==0.0.2")
-    with pytest.raises(CalledProcessError) as excinfo:
+    inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
+    with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
-
-    match = re.search(r"The conflict is caused by:\n.*The user requested inmanta-core==0\.0\.2", excinfo.value.output.decode())
+    match = re.search(
+        r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
+        r"package versions have conflicting dependencies",
+        excinfo.value.args[0],
+    )
     assert match is not None
 
 

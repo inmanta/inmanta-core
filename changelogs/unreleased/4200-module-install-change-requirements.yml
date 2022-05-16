@@ -1,0 +1,7 @@
+---
+description: Enforce inmanta package requirements so that modules can't overwrite those.
+issue-nr: 4200
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+    bugfix: "{{description}}"
