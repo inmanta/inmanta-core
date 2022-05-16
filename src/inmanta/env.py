@@ -381,7 +381,13 @@ class ActiveEnv(PythonEnvironment):
             return True
         reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
         installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return all(r.key in installed_packages and str(installed_packages[r.key]) in r for r in reqs_as_requirements)
+        for r in reqs_as_requirements:
+            if r.marker and not r.marker.evaluate():
+                # The marker of the requirement doesn't apply on this environment
+                continue
+            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                return False
+        return True
 
     def install_from_index(
         self,
