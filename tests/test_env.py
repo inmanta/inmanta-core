@@ -216,7 +216,7 @@ def test_process_env_install_from_index_conflicting_reqs(
     package remains uninstalled.
     """
     package_name: str = "more-itertools"
-    with pytest.raises(subprocess.CalledProcessError) as e:
+    with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
     assert "conflicting dependencies" in e.value.stderr.decode()
     assert package_name not in env.process_env.get_installed_packages()
