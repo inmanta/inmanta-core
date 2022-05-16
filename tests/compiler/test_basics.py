@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import pytest
+
 import inmanta.compiler as compiler
 
 
@@ -211,4 +213,85 @@ test = "b"
 \tnew value: b
 \t\tset at {dir}/main.cf:3
  (reported in test = 'b' ({dir}/main.cf:3))""",
+    )
+
+
+@pytest.mark.parametrize(
+    "erroneous_statement,error_at_char",
+    [
+        (
+            "bool CRC18",
+            6,
+        ),
+        (
+            "bool CRC18=false",
+            6,
+        ),
+        (
+            "bool? CRC18",
+            7,
+        ),
+        (
+            "bool? CRC18=null",
+            7,
+        ),
+        (
+            "bool[] CRC18",
+            8,
+        ),
+        (
+            "bool[] CRC18=[false]",
+            8,
+        ),
+        (
+            "bool[]? CRC18",
+            9,
+        ),
+        (
+            "bool[]? CRC18=null",
+            9,
+        ),
+        (
+            "int CRC18=null",
+            5,
+        ),
+        (
+            "dict CRC18",
+            6,
+        ),
+        (
+            "dict CRC18={'invalid':'identifier'}",
+            6,
+        ),
+        (
+            "dict CRC18=null",
+            6,
+        ),
+        (
+            "dict? CRC18",
+            7,
+        ),
+        (
+            "dict? CRC18={'invalid':'identifier'}",
+            7,
+        ),
+        (
+            "dict? CRC18=null",
+            7,
+        ),
+    ],
+)
+def test_attributes_starting_with_capital_letter(snippetcompiler, erroneous_statement, error_at_char):
+    expected_error = (
+        "Syntax error: Invalid identifier: attribute names must start with a lower case character "
+        "({dir}/main.cf:3:"
+        f"{error_at_char})"
+    )
+    snippetcompiler.setup_for_error(
+        f"""
+entity A:
+{erroneous_statement}
+end
+""",
+        expected_error,
     )
