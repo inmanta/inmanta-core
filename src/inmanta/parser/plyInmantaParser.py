@@ -349,6 +349,16 @@ def p_attribute_type(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
+def p_attr_err(p: YaccProduction) -> None:
+    """attr : attr_type CID empty
+    | attr_type CID '=' constant
+    | attr_type CID '=' constant_list
+    | attr_type CID '=' UNDEF"""
+    raise ParserException(
+        p[2].location, str(p[2]), "Invalid identifier: attribute names must start with a lower case character"
+    )
+
+
 def p_attr(p: YaccProduction) -> None:
     "attr : attr_type ID"
     p[0] = DefineAttribute(p[1], p[2], None)
@@ -366,6 +376,18 @@ def p_attr_undef(p: YaccProduction) -> None:
     "attr : attr_type ID '=' UNDEF"
     p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
     attach_from_string(p, 2)
+
+
+def p_attr_dict_err(p: YaccProduction) -> None:
+    """attr : DICT empty CID empty
+    | DICT empty CID '=' map_def
+    | DICT empty CID '=' NULL
+    | DICT '?' CID empty
+    | DICT '?'  CID '=' map_def
+    | DICT '?'  CID '=' NULL"""
+    raise ParserException(
+        p[3].location, str(p[3]), "Invalid identifier: attribute names must start with a lower case character"
+    )
 
 
 def p_attr_dict(p: YaccProduction) -> None:
@@ -423,8 +445,10 @@ def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
     | IMPLEMENT class_ref USING implement_ns_list MLS"""
     (inherit, implementations) = p[4]
-    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
+    when: Literal = Literal(True)
+    p[0] = DefineImplement(p[2], implementations, when, inherit=inherit, comment=p[5])
     attach_lnr(p)
+    p[0].copy_location(when)
 
 
 def p_implement_when(p: YaccProduction) -> None:
@@ -872,6 +896,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
+        ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
             attribute_offsets: Iterator[int] = accumulate(
@@ -916,6 +941,7 @@ def p_constants_collect(p: YaccProduction) -> None:
 def p_wrapped_kwargs(p: YaccProduction) -> None:
     "wrapped_kwargs : '*' '*' operand"
     p[0] = WrappedKwargs(p[3])
+    attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:
