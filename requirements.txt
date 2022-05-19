@@ -14,7 +14,7 @@ netifaces==0.11.0
 packaging==21.3
 pip==22.1
 ply==3.11
-pydantic==1.9.0
+pydantic==1.9.1
 pyformance==0.4
 PyJWT==2.4.0
 python-dateutil==2.8.2
