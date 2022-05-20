@@ -417,7 +417,6 @@ end
 def test_unpack_null_dictionary(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-
 hello_world = "Hello World!"
 dct = null
 hi_world = std::replace(hello_world, **dct)
