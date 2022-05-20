@@ -424,6 +424,6 @@ std::print(hi_world)
 """,
         (
             "The ** operator can only be applied to dictionaries (reported in "
-            "std::replace(hello_world,**dct) ({dir}/main.cf:5))"
+            "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
         ),
     )
