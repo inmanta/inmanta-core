@@ -279,7 +279,7 @@ class PythonEnvironment:
             raise e
         except Exception:
             raise
-        cmd = cmd = PipCommandBuilder.compose_pip_check_command(self.python_path)
+        cmd = PipCommandBuilder.compose_pip_check_command(self.python_path)
         try:
             subprocess.check_output(cmd)
         except CalledProcessError:
