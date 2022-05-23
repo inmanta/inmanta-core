@@ -614,7 +614,7 @@ def test_module_conflicting_dependencies(
     tmpdir: py.path.local,
 ) -> None:
     """
-    show an error message when installing a module breaks the dependencies
+    Show an error message when installing a module that breaks the dependencies
     of another one. minimalv2module depends on y~=1.0.0 which requires x~=1.0.0.
     after the install of minimalv2module we try to install minimalv2module2 which
     requires x~=2.0.0. The y~=1.0.0 requirement is now broken as python package x
