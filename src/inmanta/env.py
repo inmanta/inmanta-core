@@ -579,7 +579,7 @@ class ActiveEnv(PythonEnvironment):
                     upgrade_strategy=upgrade_strategy,
                 )
             except Exception:
-                LOGGER.error("requirements: %s", content_requirements_file)
+                LOGGER.info("requirements:\n%s", content_requirements_file)
                 raise
 
     @classmethod
