@@ -72,13 +72,14 @@ def test_install_fails(tmpdir, caplog):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
     caplog.clear()
+    caplog.set_level(logging.INFO)
     package_name = "non-existing-pkg-inmanta"
 
     with pytest.raises(Exception):
         venv.install_from_list([package_name])
 
     log_sequence = LogSequence(caplog)
-    log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
+    log_sequence.contains("inmanta.env", logging.INFO, f"requirements:\n{package_name}")
 
 
 def test_install_package_already_installed_in_parent_env(tmpdir):

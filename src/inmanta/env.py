@@ -298,11 +298,11 @@ python -m pip $@
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except CalledProcessError as e:
                 LOGGER.error("%s: %s", cmd, e.output.decode())
-                LOGGER.error("requirements: %s", requirements_file)
+                LOGGER.info("requirements:\n%s", requirements_file)
                 raise
             except Exception:
                 LOGGER.error("%s: %s", cmd, output.decode())
-                LOGGER.error("requirements: %s", requirements_file)
+                LOGGER.info("requirements:\n%s", requirements_file)
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output.decode())
