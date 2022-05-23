@@ -28,7 +28,6 @@ import sys
 import tempfile
 import venv
 from dataclasses import dataclass
-from email import message
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
