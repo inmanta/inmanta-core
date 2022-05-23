@@ -187,6 +187,7 @@ class PipCommandBuilder:
     def compose_pip_check_command(cls, python_path: str) -> List[str]:
         """
         Generate a `pip check` command for the given arguments.
+
         :param python_path: The python interpreter to use in the command.
         """
         return [python_path, "-m", "pip", "check"]
