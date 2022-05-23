@@ -28,6 +28,7 @@ import sys
 import tempfile
 import venv
 from dataclasses import dataclass
+from email import message
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
@@ -183,6 +184,14 @@ class PipCommandBuilder:
             *(["--editable"] if only_editable else []),
         ]
 
+    @classmethod
+    def compose_pip_check_command(cls, python_path: str) -> List[str]:
+        """
+        Generate a `pip check` command for the given arguments.
+        :param python_path: The python interpreter to use in the command.
+        """
+        return [python_path, "-m", "pip", "check"]
+
 
 class PythonEnvironment:
     """
@@ -271,6 +280,14 @@ class PythonEnvironment:
             raise e
         except Exception:
             raise
+        cmd = cmd = PipCommandBuilder.compose_pip_check_command(self.python_path)
+        try:
+            subprocess.check_output(cmd)
+        except CalledProcessError as e:
+            msg: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules. You can get more details on the issue with 'pip check'."
+            raise ConflictingRequirements(msg)
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
