@@ -282,7 +282,7 @@ class PythonEnvironment:
         cmd = cmd = PipCommandBuilder.compose_pip_check_command(self.python_path)
         try:
             subprocess.check_output(cmd)
-        except CalledProcessError as e:
+        except CalledProcessError:
             msg: str = "Module dependency resolution conflict: a module dependency constraint \
 was violated by another module. This most likely indicates an incompatibility between \
 two or more of the installed modules. You can get more details on the issue with 'pip check'."
