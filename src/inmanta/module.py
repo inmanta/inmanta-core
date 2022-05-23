@@ -1902,6 +1902,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
         except InvalidModuleException:
             raise
+        except env.ConflictingRequirements:
+            raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
