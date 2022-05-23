@@ -1,0 +1,4 @@
+description: Improve readability in error message when pip install fails.
+change-type: patch
+destination-branches: [master, iso4, iso5]
+sections: {}
