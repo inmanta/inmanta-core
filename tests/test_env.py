@@ -95,10 +95,11 @@ def test_install_fails(tmpdir, caplog, monkeypatch):
             return compose(*args, **{**kwargs, "index_urls": []})
         else:
             return compose(*args[:5], [], *args[5:], **kwargs)
+
     monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
 
     with pytest.raises(Exception):
-        venv.install_from_list([package_name], )
+        venv.install_from_list([package_name])
 
     log_sequence = LogSequence(caplog)
     log_sequence.contains("inmanta.env", logging.INFO, f"requirements:\n{package_name}")
