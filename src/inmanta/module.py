@@ -1990,6 +1990,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
+        test = self.collect_requirements()
+        import pudb
+
+        pu.db
         requirements: List[str] = []
         for module in self.modules.values():
             requirements.extend(module.get_strict_python_requirements_as_list())
