@@ -1992,7 +1992,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         requirements: List[str] = []
         for module in self.modules.values():
-            requirements.append(module.get_strict_python_requirements_as_list())
+            requirements.extend(module.get_strict_python_requirements_as_list())
         constraints: List[Requirement] = [Requirement.parse(item) for item in requirements]
 
         if not env.ActiveEnv.check(constraints=constraints):
