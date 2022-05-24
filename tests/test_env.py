@@ -93,7 +93,7 @@ def test_install_fails(tmpdir, caplog, monkeypatch):
         if "index_urls" in kwargs or len(args) < 5:
             return compose(*args, **{**kwargs, "index_urls": []})
         else:
-            return compose(*args[:5], [], *args[5:], **kwargs)
+            return compose(*args[:3], [], *args[4:], **kwargs)
 
     monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
 
