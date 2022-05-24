@@ -680,7 +680,10 @@ def test_module_conflicting_dependencies_with_v1_module(
     tmpdir: py.path.local,
 ) -> None:
     """
-    todo
+    Show an error message when installing a module that breaks the dependencies
+    of another one. modulev1 depends on y~=1.0.0.
+    after the install of modulev1 we try to install minimalv2module2 which
+    requires y~=2.0.0. those 2 requirements conflict which each other.
     """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     # Create an python package x with version 1.0.0
