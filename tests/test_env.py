@@ -79,12 +79,23 @@ def test_basic_install(tmpdir):
     import iplib  # NOQA
 
 
-def test_install_fails(tmpdir, caplog):
+def test_install_fails(tmpdir, caplog, monkeypatch):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
     caplog.clear()
     caplog.set_level(logging.INFO)
     package_name = "non-existing-pkg-inmanta"
+
+    # monkeypatch pip install to set --no-index for security reasons (anyone could publish this package to PyPi)
+    compose = env.PipCommandBuilder.compose_install_command
+
+    def mock_compose(*args, **kwargs):
+        if "index_urls" in kwargs or len(args) < 5:
+            return compose(*args, **{**kwargs, "index_urls": []})
+        else:
+            return compose(*args[:3], [], *args[4:], **kwargs)
+
+    monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
 
     with pytest.raises(Exception):
         venv.install_from_list([package_name])
@@ -120,8 +131,8 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert not _list_dir(site_dir, ignore=["inmanta-inherit-from-parent-venv.pth", "__pycache__"])
 
     # test installing a package that is already present in the parent venv
-    random_package = parent_installed[0]
-    venv.install_from_list([random_package])
+    assert "more-itertools" in parent_installed
+    venv.install_from_list(["more-itertools"])
 
     # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
     assert not _list_dir(site_dir, ignore=["inmanta-inherit-from-parent-venv.pth", "__pycache__"])
@@ -206,7 +217,8 @@ def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
     with pytest.raises(env.PackageNotFound):
-        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")])
+        # pass empty index list for security reasons (anyone could publish this package to PyPi)
+        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")], index_urls=[])
 
 
 def test_process_env_install_from_index_conflicting_reqs(
@@ -251,7 +263,7 @@ def test_process_env_install_from_source(
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
 @pytest.mark.parametrize("v1_plugin_loader", [True, False])
-@pytest.mark.parametrize("package_name", ["tinykernel", "more-itertools", "inmanta-module-minimalv2module"])
+@pytest.mark.parametrize("package_name", ["lorem", "more-itertools", "inmanta-module-minimalv2module"])
 @pytest.mark.slowtest
 def test_active_env_get_module_file(
     local_module_package_index: str,
