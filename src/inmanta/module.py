@@ -1994,8 +1994,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         for module in self.modules.values():
             requirements.extend(module.get_strict_python_requirements_as_list())
         constraints: List[Requirement] = [Requirement.parse(item) for item in requirements]
-
-        if not env.ActiveEnv.check(constraints=constraints):
+        constraints_for_marker = filter(lambda c: not (c.marker and not c.marker.evaluate()), constraints)
+        if not env.ActiveEnv.check(constraints=constraints_for_marker):
             raise env.ConflictingRequirements(
                 "Module dependency resolution conflict: a module dependency constraint "
                 "was violated by another module. This most likely indicates an incompatibility between "

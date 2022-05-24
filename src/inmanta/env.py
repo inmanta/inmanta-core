@@ -601,14 +601,12 @@ class ActiveEnv(PythonEnvironment):
             if in_scope is None or in_scope.fullmatch(dist_info.key)
             for requirement in dist_info.requires()
         )
-        print(all_constraints)
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
             (constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
             if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
         ]
-        print(constraint_violations)
 
         for constraint, v in constraint_violations:
             LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
