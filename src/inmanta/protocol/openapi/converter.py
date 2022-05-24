@@ -123,7 +123,7 @@ class OpenApiConverter:
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="//unpkg.com/swagger-ui-dist@^3.25.0/swagger-ui-bundle.js"></script>
+        <script src="//unpkg.com/swagger-ui-dist@^4.11.1/swagger-ui-bundle.js"></script>
         <link rel="stylesheet" href="//unpkg.com/swagger-ui-dist@^4.11.1/swagger-ui.css" />
         <title>Inmanta Service Orchestrator API</title>
     </head>
