@@ -608,7 +608,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
 
 
 @pytest.mark.slowtest
-def test_module_conflicting_dependencies(
+def test_module_conflicting_dependencies_with_v2_modules(
     snippetcompiler_clean,
     modules_v2_dir: str,
     tmpdir: py.path.local,
@@ -667,6 +667,62 @@ def test_module_conflicting_dependencies(
 
     msg: str = "Module dependency resolution conflict:"
     # Install project
+    with pytest.raises(ConflictingRequirements) as e:
+        project.install_modules()
+    assert e.value.args[0].startswith(msg)
+
+
+@pytest.mark.slowtest
+def test_module_conflicting_dependencies_with_v1_module(
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    todo
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # Create an python package x with version 1.0.0
+    create_python_package("y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), publish_index=index)
+
+    # Create an python package x with version 2.0.0
+    create_python_package("y", Version("2.0.0"), str(tmpdir.join("y-2.0.0")), publish_index=index)
+
+    # Create the first module
+    module_name1: str = "minimalv1module"
+    module_path1: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name1),
+        module_path1,
+        new_name="modulev1",
+        new_requirements=[Requirement.parse("y~=1.0.0")],
+    )
+
+    # Create the second module
+    module_name2: str = "minimalv2module"
+    module_path2: str = str(tmpdir.join(module_name2))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name2),
+        module_path2,
+        new_requirements=[Requirement.parse("y~=2.0.0")],
+        publish_index=index,
+    )
+
+    req = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+
+    # Setup project
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import modulev1",
+        install_project=False,
+        python_package_sources=[index.url],
+        python_requires=[req],
+        autostd=False,
+        add_to_module_path=[str(tmpdir)],
+    )
+
+    # Install project
+    msg: str = "Module dependency resolution conflict:"
     with pytest.raises(ConflictingRequirements) as e:
         project.install_modules()
     assert e.value.args[0].startswith(msg)

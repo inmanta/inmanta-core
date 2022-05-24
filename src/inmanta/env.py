@@ -183,15 +183,6 @@ class PipCommandBuilder:
             *(["--editable"] if only_editable else []),
         ]
 
-    @classmethod
-    def compose_pip_check_command(cls, python_path: str) -> List[str]:
-        """
-        Generate a `pip check` command for the given arguments.
-
-        :param python_path: The python interpreter to use in the command.
-        """
-        return [python_path, "-m", "pip", "check"]
-
 
 class PythonEnvironment:
     """
@@ -280,14 +271,6 @@ class PythonEnvironment:
             raise e
         except Exception:
             raise
-        cmd: List[str] = PipCommandBuilder.compose_pip_check_command(self.python_path)
-        try:
-            subprocess.check_output(cmd)
-        except CalledProcessError:
-            msg: str = "Module dependency resolution conflict: a module dependency constraint \
-was violated by another module. This most likely indicates an incompatibility between \
-two or more of the installed modules. You can get more details on the issue with 'pip check'."
-            raise ConflictingRequirements(msg)
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -600,27 +583,24 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
+    def check(cls, in_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
-            compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
+            compatibility check. Only in scope packages' direct dependencies will be considered for conflicts. The pattern is matched
             against an all-lowercase package name.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
         """
-
-        dist_info: DistInfoDistribution
         # add all requirements of all in scope packages installed in this environment
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
             requirement
             for dist_info in pkg_resources.working_set
-            if in_scope.fullmatch(dist_info.key)
+            if in_scope is None or in_scope.fullmatch(dist_info.key)
             for requirement in dist_info.requires()
         )
-
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
             (constraint, installed_versions.get(constraint.key, None))
