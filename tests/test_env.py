@@ -75,16 +75,9 @@ def test_install_fails(tmpdir, caplog, monkeypatch):
     caplog.set_level(logging.INFO)
     package_name = "non-existing-pkg-inmanta"
 
-    # monkeypatch pip install to set --no-index for security reasons (anyone could publish this package to PyPi)
-    compose = env.PipCommandBuilder.compose_install_command
-
-    def mock_compose(*args, **kwargs):
-        if "index_urls" in kwargs or len(args) < 5:
-            return compose(*args, **{**kwargs, "index_urls": []})
-        else:
-            return compose(*args[:3], [], *args[4:], **kwargs)
-
-    monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
+    # monkeypatch pip env vars to set for security reasons (anyone could publish this package to PyPi)
+    monkeypatch.setenv("PIP_INDEX_URL", "non-existing-local-index")
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "")
 
     with pytest.raises(Exception):
         venv.install_from_list([package_name])
