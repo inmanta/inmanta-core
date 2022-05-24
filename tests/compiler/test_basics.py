@@ -412,3 +412,18 @@ end
 """,
         expected_error,
     )
+
+
+def test_unpack_null_dictionary(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+hello_world = "Hello World!"
+dct = null
+hi_world = std::replace(hello_world, **dct)
+std::print(hi_world)
+""",
+        (
+            "The ** operator can only be applied to dictionaries (reported in "
+            "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
+        ),
+    )
