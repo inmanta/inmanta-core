@@ -90,7 +90,6 @@ def test_install_fails(tmpdir, caplog, monkeypatch):
     compose = env.PipCommandBuilder.compose_install_command
 
     def mock_compose(*args, **kwargs):
-        raise Exception("WORKS!")
         if "index_urls" in kwargs or len(args) < 5:
             return compose(*args, **{**kwargs, "index_urls": []})
         else:
