@@ -59,13 +59,11 @@ class PackageNotFound(Exception):
 
 
 class ConflictingRequirements(Exception):
-    def __init__(self, msg: Optional[str], conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]]):
-        self.conflicts = None
-        self.msg = None
-        if conflicts is not None:
-            self.conflicts = conflicts
-        if msg is not None:
-            self.msg = msg
+    def __init__(
+        self, msg: Optional[str] = None, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None
+    ):
+        self.conflicts = conflicts
+        self.msg = msg
 
     def get_msg(self) -> str:
         if self.msg:
