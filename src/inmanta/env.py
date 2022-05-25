@@ -588,8 +588,8 @@ class ActiveEnv(PythonEnvironment):
         Check this Python environment for incompatible dependencies in installed packages.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
-            compatibility check. Only in scope packages' direct dependencies will be considered for conflicts. The pattern is matched
-            against an all-lowercase package name.
+            compatibility check. Only in scope packages' direct dependencies will be considered for conflicts.
+            The pattern is matched against an all-lowercase package name.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
