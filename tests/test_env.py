@@ -411,13 +411,13 @@ def test_active_env_check_constraints(tmpvenv_active: str) -> None:
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
-    assert env.ActiveEnv.check(in_scope)
+    env.ActiveEnv.check(in_scope)
 
     with pytest.raises(env.ConflictingRequirements):
         env.ActiveEnv.check(in_scope, constraints)
 
     create_install_package("test-package-one", version.Version("1.0.0"), [])
-    assert env.ActiveEnv.check(in_scope, constraints)
+    env.ActiveEnv.check(in_scope, constraints)
 
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])

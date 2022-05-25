@@ -1994,7 +1994,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         try:
             env.ActiveEnv.check(constraints=constraints)
         except env.ConflictingRequirements as e:
-            raise CompilerException(e.get_msg())
+            message: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules."
+            raise env.ConflictingRequirements(message, e.conflicts)
 
     def _modules_cache_is_valid(self) -> bool:
         """
