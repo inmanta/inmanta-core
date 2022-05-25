@@ -1991,8 +1991,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
         constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-        constraints_for_marker = filter(lambda c: not (c.marker and not c.marker.evaluate()), constraints)
-        if not env.ActiveEnv.check(constraints=constraints_for_marker):
+        if not env.ActiveEnv.check(constraints=constraints):
             raise env.ConflictingRequirements(
                 "Module dependency resolution conflict: a module dependency constraint "
                 "was violated by another module. This most likely indicates an incompatibility between "
