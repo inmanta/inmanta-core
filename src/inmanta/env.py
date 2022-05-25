@@ -59,7 +59,24 @@ class PackageNotFound(Exception):
 
 
 class ConflictingRequirements(Exception):
-    pass
+    def __init__(self, msg: Optional[str], conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]]):
+        self.conflicts = None
+        self.msg = None
+        if conflicts is not None:
+            self.conflicts = conflicts
+        if msg is not None:
+            self.msg = msg
+
+    def get_msg(self) -> str:
+        if self.msg:
+            return self.msg
+        msg: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules. You can get more details on the issue with 'pip check'.\n"
+        if self.conflicts is not None:
+            for constraint, v in self.conflicts:
+                msg += "Incompatibility between constraint %s and installed version %s\n" % (constraint, v)
+        return msg
 
 
 class PythonWorkingSet:
@@ -267,7 +284,7 @@ class PythonEnvironment:
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             if "versions have conflicting dependencies" in stderr:
-                raise ConflictingRequirements(stderr)
+                raise ConflictingRequirements(msg=stderr)
             raise e
         except Exception:
             raise
@@ -608,10 +625,9 @@ class ActiveEnv(PythonEnvironment):
             if (constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint)
             if not constraint.marker or constraint.marker.evaluate()
         ]
-        # constraints_for_marker = filter(lambda c: not (c.marker and not c.marker.evaluate()), constraints)
-        for constraint, v in constraint_violations:
-            LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
-        return len(constraint_violations) == 0
+        if len(constraint_violations) != 0:
+            raise ConflictingRequirements(conflicts=constraint_violations)
+        return True
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
