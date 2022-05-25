@@ -67,7 +67,7 @@ class ConflictingRequirements(CompilerException):
         self.msg = msg
 
     def get_msg(self) -> str:
-        message: str = self.msg if self.msg else ""
+        message: str = self.msg if self.msg else "Conflicting requirements:"
         if self.conflicts is not None:
             for constraint, v in self.conflicts:
                 message += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
