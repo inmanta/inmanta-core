@@ -606,7 +606,7 @@ class ActiveEnv(PythonEnvironment):
             (constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
             if (constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint)
-            and not (constraint.marker and not constraint.marker.evaluate())
+            if not constraint.marker or constraint.marker.evaluate()
         ]
         # constraints_for_marker = filter(lambda c: not (c.marker and not c.marker.evaluate()), constraints)
         for constraint, v in constraint_violations:
