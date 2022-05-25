@@ -68,12 +68,16 @@ def test_basic_install(tmpdir):
     import iplib  # NOQA
 
 
-def test_install_fails(tmpdir, caplog):
+def test_install_fails(tmpdir, caplog, monkeypatch):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
     caplog.clear()
     caplog.set_level(logging.INFO)
     package_name = "non-existing-pkg-inmanta"
+
+    # monkeypatch pip env vars to set for security reasons (anyone could publish this package to PyPi)
+    monkeypatch.setenv("PIP_INDEX_URL", "non-existing-local-index")
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "")
 
     with pytest.raises(Exception):
         venv.install_from_list([package_name])
@@ -105,8 +109,8 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert not os.listdir(site_dir)
 
     # test installing a package that is already present in the parent venv
-    random_package = parent_installed[0]
-    venv.install_from_list([random_package])
+    assert "more-itertools" in parent_installed
+    venv.install_from_list(["more-itertools"])
 
     # Assert nothing installed in the virtual env
     assert not os.listdir(site_dir)
