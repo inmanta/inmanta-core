@@ -39,6 +39,7 @@ from tornado.httputil import url_concat
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
+from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import (
@@ -2135,3 +2136,34 @@ async def test_return_value_with_meta(unused_tcp_port, postgres_db, database_nam
     assert response.result["data"] == "abcd"
     assert response.result["metadata"].get("additionalInfo") is not None
     assert response.result["metadata"].get("warnings") is not None
+
+
+async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finalizer):
+    """
+    Test the use and validation of methods that use common.ReturnValue
+    """
+    configure(unused_tcp_port, database_name, postgres_db.port)
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
+        def test_method(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+            """
+            Create a new project
+            """
+
+        @protocol.handle(test_method)
+        async def test_method(self, id: str, **kwargs: object) -> Dict[str, str]:
+            return {"name": str(kwargs["name"]), "value": str(kwargs["value"])}
+
+    rs = Server()
+    server = ProjectServer(name="projectserver")
+    rs.add_slice(server)
+    await rs.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(rs.stop)
+
+    client = protocol.Client("client")
+    result = await client.test_method(id="test", **{"name": "test", "value": True})
+    assert result.code == 200
+    assert result.result["data"]["name"] == "test"
+    assert result.result["data"]["value"]

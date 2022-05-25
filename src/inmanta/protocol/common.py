@@ -381,6 +381,7 @@ class MethodProperties(object):
         typed: bool = False,
         envelope_key: str = const.ENVELOPE_KEY,
         strict_typing: bool = True,
+        varkw: bool = False,
     ) -> None:
         """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -402,6 +403,8 @@ class MethodProperties(object):
         :param typed: Is the method definition typed or not
         :param envelope_key: The envelope key to use
         :param strict_typing: If true, does not allow `Any` when validating argument types
+        :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
+                      responsible for the validation.
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -425,6 +428,8 @@ class MethodProperties(object):
         self._envelope_key = envelope_key
         self._strict_typing = strict_typing
         self.function = function
+        self._varkw: bool = varkw
+        self._varkw_name: Optional[str] = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -436,6 +441,11 @@ class MethodProperties(object):
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()
+
+    @property
+    def varkw(self) -> bool:
+        """Does the method allow for a variable number of key/value arguments."""
+        return self._varkw
 
     def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -467,7 +477,7 @@ class MethodProperties(object):
 
         return create_model(
             f"{self.function.__name__}_arguments",
-            **{param.name: to_tuple(param) for param in sig.parameters.values()},
+            **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
             __base__=MethodArgumentsBaseModel,
         )
 
@@ -505,6 +515,26 @@ class MethodProperties(object):
 
             self._validate_type_arg(
                 arg, type_hints[arg], strict=self.strict_typing, allow_none_type=True, in_url=self.arguments_in_url()
+            )
+
+        if self.varkw:
+            # check if a varkw is added to the method and has the type object
+            if full_spec.varkw is None:
+                raise InvalidMethodDefinition(
+                    f"varkw is set to true in the annotation but there is no ** variable in method {self.function}. "
+                    "Add `**kwargs: object` for example."
+                )
+
+            self._varkw_name = full_spec.varkw
+
+            # if the variable is there, it needs to have the type object. All other specialisations need to be validated
+            # by the handler itself.
+            if type_hints[full_spec.varkw] is not object:
+                raise InvalidMethodDefinition(f"The arguments **{full_spec.varkw} should have `object` as type annotation.")
+
+        elif full_spec.varkw is not None:
+            raise InvalidMethodDefinition(
+                f"A key/value argument is only allowed when `varkw` is set to true in method {self.function}."
             )
 
         self._validate_return_type(type_hints["return"], strict=self.strict_typing)

@@ -139,6 +139,7 @@ def typedmethod(
     api_prefix: str = "api",
     envelope_key: str = const.ENVELOPE_KEY,
     strict_typing: bool = True,
+    varkw: bool = False,
 ) -> Callable[..., Callable]:
     """
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -166,6 +167,8 @@ def typedmethod(
     :param strict_typing: If true, does not allow `Any`. Setting this option to False is heavily discouraged except for some
         few very specific cases where the type system does not allow the strict type to be specified, for example in case of
         infinite recursion.
+    :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
+                  responsible for the validation.
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -187,6 +190,7 @@ def typedmethod(
             True,
             envelope_key,
             strict_typing=strict_typing,
+            varkw=varkw,
         )
         common.MethodProperties.register_method(properties)
         return func
