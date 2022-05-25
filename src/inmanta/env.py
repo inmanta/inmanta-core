@@ -35,7 +35,7 @@ from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import DistInfoDistribution, Requirement
+from pkg_resources import Requirement
 
 from inmanta import const
 from inmanta.stable_api import stable_api
