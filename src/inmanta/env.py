@@ -70,10 +70,10 @@ class ConflictingRequirements(Exception):
             return self.msg
         msg: str = "Module dependency resolution conflict: a module dependency constraint \
 was violated by another module. This most likely indicates an incompatibility between \
-two or more of the installed modules. You can get more details on the issue with 'pip check'.\n"
+two or more of the installed modules."
         if self.conflicts is not None:
             for constraint, v in self.conflicts:
-                msg += "Incompatibility between constraint %s and installed version %s\n" % (constraint, v)
+                msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
         return msg
 
 
