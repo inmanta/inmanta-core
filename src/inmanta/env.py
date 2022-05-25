@@ -38,6 +38,7 @@ import pkg_resources
 from pkg_resources import Requirement
 
 from inmanta import const
+from inmanta.ast import CompilerException
 from inmanta.stable_api import stable_api
 from packaging import version
 
@@ -58,23 +59,17 @@ class PackageNotFound(Exception):
     pass
 
 
-class ConflictingRequirements(Exception):
-    def __init__(
-        self, msg: Optional[str] = None, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None
-    ):
+class ConflictingRequirements(CompilerException):
+    def __init__(self, msg: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
         self.conflicts = conflicts
         self.msg = msg
 
     def get_msg(self) -> str:
-        if self.msg:
-            return self.msg
-        msg: str = "Module dependency resolution conflict: a module dependency constraint \
-was violated by another module. This most likely indicates an incompatibility between \
-two or more of the installed modules."
+        message: str = self.msg
         if self.conflicts is not None:
             for constraint, v in self.conflicts:
-                msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
-        return msg
+                message += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
+        return message
 
 
 class PythonWorkingSet:
@@ -598,7 +593,7 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(cls, in_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> bool:
+    def check(cls, in_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
 
@@ -607,7 +602,6 @@ class ActiveEnv(PythonEnvironment):
             The pattern is matched against an all-lowercase package name.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
-        :return: True iff the check succeeds.
         """
         # add all requirements of all in scope packages installed in this environment
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
@@ -624,8 +618,10 @@ class ActiveEnv(PythonEnvironment):
             if not constraint.marker or constraint.marker.evaluate()
         ]
         if len(constraint_violations) != 0:
-            raise ConflictingRequirements(conflicts=constraint_violations)
-        return True
+            msg: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules."
+            raise ConflictingRequirements(msg, conflicts=constraint_violations)
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
