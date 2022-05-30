@@ -199,7 +199,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
-        resource_sets: Optional[Dict[str, Optional[str]]] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
