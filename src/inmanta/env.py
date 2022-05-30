@@ -60,7 +60,7 @@ class PackageNotFound(Exception):
 
 
 class ConflictingRequirements(CompilerException):
-    def __init__(self, msg:str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
+    def __init__(self, msg: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
         CompilerException.__init__(self, msg)
         self.conflicts = conflicts
 
