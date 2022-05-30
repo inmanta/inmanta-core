@@ -73,7 +73,6 @@ class ConflictingRequirements(CompilerException):
         return msg
 
 
-
 class PythonWorkingSet:
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
