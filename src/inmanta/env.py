@@ -61,16 +61,17 @@ class PackageNotFound(Exception):
 
 class ConflictingRequirements(CompilerException):
     def __init__(self, msg: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
-        self.message: str = msg
+        CompilerException.__init__(self, msg=self.get_msg(msg, conflicts))
         self.conflicts = conflicts
-        CompilerException.__init__(self, msg=self.get_msg())
 
-    def get_msg(self) -> str:
-        message: str = self.message
-        if self.conflicts is not None:
-            for constraint, v in self.conflicts:
-                message += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
-        return message
+    @classmethod
+    def get_msg(cls, message: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]]) -> str:
+        msg: str = message
+        if conflicts is not None:
+            for constraint, v in conflicts:
+                msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
+        return msg
+
 
 
 class PythonWorkingSet:
