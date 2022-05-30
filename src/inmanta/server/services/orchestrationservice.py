@@ -199,6 +199,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
+        resource_sets: Optional[Dict[str, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -223,6 +224,8 @@ class OrchestrationService(protocol.ServerSlice):
             )
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
+        if not resource_sets:
+            resource_sets = {}
 
         started = datetime.datetime.now().astimezone()
 
@@ -244,6 +247,8 @@ class OrchestrationService(protocol.ServerSlice):
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
                 if res_obj.status in const.UNDEPLOYABLE_STATES:
                     undeployable.append(res_obj)
+            if res_obj.resource_id in resource_sets:
+                res_obj.resource_set = resource_sets[res_obj.resource_id]
 
             # collect all agents
             agents.add(res_obj.agent)
