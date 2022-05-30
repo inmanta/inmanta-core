@@ -618,7 +618,7 @@ class ActiveEnv(PythonEnvironment):
             if not constraint.marker or constraint.marker.evaluate()
         ]
         if len(constraint_violations) != 0:
-            raise ConflictingRequirements("Conflicting requirements:", conflicts=constraint_violations)
+            raise ConflictingRequirements(msg="Conflicting requirements:", conflicts=constraint_violations)
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
