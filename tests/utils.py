@@ -261,7 +261,9 @@ async def wait_for_version(client, environment, cnt):
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
         data = await client.get_report(report["id"])
-        print(json.dumps(data.result, indent=4))
+        import pprint
+
+        pprint.pprint(data.result)
         assert report["success"]
 
     # wait for it to appear
