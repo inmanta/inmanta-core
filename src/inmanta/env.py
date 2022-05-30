@@ -60,8 +60,8 @@ class PackageNotFound(Exception):
 
 
 class ConflictingRequirements(CompilerException):
-    def __init__(self, msg: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
-        CompilerException.__init__(self, msg=self.get_msg(msg, conflicts))
+    def __init__(self, message: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
+        CompilerException.__init__(self, msg=self.get_msg(message, conflicts))
         self.conflicts = conflicts
 
     @classmethod
@@ -278,7 +278,7 @@ class PythonEnvironment:
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             if "versions have conflicting dependencies" in stderr:
-                raise ConflictingRequirements(msg=stderr)
+                raise ConflictingRequirements(stderr)
             raise e
         except Exception:
             raise
@@ -619,7 +619,7 @@ class ActiveEnv(PythonEnvironment):
             if not constraint.marker or constraint.marker.evaluate()
         ]
         if len(constraint_violations) != 0:
-            raise ConflictingRequirements(msg="Conflicting requirements:", conflicts=constraint_violations)
+            raise ConflictingRequirements("Conflicting requirements:", constraint_violations)
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
