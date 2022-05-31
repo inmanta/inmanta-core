@@ -293,6 +293,7 @@ class Resource(BaseModel):
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
     status: const.ResourceState
+    resource_set: Optional[str]
 
 
 class ResourceAction(BaseModel):

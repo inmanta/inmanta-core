@@ -4095,6 +4095,7 @@ class Resource(BaseDocument):
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
     last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -4980,6 +4981,7 @@ class Resource(BaseDocument):
             attributes=self.attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
+            resource_set=self.resource_set,
         )
 
 
