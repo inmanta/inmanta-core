@@ -2163,7 +2163,7 @@ async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finaliz
     async_finalizer.add(rs.stop)
 
     client = protocol.Client("client")
-    result = await client.test_method(id="test", **{"name": "test", "value": True})
+    result = await client.test_method(id="test", name="test", value=True)
     assert result.code == 200
     assert result.result["data"]["name"] == "test"
     assert result.result["data"]["value"]
