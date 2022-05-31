@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cookiecutter from 1.7.3 to 2.1.0
+destination-branches:
+- iso5
+sections: {}
