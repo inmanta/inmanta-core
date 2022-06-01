@@ -344,9 +344,7 @@ class PythonEnvironment:
                 return True
             return False
 
-        return [
-            Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)
-        ]
+        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
 
     @classmethod
     def _run_command_and_log_output(
