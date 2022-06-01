@@ -332,11 +332,20 @@ class PythonEnvironment:
         to make sure that no Inmanta packages gets overridden.
         """
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        requirements: Sequence[Requirement] = []
-        for pkg in workingset:
-            if pkg == "inmanta" or (pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-")):
-                requirements.append(Requirement.parse(f"{pkg}=={workingset[pkg]}"))
-        return requirements
+
+        def _is_protected_package(pkg: str) -> bool:
+            """
+            Return true iff the package with name `pkg`, installed in this venv, should not be updated.
+            """
+            if pkg == "inmanta":
+                return True
+            if pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-") and pkg != "inmanta-dev-dependencies":
+                return True
+            return False
+
+        return [
+            Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)
+        ]
 
     @classmethod
     def _run_command_and_log_output(
