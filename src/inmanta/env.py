@@ -340,6 +340,7 @@ class PythonEnvironment:
             if pkg == "inmanta":
                 return True
             if pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-") and pkg != "inmanta-dev-dependencies":
+                # Protect all server extensions
                 return True
             return False
 
