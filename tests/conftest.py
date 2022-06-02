@@ -490,6 +490,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = None
 
 
 @pytest.fixture(scope="function", autouse=True)
