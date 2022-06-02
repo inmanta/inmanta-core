@@ -2,7 +2,7 @@ asyncpg==0.25.0
 click-plugins==1.1.1
 click==8.1.3
 colorlog==6.6.0
-cookiecutter==2.1.0
+cookiecutter==2.1.1
 cryptography==37.0.2
 docstring-parser==0.14.1
 email-validator==1.2.1
