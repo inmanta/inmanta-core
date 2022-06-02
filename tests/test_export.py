@@ -23,7 +23,11 @@ import pytest
 from inmanta import config, const
 from inmanta.ast import ExternalException
 from inmanta.const import ResourceState
+from inmanta.data import Resource
+from inmanta.env import LocalPackagePath
 from inmanta.export import DependencyCycleException
+from inmanta.module import InmantaModuleRequirement
+from utils import module_from_template
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -412,3 +416,49 @@ exp::Test3(
         e.value.format_trace()
         == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
     )
+
+
+async def test_resource_set(snippetcompiler_clean, modules_v2_dir: str, tmpdir, environment) -> None:
+    """
+    test that the resourceSet is exported correctly
+    """
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="test123")
+std::ResourceSet(name="test", resources=[a])
+"""
+    init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("minimalv2module::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name),
+        module_path,
+        new_requirements=[InmantaModuleRequirement.parse("std")],
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        """
+import minimalv2module
+        """,
+        install_v2_modules=[LocalPackagePath(module_path, False)],
+        project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
+    )
+
+    await snippetcompiler_clean.do_export()
+    test = await Resource.get_list(environment=environment)
+    print(test)

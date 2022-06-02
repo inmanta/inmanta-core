@@ -486,6 +486,7 @@ class Exporter(object):
             tid=tid,
             version=version,
             resources=resources,
+            resource_set={"key": "value"},
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,
