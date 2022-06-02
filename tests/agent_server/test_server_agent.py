@@ -1702,8 +1702,8 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[p
         try:
             return p.cmdline()
         except Exception:
-            logger.warning("A child process is gone! %d", p.pid)
-            """ If a child process is gone, p.cmdline raise an exception"""
+            logger.warning("A child process is gone! pid=%d", p.pid)
+            """If a child process is gone, p.cmdline() raises an exception"""
             return ""
 
     return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
