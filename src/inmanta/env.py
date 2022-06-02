@@ -332,6 +332,7 @@ class PythonEnvironment:
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
+
         def _is_protected_package(pkg: str) -> bool:
             """
             Return true iff the package with name `pkg`, installed in this venv, should not be updated.
