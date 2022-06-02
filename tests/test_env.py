@@ -461,6 +461,7 @@ def test_override_inmanta_dev_dependencies_package(tmpvenv_active_inherit: env.V
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert pkg_name in installed_pkgs, f"The {pkg_name} package should be installed to run the tests"
 
+    # Downgrade to an old version
     inmanta_requirements = Requirement.parse(f"{pkg_name}==1.76.0")
     tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
 
