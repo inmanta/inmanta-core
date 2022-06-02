@@ -111,6 +111,7 @@ class InmantaBootloader(object):
             try:
                 inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
             except ModuleNotFoundError:
+                # This only happens when a test case creates and activates a new venv
                 return {}
             else:
                 cls.AVAILABLE_EXTENSIONS = {
