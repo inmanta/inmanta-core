@@ -352,7 +352,7 @@ class Exporter(object):
 
         resources = self.resources_to_list()
         resource_sets: Optional[List[Instance]] = (
-            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else None
+            types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else None
         )
 
         if len(self._resources) == 0:
@@ -446,7 +446,9 @@ class Exporter(object):
         return a dictonary with as keys resource_ids and as values the name of the resource_set
         the resource belongs to. return None if no resource_set is defined.
         """
-        resource_sets: Optional[Dict[str, Optional[str]]] = {} if resource_set_instances else None
+        if not resource_set_instances:
+            return None
+        resource_sets: Dict[str, Optional[str]] = {}
         for resource_set_instance in resource_set_instances:
             name = resource_set_instance.get_attribute("name").value
             resources_in_set = resource_set_instance.get_attribute("resources")
