@@ -443,8 +443,8 @@ class Exporter(object):
 
     def get_resource_sets(self, resource_set_instances: Optional[List[Instance]]) -> Optional[Dict[str, Optional[str]]]:
         """
-        return a dictonary with as keys resource_ids and as value the name of the resource_set
-        they belong to. return None if no resource_set is defined.
+        return a dictonary with as keys resource_ids and as values the name of the resource_set
+        the resource belongs to. return None if no resource_set is defined.
         """
         resource_sets: Optional[Dict[str, Optional[str]]] = {} if resource_set_instances else None
         for resource_set_instance in resource_set_instances:
