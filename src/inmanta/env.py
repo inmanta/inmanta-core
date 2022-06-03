@@ -333,17 +333,10 @@ class PythonEnvironment:
         to make sure that no Inmanta packages gets overridden.
         """
 
-        def _is_protected_package(pkg: str, version: version.Version) -> bool:
+        def _is_protected_package(pkg: str) -> bool:
             """
             Return true iff the package with name `pkg`, installed in this venv, should not be updated.
             """
-            if version.is_devrelease and version.dev == 0:
-                # Never protect packages with the .dev0 build tag. The presence of this build tag means that we are
-                # executing the tests. Constraining the package with this build tag would otherwise fail the tests when the
-                # package is installed in editable mode, because pip will try to override the editable install with a
-                # regular install. As no product or extension package is ever published to the python package repository
-                # with the version number "X.Y.Z.dev0", the pip command fails together with the associated test case.
-                return False
             if pkg == "inmanta" or pkg == "inmanta-service-orchestrator":
                 # Protect product packages
                 return True
@@ -357,7 +350,7 @@ class PythonEnvironment:
 
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [
-            Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg, workingset[pkg])
+            Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)
         ]
 
     @classmethod

@@ -277,6 +277,13 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (which is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
+    pytest.skip(
+        "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+        "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+        "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+        "package repository."
+    )
+
     venv_dir, _ = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
@@ -443,9 +450,10 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
 
     if "inmanta-core" in tmpvenv_active_inherit.get_installed_packages(only_editable=True):
         pytest.skip(
-            "Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
-            "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
-            "always execute this test because it never does an editable install."
+            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+            "package repository."
         )
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
