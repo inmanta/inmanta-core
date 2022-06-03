@@ -441,6 +441,24 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
+    def get_resource_sets(self, resource_set_instances: Optional[List[Instance]]) -> Optional[Dict[str, Optional[str]]]:
+        """
+        return a dictonary with as keys resource_ids and as value the name of the resource_set
+        they belong to. return None if no resource_set is defined.
+        """
+        resource_sets: Optional[Dict[str, Optional[str]]] = {} if resource_set_instances else None
+        for resource_set_instance in resource_set_instances:
+            name = resource_set_instance.get_attribute("name").value
+            resources_in_set = resource_set_instance.get_attribute("resources")
+            for resource_in_set in resources_in_set.value:
+                resource_id = str(
+                    Resource.create_from_model(self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set))
+                )
+                if resource_id in resource_sets:
+                    raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                resource_sets[resource_id] = name
+        return resource_sets
+
     def commit_resources(
         self,
         version: int,
@@ -487,17 +505,7 @@ class Exporter(object):
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata, "model": model}
 
-        resource_sets: Optional[Dict[str, Optional[str]]] = {} if resource_set_instances else None
-        for resource_set_instance in resource_set_instances:
-            name = resource_set_instance.get_attribute("name").value
-            resources_in_set = resource_set_instance.get_attribute("resources")
-            for resource_in_set in resources_in_set.value:
-                resource_id = str(
-                    Resource.create_from_model(self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set))
-                )
-                if resource_id in resource_sets:
-                    raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
-                resource_sets[resource_id] = name
+        resource_sets: Optional[Dict[str, Optional[str]]] = self.get_resource_sets(resource_set_instances)
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
