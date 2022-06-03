@@ -351,6 +351,9 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
+        resource_sets: Optional[List[Instance]] = (
+            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else None
+        )
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
@@ -370,7 +373,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model)
+            self.commit_resources(self._version, resources, resource_sets, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -438,7 +441,14 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
-    def commit_resources(self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict) -> None:
+    def commit_resources(
+        self,
+        version: int,
+        resources: List[Dict[str, str]],
+        resource_set_instances: Optional[List[Instance]],
+        metadata: Dict[str, str],
+        model: Dict,
+    ) -> None:
         """
         Commit the entire list of resource to the configurations server.
         """
@@ -477,6 +487,18 @@ class Exporter(object):
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata, "model": model}
 
+        resource_sets: Optional[Dict[str, Optional[str]]] = {} if resource_set_instances else None
+        for resource_set_instance in resource_set_instances:
+            name = resource_set_instance.get_attribute("name").value
+            resources_in_set = resource_set_instance.get_attribute("resources")
+            for resource_in_set in resources_in_set.value:
+                resource_id = str(
+                    Resource.create_from_model(self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set))
+                )
+                if resource_id in resource_sets:
+                    raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                resource_sets[resource_id] = name
+
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
         for res in resources:
@@ -486,7 +508,7 @@ class Exporter(object):
             tid=tid,
             version=version,
             resources=resources,
-            resource_set={"key": "value"},
+            resource_sets=resource_sets,
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from inmanta.execute.runtime import Instance
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -1108,8 +1109,8 @@ class SnippetCompilationTest(KeepOnFail):
             dirs.extend(add_to_module_path)
         return f"[{', '.join(dirs)}]"
 
-    async def do_export(self, include_status=False, do_raise=True):
-        return await off_main_thread(self._do_export(deploy=False, include_status=include_status, do_raise=do_raise))
+    def do_export(self, include_status=False, do_raise=True):
+        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
 
     def get_exported_json(self) -> JsonType:
         with open(os.path.join(self.project_dir, "dump.json")) as fh:

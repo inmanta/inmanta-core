@@ -65,6 +65,7 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     project = module.Project.get()
     try:
         (statements, blocks) = compiler.compile()
+        print(statements)
     except ParserException as e:
         compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
