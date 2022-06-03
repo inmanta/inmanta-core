@@ -442,9 +442,10 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
 
     if "inmanta-core" in tmpvenv_active_inherit.get_installed_packages(only_editable=True):
-        pytest.skip("Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
-                    "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
-                    "always execute this test because it never does an editable install."
+        pytest.skip(
+            "Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
+            "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
+            "always execute this test because it never does an editable install."
         )
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")

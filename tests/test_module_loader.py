@@ -546,9 +546,10 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     overwritten. The module gets installed from source
     """
     if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
-        pytest.skip("Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
-                    "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
-                    "always execute this test because it never does an editable install."
+        pytest.skip(
+            "Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
+            "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
+            "always execute this test because it never does an editable install."
         )
 
     # Create the module
@@ -583,9 +584,10 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     overwritten. The module gets installed from index.
     """
     if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
-        pytest.skip("Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
-                    "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
-                    "always execute this test because it never does an editable install."
+        pytest.skip(
+            "Skip this test as the inmanta-core package is not constrained when it's installed in editable mode "
+            "(See documentation: env.py -> PythonEnvironment -> _get_requirements_on_inmanta_package()). Jenkins will "
+            "always execute this test because it never does an editable install."
         )
     # Create the module
     module_name: str = "minimalv2module"
