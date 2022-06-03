@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.execute.runtime import Instance
 
 """
 About the use of @parametrize_any and @slowtest:
