@@ -69,6 +69,7 @@ class InmantaBootloader(object):
     - starting the server and its slices in the correct order
     """
 
+    # Cache field for available extensions
     AVAILABLE_EXTENSIONS: Optional[Dict[str, str]] = None
 
     def __init__(self) -> None:
