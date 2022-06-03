@@ -349,9 +349,7 @@ class PythonEnvironment:
             return False
 
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [
-            Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)
-        ]
+        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
 
     @classmethod
     def _run_command_and_log_output(

@@ -443,7 +443,9 @@ def deactive_venv():
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
     old_working_set = pkg_resources.working_set
-    old_available_extensions = dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
+    old_available_extensions = (
+        dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
+    )
 
     yield
 
