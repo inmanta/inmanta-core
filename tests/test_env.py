@@ -38,6 +38,15 @@ from inmanta import env, loader, module
 from packaging import version
 from utils import LogSequence
 
+if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+    pytest.skip(
+        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
+        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
+        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
+        "on the python package repository.",
+        allow_module_level=True,
+    )
+
 
 def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
@@ -277,14 +286,6 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (which is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
-    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-        pytest.skip(
-            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
-            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
-            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
-            "package repository."
-        )
-
     venv_dir, _ = tmpvenv_active
 
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
@@ -448,14 +449,6 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     """
     installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
     assert "inmanta-core" in installed_pkgs, "The inmanta-core package should be installed to run the tests"
-
-    if "inmanta-core" in tmpvenv_active_inherit.get_installed_packages(only_editable=True):
-        pytest.skip(
-            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
-            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
-            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
-            "package repository."
-        )
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
     with pytest.raises(env.ConflictingRequirements) as excinfo:
