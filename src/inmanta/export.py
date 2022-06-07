@@ -107,7 +107,7 @@ class Exporter(object):
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
-    resource_mapping: Optional[Dict[str, "Resource"]]
+    resource_mapping: Optional[Dict["Instance", "Resource"]]
     failed: bool  # did the compile fail?
 
     # class vars
@@ -351,7 +351,7 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
-        resource_set_instances: [List[Instance]] = (
+        resource_set_instances: List["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
         )
 
@@ -450,8 +450,8 @@ class Exporter(object):
             return None
         resource_sets: Dict[str, Optional[str]] = {}
         for resource_set_instance in resource_set_instances:
-            name: str = resource_set_instance.get_attribute("name").value
-            resources_in_set: ResultVariable = resource_set_instance.get_attribute("resources")
+            name: str = resource_set_instance.get_attribute("name").get_value()
+            resources_in_set: ResultVariable["Resource"] = resource_set_instance.get_attribute("resources")
             for resource_in_set in resources_in_set.value:
                 resource_id: str = self.resource_mapping[resource_in_set].id.resource_str()
                 if resource_id in resource_sets and resource_sets[resource_id] != name:
@@ -463,7 +463,7 @@ class Exporter(object):
         self,
         version: int,
         resources: List[Dict[str, str]],
-        resource_set_instances: Optional[List[Instance]],
+        resource_set_instances: List["Instance"],
         metadata: Dict[str, str],
         model: Dict,
     ) -> None:
