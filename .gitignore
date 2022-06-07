@@ -40,6 +40,7 @@ tests/.coverage
 .tox
 junit*.xml
 .pytest_cache
+coverage.xml
 
 # Generated
 src/*/parser/parser.out
