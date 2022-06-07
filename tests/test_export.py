@@ -568,7 +568,4 @@ import minimalv2module
     )
 
     log_sequence = LogSequence(caplog)
-    print(log_sequence.caplog.records[1].msg)
-    print("-------------------------------")
-    print(msg)
     log_sequence.contains("inmanta.export", logging.WARNING, msg)
