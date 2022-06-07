@@ -3,140 +3,321 @@
 Quickstart
 ***************
 
-This tutorial gets you started with the Inmanta orchestration tool.
-
 Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments.
-In this guide, we go for a less complex setup: install the Drupal CMS on two VM-like containers.
-First, we use Docker to set up a basic environment with two empty VM-like containers, an Inmanta server and a postgres server used by inmanta as a database.
-Then, we use Inmanta to install Drupal on these VM-like containers.
+In this guide, we go for a less complex setup: Installing `containerlab <https://containerlab.dev/>`_ and configuring `SR Linux <https://learn.srlinux.dev/>`_ containers using **Inmanta service orchestrator** and ``gNMI``.
+
+
+1. First, we use `Containerlab` to spin-up Inmanta server and its PostgreSQL database, then three `SR Linux` containers, connected in a CLOS like topology
+2. After that, we configure IP addresses and OSPF on them using **Inmanta**.
 
 .. note::
 
-    This is meant to get an example Inmanta environment set up and running quickly to experiment with.
+    This guide is meant to quickly set up an Inmanta LAB environment to experiment with.
     It is not recommended to run this setup in production, as it might lead to instabilities in the long term.
 
-.. _qsetup:
 
-Setting up the tutorial
-_________________________
+Prerequisites
+----------------------------
 
-To quickly get started with Inmanta, use Docker Compose to set up an environment to host the Inmanta server and some machines to be managed.
-Before starting this tutorial, first `install Docker on your machine <https://docs.docker.com/install/>`_.
-Next `install Docker Compose on your machine <https://docs.docker.com/compose/install/>`_.
+``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
-Then, grab the Docker quickstart from our Git repository.
+1. `Install Docker <https://docs.docker.com/install/>`_.
+2. `Install Containerlab <https://containerlab.dev/install/>`_.
+3. Prepare a development environment by creating a `python virtual environment` and installing Inmanta:
 
-.. code-block:: sh
+   .. code-block:: sh
 
-    git clone https://github.com/inmanta/quickstart-docker.git
-    cd quickstart-docker
+       mkdir -p ~/.virtualenvs
+       python3 -m venv ~/.virtualenvs/srlinux
+       source ~/.virtualenvs/srlinux/bin/activate
+       pip install inmanta-core
 
-Now that we have the needed docker files, we will need to get the `Inmanta quickstart project <https://github.com/inmanta/quickstart>`_ itself:
+4. Clone the `SR Linux examples <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux>`_ repository:
 
-.. code-block:: sh
+   .. code-block:: sh
 
-    git clone https://github.com/inmanta/quickstart.git quickstart-project
+       git clone https://github.com/inmanta/examples.git
 
-The quickstart project can now be found under the newly created `quickstart-project` directory.
-It will be the basis for this quickstart.
-The ``quickstart-project`` directory will also be shared with the Inmanta server container
-(mounted to ``/home/inmanta/quickstart-project``).
-We will come back to the files in this repository later.
 
-.. note::
+The cloned repository contains a **project.yml**, which looks like this:
 
-    If you are on `Windows`, be sure you make the drive with the quickstart project shareable with docker containers:
+    .. code-block:: yaml
 
-    1. In Powershell: ``$env:COMPOSE_CONVERT_WINDOWS_PATHS = 1``
-    2. Restart Docker for Windows
-    3. Go to Docker for Windows settings > Shared Drives > Reset credentials > select drive with quickstart project > set your credentials > Apply
+        name: SR Linux Examples
+        description: Provides examples for the SR Linux module
+        author: Inmanta
+        author_email: code@inmanta.com
+        license: ASL 2.0
+        copyright: 2022 Inmanta
+        modulepath: libs
+        downloadpath: libs
+        repo:
+            - https://github.com/inmanta/
+        install_mode: release
+        requires:
 
-Finally, have Docker Compose deploy the quickstart environment:
 
-.. code-block:: sh
-
-    docker-compose up
-
-Docker Compose will set up the Inmanta server, a postgres server and two VM-like containers to experiment on.
-When Docker Compose is done deploying and the Inmanta server is running, you will be able to open the dashboard at http://127.0.0.1:8888/dashboard.
-When you see the following output, the Inmanta server is ready to be used:
-
-.. code-block:: sh
-
-    inmanta_quickstart_server | inmanta.protocol.rest    DEBUG   Start REST transport
-    inmanta_quickstart_server | inmanta                  INFO    Server startup complete
-
-.. note::
-
-    docker-compose will lock the current terminal and use it for output from all 4 containers.
-    You will need to open a new terminal to continue with this quickstart
-
-To get an interactive shell on the Inmanta server (this will be needed later):
-
-.. code-block:: sh
-
-    docker exec -it "inmanta_quickstart_server" bash
-
-.. note::
-
-    The rest of the quickstart guide assumes commands are executed from the root path of the quickstart-docker Git repository, unless noted otherwise.
-
-Breaking down/Resetting the quickstart-docker environment
-=========================================================
-
-To fully clean up or reset the environment, run the following commands:
-
-.. code-block:: sh
-
-    docker-compose down
-    docker volume prune -f
-    docker image rmi inmanta-agent inmanta-server
-
-This will give you a clean environment next time you run ``docker-compose up``.
-
-Automatically deploying Drupal
-_______________________________
-
-At this point, you can go through the quickstart guide in one of two ways: via the dashboard or via the command line interface.
-For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
-
-.. _cli:
-
-Single machine deployment using the CLI
-=======================================
-
-To start a new project, all you need is a directory with a project.yml file,
-defining the parameters like location to search for modules and where to find the server.
-In this case we will be using the premade quickstart project we cloned in to ``./quickstart-project`` earlier.
-
-That directory contains a project.yml, which looks like this:
-
-.. code-block:: yaml
-
-    name: quickstart
-    modulepath: libs
-    downloadpath: libs
-    repo: https://github.com/inmanta/
-    description: A quickstart project that installs a drupal website.
-    requires:
-        - apache ~= 0.3.1
-        - drupal ~= 0.7.1
-        - exec ~= 1.1.0
-        - ip ~= 1.0.0
-        - logging ~= 0.4.1
-        - mysql ~= 0.6.0
-        - net ~= 0.5.0
-        - php ~= 0.3
-        - redhat ~= 0.8.0
-        - std ~= 0.26.2
-        - web ~= 0.2.2
-        - yum ~= 0.5.1
-
-The ``modulepath`` setting defines that reusable modules will be stored in ``libs``.
-The ``repo`` setting points to one or more Git projects containing Inmanta modules in Git repositories.
+The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
+The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
 The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
 
-In the next section we will use existing modules to deploy a LAMP stack.
+5. Install the required modules:
+
+   .. code-block:: sh
+
+       cd Networking/SR\ Linux/
+       inmanta project install
+
+   .. note::
+
+        should you face any errors at this stage, please contact us.
+
+
+In the next sections we will showcase how to set up and configure ``SR Linux`` devices.
+
+
+.. _lab:
+
+Setting up the LAB
+_________________________
+
+Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
+
+.. code-block:: sh
+
+    cd Networking/SR\ Linux/containerlab
+    sudo clab deploy -t topology.yml
+
+`Containerlab` will spin-up:
+
+1. an `Inmanta` server
+2. a `PostgreSQL` Database server
+3. Three `SR Linux` network operating systems.
+
+
+Depending on your system's horsepower, give them a few seconds/minutes to fully boot-up.
+
+
+Connecting to the containers
+______________________________
+
+At this stage, you should be able to view the **Web Console** by navigating to:
+
+http://172.30.0.3:8888/dashboard
+
+To get an interactive shell to the Inmanta server:
+
+.. code-block:: sh
+
+    docker exec -it clab-srlinux-inmanta-server /bin/bash
+
+
+In order to connect to `SR Linux` containers, there are two options:
+
+1. Using Docker:
+
+.. code-block:: sh
+
+    docker exec -it clab-srlinux-spine sr_cli
+    # or
+    docker exec -it clab-srlinux-leaf1 sr_cli
+    # or
+    docker exec -it clab-srlinux-leaf2 sr_cli
+
+
+2. Using SSH (username and password is `admin`):
+
+.. code-block:: sh
+
+   ssh admin@clab-srlinux-spine
+   ssh admin@clab-srlinux-leaf1
+   ssh admin@clab-srlinux-leaf2
+
+Then enter the `configuration mode` by typing:
+
+.. code-block:: sh
+
+    enter candidate
+
+The output should look something like this:
+
+.. code-block::
+
+    Welcome to the srlinux CLI.
+    Type 'help' (and press <ENTER>) if you need any help using this.
+
+
+    --{ running }--[  ]--
+    A:spine#
+
+Exit the session by typing:
+
+.. code-block:: sh
+
+    quit
+
+Now that we have the needed containers, we will need to go up a directory where the project files exist:
+
+.. code-block:: sh
+
+    cd ..
+
+.. note::
+
+    The rest of the this guide assumes commands are executed from the root path of the `SR Linux` folder, unless noted otherwise.
+
+
+.. _inenv:
+
+Create an Inmanta environment
+_______________________________
+
+We need to have an environment to manage our infrastructure. An environment is a collection of resources, such as servers, switches, routers, etc.
+
+There are two ways to create a project and an environment:
+
+1. Using Inmanta CLI (**recommended**):
+    .. code-block:: sh
+
+        inmanta-cli --host 172.30.0.3 project create -n test
+        inmanta-cli --host 172.30.0.3 environment create -p test -n SR_Linux --save
+
+2. Using the Web Console: Connect to the Inmanta container http://172.30.0.3:8888/dashboard, click on the `Create new environment` button, provide a name for the project and the environment then click `submit`.
+
+The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file that contains the required information about the server and environment ID. The compiler uses this file to find the server and to export to the right environment.
+
+
+If you have chosen the second option; the Web Console, you need to copy the environment ID for later use, either:
+
+ - from the URL, e.g. ec05d6d9-25a4-4141-a92f-38e24a12b721 from the http://172.30.0.3:8888/console/desiredstate?env=ec05d6d9-25a4-4141-a92f-38e24a12b721.
+ - or by clicking on the gear icon on the top right of the Web Console, then click on Environment, scroll down all the way to the bottom of the page and copy the environment ID.
+
+
+Configuring SR Linux
+_______________________________
+
+There are a bunch of examples present inside the `SR Linux` folder of the `examples` repository that you have cloned in the previous step, setting up the lab_.
+
+In this guide, we will showcase two examples on a small **CLOS** `topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#sr-linux-topology>`_ to get you started:
+
+1. `interface <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ configuration.
+2. `OSPF <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ configuration.
+
+It could be useful to know **Inmanta** uses ``gNMI`` protocol to interface with ``SR Linux`` devices.
+
+.. note::
+
+    In order to make sure that everything is working correctly, run ``inmanta compile -f main.cf``. This will ensure that the modules are in place and the configuration is valid. If you face any errors at this stage, please contact us.
+
+
+SR Linux interface configuration
+__________________________________
+
+The `interfaces.cf <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ file contains the required configuration model to set IP addresses on point-to-point interfaces between the ``spine``, ``leaf1`` and ``leaf2`` devices according to the `aforementioned topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#sr-linux-topology>`_.
+
+Let's have a look at the partial configuration model:
+
+
+.. code-block:: inmanta
+    :linenos:
+
+    import srlinux
+    import srlinux::interface as srinterface
+    import srlinux::interface::subinterface as srsubinterface
+    import srlinux::interface::subinterface::ipv4 as sripv4
+    import yang
+
+
+
+    ######## Leaf 1 ########
+
+    leaf1 = srlinux::GnmiDevice(
+        auto_agent = true,
+        name = "leaf1",
+        mgmt_ip = "172.30.0.210",
+        yang_credentials = yang::Credentials(
+            username = "admin",
+            password = "admin"
+        )
+    )
+
+    leaf1_eth1 = srlinux::Interface(
+        device = leaf1,
+        name = "ethernet-1/1",
+        mtu = 9000,
+        subinterface = [leaf1_eth1_subint]
+    )
+
+    leaf1_eth1_subint = srinterface::Subinterface(
+        parent_interface = leaf1_eth1,
+        x_index = 0,
+        ipv4 = leaf1_eth1_subint_address
+    )
+
+    leaf1_eth1_subint_address = srsubinterface::Ipv4(
+        parent_subinterface = leaf1_eth1_subint,
+        address = sripv4::Address(
+            parent_ipv4 = leaf1_eth1_subint_address,
+            ip_prefix = "10.10.11.2/30"
+        )
+    )
+
+
+* Lines 1-5 import the required modules/packages.
+* Lines 11-19 instantiate the device; ``GnmiDevice`` object and set the required parameters.
+* Lines 21-26 instantiate the ``Interface`` object by selecting the parent interface, ``ethernet-1/1`` and setting the MTU to 9000.
+* Lines 28-32 instantiate the ``Subinterface`` object, link to the parent interface object, set an `index` and link to the child ``Ipv4`` object.
+* Lines 34 to 40 instantiate the ``Ipv4`` object, link to the parent ``Subinterface`` object, set the IP address and prefix.
+
+
+The rest of the configuration model follows the same method for ``leaf2`` and ``spine`` devices, with the only difference being the ``spine`` having two interfaces, subinterfaces and IP addresses.
+
+
+Deploy the interfaces configuration
+____________________________________
+
+To deploy the project, we must first register it with the management server by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...). We have covered this earlier at `Create an Inmanta environment`_ section.
+
+Export the configuration model to the Inmanta server:
+
+.. code-block:: sh
+
+    inmanta -vvv export interfaces.cf
+
+Then, head to the ``resources`` page on the Web Console to view the progress.
+
+
+When the model is sent to the server, it will start deploying the configuration.
+To track progress, you can go to the `dashboard <http://172.30.0.3:8888/dashboard>`_, select the `test` project and then the
+`quickstart-env` environment. When the deployment fails for some reason, consult the
+:ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
+
+.. note::
+
+    The ``-vvv`` option sets the output of the compiler to very verbose.
+    The ``-d`` option instructs the server to immediately start the deploy.
+
+
+Resetting the LAB environment
+_______________________________________________
+
+To fully clean up or reset the LAB, go to the **containerlab** folder and run the following commands:
+
+.. code-block:: sh
+
+    cd containerlab
+    sudo clab destroy -t topology.yml
+
+This will give you a clean LAB the next time you run:
+
+.. code-block:: sh
+
+    sudo clab deploy -t topology.yml --reconfigure
+
+
+
+
+
 
 Reusing existing modules
 ------------------------------
@@ -148,99 +329,6 @@ V2 modules (See :ref:`moddev-module-v2`) need to be declared as Python dependenc
 to using them in an import statement. Some of our public modules are hosted in the v2 format on https://pypi.org/.
 
 
-.. _qsconfigmodel:
-
-The configuration model
-------------------------------
-
-In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
-
-First delete the contents of ``./quickstart-project/main.cf``, then put in the following:
-
-.. code-block:: inmanta
-    :linenos:
-
-    import ip
-    import redhat
-    import redhat::epel
-    import apache
-    import mysql
-    import web
-    import drupal
-
-    # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="172.28.0.4", remote_agent=true, remote_user="root")
-
-    # add a mysql and apache http server
-    web_server=apache::Server(host=vm1)
-    mysql_server=mysql::Server(host=vm1, remove_anon_users=true)
-
-    # deploy drupal in that virtual host
-    name=web::Alias(hostname="localhost")
-    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test", password="Str0ng-P433w0rd")
-    drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
-                        admin_password="test", admin_email="admin@example.com",
-                        site_name="localhost")
-
-
-* Lines 1-7 import all the required packages.
-* Line 10 defines on which machine we want to deploy Drupal.
-
-    * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine.
-    * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
-    * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in this tutorial we let Inmanta discover this automatically.
-
-* Line 13 deploys an Apache server on our host.
-* Line 14 deploys a Mysql server on our host and removes its anonymous users.
-* Line 17 defines the name (hostname) of the web application.
-* Line 18 defines a database for our Drupal website.
-* Lines 19-21 define the actual Drupal application.
-
-Deploy the configuration model
--------------------------------
-
-To deploy the project, we must first register it with the management server by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
-An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
-
-Connect to the terminal of the server-container:
-
-.. code-block:: sh
-
-    docker exec -it "inmanta_quickstart_server" bash
-
-Then, create the inmanta project and environment:
-
-.. code-block:: sh
-
-    cd /home/inmanta/quickstart-project
-    inmanta-cli project create -n test
-    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
-
-.. note::
-
-    The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
-
-Install all module dependencies into the project:
-
-.. code-block:: sh
-
-    inmanta project install
-
-Finally compile the project and deploy it:
-
-.. code-block:: sh
-
-    inmanta -vvv  export -d
-
-When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://127.0.0.1:8888/dashboard>`_, select the `test` project and then the
-`quickstart-env` environment. When the deployment fails for some reason, consult the
-:ref:`troubleshooting page<troubleshooting>` to investigate the root cause of the issue.
-
-.. note::
-
-    The ``-vvv`` option sets the output of the compiler to very verbose.
-    The ``-d`` option instructs the server to immediately start the deploy.
 
 Accessing your new Drupal server
 ----------------------------------
@@ -313,7 +401,7 @@ consult the :ref:`troubleshooting page<troubleshooting>` to investigate the root
 .. _qsdashboard:
 
 Using the dashboard
-==========================
+------------------------------
 
 Inmanta can deploy from the server using only the dashboard. All changes have to go through the repository in this case.
 
