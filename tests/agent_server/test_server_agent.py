@@ -1698,7 +1698,15 @@ async def setup_environment_with_agent(client, project_name):
 
 
 def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
-    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in p.cmdline() and "agent" in p.cmdline()]
+    def try_get_cmd(p: psutil.Process) -> str:
+        try:
+            return p.cmdline()
+        except Exception:
+            logger.warning("A child process is gone! pid=%d", p.pid)
+            """If a child process is gone, p.cmdline() raises an exception"""
+            return ""
+
+    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
 
 
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
