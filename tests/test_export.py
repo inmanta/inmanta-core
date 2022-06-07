@@ -517,7 +517,7 @@ class Res(Resource):
         """
 import minimalv2module
         """,
-        install_v2_modules=[LocalPackagePath(module_path, False)],
+        install_v2_modules=[LocalPackagePath(module_path, editable=False)],
         project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
     )
     with pytest.raises(CompilerException) as e:
