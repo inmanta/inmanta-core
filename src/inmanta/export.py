@@ -452,8 +452,8 @@ class Exporter(object):
             name: str = resource_set_instance.get_attribute("name").value
             resources_in_set: ResultVariable = resource_set_instance.get_attribute("resources")
             for resource_in_set in resources_in_set.value:
-                resource_id: str = 
-                    Resource.create_from_model(self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set))
+                resource_id: str = Resource.create_from_model(
+                    self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set)
                 ).id.resource_str()
                 if resource_id in resource_sets and resource_sets[resource_id] != name:
                     raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
