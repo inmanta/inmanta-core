@@ -56,6 +56,7 @@ cfg_export = Option(
 )
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
+
 ModelDict = Dict[str, Entity]
 ResourceDict = Dict[Id, Resource]
 ProxiedType = Dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
@@ -154,7 +155,7 @@ class Exporter(object):
 
     def _load_resources(self, types: Dict[str, Entity]) -> None:
         """
-        Load all registered resources
+        Load all registered resources and resource_sets
         """
         resource.validate()
         entities = resource.get_entity_resources()
@@ -192,8 +193,34 @@ class Exporter(object):
         resource_set_instances: List["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
         )
-        self.resource_sets: Dict[str, Optional[str]] = self.get_resource_sets(resource_set_instances, resource_mapping)
+        self.resource_sets: Dict[str, Optional[str]] = self._load_resource_sets(resource_set_instances, resource_mapping)
         Resource.convert_requires(resource_mapping, ignored_set)
+
+    def _load_resource_sets(
+        self, resource_set_instances: List[Instance], resource_mapping: Dict["Instance", "Resource"]
+    ) -> Dict[str, Optional[str]]:
+        """
+        return a dictonary with as keys resource_ids and as values the name of the resource_set
+        the resource belongs to. return None if no resource_set is defined.
+        This method should only be called after a successful self._load_resources
+        """
+        resource_sets: Dict[str, Optional[str]] = {}
+        assert resource_mapping is not None
+        for resource_set_instance in resource_set_instances:
+            name: str = resource_set_instance.get_attribute("name").get_value()
+            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
+            for resource_in_set in resources_in_set:
+                if resource_in_set in resource_mapping:
+                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
+                    if resource_id in resource_sets and resource_sets[resource_id] != name:
+                        raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                    resource_sets[resource_id] = name
+                else:
+                    LOGGER.warning(
+                        "resource %s is part of ResourceSets %s but will not be exported."
+                        % (str(resource_in_set), str(resource_set_instance))
+                    )
+        return resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
@@ -442,32 +469,6 @@ class Exporter(object):
         LOGGER.info("Uploading source files")
 
         upload_code(conn, tid, version, code_manager)
-
-    def get_resource_sets(
-        self, resource_set_instances: List[Instance], resource_mapping: Dict["Instance", "Resource"]
-    ) -> Dict[str, Optional[str]]:
-        """
-        return a dictonary with as keys resource_ids and as values the name of the resource_set
-        the resource belongs to. return None if no resource_set is defined.
-        This method should only be called after a successful self._load_resources
-        """
-        resource_sets: Dict[str, Optional[str]] = {}
-        assert resource_mapping is not None
-        for resource_set_instance in resource_set_instances:
-            name: str = resource_set_instance.get_attribute("name").get_value()
-            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
-            for resource_in_set in resources_in_set:
-                if resource_in_set in resource_mapping:
-                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
-                    if resource_id in resource_sets and resource_sets[resource_id] != name:
-                        raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
-                    resource_sets[resource_id] = name
-                else:
-                    LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported."
-                        % (str(resource_in_set), str(resource_set_instance))
-                    )
-        return resource_sets
 
     def commit_resources(
         self,
