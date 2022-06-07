@@ -558,8 +558,17 @@ import minimalv2module
     caplog.set_level(logging.WARNING)
 
     await snippetcompiler_clean.do_export_and_deploy()
+    cwd = snippetcompiler_clean.env
 
-    msg: str = "resource 'std::Resource (instantiated at /tmp/tmpbc20x2z_/lib/python3.9/site-packages/inmanta_plugins/minimalv2module/model/_init.cf:2)' is part of ResourceSets 'std::ResourceSet (instantiated at /tmp/tmpbc20x2z_/lib/python3.9/site-packages/inmanta_plugins/minimalv2module/model/_init.cf:2)' but will not be exported)"
+    msg: str = (
+        f"resource std::Resource (instantiated at {cwd}/lib/python3.9/site-packages/inmanta_plugins"
+        "/minimalv2module/model/_init.cf:2) is part of ResourceSets std::ResourceSet "
+        f"(instantiated at {cwd}/lib/python3.9/site-packages/inmanta_plugins/minimalv2module/model/_init.cf:2) "
+        "but will not be exported."
+    )
 
     log_sequence = LogSequence(caplog)
+    print(log_sequence.caplog.records[1].msg)
+    print("-------------------------------")
+    print(msg)
     log_sequence.contains("inmanta.export", logging.WARNING, msg)

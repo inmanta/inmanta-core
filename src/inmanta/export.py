@@ -107,7 +107,7 @@ class Exporter(object):
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
-    resource_mapping: Dict["Instance", "Resource"] = {}
+    resource_mapping: Dict["Instance", "Resource"] = None
     failed: bool  # did the compile fail?
 
     # class vars
@@ -447,6 +447,7 @@ class Exporter(object):
         the resource belongs to. return None if no resource_set is defined.
         """
         resource_sets: Dict[str, Optional[str]] = {}
+        assert self.resource_mapping is not None
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
             resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
@@ -458,7 +459,7 @@ class Exporter(object):
                     resource_sets[resource_id] = name
                 else:
                     LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported"
+                        "resource %s is part of ResourceSets %s but will not be exported."
                         % (str(resource_in_set), str(resource_set_instance))
                     )
         return resource_sets
