@@ -38,6 +38,15 @@ from inmanta import env, loader, module
 from packaging import version
 from utils import LogSequence
 
+if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+    pytest.skip(
+        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
+        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
+        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
+        "on the python package repository.",
+        allow_module_level=True,
+    )
+
 
 def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
@@ -450,6 +459,20 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
         excinfo.value.args[0],
     )
     assert match is not None
+
+
+@pytest.mark.slowtest
+def test_override_inmanta_dev_dependencies_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that an ActiveEnv can override the inmanta-dev-dependencies package.
+    """
+    pkg_name = "inmanta-dev-dependencies"
+    installed_pkgs = tmpvenv_active_inherit.get_installed_packages()
+    assert pkg_name in installed_pkgs, f"The {pkg_name} package should be installed to run the tests"
+
+    # Downgrade to an old version
+    inmanta_requirements = Requirement.parse(f"{pkg_name}==1.76.0")
+    tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
 
 
 def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
