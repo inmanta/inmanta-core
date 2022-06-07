@@ -107,7 +107,7 @@ class Exporter(object):
     # instance vars
     types: Optional[Dict[str, Entity]]
     scopes: Optional[Namespace]
-    resource_mapping: Optional[Dict["Instance", "Resource"]]
+    resource_mapping: Dict["Instance", "Resource"] = {}
     failed: bool  # did the compile fail?
 
     # class vars
@@ -441,18 +441,16 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
-    def get_resource_sets(self, resource_set_instances: Optional[List[Instance]]) -> Optional[Dict[str, Optional[str]]]:
+    def get_resource_sets(self, resource_set_instances: List[Instance]) -> Dict[str, Optional[str]]:
         """
         return a dictonary with as keys resource_ids and as values the name of the resource_set
         the resource belongs to. return None if no resource_set is defined.
         """
-        if not resource_set_instances:
-            return None
         resource_sets: Dict[str, Optional[str]] = {}
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
-            resources_in_set: ResultVariable["Resource"] = resource_set_instance.get_attribute("resources")
-            for resource_in_set in resources_in_set.value:
+            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
+            for resource_in_set in resources_in_set:
                 resource_id: str = self.resource_mapping[resource_in_set].id.resource_str()
                 if resource_id in resource_sets and resource_sets[resource_id] != name:
                     raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
@@ -505,7 +503,7 @@ class Exporter(object):
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata, "model": model}
 
-        resource_sets: Optional[Dict[str, Optional[str]]] = self.get_resource_sets(resource_set_instances)
+        resource_sets: Dict[str, Optional[str]] = self.get_resource_sets(resource_set_instances)
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
