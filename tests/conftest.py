@@ -76,6 +76,7 @@ import sys
 import tempfile
 import time
 import traceback
+import typing
 import uuid
 import venv
 from configparser import ConfigParser
@@ -126,6 +127,15 @@ if PYTEST_PLUGIN_MODE:
 else:
     import utils
     from db.common import PGRestore
+
+if typing.TYPE_CHECKING:
+    # Local type stub for mypy that works with both pytest < 7 and pytest >=7
+    # https://docs.pytest.org/en/7.1.x/_modules/_pytest/legacypath.html#TempdirFactory
+
+    class TempdirFactory:
+        def mktemp(self, path: str) -> py.path.local:
+            ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -659,12 +669,13 @@ def log_state_tcp_ports(request, log_file):
 
 
 @pytest.fixture(scope="function")
-async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
+async def server_config(
+    event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory, inmanta_state_dir
+):
     reset_metrics()
 
-    state_dir = tempfile.mkdtemp()
-
     port = str(unused_tcp_port_factory())
+    state_dir = str(inmanta_state_dir)
 
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
@@ -686,7 +697,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
     yield config
-    shutil.rmtree(state_dir)
 
 
 @pytest.fixture(scope="function")
@@ -1509,3 +1519,14 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
+
+@pytest.fixture(scope="function")
+def inmanta_state_dir(tmpdir_factory: "TempdirFactory") -> Iterator[str]:
+    """
+    This fixture overrides the inmanta_state_dir fixture defined in pytest-inmanta so
+    that fixtures that need to set up and write to a state directory use the same one.
+    """
+    inmanta_state_dir = tmpdir_factory.mktemp("inmanta_state_dir")
+    yield str(inmanta_state_dir)
+    inmanta_state_dir.remove(ignore_errors=True)

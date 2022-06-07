@@ -1,0 +1,7 @@
+description: Add support for changing the Inmanta state directory to a writable location by the current user.
+issue-nr: 189
+issue-repo: pytest-inmanta
+change-type: patch
+destination-branches: [iso5, master]
+sections: {
+}
