@@ -451,10 +451,16 @@ class Exporter(object):
             name: str = resource_set_instance.get_attribute("name").get_value()
             resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
-                resource_id: str = self.resource_mapping[resource_in_set].id.resource_str()
-                if resource_id in resource_sets and resource_sets[resource_id] != name:
-                    raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
-                resource_sets[resource_id] = name
+                if resource_in_set in self.resource_mapping:
+                    resource_id: str = self.resource_mapping[resource_in_set].id.resource_str()
+                    if resource_id in resource_sets and resource_sets[resource_id] != name:
+                        raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                    resource_sets[resource_id] = name
+                else:
+                    LOGGER.warning(
+                        "resource %s is part of ResourceSets %s but will not be exported"
+                        % (str(resource_in_set), str(resource_set_instance))
+                    )
         return resource_sets
 
     def commit_resources(
