@@ -2,6 +2,6 @@
 description: Make sure that the `inmanta project install` command doesn't protect the inmanta-dev-dependencies package
 issue-nr: 4249
 change-type: patch
-destination-branches: [master, iso5]
+destination-branches: [iso5]
 sections:
   bugfix: "{{description}}"
