@@ -350,8 +350,8 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
-        resource_sets: Optional[List[Instance]] = (
-            types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else None
+        resource_set_instances: [List[Instance]] = (
+            types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
         )
 
         if len(self._resources) == 0:
@@ -372,7 +372,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, resource_sets, metadata, model)
+            self.commit_resources(self._version, resources, resource_set_instances, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
