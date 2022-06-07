@@ -1501,9 +1501,11 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     async_finalizer(a.stop)
 
     # Wait until agent is up
+    async def agent_in_db() -> bool:
+        return len(await data.AgentInstance.get_list()) == 1
+
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
-    instances = await data.AgentInstance.get_list()
-    assert len(instances) == 1
+    await retry_limited(agent_in_db, 10)
 
     # Update agentmap
     caplog.clear()
@@ -1698,7 +1700,15 @@ async def setup_environment_with_agent(client, project_name):
 
 
 def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
-    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in p.cmdline() and "agent" in p.cmdline()]
+    def try_get_cmd(p: psutil.Process) -> str:
+        try:
+            return p.cmdline()
+        except Exception:
+            logger.warning("A child process is gone! pid=%d", p.pid)
+            """If a child process is gone, p.cmdline() raises an exception"""
+            return ""
+
+    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
 
 
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
