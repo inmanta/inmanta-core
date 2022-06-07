@@ -56,7 +56,6 @@ cfg_export = Option(
 )
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
-
 ModelDict = Dict[str, Entity]
 ResourceDict = Dict[Id, Resource]
 ProxiedType = Dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
@@ -450,13 +449,13 @@ class Exporter(object):
             return None
         resource_sets: Dict[str, Optional[str]] = {}
         for resource_set_instance in resource_set_instances:
-            name = resource_set_instance.get_attribute("name").value
-            resources_in_set = resource_set_instance.get_attribute("resources")
+            name: str = resource_set_instance.get_attribute("name").value
+            resources_in_set: ResultVariable = resource_set_instance.get_attribute("resources")
             for resource_in_set in resources_in_set.value:
-                resource_id = str(
+                resource_id: str = str(
                     Resource.create_from_model(self, str(resource_in_set.type), DynamicProxy.return_value(resource_in_set))
                 )
-                if resource_id in resource_sets:
+                if resource_id in resource_sets and resource_sets[resource_id] != name:
                     raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
                 resource_sets[resource_id] = name
         return resource_sets
