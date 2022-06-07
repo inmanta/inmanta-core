@@ -277,12 +277,13 @@ def test_active_env_get_module_file(
     install a dependency of inmanta-core (which is already installed in the encapsulating development venv), a new package or an
     inmanta module (namespace package).
     """
-    pytest.skip(
-        "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
-        "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
-        "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
-        "package repository."
-    )
+    if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+        pytest.skip(
+            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+            "package repository."
+        )
 
     venv_dir, _ = tmpvenv_active
 
