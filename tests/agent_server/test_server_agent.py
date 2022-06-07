@@ -1501,9 +1501,11 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     async_finalizer(a.stop)
 
     # Wait until agent is up
+    async def agent_in_db():
+        return len(await data.AgentInstance.get_list()) == 1
+
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
-    instances = await data.AgentInstance.get_list()
-    assert len(instances) == 1
+    await retry_limited(agent_in_db, 10)
 
     # Update agentmap
     caplog.clear()
