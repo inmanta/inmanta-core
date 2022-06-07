@@ -26,7 +26,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import plugins
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -545,6 +545,14 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     but with another version. The requirements of core should not be
     overwritten. The module gets installed from source
     """
+    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+        pytest.skip(
+            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+            "package repository."
+        )
+
     # Create the module
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
@@ -576,6 +584,13 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     but with another version. The requirements of core should not be
     overwritten. The module gets installed from index.
     """
+    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+        pytest.skip(
+            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+            "package repository."
+        )
     # Create the module
     module_name: str = "minimalv2module"
     module_path: str = str(tmpdir.join(module_name))
