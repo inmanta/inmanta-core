@@ -280,7 +280,7 @@ class OrchestrationService(protocol.ServerSlice):
         superfluous_ids = set(resource_sets.keys()) - resource_ids
         if superfluous_ids:
             raise BadRequest(
-                f"The following resource ids provided in the resource_set parameter are not present "
+                f"The following resource ids provided in the resource_sets parameter are not present "
                 f"in the resources list: {', '.join(superfluous_ids)}"
             )
 
