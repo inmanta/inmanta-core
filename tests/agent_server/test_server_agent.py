@@ -942,6 +942,8 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     await wait_for_n_deployed_resources(client, env_id, version1, n=2)
 
+    generation_version1 = agent._instances["agent1"]._nq.generation
+
     result = await client.get_version(environment, version1)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
@@ -962,6 +964,10 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("second version released")
 
+    # Wait until the agent is deploying version2. Otherwise the call to `wait_for_done_with_waiters()`
+    # might notify a test::Wait resource of version1, instead of the resources of version2. This could
+    # cause problem when the resource states of version1 are checked later on in this test case.
+    await retry_limited(lambda: agent._instances["agent1"]._nq.generation != generation_version1, timeout=10)
     await resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
