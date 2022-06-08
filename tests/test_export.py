@@ -477,7 +477,6 @@ import modulev1
     assert resources[3].resource_set is None
 
 
-@pytest.mark.slowtest
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     """
     test that an error is raised if a resource is in multiple
