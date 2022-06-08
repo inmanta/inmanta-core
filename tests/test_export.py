@@ -420,7 +420,7 @@ exp::Test3(
 
 
 @pytest.mark.slowtest
-async def test_resource_set(snippetcompiler_clean, modules_v2_dir: str, tmpdir, environment) -> None:
+async def test_resource_set(snippetcompiler, modules_v2_dir: str, tmpdir, environment) -> None:
     """
     test that the resourceSet is exported correctly
     """
@@ -457,7 +457,7 @@ class Res(Resource):
         new_content_init_cf=init_cf,
         new_content_init_py=init_py,
     )
-    snippetcompiler_clean.setup_for_snippet(
+    snippetcompiler.setup_for_snippet(
         """
 import minimalv2module
         """,
@@ -465,7 +465,7 @@ import minimalv2module
         project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
     )
 
-    await snippetcompiler_clean.do_export_and_deploy()
+    await snippetcompiler.do_export_and_deploy()
     resources = await Resource.get_list(environment=environment)
     assert len(resources) == 4
     assert resources[0].resource_id_value == "the_resource_a"
@@ -479,7 +479,7 @@ import minimalv2module
 
 
 @pytest.mark.slowtest
-async def test_resource_in_multiple_resource_sets(snippetcompiler_clean, modules_v2_dir: str, tmpdir, environment) -> None:
+async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_v2_dir: str, tmpdir, environment) -> None:
     """
     test that an error is raised if a resource is in multiple
     resource_sets
@@ -514,7 +514,7 @@ class Res(Resource):
         new_content_init_cf=init_cf,
         new_content_init_py=init_py,
     )
-    snippetcompiler_clean.setup_for_snippet(
+    snippetcompiler.setup_for_snippet(
         """
 import minimalv2module
         """,
@@ -522,49 +522,31 @@ import minimalv2module
         project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
     )
     with pytest.raises(CompilerException) as e:
-        await snippetcompiler_clean.do_export_and_deploy()
+        await snippetcompiler.do_export_and_deploy()
     assert (
         e.value.format_trace()
         == "resource 'minimalv2module::Res[the_resource_a,name=the_resource_a]' can not be part of multiple ResourceSets"
     )
 
 
-@pytest.mark.slowtest
-async def test_resource_not_exported(snippetcompiler_clean, modules_v2_dir: str, tmpdir, environment, caplog) -> None:
+async def test_resource_not_exported(snippetcompiler, caplog, environment) -> None:
     """
     test that an error is raised if a resource that is not exported is in a resource_set
     """
-    init_cf = """
+    snippetcompiler.setup_for_snippet(
+        """
 std::ResourceSet(name="resource_set_1", resources=[std::Resource()])
 implement std::Resource using std::none
 """
-    module_name: str = "minimalv2module"
-    module_path: str = str(tmpdir.join(module_name))
-
-    module_from_template(
-        os.path.join(modules_v2_dir, module_name),
-        module_path,
-        new_requirements=[InmantaModuleRequirement.parse("std")],
-        new_content_init_cf=init_cf,
-    )
-    snippetcompiler_clean.setup_for_snippet(
-        """
-import minimalv2module
-        """,
-        install_v2_modules=[LocalPackagePath(module_path, editable=False)],
-        project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
     )
     caplog.clear()
     caplog.set_level(logging.WARNING)
-
-    await snippetcompiler_clean.do_export_and_deploy()
-    cwd = snippetcompiler_clean.env
+    await snippetcompiler.do_export_and_deploy()
+    cwd = snippetcompiler.project_dir
 
     msg: str = (
-        f"resource std::Resource (instantiated at {cwd}/lib/python3.9/site-packages/inmanta_plugins"
-        "/minimalv2module/model/_init.cf:2) is part of ResourceSets std::ResourceSet "
-        f"(instantiated at {cwd}/lib/python3.9/site-packages/inmanta_plugins/minimalv2module/model/_init.cf:2) "
-        "but will not be exported."
+        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSets std::ResourceSet "
+        f"(instantiated at {cwd}/main.cf:2) but will not be exported."
     )
 
     log_sequence = LogSequence(caplog)
