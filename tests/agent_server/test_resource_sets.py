@@ -24,6 +24,20 @@ from inmanta.util import get_compiler_version
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
     version = await clienthelper.get_version()
 
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+        },
+    )
+    assert result.code == 400
+
     resources = [
         {
             "key": "key1",
