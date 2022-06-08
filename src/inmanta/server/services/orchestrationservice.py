@@ -276,6 +276,13 @@ class OrchestrationService(protocol.ServerSlice):
                     if rid.get_agent_name() != agent:
                         # it is a CAD
                         cross_agent_dep.append((res_obj, rid))
+        resource_ids = {res.resource_id for res in resource_objects}
+        superfluous_ids = set(resource_sets.keys()) - resource_ids
+        if superfluous_ids:
+            raise BadRequest(
+                f"The following resource ids provided in the resource_sets parameter are not present "
+                f"in the resources list: {', '.join(superfluous_ids)}"
+            )
 
         # hook up all CADs
         for f, t in cross_agent_dep:
