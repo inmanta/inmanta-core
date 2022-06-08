@@ -190,21 +190,19 @@ class Exporter(object):
                             instance.location,
                         )
 
+        self._load_resource_sets(types, resource_mapping)
+        Resource.convert_requires(resource_mapping, ignored_set)
+
+    def _load_resource_sets(self, types: Dict[str, Entity], resource_mapping: Dict["Instance", "Resource"]) -> None:
+        """
+        load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
+        the resource belongs to.
+        This method should only be called at the end of self._load_resources()
+        """
+        resource_sets: Dict[str, Optional[str]] = {}
         resource_set_instances: List["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
         )
-        self.resource_sets: Dict[str, Optional[str]] = self._load_resource_sets(resource_set_instances, resource_mapping)
-        Resource.convert_requires(resource_mapping, ignored_set)
-
-    def _load_resource_sets(
-        self, resource_set_instances: List[Instance], resource_mapping: Dict["Instance", "Resource"]
-    ) -> Dict[str, Optional[str]]:
-        """
-        return a dictonary with as keys resource_ids and as values the name of the resource_set
-        the resource belongs to. return None if no resource_set is defined.
-        This method should only be called after a successful self._load_resources
-        """
-        resource_sets: Dict[str, Optional[str]] = {}
         assert resource_mapping is not None
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
@@ -220,7 +218,7 @@ class Exporter(object):
                         "resource %s is part of ResourceSets %s but will not be exported."
                         % (str(resource_in_set), str(resource_set_instance))
                     )
-        return resource_sets
+        self._resource_sets: Dict[str, Optional[str]] = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
