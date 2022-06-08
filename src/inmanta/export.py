@@ -197,7 +197,7 @@ class Exporter(object):
         """
         load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
         the resource belongs to.
-        This method should only be called at the end of self._load_resources()
+        This method should only be called after all resources have been extracted from the model.
         """
         resource_sets: Dict[str, Optional[str]] = {}
         resource_set_instances: List["Instance"] = (
