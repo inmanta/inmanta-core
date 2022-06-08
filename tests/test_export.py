@@ -419,75 +419,20 @@ exp::Test3(
     )
 
 
-@pytest.mark.slowtest
-async def test_resource_set_v2(snippetcompiler, modules_v2_dir: str, tmpdir, environment) -> None:
+async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     """
     test that the resourceSet is exported correctly
     """
-    init_cf = """
-entity Res extends std::Resource:
-    string name
-end
 
-implement Res using std::none
-
-a = Res(name="the_resource_a")
-b = Res(name="the_resource_b")
-c = Res(name="the_resource_c")
-d = Res(name="the_resource_d")
-std::ResourceSet(name="resource_set_1", resources=[a,c])
-std::ResourceSet(name="resource_set_2", resources=[b])
-"""
     init_py = """
 from inmanta.resources import (
     Resource,
     resource,
 )
-@resource("minimalv2module::Res", agent="name", id_attribute="name")
+@resource("modulev1::Res", agent="name", id_attribute="name")
 class Res(Resource):
     fields = ("name",)
 """
-    module_name: str = "minimalv2module"
-    module_path: str = str(tmpdir.join(module_name))
-
-    module_from_template(
-        os.path.join(modules_v2_dir, module_name),
-        module_path,
-        new_requirements=[InmantaModuleRequirement.parse("std")],
-        new_content_init_cf=init_cf,
-        new_content_init_py=init_py,
-    )
-    snippetcompiler.setup_for_snippet(
-        """
-import minimalv2module
-        """,
-        install_v2_modules=[LocalPackagePath(module_path, editable=False)],
-        project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
-    )
-
-    await snippetcompiler.do_export_and_deploy()
-    resources = await Resource.get_list(environment=environment)
-    assert len(resources) == 4
-    assert resources[0].resource_id_value == "the_resource_a"
-    assert resources[0].resource_set == "resource_set_1"
-    assert resources[1].resource_id_value == "the_resource_b"
-    assert resources[1].resource_set == "resource_set_2"
-    assert resources[2].resource_id_value == "the_resource_c"
-    assert resources[2].resource_set == "resource_set_1"
-    assert resources[3].resource_id_value == "the_resource_d"
-    assert resources[3].resource_set is None
-
-
-
-async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
-    """
-    test that the resourceSet is exported correctly
-    """
-    from inmanta.resources import Resource, resource
-    @resource("__config__::::Res", agent="name", id_attribute="name")
-    class Res(Resource):
-        fields = ("name",)
-
     init_cf = """
 entity Res extends std::Resource:
     string name
@@ -509,13 +454,14 @@ std::ResourceSet(name="resource_set_2", resources=[b])
         os.path.join(modules_dir, module_name),
         module_path,
         new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
         new_name="modulev1",
     )
-    snippetcompiler.setup_for_snippet( :#TODO arnaud
+    snippetcompiler.setup_for_snippet(
         """
 import modulev1
         """,
-        add_to_module_path=[module_path],
+        add_to_module_path=[str(tmpdir)],
     )
 
     await snippetcompiler.do_export_and_deploy()
@@ -529,56 +475,55 @@ import modulev1
     assert resources[2].resource_set == "resource_set_1"
     assert resources[3].resource_id_value == "the_resource_d"
     assert resources[3].resource_set is None
-#
-# @pytest.mark.slowtest
-# async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_v2_dir: str, tmpdir, environment) -> None:
-#     """
-#     test that an error is raised if a resource is in multiple
-#     resource_sets
-#     """
-#     init_cf = """
-# entity Res extends std::Resource:
-#     string name
-# end
-#
-# implement Res using std::none
-#
-# a = Res(name="the_resource_a")
-# std::ResourceSet(name="resource_set_1", resources=[a])
-# std::ResourceSet(name="resource_set_2", resources=[a])
-# """
-#     init_py = """
-# from inmanta.resources import (
-#     Resource,
-#     resource,
-# )
-# @resource("minimalv2module::Res", agent="name", id_attribute="name")
-# class Res(Resource):
-#     fields = ("name",)
-# """
-#     module_name: str = "minimalv2module"
-#     module_path: str = str(tmpdir.join(module_name))
-#
-#     module_from_template(
-#         os.path.join(modules_v2_dir, module_name),
-#         module_path,
-#         new_requirements=[InmantaModuleRequirement.parse("std")],
-#         new_content_init_cf=init_cf,
-#         new_content_init_py=init_py,
-#     )
-#     snippetcompiler.setup_for_snippet(
-#         """
-# import minimalv2module
-#         """,
-#         install_v2_modules=[LocalPackagePath(module_path, editable=False)],
-#         project_requires=[InmantaModuleRequirement.parse("minimalv2module"), InmantaModuleRequirement.parse("std")],
-#     )
-#     with pytest.raises(CompilerException) as e:
-#         await snippetcompiler.do_export_and_deploy()
-#     assert (
-#         e.value.format_trace()
-#         == "resource 'minimalv2module::Res[the_resource_a,name=the_resource_a]' can not be part of multiple ResourceSets"
-#     )
+
+
+@pytest.mark.slowtest
+async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    test that an error is raised if a resource is in multiple
+    resource_sets
+    """
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+std::ResourceSet(name="resource_set_1", resources=[a])
+std::ResourceSet(name="resource_set_2", resources=[a])
+"""
+    init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+        new_name="modulev1",
+    )
+    snippetcompiler.setup_for_snippet(
+        """
+import modulev1
+        """,
+        add_to_module_path=[str(tmpdir)],
+    )
+    with pytest.raises(CompilerException) as e:
+        await snippetcompiler.do_export_and_deploy()
+    assert (
+        e.value.format_trace()
+        == "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple ResourceSets"
+    )
 
 
 async def test_resource_not_exported(snippetcompiler, caplog, environment) -> None:
