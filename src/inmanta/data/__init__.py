@@ -1151,6 +1151,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             LOGGER.exception("A timeout occurred while closing the connection pool to the database")
             raise
         except asyncio.CancelledError:
+            cls._connection_pool.terminate()
             # Propagate cancel
             raise
         except Exception:
