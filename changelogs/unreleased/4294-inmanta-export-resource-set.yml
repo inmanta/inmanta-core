@@ -1,0 +1,4 @@
+description: Update the inmanta export command as such that it exports resource sets in the put_version endpoint.
+issue-nr: 4294
+change-type: minor
+destination-branches: [master, iso5]
