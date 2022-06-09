@@ -4,7 +4,7 @@ Quickstart
 ***************
 
 Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments.
-In this guide, we go for a less complex setup: Installing `containerlab <https://containerlab.dev/>`_ and configuring `SR Linux <https://learn.srlinux.dev/>`_ containers using **Inmanta service orchestrator** and ``gNMI``.
+In this guide we start simple and manage a 3 node CLOS network with spine and two leaf switches. In this guide we will install `containerlab <https://containerlab.dev/>`_ and configure `SR Linux <https://learn.srlinux.dev/>`_ containers using **Inmanta open source orchestrator** and ``gNMI``.
 
 
 1. First, we use `Containerlab` to spin-up Inmanta server and its PostgreSQL database, then three `SR Linux` containers, connected in a CLOS like topology
