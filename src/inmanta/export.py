@@ -216,8 +216,8 @@ class Exporter(object):
                     resource_sets[resource_id] = name
                 else:
                     LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported."
-                        % (str(resource_in_set), str(resource_set_instance))
+                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        str(resource_in_set), str(resource_set_instance)
                     )
         self._resource_sets: Dict[str, Optional[str]] = resource_sets
 
