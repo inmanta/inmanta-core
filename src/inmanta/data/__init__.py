@@ -884,8 +884,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except asyncio.TimeoutError:
             cls._connection_pool.terminate()
+            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+            raise
+        except asyncio.CancelledError:
+            cls._connection_pool.terminate()
+            # Propagate cancel
+            raise
+        except Exception:
+            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+            raise
         finally:
             cls._connection_pool = None
 
@@ -5088,7 +5097,12 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+    # or until the gather itself is cancelled.
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+    if exceptions:
+        raise exceptions[0]
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
