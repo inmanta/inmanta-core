@@ -212,7 +212,7 @@ class Exporter(object):
                 if resource_in_set in resource_mapping:
                     resource_id: str = resource_mapping[resource_in_set].id.resource_str()
                     if resource_id in resource_sets and resource_sets[resource_id] != name:
-                        raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                        raise CompilerException(f"resource '{resource_id}' can not be part of multiple ResourceSets: {resource_sets[resource_id]} and {name}")
                     resource_sets[resource_id] = name
                 else:
                     LOGGER.warning(
