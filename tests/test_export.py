@@ -21,14 +21,12 @@ import os
 
 import pytest
 
-from inmanta import config, const, module
+from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Resource
-from inmanta.env import LocalPackagePath
 from inmanta.export import DependencyCycleException
-from inmanta.module import InmantaModuleRequirement
-from utils import LogSequence, module_from_template, v1_module_from_template
+from utils import LogSequence, v1_module_from_template
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -519,9 +517,8 @@ import modulev1
     )
     with pytest.raises(CompilerException) as e:
         await snippetcompiler.do_export_and_deploy()
-    assert e.value.format_trace() == (
-        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple "
-        "ResourceSets: resource_set_1 and resource_set_2"
+    assert str(e.value).startswith(
+        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple " "ResourceSets:"
     )
 
 
