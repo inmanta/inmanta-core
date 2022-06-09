@@ -414,18 +414,18 @@ Export the ``interafces`` configuration model to the Inmanta server:
 
 .. code-block:: sh
 
-    inmanta -vvv export interfaces.cf
+    inmanta -vvv export -f interfaces.cf
     # or
-    inmanta -vvv export interfaces.cf -d
+    inmanta -vvv export -f interfaces.cf -d
 
 
 Export the ``OSPF`` configuration model to the Inmanta server:
 
 .. code-block:: sh
 
-    inmanta -vvv export ospf.cf
+    inmanta -vvv export -f ospf.cf
     # or
-    inmanta -vvv export ospf.cf -d
+    inmanta -vvv export -f ospf.cf -d
 
 
 .. note::
