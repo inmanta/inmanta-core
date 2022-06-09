@@ -103,7 +103,7 @@ ______________________________
 
 At this stage, you should be able to view the **Web Console** by navigating to:
 
-http://172.30.0.3:8888/dashboard
+http://172.30.0.3:8888/console
 
 To get an interactive shell to the Inmanta server:
 
