@@ -188,7 +188,7 @@ There are two ways to create a project and an environment:
 The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file that contains the required information about the server and environment ID. The compiler uses this file to find the server and to export to the right environment.
 
 
-2. Using the Web Console: Connect to the Inmanta container http://172.30.0.3:8888/dashboard, click on the `Create new environment` button, provide a name for the project and the environment then click `submit`.
+2. Using the Web Console: Connect to the Inmanta container http://172.30.0.3:8888/console, click on the `Create new environment` button, provide a name for the project and the environment then click `submit`.
 
 
 If you have chosen the second option; the Web Console, you need to copy the environment ID for later use, either:
