@@ -281,6 +281,12 @@ class ModelVersionInfo(BaseModel):
     export_metadata: ModelMetadata
     model: Optional[JsonType]
 
+class ResourceDB(BaseModel):
+    send_event: bool
+    name: str
+    requires: List[ResourceIdStr]
+    version: int
+    id: ResourceIdStr
 
 class Resource(BaseModel):
     environment: uuid.UUID
@@ -294,7 +300,6 @@ class Resource(BaseModel):
     attributes: JsonType
     status: const.ResourceState
     resource_set: Optional[str]
-
 
 class ResourceAction(BaseModel):
     environment: uuid.UUID

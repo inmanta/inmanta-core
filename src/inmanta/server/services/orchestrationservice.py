@@ -419,6 +419,21 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200
 
+    @handle(methods.put_partial, version_id="id", env="tid")
+    async def put_partial(
+        self,
+        env: data.Environment,
+        version: int,
+        resources: list,
+        resource_state: dict = {},
+        unknowns: list = None,
+        version_info: dict = None,
+        compiler_version: str = None,
+        resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
+        to_delete_resource_sets: List[str] = [],
+    ) -> Apireturn:
+        return 200
+
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
         self,
