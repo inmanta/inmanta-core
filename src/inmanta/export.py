@@ -199,8 +199,6 @@ class Exporter(object):
         the resource belongs to.
         This method should only be called after all resources have been extracted from the model.
         """
-        assert resource_mapping is not None
-        assert types is not None
         resource_sets: Dict[str, Optional[str]] = {}
         resource_set_instances: List["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
