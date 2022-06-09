@@ -519,9 +519,9 @@ import modulev1
     )
     with pytest.raises(CompilerException) as e:
         await snippetcompiler.do_export_and_deploy()
-    assert (
-        e.value.format_trace()
-        == "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple ResourceSets: resource_set_1 and resource_set_2"
+    assert e.value.format_trace() == (
+        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple "
+        "ResourceSets: resource_set_1 and resource_set_2"
     )
 
 
