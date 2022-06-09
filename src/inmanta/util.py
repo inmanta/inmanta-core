@@ -104,8 +104,8 @@ def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
 
 
 def ensure_future_and_handle_exception(
-    logger: Logger, msg: str, action: Awaitable[None], notify_done_callback: Callable[[asyncio.Task[None]], None]
-) -> asyncio.Task[None]:
+    logger: Logger, msg: str, action: Awaitable, notify_done_callback: Callable[[asyncio.Task], None]
+) -> asyncio.Task:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
@@ -123,7 +123,7 @@ def ensure_future_and_handle_exception(
     return future
 
 
-TaskMethod = Callable[[], Awaitable[None]]
+TaskMethod = Callable[[], Awaitable]
 
 
 class Scheduler(object):
@@ -137,9 +137,9 @@ class Scheduler(object):
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
-        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[None]]] = defaultdict(list)
+        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
@@ -147,7 +147,7 @@ class Scheduler(object):
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
 
-    def _notify_done(self, action: TaskMethod, task: asyncio.Task[None]) -> None:
+    def _notify_done(self, action: TaskMethod, task: asyncio.Task) -> None:
         """
         Called by the callback function of executing task when the task has finished executing.
         """
