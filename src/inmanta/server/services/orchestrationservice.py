@@ -419,7 +419,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200
 
-    @handle(methods.put_partial, version_id="id", env="tid")
+    @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
         self,
         env: data.Environment,
