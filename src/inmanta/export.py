@@ -203,7 +203,7 @@ class Exporter(object):
         assert types is not None
         resource_sets: Dict[str, Optional[str]] = {}
         resource_set_instances: List["Instance"] = (
-            types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
+            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
