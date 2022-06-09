@@ -201,7 +201,7 @@ class Exporter(object):
         """
         resource_sets: Dict[str, Optional[str]] = {}
         resource_set_instances: List["Instance"] = (
-            types["std::ResourceSet"].get_all_instances() if types and "std::ResourceSet" in types else []
+            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
@@ -210,12 +210,12 @@ class Exporter(object):
                 if resource_in_set in resource_mapping:
                     resource_id: str = resource_mapping[resource_in_set].id.resource_str()
                     if resource_id in resource_sets and resource_sets[resource_id] != name:
-                        raise CompilerException("resource '%s' can not be part of multiple ResourceSets" % resource_id)
+                        raise CompilerException(f"resource '{resource_id}' can not be part of multiple ResourceSets: {resource_sets[resource_id]} and {name}")
                     resource_sets[resource_id] = name
                 else:
                     LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported."
-                        % (str(resource_in_set), str(resource_set_instance))
+                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        str(resource_in_set), str(resource_set_instance)
                     )
         self._resource_sets: Dict[str, Optional[str]] = resource_sets
 

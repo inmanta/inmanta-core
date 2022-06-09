@@ -527,7 +527,7 @@ import modulev1
 
 async def test_resource_not_exported(snippetcompiler, caplog, environment) -> None:
     """
-    test that an error is raised if a resource that is not exported is in a resource_set
+    test that a warning is logged if a resource that is not exported is in a resource_set
     """
     snippetcompiler.setup_for_snippet(
         """
