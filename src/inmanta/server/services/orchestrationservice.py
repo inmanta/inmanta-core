@@ -20,11 +20,12 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import asyncpg
+import pydantic
 
-from inmanta import const, data
+from inmanta import const, data, model
 from inmanta.data import (
     APILIMIT,
     AVAILABLE_VERSIONS_TO_KEEP,
@@ -425,14 +426,40 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: list,
-        resource_state: dict = {},
+        resource_state: Dict[model.ResourceIdStr, str] = {},
         unknowns: list = None,
-        version_info: dict = None,
+        version_info: list = None,
         compiler_version: str = None,
         resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
-        to_delete_resource_sets: List[str] = [],
-    ) -> Apireturn:
-        return 200
+        removed_resource_sets: List[str] = [],
+    ) -> None:
+        pydantic.parse_obj_as(List[Dict[str, Any]], resources)
+
+        if not compiler_version:
+            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
+
+        if version > env.last_version:
+            raise BadRequest(
+                f"The version number used is {version} "
+                f"which is higher than the last outstanding reservation {env.last_version}"
+            )
+        if version <= 0:
+            raise BadRequest(f"The version number used ({version}) is not positive")
+        started = datetime.datetime.now().astimezone()
+        agents = set()
+
+        old_resources = await data.Resource.get_list()
+        merged_resources = self.merge_partial_with_old(old_resources, resources, removed_resource_sets)
+
+        return
+
+    def merge_partial_with_old(self, old_resources: any, partial_updates: any, removed_resource_sets: List[str]) -> List[any]:
+        """
+        :param old_version: The list of resources in the previous version of the model.
+        :param partial_updates: The list of resources part of the partial compile.
+        :param removed_resource_sets: The names of the resource sets removed in this partial compile.
+        """
+        return []
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(

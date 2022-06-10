@@ -282,14 +282,6 @@ class ModelVersionInfo(BaseModel):
     model: Optional[JsonType]
 
 
-class ResourceDB(BaseModel):
-    send_event: bool
-    name: str
-    requires: List[ResourceIdStr]
-    version: int
-    id: ResourceIdStr
-
-
 class Resource(BaseModel):
     environment: uuid.UUID
     model: int

@@ -31,18 +31,23 @@ from .openapi.model import OpenAPI
 
 
 @typedmethod(
-    path="/version/partial", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.compiler], api_version=2
+    path="/version/partial",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.compiler],
+    api_version=2,
+    varkw=True,
 )
 def put_partial(
     tid: uuid.UUID,
     version: int,
-    resources: List[model.ResourceDB],
     resource_state: Dict[model.ResourceIdStr, str] = {},
     unknowns: List[Dict[str, str]] = None,
     version_info: model.ModelVersionInfo = None,
     compiler_version: str = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
-    to_delete_resource_sets: List[str] = [],
+    removed_resource_sets: List[str] = [],
+    **kwargs: object,
 ) -> None:
     """
     Store a new version of the configuration model
@@ -51,16 +56,17 @@ def put_partial(
 
     :param tid: The id of the environment
     :param version: The version of the configuration model
-    :param resources: A list resources that result from the partial compile
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
     :param resource_sets: a dictionary describing which resource belongs to which resource set
-    :param to_delete_resource_sets: a list of resource_sets that should be deleted from the model
+    :param removed_resource_sets: a list of resource_sets that should be deleted from the model
+    :param **kwargs: bypass the type checking for resources that result from the partial compile
     """
 
 
+# todo: create ticket to clean kwargs and type resources
 # Method for working with projects
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
