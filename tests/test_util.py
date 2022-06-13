@@ -24,7 +24,7 @@ import uuid
 import pytest
 
 from inmanta import util
-from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
+from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first, IntervalSchedule
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ async def test_scheduler_remove(caplog):
     async def action():
         i.append(0)
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -60,7 +60,7 @@ async def test_scheduler_stop(caplog):
         i.append(0)
         return "A"
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -73,7 +73,7 @@ async def test_scheduler_stop(caplog):
     no_error_in_logs(caplog)
 
     caplog.clear()
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
     assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
     assert not sched._executing_tasks[action]
 
@@ -88,7 +88,7 @@ async def test_scheduler_async_run_fail(caplog):
         await asyncio.sleep(0)
         raise Exception("Marker")
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -113,7 +113,7 @@ async def test_scheduler_run_async(caplog):
     async def action():
         i.append(0)
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -148,7 +148,7 @@ async def test_scheduler_cancel_executing_tasks() -> None:
             raise
 
     sched = util.Scheduler("xxx")
-    sched.add_action(action, interval=1000, initial_delay=0)
+    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0))
     await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
     assert task_status.task_is_executing
     assert not task_status.task_was_cancelled

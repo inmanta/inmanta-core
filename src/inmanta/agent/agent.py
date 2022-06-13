@@ -43,7 +43,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import add_future
+from inmanta.util import add_future, IntervalSchedule
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -637,7 +637,7 @@ class AgentInstance(object):
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action: Callable[[], Awaitable[None]], interval: int, splay: int) -> None:
-        self.process._sched.add_action(action, interval, splay)
+        self.process._sched.add_action(action, IntervalSchedule(interval=float(interval), initial_delay=float(splay)))
         self._time_triggered_actions.add(action)
 
     def _disable_time_triggers(self) -> None:

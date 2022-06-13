@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes, JsonType
-from inmanta.util import CycleException, Scheduler, TaskHandler, TaskMethod, stable_depth_first
+from inmanta.util import CronSchedule, CycleException, Scheduler, TaskHandler, TaskMethod, stable_depth_first, IntervalSchedule
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager
@@ -296,7 +296,21 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     # utility methods for extensions developers
     def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None) -> None:
-        self._sched.add_action(call, interval, initial_delay)
+        """
+        Schedule a task repeatedly with a given interval.
+
+        :param interval: The interval between executions of the task.
+        :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
+        """
+        self._sched.add_action(call, IntervalSchedule(interval, initial_delay))
+
+    def schedule_cron(self, call: TaskMethod, cron: str) -> None:
+        """
+        Schedule a task according to a cron specifier.
+
+        :param cron: The cron specifier to schedule the task by.
+        """
+        self._sched.add_action(call, CronSchedule(cron))
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """

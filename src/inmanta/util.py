@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -31,6 +31,8 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from collections import defaultdict
+from croniter import croniter
+from dataclasses import dataclass
 from logging import Logger
 from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
 
@@ -114,6 +116,84 @@ def ensure_future_and_handle_exception(
 TaskMethod = Callable[[], Awaitable[None]]
 
 
+class TaskSchedule(ABC):
+    """
+    Abstract base class for a task schedule specification. Offers methods to inspect when the task should be scheduled, relative
+    to the current time.
+    """
+
+    @abstractmethod
+    def get_initial_delay(self) -> float:
+        """
+        Returns the number of seconds from now until this task should be scheduled for the first time.
+        """
+        ...
+
+    @abstractmethod
+    def get_next_delay(self) -> float:
+        """
+        Returns the number of seconds from now until this task should be scheduled again. Uses the current time as reference,
+        i.e. assumes the task has already run at least once and a negligible amount of time has passed since the last run
+        completed.
+        """
+        ...
+
+    @abstractmethod
+    def log(self, action: TaskMethod) -> None:
+        # TODO: docstring
+        ...
+
+
+@dataclass
+class IntervalSchedule(TaskSchedule)
+    """
+    Simple interval schedule for tasks.
+
+    :param interval: The interval between execution of actions.
+    :param initial_delay: Delay to the first execution. If not set, interval is used.
+    """
+
+    interval: float
+    initial_delay: Optional[float] = None
+
+    def get_initial_delay(self) -> float:
+        return self.initial_delay if self.initial_delay is not None else self.interval
+
+    def get_next_delay(self) -> float:
+        return self.next_delay
+
+    def log(self, action: TaskMethod) -> None:
+        LOGGER.debug(
+            "Scheduling action %s every %d seconds with initial delay %d", action, self.interval, self.get_initial_delay()
+        )
+
+
+class CronSchedule(TaskSchedule)
+    """
+    Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time.
+    """
+
+    def __init__(self, cron: str) -> None:
+        if not croniter.is_valid(cron):
+            raise ValueError("'%s' is not a valid cron expression" % cron)
+        self.cron: str = cron
+
+    def get_initial_delay(self) -> float:
+        # no special treatment for first execution
+        return self.get_next_delay()
+
+    def get_next_delay(self) -> float:
+        # no need for timezone-aware because no datetime state is kept/returned (only a delta)
+        now: datetime.datetime = datetime.datetime.now()
+        delay: datetime.timedelta = croniter(self.cron, now).get_next(datetime.datetime) - now
+        return delay.total_seconds()
+
+    def log(self, action: TaskMethod) -> None:
+        LOGGER.debug(
+            "Scheduling action %s according to cron specifier '%s'", action, self.cron
+        )
+
+
 class Scheduler(object):
     """
     An event scheduler class
@@ -148,15 +228,13 @@ class Scheduler(object):
     def add_action(
         self,
         action: TaskMethod,
-        interval: float,
-        initial_delay: Optional[float] = None,
+        schedule: TaskSchedule,
     ) -> None:
         """
         Add a new action
 
         :param action: A function to call periodically
-        :param interval: The interval between execution of actions
-        :param initial_delay: Delay to the first execution, defaults to interval
+        :param schedule: The schedule for this action
         """
         assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
 
@@ -164,9 +242,7 @@ class Scheduler(object):
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
             return
 
-        if initial_delay is None:
-            initial_delay = interval
-
+        schedule.log(action)
         LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
 
         def action_function() -> None:
@@ -184,10 +260,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(interval, action_function)
+                    ihandle = IOLoop.current().call_later(schedule.get_next_delay(), action_function)
                     self._scheduled[action] = ihandle
 
-        handle = IOLoop.current().call_later(initial_delay, action_function)
+        handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
         self._scheduled[action] = handle
 
     def remove(self, action: Callable) -> None:
