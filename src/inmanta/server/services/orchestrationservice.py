@@ -435,43 +435,22 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: List[str] = [],
     ) -> None:
         pydantic.parse_obj_as(List[Dict[str, Any]], resources)
+        merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
+        result = await self.put_version(
+            env,
+            version,
+            merged_resources,
+            resource_state,
+            unknowns,
+            version_info,
+            compiler_version,
+            resource_sets,
+        )
+        print(result)
+        return result
 
-        if not compiler_version:
-            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
-
-        if version > env.last_version:
-            raise BadRequest(
-                f"The version number used is {version} "
-                f"which is higher than the last outstanding reservation {env.last_version}"
-            )
-        if version <= 0:
-            raise BadRequest(f"The version number used ({version}) is not positive")
-
-        for removed_res in removed_resource_sets:
-            if removed_res in resource_sets.values():
-                raise BadRequest(f"A resource can not belong to a resource_set({removed_res}) that will be removed")
-
-        started = datetime.datetime.now().astimezone()
-        agents = set()
-
-        async def get_old_resources():
-            old_data = await data.Resource.get_list()
-            result: List[tuple[[Dict[str, Any]], str]] = []
-            for res in old_data:
-                resource = {
-                    "id": res.resource_version_id,
-                }
-                resource.update(res.attributes)
-                result.append((resource, res.resource_set))
-            return result
-
-        old_resources = await get_old_resources()
-        merged_resources = self.merge_partial_with_old(old_resources, resources, resource_sets, removed_resource_sets)
-        return
-
-    def merge_partial_with_old(
+    async def merge_partial_with_old(
         self,
-        old_resources: List[tuple[[Dict[str, Any]], str]],
         partial_updates: List[Dict[str, Any]],
         resource_sets: Dict[ResourceIdStr, Optional[str]],
         removed_resource_sets: List[str],
@@ -516,6 +495,19 @@ class OrchestrationService(protocol.ServerSlice):
                     result.add(resource_set)
             return result
 
+        async def get_old_resources():
+            old_data = await data.Resource.get_list()
+            result: List[tuple[[Dict[str, Any]], str]] = []
+            for res in old_data:
+                resource = {
+                    "id": res.resource_version_id,
+                }
+                resource.update(res.attributes)
+                result.append((resource, res.resource_set))
+            return result
+
+        old_resources = await get_old_resources()
+
         paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
         updated_resource_sets = get_updated_resource_sets(paired_resources)
 
@@ -525,17 +517,24 @@ class OrchestrationService(protocol.ServerSlice):
             if not r[1] in removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
         }
 
-        for resource_partial, old_resource, set_partial, set_old in paired_resources:
+        for resource_partial, resource_old, resource_set_partial, resource_set_old in paired_resources:
             assert resource_partial is not None
-            assert old_resource is None or old_resource["id"] == resource_partial["id"]
-            if old_resource is None:
-                # Adding new resource can never cause problems
+            assert resource_old is None or resource_old["id"] == resource_partial["id"]
+            if resource_old is None:
                 result[resource_partial["id"]] = resource_partial
             else:
-                if set_partial != set_old:
+                if resource_set_partial != resource_set_old:
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({resource_partial['id']}) to another resource set"
                     )
+                if (
+                    resource_set_partial == None and resource_partial != resource_old
+                ):  # todo:: compare resource_partial with resource_old
+                    raise BadRequest(
+                        f"Resource ({resource_partial['id']}) without a resource set cannot be updated via a partial compile"
+                    )
+                else:
+                    result[resource_partial["id"]] = resource_partial
         return result
 
     @handle(methods.release_version, version_id="id", env="tid")

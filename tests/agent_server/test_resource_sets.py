@@ -160,14 +160,14 @@ async def test_resource_sets_via_put_partial(server, client, environment, client
         },
         {
             "key": "key10",
-            "value": "florent",
+            "value": "test",
             "id": "test::Resource[agent1,key=key10],v=%d" % version,
             "send_event": False,
             "purged": False,
             "requires": [],
         },
     ]
-
+    version = await clienthelper.get_version()
     result = await client.put_partial(
         tid=environment,
         version=version,
