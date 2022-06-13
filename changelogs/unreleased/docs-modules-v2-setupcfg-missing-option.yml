@@ -1,0 +1,4 @@
+description: added missing option to setup.cfg in modules v2 docs
+change-type: patch
+destination-branches:
+  - master
