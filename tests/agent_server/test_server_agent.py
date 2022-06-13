@@ -1400,7 +1400,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()
-    children_pre = current_process.children(recursive=True)
+    agent_processes_pre: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(env_uuid)
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
@@ -1501,12 +1501,10 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     # Stop server
     await server.stop()
 
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    agent_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
-    newchildren = set(children) - set(children_pre)
-
-    assert len(newchildren) == 0, newchildren
+    assert len(new_agent_processes) == 0, new_agent_processes
 
 
 @pytest.mark.asyncio
