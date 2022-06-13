@@ -2022,7 +2022,7 @@ PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
-AUTO_RECOMPILE_WAIT = "auto_recompile_wait"
+RECOMPILE_BACKOFF = "recompile_backoff"
 
 
 class Setting(object):
@@ -2275,8 +2275,8 @@ class Environment(BaseDocument):
             validator=convert_int,
             doc="The number of days to retain notifications for",
         ),
-        AUTO_RECOMPILE_WAIT: Setting(
-            name=AUTO_RECOMPILE_WAIT,
+        RECOMPILE_BACKOFF: Setting(
+            name=RECOMPILE_BACKOFF,
             default=0.1,
             typ="float",
             validator=convert_float,

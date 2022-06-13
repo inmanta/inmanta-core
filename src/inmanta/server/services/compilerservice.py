@@ -638,8 +638,17 @@ class CompilerService(ServerSlice):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        env = await data.Environment.get_by_id(compile.environment)
-        wait_time = await env.get(data.AUTO_RECOMPILE_WAIT)
+        auto_recompile_wait = opt.server_autrecompile_wait.get()
+        if auto_recompile_wait > 0:
+            wait_time = auto_recompile_wait
+            log_message = (
+                f"The server-auto-recompile-wait is enabled and set to {wait_time} seconds. "
+                f"This option is deprecated in favor of the recompile_backoff environment setting."
+            )
+        else:
+            env = await data.Environment.get_by_id(compile.environment)
+            wait_time = await env.get(data.RECOMPILE_BACKOFF)
+            log_message = f"The recompile_backoff environment setting is enabled and set to {wait_time} seconds."
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
@@ -650,9 +659,8 @@ class CompilerService(ServerSlice):
             )
         if wait > 0:
             LOGGER.info(
-                "auto_recompile_wait is enabled and set to %s seconds, "
-                "waiting for %.2f seconds before running a new compile",
-                wait_time,
+                "%s" "waiting for %.2f seconds before running a new compile",
+                log_message,
                 wait,
             )
         else:
