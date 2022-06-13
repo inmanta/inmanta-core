@@ -1955,10 +1955,14 @@ def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     return f_value
 
 
-def convert_float(value: Union[float, int, str]) -> float:
+def convert_positive_float(value: Union[float, int, str]) -> float:
     if isinstance(value, float):
-        return value
-    return float(value)
+        float_value = value
+    else:
+        float_value = float(value)
+    if float_value < 0:
+        raise ValueError(f"This value should be positive, got: {value}")
+    return float_value
 
 
 def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
@@ -2000,7 +2004,7 @@ TYPE_MAP = {
     "dict": "jsonb",
     "str": "varchar",
     "enum": "varchar",
-    "float": "double precision",
+    "positive_float": "double precision",
 }
 
 AUTO_DEPLOY = "auto_deploy"
@@ -2278,8 +2282,8 @@ class Environment(BaseDocument):
         RECOMPILE_BACKOFF: Setting(
             name=RECOMPILE_BACKOFF,
             default=0.1,
-            typ="float",
-            validator=convert_float,
+            typ="positive_float",
+            validator=convert_positive_float,
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
         ),

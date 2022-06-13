@@ -38,6 +38,7 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
+from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
 from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
@@ -639,16 +640,17 @@ class CompilerService(ServerSlice):
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
         auto_recompile_wait = opt.server_autrecompile_wait.get()
-        if auto_recompile_wait > 0:
+        if Config.is_set("server", "auto-recompile-wait") and auto_recompile_wait > 0:
             wait_time = auto_recompile_wait
-            log_message = (
-                f"The server-auto-recompile-wait is enabled and set to {wait_time} seconds. "
-                f"This option is deprecated in favor of the recompile_backoff environment setting."
+            LOGGER.warning(
+                "The server-auto-recompile-wait is enabled and set to %s seconds. "
+                "This option is deprecated in favor of the recompile_backoff environment setting.",
+                auto_recompile_wait,
             )
         else:
             env = await data.Environment.get_by_id(compile.environment)
             wait_time = await env.get(data.RECOMPILE_BACKOFF)
-            log_message = f"The recompile_backoff environment setting is enabled and set to {wait_time} seconds."
+            LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
@@ -659,8 +661,7 @@ class CompilerService(ServerSlice):
             )
         if wait > 0:
             LOGGER.info(
-                "%s" "waiting for %.2f seconds before running a new compile",
-                log_message,
+                "Waiting for %.2f seconds before running a new compile",
                 wait,
             )
         else:

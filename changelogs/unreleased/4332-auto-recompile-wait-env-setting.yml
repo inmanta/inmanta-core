@@ -3,4 +3,4 @@ issue-nr: 4332
 change-type: major
 destination-branches: [master]
 sections:
-  deprecation-note: "The auto-recompile-wait option in the server configuration is now deprecated in favor of the recompile-backoff environment setting"
+  deprecation-note: "The auto-recompile-wait option in the server configuration is now deprecated in favor of the recompile_backoff environment setting"
