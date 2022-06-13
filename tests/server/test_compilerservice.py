@@ -529,9 +529,6 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
-    config.Config.set("server", "auto-recompile-wait", "0")
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.RECOMPILE_BACKOFF, 0)
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -644,8 +641,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     correct value in this test.
     """
     env = await data.Environment.get_by_id(environment)
-    await env.set(data.RECOMPILE_BACKOFF, 0)
-    config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -741,9 +736,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
 
 
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
-    config.Config.set("server", "auto-recompile-wait", "0")
-    env = await data.Environment.get_by_id(environment)
-    await env.set(data.RECOMPILE_BACKOFF, 0)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -972,7 +964,9 @@ async def test_compileservice_auto_recompile_wait(
     Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
     """
     with caplog.at_level(logging.DEBUG):
-        config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
+        if auto_recompile_wait == "0":
+            config.Config._get_instance().remove_option("server", "auto-recompile-wait")
+
         env = await data.Environment.get_by_id(environment)
         await env.set(data.RECOMPILE_BACKOFF, recompile_backoff)
         compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)

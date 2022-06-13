@@ -640,7 +640,7 @@ class CompilerService(ServerSlice):
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
         auto_recompile_wait = opt.server_autrecompile_wait.get()
-        if Config.is_set("server", "auto-recompile-wait") and auto_recompile_wait > 0:
+        if Config.is_set("server", "auto-recompile-wait"):
             wait_time = auto_recompile_wait
             LOGGER.warning(
                 "The server-auto-recompile-wait is enabled and set to %s seconds. "
