@@ -104,7 +104,7 @@ async def test_resource_sets_via_put_partial(server, client, environment, client
             "id": "test::Resource[agent1,key=key1],v=%d" % version,
             "send_event": False,
             "purged": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+            "requires": [],
         },
         {
             "key": "key2",
@@ -134,7 +134,7 @@ async def test_resource_sets_via_put_partial(server, client, environment, client
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
         "test::Resource[agent1,key=key2]": "set-b",
-        "test::Resource[agent1,key=key3]": None,
+        "test::Resource[agent1,key=key3]": "set-c",
     }
 
     result = await client.put_version(
@@ -151,12 +151,20 @@ async def test_resource_sets_via_put_partial(server, client, environment, client
 
     resources_partial = [
         {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "key": "key2",
+            "value": "value123",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
             "send_event": False,
             "purged": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+            "requires": [],
+        },
+        {
+            "key": "key10",
+            "value": "florent",
+            "id": "test::Resource[agent1,key=key10],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
         },
     ]
 
@@ -168,8 +176,12 @@ async def test_resource_sets_via_put_partial(server, client, environment, client
         unknowns=[],
         version_info=None,
         compiler_version=get_compiler_version(),
-        resource_sets={},
-        removed_resource_sets=[],
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+            "test::Resource[agent1,key=key2]": "set-b",
+            "test::Resource[agent1,key=key3]": None,
+        },
+        removed_resource_sets=["set-c"],
     )
 
     assert result.code == 200
