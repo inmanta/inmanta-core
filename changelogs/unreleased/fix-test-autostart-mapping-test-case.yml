@@ -1,0 +1,4 @@
+---
+description: Ensure that the test_autostart_mapping test case only takes into account the inmanta agent processes.
+change-type: patch
+destination-branches: [master, iso5, iso4]
