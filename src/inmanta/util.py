@@ -32,7 +32,8 @@ from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
 from collections import defaultdict
 from logging import Logger
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+from types import TracebackType
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -455,15 +456,17 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
     return out
 
 
-class _Named_Sub_Lock:
+class _NamedSubLock:
     def __init__(self, parent: "NamedLock", name: str) -> None:
         self.parent = parent
         self.name = name
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> None:
         await self.parent.acquire(self.name)
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
+    ) -> None:
         await self.parent.release(self.name)
 
 
@@ -474,8 +477,8 @@ class NamedLock:
         self._master_lock: Lock = Lock()
         self._named_locks: Dict[str, Lock] = {}
 
-    def get(self, name: str) -> _Named_Sub_Lock:
-        return _Named_Sub_Lock(self, name)
+    def get(self, name: str) -> _NamedSubLock:
+        return _NamedSubLock(self, name)
 
     async def acquire(self, name: str) -> None:
         async with self._master_lock:
@@ -490,5 +493,6 @@ class NamedLock:
         async with self._master_lock:
             lock = self._named_locks[name]
             lock.release()
+            # This relies on the internal mechanics of the lock
             if not lock._waiters:
                 del self._named_locks[name]
