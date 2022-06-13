@@ -966,6 +966,8 @@ async def test_compileservice_auto_recompile_wait(
     with caplog.at_level(logging.DEBUG):
         if auto_recompile_wait == "0":
             config.Config._get_instance().remove_option("server", "auto-recompile-wait")
+        else:
+            config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
 
         env = await data.Environment.get_by_id(environment)
         await env.set(data.RECOMPILE_BACKOFF, recompile_backoff)

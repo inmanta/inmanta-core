@@ -639,13 +639,12 @@ class CompilerService(ServerSlice):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        auto_recompile_wait = opt.server_autrecompile_wait.get()
         if Config.is_set("server", "auto-recompile-wait"):
-            wait_time = auto_recompile_wait
+            wait_time = opt.server_autrecompile_wait.get()
             LOGGER.warning(
                 "The server-auto-recompile-wait is enabled and set to %s seconds. "
                 "This option is deprecated in favor of the recompile_backoff environment setting.",
-                auto_recompile_wait,
+                wait_time,
             )
         else:
             env = await data.Environment.get_by_id(compile.environment)
