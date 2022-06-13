@@ -70,20 +70,6 @@ else:
     ResourceActionResultFuture = asyncio.Future
 
 
-@dataclass
-class PerModuleLock:
-    """A data structure to help managing the fine-grained locks for module loading
-
-    :param resource_name: name of the resource being loaded
-    :param current_hash: current file hash baing loaded
-    :param lock: future representing completion
-    """
-
-    resource_name: str
-    resource_verion: str
-    result: Future = Future()
-
-
 class ResourceActionBase(abc.ABC):
     """Base class for Local and Remote resource actions"""
 
