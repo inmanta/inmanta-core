@@ -638,7 +638,8 @@ class CompilerService(ServerSlice):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        wait_time = opt.server_autrecompile_wait.get()
+        env = await data.Environment.get_by_id(compile.environment)
+        wait_time = await env.get(data.AUTO_RECOMPILE_WAIT)
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
@@ -649,7 +650,7 @@ class CompilerService(ServerSlice):
             )
         if wait > 0:
             LOGGER.info(
-                "server-auto-recompile-wait is enabled and set to %s seconds, "
+                "auto_recompile_wait is enabled and set to %s seconds, "
                 "waiting for %.2f seconds before running a new compile",
                 wait_time,
                 wait,

@@ -1,0 +1,7 @@
+description: Add environment setting to set the auto-recompile-wait time instead of the config option
+issue-nr: 4332
+change-type: patch
+destination-branches: [master]
+sections:
+  feature: "{{description}}",
+  deprecation-note: "The auto-recompile-wait option in the server configuration is now deprecated in favor of the environment setting with the same name"

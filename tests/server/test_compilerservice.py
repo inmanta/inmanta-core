@@ -529,7 +529,8 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
-    config.Config.set("server", "auto-recompile-wait", "0")
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTO_RECOMPILE_WAIT, 0)
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -642,7 +643,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     correct value in this test.
     """
     env = await data.Environment.get_by_id(environment)
-    config.Config.set("server", "auto-recompile-wait", "0")
+    await env.set(data.AUTO_RECOMPILE_WAIT, 0)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -738,7 +739,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
 
 
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
-    config.Config.set("server", "auto-recompile-wait", "0")
+    env = await data.Environment.get_by_id(environment)
+    await env.set(data.AUTO_RECOMPILE_WAIT, 0)
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -951,7 +953,7 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
     """
     with caplog.at_level(logging.DEBUG):
         env = await data.Environment.get_by_id(environment)
-        config.Config.set("server", "auto-recompile-wait", "2")
+        await env.set(data.AUTO_RECOMPILE_WAIT, "2.1")
         compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
         # request compiles in rapid succession
@@ -982,7 +984,7 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
         ).contains(
             "inmanta.server.services.compilerservice",
             logging.INFO,
-            "server-auto-recompile-wait is enabled and set to 2 seconds",
+            "auto_recompile_wait is enabled and set to 2.1 seconds",
         ).contains(
             "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
         )
@@ -990,10 +992,9 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
 
 async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
     """
-    Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
+    Test the recompile waiting time calculation when auto-recompile-wait environment setting is enabled
     """
     auto_recompile_wait = 2
-    config.Config.set("server", "auto-recompile-wait", str(auto_recompile_wait))
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     now = datetime.datetime.now()

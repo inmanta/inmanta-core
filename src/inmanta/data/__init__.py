@@ -1955,6 +1955,12 @@ def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     return f_value
 
 
+def convert_float(value: Union[float, int, str]) -> float:
+    if isinstance(value, float):
+        return value
+    return float(value)
+
+
 def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError("Agent map should be a dict")
@@ -1988,7 +1994,14 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
+TYPE_MAP = {
+    "int": "integer",
+    "bool": "boolean",
+    "dict": "jsonb",
+    "str": "varchar",
+    "enum": "varchar",
+    "float": "double precision",
+}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -2009,6 +2022,7 @@ PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
+AUTO_RECOMPILE_WAIT = "auto_recompile_wait"
 
 
 class Setting(object):
@@ -2260,6 +2274,14 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain notifications for",
+        ),
+        AUTO_RECOMPILE_WAIT: Setting(
+            name=AUTO_RECOMPILE_WAIT,
+            default=0.1,
+            typ="float",
+            validator=convert_float,
+            doc="""The number of seconds to wait before the server may attempt to do a new recompile.
+                    Recompiles are triggered after facts updates for example.""",
         ),
     }
 
