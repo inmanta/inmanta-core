@@ -198,7 +198,7 @@ class AttributeStateChange(BaseModel):
     desired: Optional[Any] = None
 
 
-EnvSettingType = Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
 
 
 class Environment(BaseModel):
