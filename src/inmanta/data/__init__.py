@@ -1148,8 +1148,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
         except asyncio.TimeoutError:
             cls._connection_pool.terminate()
+            # Don't propagate this exception but just write a log message. This way:
+            #   * A timeout here still makes sure that the other server slices get stopped
+            #   * The tests don't fail when this timeout occurs
             LOGGER.exception("A timeout occurred while closing the connection pool to the database")
-            raise
         except asyncio.CancelledError:
             cls._connection_pool.terminate()
             # Propagate cancel
