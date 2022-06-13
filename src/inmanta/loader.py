@@ -164,7 +164,7 @@ class CodeManager(object):
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModuleSource:
     name: str
     source: str
@@ -213,44 +213,57 @@ class CodeLoader(object):
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
+    def install_source(self, module_source: ModuleSource) -> bool:
+        """
+        :return: True if this module install requires a reload
+        """
+        # if the module is new, or update
+        if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
+            LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
+
+            all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
+            relative_module_path: str = PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+            # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+            module_dir: str = os.path.join(all_modules_dir, relative_module_path)
+
+            package_dir: str = os.path.normpath(
+                os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
+            )
+
+            def touch_inits(directory: str) -> None:
+                """
+                Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+                with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
+                """
+                normdir: str = os.path.normpath(directory)
+                if normdir == package_dir:
+                    return
+                pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                touch_inits(os.path.dirname(normdir))
+
+            # ensure correct package structure
+            os.makedirs(module_dir, exist_ok=True)
+            touch_inits(os.path.dirname(module_dir))
+            source_file = os.path.join(module_dir, "__init__.py")
+
+            # write the new source
+            with open(source_file, "w+", encoding="utf-8") as fd:
+                fd.write(module_source.source)
+            return True
+        else:
+            LOGGER.debug(
+                "Not deploying code (hv=%s, module=%s) because of cache hit", module_source.hash_value, module_source.name
+            )
+            return False
+
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
-        to_reload: List[ModuleSource] = []
+        to_reload: Set[ModuleSource] = set()
 
-        for module_source in module_sources:
-            # if the module is new, or update
-            if module_source.name not in self.__modules or module_source.hash_value != self.__modules[module_source.name][0]:
-                LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
-
-                all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-                relative_module_path: str = PluginModuleLoader.convert_module_to_relative_path(module_source.name)
-                # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
-                module_dir: str = os.path.join(all_modules_dir, relative_module_path)
-
-                package_dir: str = os.path.normpath(
-                    os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
-                )
-
-                def touch_inits(directory: str) -> None:
-                    """
-                    Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
-                    with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
-                    """
-                    normdir: str = os.path.normpath(directory)
-                    if normdir == package_dir:
-                        return
-                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
-                    touch_inits(os.path.dirname(normdir))
-
-                # ensure correct package structure
-                os.makedirs(module_dir, exist_ok=True)
-                touch_inits(os.path.dirname(module_dir))
-                source_file = os.path.join(module_dir, "__init__.py")
-
-                # write the new source
-                with open(source_file, "w+", encoding="utf-8") as fd:
-                    fd.write(module_source.source)
-
-                to_reload.append(module_source)
+        sources = set(module_sources)
+        for module_source in sources:
+            is_changed = self.install_source(module_source)
+            if is_changed:
+                to_reload.add(module_source)
 
         if len(to_reload) > 0:
             importlib.invalidate_caches()

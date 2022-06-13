@@ -29,7 +29,7 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
 from collections import defaultdict
 from logging import Logger
 from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
@@ -453,3 +453,42 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
         dfs(nodes.pop(0))
 
     return out
+
+
+class _Named_Sub_Lock:
+    def __init__(self, parent: "NamedLock", name: str) -> None:
+        self.parent = parent
+        self.name = name
+
+    async def __aenter__(self):
+        await self.parent.acquire(self.name)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.parent.release(self.name)
+
+
+class NamedLock:
+    """Create fine grained locks"""
+
+    def __init__(self) -> None:
+        self._master_lock: Lock = Lock()
+        self._named_locks: Dict[str, Lock] = {}
+
+    def get(self, name: str) -> _Named_Sub_Lock:
+        return _Named_Sub_Lock(self, name)
+
+    async def acquire(self, name: str) -> None:
+        async with self._master_lock:
+            if name in self._named_locks:
+                lock = self._named_locks[name]
+            else:
+                lock = Lock()
+                self._named_locks[name] = lock
+        await lock.acquire()
+
+    async def release(self, name: str) -> None:
+        async with self._master_lock:
+            lock = self._named_locks[name]
+            lock.release()
+            if not lock._waiters:
+                del self._named_locks[name]
