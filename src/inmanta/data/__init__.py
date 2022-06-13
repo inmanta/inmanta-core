@@ -17,6 +17,7 @@
 """
 import asyncio
 import copy
+import croniter
 import datetime
 import enum
 import hashlib
@@ -1990,6 +1991,14 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
+def validate_cron(value: str) -> str:
+    if not value:
+        return ""
+    if not croniter.is_valid(value):
+        raise ValueError("'%s' is not a valid cron expression" % value)
+    return value
+
+
 TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
 
 AUTO_DEPLOY = "auto_deploy"
@@ -2006,6 +2015,7 @@ AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
@@ -2037,7 +2047,7 @@ class Setting(object):
                         is requested from the database, it will return the default value and also store
                         the default value in the database.
         :param doc: The documentation/help string for this setting
-        :param validator: A validation and casting function for input settings.
+        :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
@@ -2226,6 +2236,17 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
+        ),
+        # TODO: make sure this can only be enabled if server_compile is True or mention only relevant in that case
+        AUTO_FULL_COMPILE: Setting(
+            name=AUTO_FULL_COMPILE,
+            default="",
+            typ="str",
+            validator=validate_cron,
+            doc=(
+                "Periodically run a full compile following a cron-like time-to-run specification"
+                " (`min hour dom month dow` or macros). Mostly relevant when partial compiles are enabled."
+            ),
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
