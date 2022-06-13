@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import asyncpg
 import pydantic
 
-from inmanta import const, data, model
+from inmanta import const, data
 from inmanta.data import (
     APILIMIT,
     AVAILABLE_VERSIONS_TO_KEEP,
@@ -34,6 +34,7 @@ from inmanta.data import (
     DesiredStateVersionOrder,
     InvalidSort,
     QueryType,
+    model,
 )
 from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
@@ -426,9 +427,9 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: list,
-        resource_state: Dict[model.ResourceIdStr, str] = {},
+        resource_state: Dict[ResourceIdStr, str] = {},
         unknowns: list = None,
-        version_info: list = None,
+        version_info: model.ModelVersionInfo = None,
         compiler_version: str = None,
         resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
         removed_resource_sets: List[str] = [],
@@ -445,21 +446,59 @@ class OrchestrationService(protocol.ServerSlice):
             )
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
+
+        for removed_res in removed_resource_sets:
+            if removed_res in resource_sets.values():
+                raise BadRequest(f"A resource can not belong to a resource_set({removed_res}) that will be removed")
+
         started = datetime.datetime.now().astimezone()
         agents = set()
 
-        old_resources = await data.Resource.get_list()
-        merged_resources = self.merge_partial_with_old(old_resources, resources, removed_resource_sets)
+        def get_old_recources():
+            old_data = await data.Resource.get_list()
+            result = {
+                "id": old_data.resource_version_id,
+            }
+            result.update(old_data.attributes)
+            return result
+
+        old_resources = get_old_recources()
+        merged_resources = self.merge_partial_with_old(old_resources, resources, removed_resource_sets, resource_sets)
 
         return
 
-    def merge_partial_with_old(self, old_resources: any, partial_updates: any, removed_resource_sets: List[str]) -> List[any]:
+    def merge_partial_with_old(
+        self,
+        old_resources: any,
+        partial_updates: any,
+        removed_resource_sets: List[str],
+        resource_sets: Dict[ResourceIdStr, Optional[str]],
+    ) -> List[any]:
         """
         :param old_version: The list of resources in the previous version of the model.
         :param partial_updates: The list of resources part of the partial compile.
         :param removed_resource_sets: The names of the resource sets removed in this partial compile.
         """
-        return []
+
+        def pair_resources_partial_update_to_old_version(old_resources, partial_updates):
+            paired_resources: List[tuple[[Dict[str, Any], [Dict[str, Any]]]]] = []
+            for partial_update in partial_updates:
+                for old_resource in old_resources:
+                    if partial_update["id"] == old_resource["id"]:
+                        paired_resources.append((partial_update, old_resource))
+            return paired_resources
+
+        def in_resource_sets(
+            resource: ResourceIdStr, resource_sets: List[str], all_resource_sets: Dict[ResourceIdStr, Optional[str]]
+        ):
+            print("e")
+            return True
+
+        paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
+        result: Dict[ResourceIdStr, Dict[str, Any]] = {
+            r["id"]: r for r in old_resources if not in_resource_sets(r, removed_resource_sets, resource_sets)
+        }
+        return result
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
