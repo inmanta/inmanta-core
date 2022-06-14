@@ -688,7 +688,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("server", "agent-process-purge-interval", "0")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
     yield config
     shutil.rmtree(state_dir)
@@ -787,7 +786,6 @@ async def server_multi(
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
-    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
 
@@ -863,6 +861,7 @@ async def create_environment(client, use_custom_env_settings: bool) -> str:
         await env_obj.set(data.AUTO_DEPLOY, False)
         await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
         await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
     return env_id
 
