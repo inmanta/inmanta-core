@@ -28,6 +28,7 @@ import traceback
 import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
+from collections.abc import Mapping
 from functools import partial
 from itertools import chain
 from logging import Logger
@@ -521,11 +522,11 @@ class CompilerService(ServerSlice):
         Schedules full compiles for each environment based on its settings.
         """
         env: data.Environment
-        for env in data.Environment.get_list():
-            if auto_full_compile_schedule := await env.get(AUTO_FULL_COMPILE):
+        for env in await data.Environment.get_list():
+            if auto_full_compile_schedule := await env.get(data.AUTO_FULL_COMPILE):
                 self.schedule_cron(
                     # TODO: do_export value correct?
-                    partial(self._auto_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()),
+                    partial(self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()),
                     auto_full_compile_schedule,
                 )
 
@@ -535,8 +536,8 @@ class CompilerService(ServerSlice):
         force_update: bool,
         do_export: bool,
         remote_id: uuid.UUID,
-        metadata: JsonType = None,
-        env_vars: Dict[str, str] = None,
+        metadata: Optional[JsonType] = None,
+        env_vars: Optional[Mapping[str, str]] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
