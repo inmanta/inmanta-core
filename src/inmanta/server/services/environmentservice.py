@@ -265,6 +265,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def list_settings(self, env: data.Environment) -> Apireturn:
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
+    # TODO: update cron when setting changes
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         try:

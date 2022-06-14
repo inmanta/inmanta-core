@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 """
 import abc
 import asyncio
+import croniter
 import datetime
 import json
 import logging
@@ -27,6 +28,7 @@ import traceback
 import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
+from functools import partial
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -46,7 +48,7 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
@@ -487,7 +489,7 @@ class CompilerService(ServerSlice):
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
-        return [SLICE_TRANSPORT]
+        return [SLICE_SERVER, SLICE_TRANSPORT]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerService, self).prestart(server)
@@ -499,6 +501,7 @@ class CompilerService(ServerSlice):
         await super(CompilerService, self).start()
         await self._recover()
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
+        await self._schedule_full_compiles()
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -513,20 +516,38 @@ class CompilerService(ServerSlice):
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
 
+    async def _schedule_full_compiles(self) -> None:
+        """
+        Schedules full compiles for each environment based on its settings.
+        """
+        env: data.Environment
+        for env in data.Environment.get_list():
+            if auto_full_compile_schedule := await env.get(AUTO_FULL_COMPILE):
+                self.schedule_cron(
+                    # TODO: do_export value correct?
+                    partial(self._auto_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()),
+                    auto_full_compile_schedule,
+                )
+
     async def request_recompile(
         self,
         env: data.Environment,
         force_update: bool,
         do_export: bool,
         remote_id: uuid.UUID,
-        metadata: JsonType = {},
-        env_vars: Dict[str, str] = {},
+        metadata: JsonType = None,
+        env_vars: Dict[str, str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :return: the compile id of the requested compile and any warnings produced during the request
         """
+        if metadata is None:
+            metadata = {}
+        if env_vars is None:
+            env_vars = {}
+
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
