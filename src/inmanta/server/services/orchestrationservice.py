@@ -282,10 +282,15 @@ class OrchestrationService(protocol.ServerSlice):
         superfluous_ids = set(resource_sets.keys()) - resource_ids
         if superfluous_ids and not partial:
             raise BadRequest(
-                f"The following resource ids provided in the resource_sets parameter are not present "
+                "The following resource ids provided in the resource_sets parameter are not present "
                 f"in the resources list: {', '.join(superfluous_ids)}"
             )
-
+        requires_ids = set(provides_tree.keys())
+        if not requires_ids.issubset(resource_ids):
+            raise BadRequest(
+                "The model should have a dependency graph that is closed and no dangling dependencies:"
+                f" {requires_ids-resource_ids}"
+            )
         # hook up all CADs
         for f, t in cross_agent_dep:
             res_obj = rv_dict[t.resource_str()]
@@ -529,6 +534,7 @@ class OrchestrationService(protocol.ServerSlice):
             for r in old_resources
             if not r[1] in removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
         ]
+
         result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
 
         for resource_partial, resource_old, resource_set_partial, resource_set_old in paired_resources:
@@ -544,9 +550,7 @@ class OrchestrationService(protocol.ServerSlice):
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({resource_partial['id']}) to another resource set"
                     )
-                if (
-                    resource_set_partial == None and resource_partial != resource_old
-                ):  # todo:: compare resource_partial with resource_old with more than !=
+                if resource_set_partial == None and resource_partial != resource_old:  # todo:: is the != comparison enough?
                     raise BadRequest(
                         f"Resource ({resource_partial['id']}) without a resource set cannot be updated via a partial compile"
                     )

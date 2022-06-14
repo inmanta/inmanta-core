@@ -411,3 +411,109 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=2"
     assert resource_list[1].resource_version_id == "test::Resource[agent1,key=key2],v=2"
     assert resource_sets_from_db == {"test::Resource[agent1,key=key1]": "set-a", "test::Resource[agent1,key=key2]": "set-b"}
+
+
+async def test_resource_sets_dependency_graph(server, client, environment, clienthelper):
+    """
+    The model should have a dependency graph that is closed (i.e. doesn't have any dangling dependencies).
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version, "test::Resource[agent1,key=key3],v=%d" % version],
+        },
+    ]
+    resource_sets = {}
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=key2]', 'test::Resource[agent1,key=key3]'}"
+    )
+
+
+async def test_put_partial_dependency_graph(server, client, environment, clienthelper):
+    """
+    The model should have a dependency graph that is closed (i.e. doesn't have any dangling dependencies),
+    even after a partial compile
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+        "test::Resource[agent1,key=key2]": "set-a",
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+    version = await clienthelper.get_version()
+    resources_partial = [
+        {
+            "key": "key1",
+            "value": "value123",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        version=version,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        compiler_version=get_compiler_version(),
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+            "test::Resource[agent1,key=key2]": "set-a",
+        },
+    )
+
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=key2]'}"
+    )
