@@ -95,10 +95,13 @@ def test_CRUD_handler_with_unserializable_items(caplog):
 
     class DummyCrud(CRUDHandler):
         def __init__(self):
-            pass
+            self.updated = False
 
         def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
             resource.value = "a"
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
+            self.updated = True
 
     @resource("aa::Aa", "aa", "aa")
     class TestResource(PurgeableResource):
@@ -108,10 +111,11 @@ def test_CRUD_handler_with_unserializable_items(caplog):
 
     # Sets are not JSON serializable
     res.value = {"a", "b"}
+    res.purged = False
 
     ctx = HandlerContext(res, False)
 
     handler = DummyCrud()
     handler.execute(ctx, res, False)
 
-    no_error_in_logs(caplog)
+    assert handler.updated
