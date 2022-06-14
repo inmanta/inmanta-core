@@ -90,15 +90,15 @@ def xx():
     await gather(r1, r2, r3)
 
     # Test 1 is deployed once, as seen by the agent
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test 5").contains(
-        "inmanta.agent.agent", DEBUG, "Installed handler test::Test 5"
-    ).contains("inmanta.agent.agent", DEBUG, "Code already present for test::Test 5").assert_not(
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test version=5").contains(
+        "inmanta.agent.agent", DEBUG, "Installed handler test::Test version=5"
+    ).contains("inmanta.agent.agent", DEBUG, "Code already present for test::Test version=5").assert_not(
         "inmanta", DEBUG, "test::Test "
     )
 
     # Test 2 is deployed twice, as seen by the agent
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test2 5")
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test2 6")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test2 version=5")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test2 version=6")
 
     # Loader only loads source1 once
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv1}, module=inmanta_plugins.test)").assert_not(
@@ -111,5 +111,5 @@ def xx():
     )
 
     # Test 3 is deployed twice, as seen by the agent and the loader
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 5")
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 6")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=5")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")

@@ -1209,7 +1209,7 @@ class Agent(SessionEndpoint):
                                 for hash_value, (path, name, content, requires) in result.result["sources"].items()
                             ]
                         )
-                        LOGGER.debug("Installed handler %s %d", rt, version)
+                        LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
