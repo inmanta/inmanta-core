@@ -310,6 +310,9 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
 
+    if isinstance(o, set):
+        return str(o)
+
     from inmanta.data.model import BaseModel
 
     if isinstance(o, BaseModel):

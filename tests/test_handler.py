@@ -85,3 +85,33 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     assert handler.deleted == delete
     no_error_in_logs(caplog)
     log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")
+
+
+def test_CRUD_handler_with_unserializable_items(caplog):
+    """
+    This test case checks that sets are correctly turned into strings during JSON serialization
+    """
+    caplog.set_level(logging.DEBUG)
+
+    class DummyCrud(CRUDHandler):
+        def __init__(self):
+            pass
+
+        def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+            resource.value = "a"
+
+    @resource("aa::Aa", "aa", "aa")
+    class TestResource(PurgeableResource):
+        fields = ("value",)
+
+    res = TestResource(Id("aa::Aa", "aa", "aa", "aa", 1))
+
+    # Sets are not JSON serializable
+    res.value = {"a", "b"}
+
+    ctx = HandlerContext(res, False)
+
+    handler = DummyCrud()
+    handler.execute(ctx, res, False)
+
+    no_error_in_logs(caplog)
