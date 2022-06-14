@@ -17,7 +17,6 @@
 """
 import asyncio
 import copy
-import croniter
 import datetime
 import enum
 import hashlib
@@ -57,6 +56,7 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg.protocol import Record
+from croniter import croniter
 
 import inmanta.db.versions
 from inmanta import const, resources, util
@@ -2237,6 +2237,9 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
         ),
+        # TODO: take into account:
+        #   auto-recompile-wait: https://docs.inmanta.com/inmanta-service-orchestrator-dev/6/reference/config.html#server.auto-recompile-wait
+        #   recompile_backoff: https://docs.inmanta.com/inmanta-service-orchestrator-dev/6/reference/environmentsettings.html#recompile_backoff
         # TODO: make sure this can only be enabled if server_compile is True or mention only relevant in that case
         AUTO_FULL_COMPILE: Setting(
             name=AUTO_FULL_COMPILE,

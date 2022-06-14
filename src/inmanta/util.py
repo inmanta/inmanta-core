@@ -145,7 +145,7 @@ class TaskSchedule(ABC):
 
 
 @dataclass
-class IntervalSchedule(TaskSchedule)
+class IntervalSchedule(TaskSchedule):
     """
     Simple interval schedule for tasks.
 
@@ -160,7 +160,7 @@ class IntervalSchedule(TaskSchedule)
         return self.initial_delay if self.initial_delay is not None else self.interval
 
     def get_next_delay(self) -> float:
-        return self.next_delay
+        return self.interval
 
     def log(self, action: TaskMethod) -> None:
         LOGGER.debug(
@@ -168,7 +168,7 @@ class IntervalSchedule(TaskSchedule)
         )
 
 
-class CronSchedule(TaskSchedule)
+class CronSchedule(TaskSchedule):
     """
     Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time.
     """
@@ -243,7 +243,6 @@ class Scheduler(object):
             return
 
         schedule.log(action)
-        LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
 
         def action_function() -> None:
             LOGGER.info("Calling %s" % action)
