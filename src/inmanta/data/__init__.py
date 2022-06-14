@@ -1958,6 +1958,16 @@ def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     return f_value
 
 
+def convert_positive_float(value: Union[float, int, str]) -> float:
+    if isinstance(value, float):
+        float_value = value
+    else:
+        float_value = float(value)
+    if float_value < 0:
+        raise ValueError(f"This value should be positive, got: {value}")
+    return float_value
+
+
 def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError("Agent map should be a dict")
@@ -1999,7 +2009,14 @@ def validate_cron(value: str) -> str:
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
+TYPE_MAP = {
+    "int": "integer",
+    "bool": "boolean",
+    "dict": "jsonb",
+    "str": "varchar",
+    "enum": "varchar",
+    "positive_float": "double precision",
+}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -2021,6 +2038,7 @@ PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
+RECOMPILE_BACKOFF = "recompile_backoff"
 
 
 class Setting(object):
@@ -2286,6 +2304,14 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain notifications for",
+        ),
+        RECOMPILE_BACKOFF: Setting(
+            name=RECOMPILE_BACKOFF,
+            default=0.1,
+            typ="positive_float",
+            validator=convert_positive_float,
+            doc="""The number of seconds to wait before the server may attempt to do a new recompile.
+                    Recompiles are triggered after facts updates for example.""",
         ),
     }
 

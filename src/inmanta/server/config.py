@@ -179,7 +179,7 @@ server_autrecompile_wait = Option(
     "server",
     "auto-recompile-wait",
     10,
-    """The number of seconds to wait before the server may attempt to do a new recompile.
+    """DEPRECATED: The number of seconds to wait before the server may attempt to do a new recompile.
                                      Recompiles are triggered after facts updates for example.""",
     is_time,
 )
