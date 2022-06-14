@@ -16,14 +16,17 @@
     Contact: code@inmanta.com
 """
 import json
+import logging
 import os
 
 import pytest
 
 from inmanta import config, const
-from inmanta.ast import ExternalException
+from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
+from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
+from utils import LogSequence, v1_module_from_template
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -412,3 +415,132 @@ exp::Test3(
         e.value.format_trace()
         == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
     )
+
+
+async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    test that the resourceSet is exported correctly
+    """
+
+    init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+b = Res(name="the_resource_b")
+c = Res(name="the_resource_c")
+d = Res(name="the_resource_d")
+std::ResourceSet(name="resource_set_1", resources=[a,c])
+std::ResourceSet(name="resource_set_2", resources=[b])
+    """
+
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+        new_name="modulev1",
+    )
+    snippetcompiler.setup_for_snippet(
+        """
+import modulev1
+        """,
+        add_to_module_path=[str(tmpdir)],
+    )
+
+    await snippetcompiler.do_export_and_deploy()
+    resources = await Resource.get_list(environment=environment)
+    assert len(resources) == 4
+    assert resources[0].resource_id_value == "the_resource_a"
+    assert resources[0].resource_set == "resource_set_1"
+    assert resources[1].resource_id_value == "the_resource_b"
+    assert resources[1].resource_set == "resource_set_2"
+    assert resources[2].resource_id_value == "the_resource_c"
+    assert resources[2].resource_set == "resource_set_1"
+    assert resources[3].resource_id_value == "the_resource_d"
+    assert resources[3].resource_set is None
+
+
+async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    test that an error is raised if a resource is in multiple
+    resource_sets
+    """
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+std::ResourceSet(name="resource_set_1", resources=[a])
+std::ResourceSet(name="resource_set_2", resources=[a])
+"""
+    init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+        new_name="modulev1",
+    )
+    snippetcompiler.setup_for_snippet(
+        """
+import modulev1
+        """,
+        add_to_module_path=[str(tmpdir)],
+    )
+    with pytest.raises(CompilerException) as e:
+        await snippetcompiler.do_export_and_deploy()
+    assert str(e.value).startswith(
+        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple " "ResourceSets:"
+    )
+
+
+async def test_resource_not_exported(snippetcompiler, caplog, environment) -> None:
+    """
+    test that a warning is logged if a resource that is not exported is in a resource_set
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+std::ResourceSet(name="resource_set_1", resources=[std::Resource()])
+implement std::Resource using std::none
+"""
+    )
+    caplog.clear()
+    caplog.set_level(logging.WARNING)
+    await snippetcompiler.do_export_and_deploy()
+    cwd = snippetcompiler.project_dir
+
+    msg: str = (
+        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSets std::ResourceSet "
+        f"(instantiated at {cwd}/main.cf:2) but will not be exported."
+    )
+
+    log_sequence = LogSequence(caplog)
+    log_sequence.contains("inmanta.export", logging.WARNING, msg)

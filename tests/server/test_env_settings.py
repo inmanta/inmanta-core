@@ -130,6 +130,9 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value="error")
     assert response.code == 500
 
+    response = await client_v2.environment_settings_set(tid=environment_default, id="recompile_backoff", value="-42.5")
+    assert response.code == 500
+
     response = await client_v2.environment_setting_delete(tid=environment_default, id="auto_deploy")
     assert response.code == 200
 

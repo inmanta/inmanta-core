@@ -529,7 +529,6 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
     """
-    config.Config.set("server", "auto-recompile-wait", "0")
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
@@ -642,7 +641,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     correct value in this test.
     """
     env = await data.Environment.get_by_id(environment)
-    config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -738,7 +736,6 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
 
 
 async def test_compilerservice_halt(mocked_compiler_service_block, server, client, environment: uuid.UUID) -> None:
-    config.Config.set("server", "auto-recompile-wait", "0")
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     result = await client.get_compile_queue(environment)
@@ -945,13 +942,35 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     assert "trace: " in report.errstream
 
 
-async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block, server, client, environment, caplog):
+@pytest.mark.parametrize(
+    "auto_recompile_wait,recompile_backoff,expected_log_message,expected_log_level",
+    [
+        ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
+        ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING),
+    ],
+)
+async def test_compileservice_auto_recompile_wait(
+    mocked_compiler_service_block,
+    server,
+    client,
+    environment,
+    caplog,
+    auto_recompile_wait,
+    recompile_backoff,
+    expected_log_message,
+    expected_log_level,
+):
     """
     Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
     """
     with caplog.at_level(logging.DEBUG):
+        if auto_recompile_wait == "0":
+            config.Config._get_instance().remove_option("server", "auto-recompile-wait")
+        else:
+            config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
+
         env = await data.Environment.get_by_id(environment)
-        config.Config.set("server", "auto-recompile-wait", "2")
+        await env.set(data.RECOMPILE_BACKOFF, recompile_backoff)
         compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
         # request compiles in rapid succession
@@ -979,21 +998,16 @@ async def test_compileservice_auto_recompile_wait(mocked_compiler_service_block,
 
         LogSequence(caplog, allow_errors=False).contains(
             "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
-        ).contains(
-            "inmanta.server.services.compilerservice",
-            logging.INFO,
-            "server-auto-recompile-wait is enabled and set to 2 seconds",
-        ).contains(
+        ).contains("inmanta.server.services.compilerservice", expected_log_level, expected_log_message,).contains(
             "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
         )
 
 
 async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
     """
-    Test the recompile waiting time calculation when auto-recompile-wait configuration option is enabled
+    Test the recompile waiting time calculation when auto-recompile-wait environment setting is enabled
     """
     auto_recompile_wait = 2
-    config.Config.set("server", "auto-recompile-wait", str(auto_recompile_wait))
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
 
     now = datetime.datetime.now()

@@ -38,6 +38,7 @@ import pkg_resources
 from pkg_resources import DistInfoDistribution, Requirement
 
 from inmanta import const
+from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
 
@@ -331,12 +332,24 @@ class PythonEnvironment:
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
+
+        def _is_protected_package(pkg: str) -> bool:
+            """
+            Return true iff the package with name `pkg`, installed in this venv, should not be updated.
+            """
+            if pkg == "inmanta" or pkg == "inmanta-service-orchestrator":
+                # Protect product packages
+                return True
+            pkg_names_installed_extensions = [
+                f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()
+            ]
+            if pkg in pkg_names_installed_extensions:
+                # Protect all server extensions
+                return True
+            return False
+
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        requirements: Sequence[Requirement] = []
-        for pkg in workingset:
-            if pkg == "inmanta" or (pkg.startswith("inmanta-") and not pkg.startswith("inmanta-module-")):
-                requirements.append(Requirement.parse(f"{pkg}=={workingset[pkg]}"))
-        return requirements
+        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
 
     @classmethod
     def _run_command_and_log_output(

@@ -133,6 +133,7 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
+        self._resource_sets: Dict[str, Optional[str]] = {}
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -154,7 +155,7 @@ class Exporter(object):
 
     def _load_resources(self, types: Dict[str, Entity]) -> None:
         """
-        Load all registered resources
+        Load all registered resources and resource_sets
         """
         resource.validate()
         entities = resource.get_entity_resources()
@@ -189,7 +190,38 @@ class Exporter(object):
                             instance.location,
                         )
 
+        self._load_resource_sets(types, resource_mapping)
         Resource.convert_requires(resource_mapping, ignored_set)
+
+    def _load_resource_sets(self, types: Dict[str, Entity], resource_mapping: Dict["Instance", "Resource"]) -> None:
+        """
+        load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
+        the resource belongs to.
+        This method should only be called after all resources have been extracted from the model.
+        """
+        resource_sets: Dict[str, Optional[str]] = {}
+        resource_set_instances: List["Instance"] = (
+            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
+        )
+        for resource_set_instance in resource_set_instances:
+            name: str = resource_set_instance.get_attribute("name").get_value()
+            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
+            for resource_in_set in resources_in_set:
+                if resource_in_set in resource_mapping:
+                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
+                    if resource_id in resource_sets and resource_sets[resource_id] != name:
+                        raise CompilerException(
+                            f"resource '{resource_id}' can not be part of multiple ResourceSets: "
+                            f"{resource_sets[resource_id]} and {name}"
+                        )
+                    resource_sets[resource_id] = name
+                else:
+                    LOGGER.warning(
+                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        str(resource_in_set),
+                        str(resource_set_instance),
+                    )
+        self._resource_sets: Dict[str, Optional[str]] = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
@@ -329,6 +361,7 @@ class Exporter(object):
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
+            # This is the actuel export : convert entities to resources.
             self._load_resources(types)
 
             # call dependency managers
@@ -438,7 +471,13 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
-    def commit_resources(self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict) -> None:
+    def commit_resources(
+        self,
+        version: int,
+        resources: List[Dict[str, str]],
+        metadata: Dict[str, str],
+        model: Dict,
+    ) -> None:
         """
         Commit the entire list of resource to the configurations server.
         """
@@ -486,6 +525,7 @@ class Exporter(object):
             tid=tid,
             version=version,
             resources=resources,
+            resource_sets=self._resource_sets,
             unknowns=unknown_parameters,
             resource_state=self._resource_state,
             version_info=version_info,

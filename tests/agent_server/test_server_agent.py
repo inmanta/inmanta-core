@@ -930,6 +930,8 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     await wait_for_n_deployed_resources(client, env_id, version1, n=2)
 
+    generation_version1 = agent._instances["agent1"]._nq.generation
+
     result = await client.get_version(environment, version1)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
@@ -950,6 +952,10 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("second version released")
 
+    # Wait until the agent is deploying version2. Otherwise the call to `wait_for_done_with_waiters()`
+    # might notify a test::Wait resource of version1, instead of the resources of version2. This could
+    # cause problem when the resource states of version1 are checked later on in this test case.
+    await retry_limited(lambda: agent._instances["agent1"]._nq.generation != generation_version1, timeout=10)
     await resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
@@ -1377,7 +1383,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()
-    children_pre = current_process.children(recursive=True)
+    agent_processes_pre: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(env_uuid)
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
@@ -1478,12 +1484,10 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     # Stop server
     await asyncio.wait_for(server.stop(), timeout=15)
 
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    agent_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
-    newchildren = set(children) - set(children_pre)
-
-    assert len(newchildren) == 0, newchildren
+    assert len(new_agent_processes) == 0, new_agent_processes
 
 
 async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
@@ -1501,9 +1505,11 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     async_finalizer(a.stop)
 
     # Wait until agent is up
+    async def agent_in_db() -> bool:
+        return len(await data.AgentInstance.get_list()) == 1
+
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
-    instances = await data.AgentInstance.get_list()
-    assert len(instances) == 1
+    await retry_limited(agent_in_db, 10)
 
     # Update agentmap
     caplog.clear()
@@ -1698,7 +1704,15 @@ async def setup_environment_with_agent(client, project_name):
 
 
 def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
-    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in p.cmdline() and "agent" in p.cmdline()]
+    def try_get_cmd(p: psutil.Process) -> str:
+        try:
+            return p.cmdline()
+        except Exception:
+            logger.warning("A child process is gone! pid=%d", p.pid)
+            """If a child process is gone, p.cmdline() raises an exception"""
+            return ""
+
+    return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
 
 
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):

@@ -443,6 +443,9 @@ def deactive_venv():
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
     old_working_set = pkg_resources.working_set
+    old_available_extensions = (
+        dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
+    )
 
     yield
 
@@ -462,6 +465,7 @@ def deactive_venv():
         del os.environ["VIRTUAL_ENV"]
     env.mock_process_env(python_path=old_process_env)
     loader.PluginModuleFinder.reset()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
 
 def reset_metrics():
@@ -490,6 +494,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = None
 
 
 @pytest.fixture(scope="function", autouse=True)

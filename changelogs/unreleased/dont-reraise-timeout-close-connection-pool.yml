@@ -1,0 +1,4 @@
+---
+description: Don't re-raise TimeoutError on close connection pool
+change-type: patch
+destination-branches: [master, iso5, iso4]

@@ -524,7 +524,7 @@ def put_version(
     unknowns: list = None,
     version_info: dict = None,
     compiler_version: str = None,
-    resource_sets: Optional[Dict[model.ResourceIdStr, Optional[str]]] = None,
+    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
 ):
     """
     Store a new version of the configuration model
