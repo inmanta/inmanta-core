@@ -26,7 +26,6 @@ import uuid
 from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
-from dataclasses import dataclass
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
