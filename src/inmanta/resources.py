@@ -532,6 +532,9 @@ class Id(object):
 
         self._version = version
 
+    def increment_version(self) -> None:
+        self._version += 1
+
     def __str__(self) -> str:
         if self._version > 0:
             return self.resource_version_str()

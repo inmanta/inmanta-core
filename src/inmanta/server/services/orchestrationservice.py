@@ -455,7 +455,6 @@ class OrchestrationService(protocol.ServerSlice):
         result = await self._put_version(
             env, version, merged_resources, resource_state, unknowns, version_info, compiler_version, resource_sets, True
         )
-        print(result)
         return
 
     async def merge_partial_with_old(
@@ -490,7 +489,7 @@ class OrchestrationService(protocol.ServerSlice):
                 pair = (partial_update, None, resource_set, None)
                 for old_resource in old_resources:
                     res = old_resource[0]
-                    if partial_update["id"] == res["id"]:
+                    if key == Id.parse_id(res["id"]).resource_str():
                         pair = (partial_update, res, resource_set, old_resource[1])
                 paired_resources.append(pair)
 
@@ -519,15 +518,25 @@ class OrchestrationService(protocol.ServerSlice):
         paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
         updated_resource_sets = get_updated_resource_sets(paired_resources)
 
-        result: Dict[ResourceIdStr, Dict[str, Any]] = {
-            r[0]["id"]: r[0]
+        def copy_with_incremented_version(resource):
+            res = Id.parse_id(resource["id"])
+            res.increment_version()
+            resource["id"] = res.resource_version_str()
+            return resource
+
+        to_keep: List[Dict[str, Any]] = [
+            copy_with_incremented_version(r[0])
             for r in old_resources
             if not r[1] in removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
-        }
+        ]
+        result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
 
         for resource_partial, resource_old, resource_set_partial, resource_set_old in paired_resources:
             assert resource_partial is not None
-            assert resource_old is None or resource_old["id"] == resource_partial["id"]
+            assert (
+                resource_old is None
+                or Id.parse_id(resource_old["id"]).resource_str() == Id.parse_id(resource_partial["id"]).resource_str()
+            )
             if resource_old is None:
                 result[resource_partial["id"]] = resource_partial
             else:
