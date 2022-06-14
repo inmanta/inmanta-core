@@ -191,8 +191,7 @@ class OrchestrationService(protocol.ServerSlice):
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
-    @handle(methods.put_version, env="tid")
-    async def put_version(
+    async def _put_version(
         self,
         env: data.Environment,
         version: int,
@@ -202,6 +201,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: JsonType,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        partial: bool = False,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -280,7 +280,7 @@ class OrchestrationService(protocol.ServerSlice):
                         cross_agent_dep.append((res_obj, rid))
         resource_ids = {res.resource_id for res in resource_objects}
         superfluous_ids = set(resource_sets.keys()) - resource_ids
-        if superfluous_ids:
+        if superfluous_ids and not partial:
             raise BadRequest(
                 f"The following resource ids provided in the resource_sets parameter are not present "
                 f"in the resources list: {', '.join(superfluous_ids)}"
@@ -421,6 +421,22 @@ class OrchestrationService(protocol.ServerSlice):
 
         return 200
 
+    @handle(methods.put_version, env="tid")
+    async def put_version(
+        self,
+        env: data.Environment,
+        version: int,
+        resources: List[JsonType],
+        resource_state: Dict[ResourceIdStr, const.ResourceState],
+        unknowns: List[Dict[str, PrimitiveTypes]],
+        version_info: JsonType,
+        compiler_version: Optional[str] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+    ) -> Apireturn:
+        return await self._put_version(
+            env, version, resources, resource_state, unknowns, version_info, compiler_version, resource_sets
+        )
+
     @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
         self,
@@ -436,18 +452,11 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> None:
         pydantic.parse_obj_as(List[Dict[str, Any]], resources)
         merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
-        result = await self.put_version(
-            env,
-            version,
-            merged_resources,
-            resource_state,
-            unknowns,
-            version_info,
-            compiler_version,
-            resource_sets,
+        result = await self._put_version(
+            env, version, merged_resources, resource_state, unknowns, version_info, compiler_version, resource_sets, True
         )
         print(result)
-        return result
+        return
 
     async def merge_partial_with_old(
         self,
@@ -457,7 +466,7 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> List[any]:
         """
         :param old_version: a list of tuples containing the resource in the previous version of the model and its resource_set.
-        :param partial_updates: The list of resources part of the partial compile.
+        :param resource_sets: a dictionary mapping each resource (using its id) with a resource_set if it is in one
         :param removed_resource_sets: The names of the resource sets removed in this partial compile.
         """
 
@@ -469,7 +478,7 @@ class OrchestrationService(protocol.ServerSlice):
             1. the resource as returned by the partial compile
             2. the resource as it is in the old version
             3. the resource_set the resource belongs to in the partial compile
-            4. the resource_set the resource belonds to in the previous version
+            4. the resource_set the resource belongs to in the previous version
 
             :param old_resources: a list of tuples containing the resource in the previous version of the model and its resource_set.
             :param partial_updates: The list of resources part of the partial compile.
@@ -507,7 +516,6 @@ class OrchestrationService(protocol.ServerSlice):
             return result
 
         old_resources = await get_old_resources()
-
         paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
         updated_resource_sets = get_updated_resource_sets(paired_resources)
 
@@ -529,13 +537,13 @@ class OrchestrationService(protocol.ServerSlice):
                     )
                 if (
                     resource_set_partial == None and resource_partial != resource_old
-                ):  # todo:: compare resource_partial with resource_old
+                ):  # todo:: compare resource_partial with resource_old with more than !=
                     raise BadRequest(
                         f"Resource ({resource_partial['id']}) without a resource set cannot be updated via a partial compile"
                     )
                 else:
                     result[resource_partial["id"]] = resource_partial
-        return result
+        return list(result.values())
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
