@@ -912,11 +912,11 @@ class CRUDHandler(ResourceHandler):
                 try:
                     json_encode(values)
                 except TypeError:
-                    current = str(values["current"])
-                    desired = str(values["desired"])
-                    changes[field]["desired"] = desired
-                    changes[field]["current"] = current
-                ctx.add_change(field, desired=desired, current=current)
+                    current_value = str(values["current"])
+                    desired_value = str(values["desired"])
+                    changes[field]["desired"] = desired_value
+                    changes[field]["current"] = current_value
+                ctx.add_change(field, desired=desired_value, current=current_value)
 
             if not dry_run:
                 if "purged" in changes:
