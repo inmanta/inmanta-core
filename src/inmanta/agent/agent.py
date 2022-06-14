@@ -23,6 +23,8 @@ import os
 import random
 import time
 import uuid
+from asyncio import Lock
+from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
@@ -43,7 +45,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import add_future
+from inmanta.util import NamedLock, add_future
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -988,6 +990,12 @@ class Agent(SessionEndpoint):
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
             self._loader = CodeLoader(self._storage["code"])
+            # Lock to ensure only one actual install runs at a time
+            self._loader_lock = Lock()
+            # Cache to prevent re-loading the same resource-version
+            self._last_loaded: Dict[str, int] = defaultdict(lambda: -1)
+            # Per-resource lock to serialize all actions per resource
+            self._resource_loader_lock = NamedLock()
 
         self.agent_map: Optional[Dict[str, str]] = agent_map
 
@@ -1181,21 +1189,31 @@ class Agent(SessionEndpoint):
             return failed_to_load
 
         for rt in set(resource_types):
-            result: protocol.Result = await self._client.get_code(environment, version, rt)
+            # only one logical thread can load a particular resource type at any time
+            async with self._resource_loader_lock.get(rt):
+                # stop if the last successful load was this one
+                # The combination of the lock and this check causes the reloads to naturally 'batch up'
+                if self._last_loaded[rt] == version:
+                    LOGGER.debug("Code already present for %s version=%d", rt, version)
+                    continue
+                # clear cache, for retry on failure
+                self._last_loaded[rt] = -1
 
-            if result.code == 200 and result.result is not None:
-                try:
-                    LOGGER.debug("Installing handler %s", rt)
-                    await self._install(
-                        [
-                            (ModuleSource(name, content, hash_value), requires)
-                            for hash_value, (path, name, content, requires) in result.result["sources"].items()
-                        ]
-                    )
-                    LOGGER.debug("Installed handler %s", rt)
-                except Exception:
-                    LOGGER.exception("Failed to install handler %s", rt)
-                    failed_to_load.add(rt)
+                result: protocol.Result = await self._client.get_code(environment, version, rt)
+                if result.code == 200 and result.result is not None:
+                    try:
+                        LOGGER.debug("Installing handler %s version=%d", rt, version)
+                        await self._install(
+                            [
+                                (ModuleSource(name, content, hash_value), requires)
+                                for hash_value, (path, name, content, requires) in result.result["sources"].items()
+                            ]
+                        )
+                        LOGGER.debug("Installed handler %s version=%d", rt, version)
+                        self._last_loaded[rt] = version
+                    except Exception:
+                        LOGGER.exception("Failed to install handler %s version=%d", rt, version)
+                        failed_to_load.add(rt)
 
         return failed_to_load
 
@@ -1203,10 +1221,11 @@ class Agent(SessionEndpoint):
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
-        loop = asyncio.get_event_loop()
-        for module, module_requires in modules:
-            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires)
-        await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
+        async with self._loader_lock:
+            loop = asyncio.get_event_loop()
+            for module, module_requires in modules:
+                await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:

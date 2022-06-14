@@ -29,10 +29,11 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
 from collections import defaultdict
 from logging import Logger
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+from types import TracebackType
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -453,3 +454,50 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
         dfs(nodes.pop(0))
 
     return out
+
+
+class NamedSubLock:
+    def __init__(self, parent: "NamedLock", name: str) -> None:
+        self.parent = parent
+        self.name = name
+
+    async def __aenter__(self) -> None:
+        await self.parent.acquire(self.name)
+
+    async def __aexit__(
+        self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
+    ) -> None:
+        await self.parent.release(self.name)
+
+
+class NamedLock:
+    """Create fine grained locks"""
+
+    def __init__(self) -> None:
+        self._master_lock: Lock = Lock()
+        self._named_locks: Dict[str, Lock] = {}
+        self._named_locks_counters: Dict[str, int] = {}
+
+    def get(self, name: str) -> NamedSubLock:
+        return NamedSubLock(self, name)
+
+    async def acquire(self, name: str) -> None:
+        async with self._master_lock:
+            if name in self._named_locks:
+                lock = self._named_locks[name]
+                self._named_locks_counters[name] += 1
+            else:
+                lock = Lock()
+                self._named_locks[name] = lock
+                self._named_locks_counters[name] = 1
+        await lock.acquire()
+
+    async def release(self, name: str) -> None:
+        async with self._master_lock:
+            lock = self._named_locks[name]
+            lock.release()
+            self._named_locks_counters[name] -= 1
+            # This relies on the internal mechanics of the lock
+            if self._named_locks_counters[name] <= 0:
+                del self._named_locks[name]
+                del self._named_locks_counters[name]
