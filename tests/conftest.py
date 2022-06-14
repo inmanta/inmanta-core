@@ -861,11 +861,7 @@ async def create_environment(client, use_custom_env_settings: bool) -> str:
         await env_obj.set(data.AUTO_DEPLOY, False)
         await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
         await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-
-    # Set the RECOMPILE_BACKOFF setting to 0, to ensure backwards compatibility. The previous implementation
-    # of the test suite set the auto-recompile-wait setting in the server fixture(s) to zero.
-    result = await client.set_setting(tid=env_id, id=data.RECOMPILE_BACKOFF, value=0)
-    assert result.code == 200
+        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
     return env_id
 
