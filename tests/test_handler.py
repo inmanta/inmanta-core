@@ -87,9 +87,10 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")
 
 
-def test_CRUD_handler_with_unserializable_items(caplog):
+def test_3470_CRUD_handler_with_unserializable_items(caplog):
     """
-    This test case checks that sets are correctly turned into strings during JSON serialization
+    This test case checks that unserializable items in the 'changes' set not longer make
+    the CRUD handler hang.
     """
     caplog.set_level(logging.DEBUG)
 
