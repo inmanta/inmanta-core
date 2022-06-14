@@ -257,13 +257,13 @@ class CodeLoader(object):
             return False
 
     def deploy_version(self, module_sources: Iterable[ModuleSource]) -> None:
-        to_reload: Set[ModuleSource] = set()
+        to_reload: List[ModuleSource] = []
 
         sources = set(module_sources)
         for module_source in sources:
             is_changed = self.install_source(module_source)
             if is_changed:
-                to_reload.add(module_source)
+                to_reload.append(module_source)
 
         if len(to_reload) > 0:
             importlib.invalidate_caches()

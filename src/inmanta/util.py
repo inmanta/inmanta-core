@@ -456,7 +456,7 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
     return out
 
 
-class _NamedSubLock:
+class NamedSubLock:
     def __init__(self, parent: "NamedLock", name: str) -> None:
         self.parent = parent
         self.name = name
@@ -476,23 +476,28 @@ class NamedLock:
     def __init__(self) -> None:
         self._master_lock: Lock = Lock()
         self._named_locks: Dict[str, Lock] = {}
+        self._named_locks_counters: Dict[str, int] = {}
 
-    def get(self, name: str) -> _NamedSubLock:
-        return _NamedSubLock(self, name)
+    def get(self, name: str) -> NamedSubLock:
+        return NamedSubLock(self, name)
 
     async def acquire(self, name: str) -> None:
         async with self._master_lock:
             if name in self._named_locks:
                 lock = self._named_locks[name]
+                self._named_locks_counters[name] += 1
             else:
                 lock = Lock()
                 self._named_locks[name] = lock
+                self._named_locks_counters[name] = 1
         await lock.acquire()
 
     async def release(self, name: str) -> None:
         async with self._master_lock:
             lock = self._named_locks[name]
             lock.release()
+            self._named_locks_counters[name] -= 1
             # This relies on the internal mechanics of the lock
-            if not lock._waiters:
+            if self._named_locks_counters[name] <= 0:
                 del self._named_locks[name]
+                del self._named_locks_counters[name]
