@@ -2255,10 +2255,6 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
         ),
-        # TODO: take into account:
-        #   auto-recompile-wait: https://docs.inmanta.com/inmanta-service-orchestrator-dev/6/reference/config.html#server.auto-recompile-wait
-        #   recompile_backoff: https://docs.inmanta.com/inmanta-service-orchestrator-dev/6/reference/environmentsettings.html#recompile_backoff
-        # TODO: make sure this can only be enabled if server_compile is True or mention only relevant in that case
         AUTO_FULL_COMPILE: Setting(
             name=AUTO_FULL_COMPILE,
             default="",
@@ -2266,7 +2262,9 @@ class Environment(BaseDocument):
             validator=validate_cron,
             doc=(
                 "Periodically run a full compile following a cron-like time-to-run specification"
-                " (`min hour dom month dow` or macros). Mostly relevant when partial compiles are enabled."
+                " (`min hour dom month dow` or macros). A compile will be requested at the scheduled time. The actual"
+                " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
+                " RECOMPILE_BACKOFF environment variable. This setting has no effect when server_compile is disabled."
             ),
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
