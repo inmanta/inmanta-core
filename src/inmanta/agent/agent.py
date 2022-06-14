@@ -1194,7 +1194,7 @@ class Agent(SessionEndpoint):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
                 if self._last_loaded[rt] == version:
-                    LOGGER.debug("Code already present for %s %d", rt, version)
+                    LOGGER.debug("Code already present for %s version=%d", rt, version)
                     continue
                 # clear cache, for retry on failure
                 self._last_loaded[rt] = -1
@@ -1202,7 +1202,7 @@ class Agent(SessionEndpoint):
                 result: protocol.Result = await self._client.get_code(environment, version, rt)
                 if result.code == 200 and result.result is not None:
                     try:
-                        LOGGER.debug("Installing handler %s %d", rt, version)
+                        LOGGER.debug("Installing handler %s version=%d", rt, version)
                         await self._install(
                             [
                                 (ModuleSource(name, content, hash_value), requires)
@@ -1212,7 +1212,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installed handler %s %d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
-                        LOGGER.exception("Failed to install handler %s %d", rt, version)
+                        LOGGER.exception("Failed to install handler %s version=%d", rt, version)
                         failed_to_load.add(rt)
 
         return failed_to_load
