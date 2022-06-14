@@ -688,7 +688,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("server", "agent-process-purge-interval", "0")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
     yield config
     shutil.rmtree(state_dir)
@@ -787,7 +786,6 @@ async def server_multi(
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
-    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
 
@@ -863,6 +861,11 @@ async def create_environment(client, use_custom_env_settings: bool) -> str:
         await env_obj.set(data.AUTO_DEPLOY, False)
         await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
         await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+
+    # Set the RECOMPILE_BACKOFF setting to 0, to ensure backwards compatibility. The previous implementation
+    # of the test suite set the auto-recompile-wait setting in the server fixture(s) to zero.
+    result = await client.set_setting(tid=env_id, id=data.RECOMPILE_BACKOFF, value=0)
+    assert result.code == 200
 
     return env_id
 
