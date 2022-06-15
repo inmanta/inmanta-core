@@ -128,7 +128,14 @@ class EnvironmentService(protocol.ServerSlice):
         self.agent_state_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_COMPILER, SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
+        return [
+            SLICE_COMPILER,
+            SLICE_SERVER,
+            SLICE_DATABASE,
+            SLICE_AUTOSTARTED_AGENT_MANAGER,
+            SLICE_ORCHESTRATION,
+            SLICE_RESOURCE,
+        ]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
