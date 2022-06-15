@@ -485,7 +485,8 @@ class OrchestrationService(protocol.ServerSlice):
             3. the resource_set the resource belongs to in the partial compile
             4. the resource_set the resource belongs to in the previous version
 
-            :param old_resources: a list of tuples containing the resource in the previous version of the model and its resource_set.
+            :param old_resources: a list of tuples containing the resource in the previous version of the model
+            and its resource_set.
             :param partial_updates: The list of resources part of the partial compile.
             """
             paired_resources: List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]] = []
