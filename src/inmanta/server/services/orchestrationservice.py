@@ -524,7 +524,7 @@ class OrchestrationService(protocol.ServerSlice):
             old_data = await data.Resource.get_list()
             result: List[tuple[Dict[str, Any], Optional[str]]] = []
             for res in old_data:
-                resource: Dict[str, Any] = {
+                resource: Dict[str, ResourceVersionIdStr] = {
                     "id": res.resource_version_id,
                 }
                 resource.update(res.attributes)
