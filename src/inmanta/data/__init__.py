@@ -2055,6 +2055,7 @@ class Setting(object):
         validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
         recompile: bool = False,
         update_model: bool = False,
+        update_schedules: bool = False,
         agent_restart: bool = False,
         allowed_values: Optional[List[m.EnvSettingType]] = None,
     ) -> None:
@@ -2068,6 +2069,7 @@ class Setting(object):
         :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
+        :param update_schedules: Update scheduled tasks
         :param agent_restart: Restart autostarted agents when this settings is updated.
         :param allowed_values: list of possible values (if type is enum)
         """
@@ -2260,6 +2262,7 @@ class Environment(BaseDocument):
             default="",
             typ="str",
             validator=validate_cron,
+            update_schedules=True,
             doc=(
                 "Periodically run a full compile following a cron-like time-to-run specification"
                 " (`min hour dom month dow` or macros). A compile will be requested at the scheduled time. The actual"

@@ -48,7 +48,7 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
@@ -490,7 +490,7 @@ class CompilerService(ServerSlice):
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_TRANSPORT]
+        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerService, self).prestart(server)
@@ -502,7 +502,6 @@ class CompilerService(ServerSlice):
         await super(CompilerService, self).start()
         await self._recover()
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
-        await self._schedule_full_compiles()
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -517,18 +516,12 @@ class CompilerService(ServerSlice):
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
 
-    async def _schedule_full_compiles(self) -> None:
-        """
-        Schedules full compiles for each environment based on its settings.
-        """
-        # TODO: should this move to environment service?
-        env: data.Environment
-        for env in await data.Environment.get_list():
-            self._schedule_full_compile(env.id, await env.get(data.AUTO_FULL_COMPILE))
-
-    def _schedule_full_compile(self, env: uuid.UUID, schedule_cron: str) -> None:
+    def schedule_full_compile(self, env: uuid.UUID, schedule_cron: str) -> None:
         """
         Schedules full compiles for a single environment. Overrides any previously enabled schedule for this environment.
+
+        :param env: The environment to schedule full compiles for
+        :param schedule_cron: The cron expression for the schedule, may be an empty string to disable full compile scheduling.
         """
         # remove old schedule if it exists
         if env in self._scheduled_full_compiles:

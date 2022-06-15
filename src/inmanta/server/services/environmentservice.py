@@ -37,6 +37,7 @@ from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerE
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_COMPILER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_ORCHESTRATION,
@@ -47,6 +48,7 @@ from inmanta.server import (
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
@@ -126,7 +128,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.agent_state_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
+        return [SLICE_COMPILER, SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -136,10 +138,27 @@ class EnvironmentService(protocol.ServerSlice):
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
+        self.compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
-    # TODO: update cron when setting changes
+    async def start(self) -> None:
+        await super().start()
+
+    def _enable_schedules(self) -> None:
+        """
+        Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
+        """
+        env: data.Environment
+        for env in await data.Environment.get_list(details=False):
+            self._enable_schedule(env)
+
+    def _enable_schedule(self, env: data.Environment) -> None:
+        """
+        Schedules appropriate actions for a single environment. Overrides old schedules.
+        """
+        self.compiler_service.schedule_full_compile(env.id, await env.get(data.AUTO_FULL_COMPILE))
+
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
 
@@ -158,6 +177,12 @@ class EnvironmentService(protocol.ServerSlice):
             else:
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
                 self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+
+        if setting.update_schedules:
+            # TODO: recreating all scheduled actions might not be appropriate because it resets the timer on all, not just the
+            # created one.
+            LOGGER.info("Environment setting %s changed. Recreating scheduled actions.", key)
+            self._enable_schedule(env)
 
         return warnings
 
@@ -295,6 +320,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
+    # TODO: update cron when created
     # v2 handlers
     @handle(methods_v2.environment_create)
     async def environment_create(
