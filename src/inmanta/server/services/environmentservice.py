@@ -443,7 +443,7 @@ class EnvironmentService(protocol.ServerSlice):
         if metadata is None:
             metadata = model.ModelMetadata(message="Decommission of environment", type="api")
         version_info = model.ModelVersionInfo(export_metadata=metadata)
-        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
+        await self.orchestration_service.put_version(env, version, [], {}, [], version_info, get_compiler_version())
         return version
 
     @handle(methods_v2.environment_clear, env="id")

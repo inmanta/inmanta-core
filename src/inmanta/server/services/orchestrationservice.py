@@ -35,6 +35,7 @@ from inmanta.data import (
     DesiredStateVersionOrder,
     InvalidSort,
     QueryType,
+    model,
 )
 from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
@@ -198,7 +199,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: JsonType,
+        version_info: Optional[model.ModelVersionInfo] = None,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         partial: bool = False,
@@ -297,14 +298,14 @@ class OrchestrationService(protocol.ServerSlice):
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input: JsonType, key: str, default: object) -> object:
+        def safe_get(input: object, key: str, default: object) -> object:
             if not isinstance(input, dict):
                 return default
             if key not in input:
                 return default
             return input[key]
 
-        metadata: JsonType = safe_get(version_info, const.EXPORT_META_DATA, {})
+        metadata: object = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
         failed = compile_state == const.Compilestate.failed
 
@@ -434,7 +435,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: JsonType,
+        version_info: Optional[model.ModelVersionInfo] = None,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
@@ -450,7 +451,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: list[Any],
         resource_state: Dict[ResourceIdStr, ResourceState] = {},
         unknowns: List[Dict[str, PrimitiveTypes]] = [],
-        version_info: Dict[str, Any] = {},
+        version_info: Optional[model.ModelVersionInfo] = None,
         compiler_version: Optional[str] = None,
         resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
         removed_resource_sets: List[str] = [],

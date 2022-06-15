@@ -522,7 +522,7 @@ def put_version(
     resources: list,
     resource_state: dict = {},
     unknowns: list = None,
-    version_info: dict = None,
+    version_info: Optional[model.ModelVersionInfo] = None,
     compiler_version: str = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
 ):
