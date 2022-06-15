@@ -151,16 +151,17 @@ class EnvironmentService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        self._enable_schedules()
 
-    def _enable_schedules(self) -> None:
+    async def _enable_schedules(self) -> None:
         """
         Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
         """
         env: data.Environment
         for env in await data.Environment.get_list(details=False):
-            self._enable_schedule(env)
+            await self._enable_schedule(env)
 
-    def _enable_schedule(self, env: data.Environment) -> None:
+    async def _enable_schedule(self, env: data.Environment) -> None:
         """
         Schedules appropriate actions for a single environment. Overrides old schedules.
         """
@@ -189,7 +190,7 @@ class EnvironmentService(protocol.ServerSlice):
             # TODO: recreating all scheduled actions might not be appropriate because it resets the timer on all, not just the
             # created one.
             LOGGER.info("Environment setting %s changed. Recreating scheduled actions.", key)
-            self._enable_schedule(env)
+            self.add_background_task(self._enable_schedule(env))
 
         return warnings
 
