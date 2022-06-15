@@ -29,25 +29,28 @@ from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_
 
 LOGGER = logging.getLogger(__name__)
 
+# TODO: util tests
 
 async def test_scheduler_remove(caplog):
-    sched = util.Scheduler("remove")
+    scheduler = util.Scheduler("remove")
 
     i = []
 
     async def action():
         i.append(0)
 
-    sched.add_action(action, IntervalSchedule(0.05, 0))
+    schedule: IntervalSchedule = IntervalSchedule(0.05, 0)
+    scheduler.add_action(action, schedule)
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    sched.remove(action)
+    assert scheduler._executing_tasks[(action, schedule)]
+    scheduler.remove(action, schedule)
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
-    assert not sched._executing_tasks[action]
+    assert not scheduler._executing_tasks[(action, schedule)]
     no_error_in_logs(caplog)
 
 

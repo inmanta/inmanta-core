@@ -54,7 +54,7 @@ from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
-from inmanta.util import ensure_directory_exist
+from inmanta.util import ensure_directory_exist, TaskMethod
 
 RETURNCODE_INTERNAL_ERROR = -1
 
@@ -479,6 +479,7 @@ class CompilerService(ServerSlice):
         self._recompiles: Dict[uuid.UUID, Task] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: List[CompileStateListener] = []
+        self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         return {"task_queue": await data.Compile.get_next_compiles_count(), "listeners": len(self.listeners)}
@@ -521,14 +522,25 @@ class CompilerService(ServerSlice):
         """
         Schedules full compiles for each environment based on its settings.
         """
+        # TODO: should this move to environment service?
         env: data.Environment
         for env in await data.Environment.get_list():
-            if auto_full_compile_schedule := await env.get(data.AUTO_FULL_COMPILE):
-                self.schedule_cron(
-                    # TODO: do_export value correct?
-                    partial(self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()),
-                    auto_full_compile_schedule,
-                )
+            self._schedule_full_compile(env.id, await env.get(data.AUTO_FULL_COMPILE))
+
+    def _schedule_full_compile(self, env: uuid.UUID, schedule_cron: str) -> None:
+        """
+        Schedules full compiles for a single environment. Overrides any previously enabled schedule for this environment.
+        """
+        # remove old schedule if it exists
+        if env in self._scheduled_full_compiles:
+            self.remove_cron(*self._scheduled_full_compiles[env])
+            del self._scheduled_full_compiles[env]
+        # set up new schedule
+        if schedule_cron:
+            # TODO: is do_export value correct?
+            action: TaskMethod = partial(self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+            self.schedule_cron(action, schedule_cron)
+            self._scheduled_full_compiles[env] = (action, schedule_cron)
 
     async def request_recompile(
         self,

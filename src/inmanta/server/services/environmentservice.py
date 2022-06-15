@@ -139,6 +139,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
+    # TODO: update cron when setting changes
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
 
@@ -265,7 +266,6 @@ class EnvironmentService(protocol.ServerSlice):
     async def list_settings(self, env: data.Environment) -> Apireturn:
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
-    # TODO: update cron when setting changes
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
         try:
@@ -420,6 +420,7 @@ class EnvironmentService(protocol.ServerSlice):
         env_list = await data.Environment.get_list(details=details)
         return [env.to_dto() for env in env_list]
 
+    # TODO: update cron when deleted?
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
         env = await data.Environment.get_by_id(environment_id)
@@ -435,6 +436,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
+    # TODO: update cron when decommissioned?
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)

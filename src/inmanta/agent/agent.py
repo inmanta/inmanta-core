@@ -43,7 +43,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import add_future, IntervalSchedule
+from inmanta.util import add_future, IntervalSchedule, ScheduledTask, TaskMethod
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -531,7 +531,7 @@ class AgentInstance(object):
         # init
         self._cache = AgentCache()
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
-        self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
+        self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
 
@@ -636,13 +636,14 @@ class AgentInstance(object):
             )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
-    def _enable_time_trigger(self, action: Callable[[], Awaitable[None]], interval: int, splay: int) -> None:
-        self.process._sched.add_action(action, IntervalSchedule(interval=float(interval), initial_delay=float(splay)))
-        self._time_triggered_actions.add(action)
+    def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
+        schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
+        self.process._sched.add_action(action, schedule)
+        self._time_triggered_actions.add((action, schedule))
 
     def _disable_time_triggers(self) -> None:
-        for action in self._time_triggered_actions:
-            self.process._sched.remove(action)
+        for action, schedule in self._time_triggered_actions:
+            self.process._sched.remove(action, schedule)
         self._time_triggered_actions.clear()
 
     def notify_ready(

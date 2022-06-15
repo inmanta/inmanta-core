@@ -297,20 +297,28 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     # utility methods for extensions developers
     def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None) -> None:
         """
-        Schedule a task repeatedly with a given interval.
+        Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
+        same. Clients that wish to be able to delete tasks should make sure to use a unique action object.
 
         :param interval: The interval between executions of the task.
         :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
         """
-        self._sched.add_action(call, IntervalSchedule(interval, initial_delay))
+        self._sched.add_action(call, IntervalSchedule(float(interval), initial_delay))
 
     def schedule_cron(self, call: TaskMethod, cron: str) -> None:
         """
-        Schedule a task according to a cron specifier.
+        Schedule a task according to a cron specifier. Tasks with the same call and the same schedule are considered the same.
+        Clients that wish to be able to delete tasks should make sure to use a unique action object.
 
         :param cron: The cron specifier to schedule the task by.
         """
-        self._sched.add_action(call, CronSchedule(cron))
+        self._sched.add_action(call, CronSchedule(cron=cron))
+
+    def remove_cron(self, call: TaskMethod, cron: str) -> None:
+        """
+        Remove a cron-scheduled task.
+        """
+        self._sched.remove(call, CronSchedule(cron=cron))
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """

@@ -114,6 +114,7 @@ def ensure_future_and_handle_exception(
 
 
 TaskMethod = Callable[[], Awaitable[object]]
+ScheduledTask = Tuple[TaskMethod, TaskSchedule]
 
 
 class TaskSchedule(ABC):
@@ -144,7 +145,7 @@ class TaskSchedule(ABC):
         ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class IntervalSchedule(TaskSchedule):
     """
     Simple interval schedule for tasks.
@@ -168,15 +169,17 @@ class IntervalSchedule(TaskSchedule):
         )
 
 
+@dataclass(frozen=True)
 class CronSchedule(TaskSchedule):
     """
     Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time.
     """
 
-    def __init__(self, cron: str) -> None:
-        if not croniter.is_valid(cron):
-            raise ValueError("'%s' is not a valid cron expression" % cron)
-        self.cron: str = cron
+    cron: str
+
+    def __post_init__(self) -> None:
+        if not croniter.is_valid(self.cron):
+            raise ValueError("'%s' is not a valid cron expression" % self.cron)
 
     def get_initial_delay(self) -> float:
         # no special treatment for first execution
@@ -196,12 +199,15 @@ class CronSchedule(TaskSchedule):
 
 class Scheduler(object):
     """
-    An event scheduler class
+    An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
+    same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
+    action objects.
     """
+    # TODO: add test for non-unique actions, unique actions with different schedules, actions that are unique only by being wrapped in partial, actions defined in function that is called twice, ...
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[Callable, object] = {}
+        self._scheduled: Dict[ScheduledTask, object] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
@@ -244,9 +250,14 @@ class Scheduler(object):
 
         schedule.log(action)
 
+        task_spec: ScheduledTask = (action, schedule)
+        if task_spec in self._scheduled:
+            # start fresh to respect initial delay, if set
+            self.remove(action, schedule)
+
         def action_function() -> None:
             LOGGER.info("Calling %s" % action)
-            if action in self._scheduled:
+            if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(
                         logger=LOGGER,
@@ -260,18 +271,19 @@ class Scheduler(object):
                 finally:
                     # next iteration
                     ihandle = IOLoop.current().call_later(schedule.get_next_delay(), action_function)
-                    self._scheduled[action] = ihandle
+                    self._scheduled[task_spec] = ihandle
 
         handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
-        self._scheduled[action] = handle
+        self._scheduled[task_spec] = handle
 
-    def remove(self, action: Callable) -> None:
+    def remove(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         """
         Remove a scheduled action
         """
-        if action in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[action])
-            del self._scheduled[action]
+        task: ScheduledTask = (action, schedule)
+        if task in self._scheduled:
+            IOLoop.current().remove_timeout(self._scheduled[task])
+            del self._scheduled[task]
 
     def stop(self) -> None:
         """
@@ -281,7 +293,7 @@ class Scheduler(object):
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
-                action, handle = self._scheduled.popitem()
+                _, handle = self._scheduled.popitem()
                 IOLoop.current().remove_timeout(handle)
         except KeyError:
             pass
