@@ -19,12 +19,13 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 
+from ..types import PrimitiveTypes
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -41,10 +42,10 @@ from .openapi.model import OpenAPI
 def put_partial(
     tid: uuid.UUID,
     version: int,
-    resource_state: Dict[model.ResourceIdStr, str] = {},
-    unknowns: List[Dict[str, str]] = None,
-    version_info: model.ModelVersionInfo = None,
-    compiler_version: str = None,
+    resource_state: Dict[model.ResourceIdStr, ResourceState] = {},
+    unknowns: List[Dict[str, PrimitiveTypes]] = [],
+    version_info: Dict[str, Any] = {},
+    compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
     removed_resource_sets: List[str] = [],
     **kwargs: object,

@@ -26,6 +26,7 @@ import asyncpg
 import pydantic
 
 from inmanta import const, data
+from inmanta.const import ResourceState
 from inmanta.data import (
     APILIMIT,
     AVAILABLE_VERSIONS_TO_KEEP,
@@ -447,11 +448,11 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        resources: list,
-        resource_state: Dict[ResourceIdStr, str] = {},
-        unknowns: list = None,
-        version_info: model.ModelVersionInfo = None,
-        compiler_version: str = None,
+        resources: list[Any],
+        resource_state: Dict[ResourceIdStr, ResourceState] = {},
+        unknowns: List[Dict[str, PrimitiveTypes]] = [],
+        version_info: Dict[str, Any] = {},
+        compiler_version: Optional[str] = None,
         resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
         removed_resource_sets: List[str] = [],
     ) -> None:
@@ -467,7 +468,7 @@ class OrchestrationService(protocol.ServerSlice):
         partial_updates: List[Dict[str, Any]],
         resource_sets: Dict[ResourceIdStr, Optional[str]],
         removed_resource_sets: List[str],
-    ) -> List[any]:
+    ) -> List[Any]:
         """
         :param partial_updates: a list of dictonaries that results from a partial compile.
         :param resource_sets: a dictionary mapping each resource (using its id) with a resource_set if it is in one
@@ -475,8 +476,8 @@ class OrchestrationService(protocol.ServerSlice):
         """
 
         def pair_resources_partial_update_to_old_version(
-            old_resources: List[tuple[[Dict[str, Any]], str]], partial_updates: List[Dict[str, Any]]
-        ):
+            old_resources: List[tuple[Dict[str, Any], Optional[str]]], partial_updates: List[Dict[str, Any]]
+        ) -> List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]]:
             """
             returns a list of tuples (one tuple per resource) containing 4 elements:
             1. the resource as returned by the partial compile
@@ -487,11 +488,16 @@ class OrchestrationService(protocol.ServerSlice):
             :param old_resources: a list of tuples containing the resource in the previous version of the model and its resource_set.
             :param partial_updates: The list of resources part of the partial compile.
             """
-            paired_resources: List[tuple[[Dict[str, Any], [Dict[str, Any]], str, str]]] = []
+            paired_resources: List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]] = []
             for partial_update in partial_updates:
                 key = Id.parse_id(partial_update["id"]).resource_str()
                 resource_set = resource_sets.get(key)
-                pair = (partial_update, None, resource_set, None)
+                pair: tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]] = (
+                    partial_update,
+                    None,
+                    resource_set,
+                    None,
+                )
                 for old_resource in old_resources:
                     res = old_resource[0]
                     if key == Id.parse_id(res["id"]).resource_str():
@@ -499,7 +505,9 @@ class OrchestrationService(protocol.ServerSlice):
                 paired_resources.append(pair)
             return paired_resources
 
-        def get_updated_resource_sets(paired_resources: List[tuple[[Dict[str, Any], [Dict[str, Any]], str, str]]]) -> Set[str]:
+        def get_updated_resource_sets(
+            paired_resources: List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]]
+        ) -> Set[str]:
             """
             returns a set of strings containing the name of all the resource_sets that have changed resources
             in the result of the partial compile.
@@ -513,11 +521,11 @@ class OrchestrationService(protocol.ServerSlice):
                     result.add(resource_set)
             return result
 
-        async def get_old_resources():
+        async def get_old_resources() -> List[tuple[Dict[str, Any], Optional[str]]]:
             old_data = await data.Resource.get_list()
-            result: List[tuple[[Dict[str, Any]], str]] = []
+            result: List[tuple[Dict[str, Any], Optional[str]]] = []
             for res in old_data:
-                resource = {
+                resource: Dict[str, Any] = {
                     "id": res.resource_version_id,
                 }
                 resource.update(res.attributes)
@@ -528,7 +536,7 @@ class OrchestrationService(protocol.ServerSlice):
         paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
         updated_resource_sets = get_updated_resource_sets(paired_resources)
 
-        def copy_with_incremented_version(resource):
+        def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
             res = Id.parse_id(resource["id"])
             res.increment_version()
             resource["id"] = res.resource_version_str()
