@@ -35,7 +35,6 @@ from inmanta.data import (
     DesiredStateVersionOrder,
     InvalidSort,
     QueryType,
-    model,
 )
 from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
