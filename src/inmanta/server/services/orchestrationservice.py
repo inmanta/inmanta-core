@@ -469,7 +469,7 @@ class OrchestrationService(protocol.ServerSlice):
         removed_resource_sets: List[str],
     ) -> List[any]:
         """
-        :param old_version: a list of tuples containing the resource in the previous version of the model and its resource_set.
+        :param partial_updates: a list of dictonaries that results from a partial compile.
         :param resource_sets: a dictionary mapping each resource (using its id) with a resource_set if it is in one
         :param removed_resource_sets: The names of the resource sets removed in this partial compile.
         """
@@ -497,10 +497,15 @@ class OrchestrationService(protocol.ServerSlice):
                     if key == Id.parse_id(res["id"]).resource_str():
                         pair = (partial_update, res, resource_set, old_resource[1])
                 paired_resources.append(pair)
-
             return paired_resources
 
         def get_updated_resource_sets(paired_resources: List[tuple[[Dict[str, Any], [Dict[str, Any]], str, str]]]) -> Set[str]:
+            """
+            returns a set of strings containing the name of all the resource_sets that have changed resources
+            in the result of the partial compile.
+
+            :param paired_resources: see pair_resources_partial_update_to_old_version
+            """
             result: Set[str] = set()
             for res in paired_resources:
                 resource_set = res[2]

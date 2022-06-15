@@ -50,7 +50,7 @@ def put_partial(
     **kwargs: object,
 ) -> None:
     """
-    Store a new version of the configuration model
+    Store a new version of the configuration model after a partial recompile.
 
     The version number must be obtained through the reserve_version call
 
@@ -66,7 +66,8 @@ def put_partial(
     """
 
 
-# todo: create ticket to clean kwargs and type resources
+# TODO: create ticket to clean kwargs and type resources
+
 # Method for working with projects
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
