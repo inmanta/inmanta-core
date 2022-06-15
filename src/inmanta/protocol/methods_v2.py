@@ -44,7 +44,7 @@ def put_partial(
     version: int,
     resource_state: Dict[model.ResourceIdStr, ResourceState] = {},
     unknowns: List[Dict[str, PrimitiveTypes]] = [],
-    version_info: model.ModelVersionInfo = None,
+    version_info: Optional[model.ModelVersionInfo] = None,
     compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
     removed_resource_sets: List[str] = [],
