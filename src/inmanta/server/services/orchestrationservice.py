@@ -459,8 +459,17 @@ class OrchestrationService(protocol.ServerSlice):
         pydantic.parse_obj_as(List[Dict[str, Any]], resources)
         merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
         await self._put_version(
-            env, version, merged_resources, resource_state, unknowns, version_info, compiler_version, resource_sets, partial=True
+            env,
+            version,
+            merged_resources,
+            resource_state,
+            unknowns,
+            version_info,
+            compiler_version,
+            resource_sets,
+            partial=True,
         )
+
     async def merge_partial_with_old(
         self,
         partial_updates: List[Dict[str, Any]],
