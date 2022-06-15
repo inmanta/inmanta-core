@@ -97,7 +97,7 @@ async def test_resource_sets_via_put_version(server, client, environment, client
 
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):
     """
-    When an partial compile updates a certain resource set, the entire resource set
+    When a partial compile updates a certain resource set, the entire resource set
     is replaced by the same resource set in the partial compile.
     """
     version = await clienthelper.get_version()

@@ -435,7 +435,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: model.ModelVersionInfo,
+        version_info: JsonType,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
@@ -459,10 +459,8 @@ class OrchestrationService(protocol.ServerSlice):
         pydantic.parse_obj_as(List[Dict[str, Any]], resources)
         merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
         await self._put_version(
-            env, version, merged_resources, resource_state, unknowns, version_info, compiler_version, resource_sets, True
+            env, version, merged_resources, resource_state, unknowns, version_info, compiler_version, resource_sets, partial=True
         )
-        return
-
     async def merge_partial_with_old(
         self,
         partial_updates: List[Dict[str, Any]],
@@ -526,7 +524,7 @@ class OrchestrationService(protocol.ServerSlice):
             old_data = await data.Resource.get_list()
             result: List[tuple[Dict[str, Any], Optional[str]]] = []
             for res in old_data:
-                resource: Dict[str, Any] = {
+                resource: Dict[str, ResourceVersionIdStr] = {
                     "id": res.resource_version_id,
                 }
                 resource.update(res.attributes)
