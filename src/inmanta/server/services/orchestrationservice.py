@@ -456,7 +456,14 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
         removed_resource_sets: List[str] = [],
     ) -> None:
-        pydantic.parse_obj_as(List[Dict[str, Any]], resources)
+        try:
+            pydantic.parse_obj_as(List[Dict[str, Any]], resources)
+        except pydantic.ValidationError:
+            raise BadRequest(
+                "Type validation failed for resources in put_patrial."
+                f"excepted an argument of type List[Dict[str, Any] but received {resources}"
+            )
+
         merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
         await self._put_version(
             env,

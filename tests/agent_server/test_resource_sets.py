@@ -666,3 +666,67 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         "test::Resource[agent1,key=key6]": None,
         "test::Resource[agent1,key=key7]": None,
     }
+
+
+async def test_put_partial_validation_error(server, client, environment, clienthelper):
+    """
+    A partial compile can update multiple resource sets at the same time.
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+        "test::Resource[agent1,key=key2]": "set-b",
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+    version = await clienthelper.get_version()
+    resources_partial = ["key1", "key2]"]
+
+    result = await client.put_partial(
+        tid=environment,
+        version=version,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        compiler_version=get_compiler_version(),
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+            "test::Resource[agent1,key=key2]": "set-b",
+        },
+    )
+
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: Type validation failed for resources in put_"
+        "patrial.excepted an argument of type List[Dict[str, Any] but "
+        "received ['key1', 'key2]']"
+    )
