@@ -510,6 +510,7 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
     """
     dryrun and deploy a configuration model
     """
+    # TODO: Arnaud
     resource_container.Provider.reset()
     myagent = agent.Agent(
         hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
