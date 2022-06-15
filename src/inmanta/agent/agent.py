@@ -25,7 +25,7 @@ import time
 import uuid
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado import ioloop
 from tornado.concurrent import Future
@@ -43,7 +43,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import add_future, IntervalSchedule, ScheduledTask, TaskMethod
+from inmanta.util import IntervalSchedule, ScheduledTask, TaskMethod, add_future
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5

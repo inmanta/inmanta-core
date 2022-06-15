@@ -17,7 +17,6 @@
 """
 import abc
 import asyncio
-import croniter
 import datetime
 import json
 import logging
@@ -54,7 +53,7 @@ from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
-from inmanta.util import ensure_directory_exist, TaskMethod
+from inmanta.util import TaskMethod, ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
 
@@ -538,7 +537,9 @@ class CompilerService(ServerSlice):
         # set up new schedule
         if schedule_cron:
             # TODO: is do_export value correct?
-            action: TaskMethod = partial(self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4())
+            action: TaskMethod = partial(
+                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()
+            )
             self.schedule_cron(action, schedule_cron)
             self._scheduled_full_compiles[env] = (action, schedule_cron)
 

@@ -36,7 +36,7 @@ from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes, JsonType
-from inmanta.util import CronSchedule, CycleException, Scheduler, TaskHandler, TaskMethod, stable_depth_first, IntervalSchedule
+from inmanta.util import CronSchedule, CycleException, IntervalSchedule, Scheduler, TaskHandler, TaskMethod, stable_depth_first
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager

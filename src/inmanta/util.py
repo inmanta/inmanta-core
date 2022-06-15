@@ -31,7 +31,6 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
 from collections import defaultdict
-from croniter import croniter
 from dataclasses import dataclass
 from logging import Logger
 from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
@@ -39,6 +38,7 @@ from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optiona
 from tornado import gen
 from tornado.ioloop import IOLoop
 
+from croniter import croniter
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
@@ -114,7 +114,6 @@ def ensure_future_and_handle_exception(
 
 
 TaskMethod = Callable[[], Awaitable[object]]
-ScheduledTask = Tuple[TaskMethod, TaskSchedule]
 
 
 class TaskSchedule(ABC):
@@ -143,6 +142,9 @@ class TaskSchedule(ABC):
     def log(self, action: TaskMethod) -> None:
         # TODO: docstring
         ...
+
+
+ScheduledTask = Tuple[TaskMethod, TaskSchedule]
 
 
 @dataclass(frozen=True)
@@ -192,9 +194,7 @@ class CronSchedule(TaskSchedule):
         return delay.total_seconds()
 
     def log(self, action: TaskMethod) -> None:
-        LOGGER.debug(
-            "Scheduling action %s according to cron specifier '%s'", action, self.cron
-        )
+        LOGGER.debug("Scheduling action %s according to cron specifier '%s'", action, self.cron)
 
 
 class Scheduler(object):
@@ -203,7 +203,9 @@ class Scheduler(object):
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
     action objects.
     """
-    # TODO: add test for non-unique actions, unique actions with different schedules, actions that are unique only by being wrapped in partial, actions defined in function that is called twice, ...
+
+    # TODO: add test for non-unique actions, unique actions with different schedules,
+    #   actions that are unique only by being wrapped in partial, actions defined in function that is called twice, ...
 
     def __init__(self, name: str) -> None:
         self.name = name

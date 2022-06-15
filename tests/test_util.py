@@ -24,12 +24,13 @@ import uuid
 import pytest
 
 from inmanta import util
-from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first, IntervalSchedule
+from inmanta.util import CycleException, IntervalSchedule, ensure_future_and_handle_exception, stable_depth_first
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 
 # TODO: util tests
+
 
 async def test_scheduler_remove(caplog):
     scheduler = util.Scheduler("remove")

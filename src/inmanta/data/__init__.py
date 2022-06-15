@@ -56,9 +56,9 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg.protocol import Record
-from croniter import croniter
 
 import inmanta.db.versions
+from croniter import croniter
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
