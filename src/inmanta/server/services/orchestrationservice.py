@@ -214,6 +214,7 @@ class OrchestrationService(protocol.ServerSlice):
          }
         :param version_info:
         :param compiler_version:
+        :param partial: set to True to do a partial compile, False to do a full compile.
         :return:
         """
 
