@@ -61,7 +61,7 @@ def put_partial(
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
-    :param resource_sets: a dictionary describing which resource belongs to which resource set
+    :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
     :param **kwargs: bypass the type checking for resources that result from the partial compile
     """
