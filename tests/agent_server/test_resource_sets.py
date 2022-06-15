@@ -443,6 +443,9 @@ async def test_resource_sets_dependency_graph(server, client, environment, clien
     assert result.result["message"] == (
         "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
         "{'test::Resource[agent1,key=key2]', 'test::Resource[agent1,key=key3]'}"
+    ) or (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=key3]', 'test::Resource[agent1,key=key2]'}"
     )
 
 
