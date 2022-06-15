@@ -563,7 +563,7 @@ class OrchestrationService(protocol.ServerSlice):
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({resource_partial['id']}) to another resource set"
                     )
-                if resource_set_partial == None and resource_partial != resource_old:  # todo:: is the != comparison enough?
+                if resource_set_partial is None and resource_partial != resource_old:  # todo:: is the != comparison enough?
                     raise BadRequest(
                         f"Resource ({resource_partial['id']}) without a resource set cannot be updated via a partial compile"
                     )
