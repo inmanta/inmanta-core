@@ -435,7 +435,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: model.ModelVersionInfo,
+        version_info: JsonType,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
