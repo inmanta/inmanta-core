@@ -48,7 +48,7 @@ def put_partial(
     compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
     removed_resource_sets: List[str] = [],
-    **kwargs: object,
+    **kwargs: object,  # bypass the type checking for resources that result from the partial compile
 ) -> None:
     """
     Store a new version of the configuration model after a partial recompile.
@@ -63,7 +63,7 @@ def put_partial(
     :param compiler_version: version of the compiler, if not provided, this call will return an error
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
-    :param **kwargs: bypass the type checking for resources that result from the partial compile
+    :param **kwargs: support value 'resources' of type 'List[Dict[str, Any]'
     """
 
 
