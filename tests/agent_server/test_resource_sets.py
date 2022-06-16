@@ -812,7 +812,7 @@ async def test_put_partial_validation_error(server, client, environment, clienth
     )
     assert result.code == 200
     version = await clienthelper.get_version()
-    resources_partial = ["key1", "key2]"]
+    resources_partial = ["key1", "key2"]
 
     result = await client.put_partial(
         tid=environment,
@@ -831,7 +831,7 @@ async def test_put_partial_validation_error(server, client, environment, clienth
     assert result.code == 400
     assert result.result["message"] == (
         "Invalid request: Type validation failed for resources argument. Expected an argument of type List[Dict[str, Any]] but "
-        "received ['key1', 'key2]'"
+        "received ['key1', 'key2']"
     )
 
 
