@@ -354,13 +354,13 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
+        if not resource_sets:
+            resource_sets = {}
+
         res_ids = [Id.parse_id(r["id"]).resource_str() for r in resources]
         for resource in resource_sets.keys():
             if resource not in res_ids:
                 raise BadRequest(f"Resource {resource} was found in the resource_sets but not in the resources")
-
-        if not resource_sets:
-            resource_sets = {}
 
         started = datetime.datetime.now().astimezone()
 
@@ -593,7 +593,7 @@ class OrchestrationService(protocol.ServerSlice):
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "
-                f"Expected an argument of type List[Dict[str, Any] but received {resources}"
+                f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
         for r in resource_sets.keys():

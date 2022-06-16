@@ -574,7 +574,6 @@ async def test_put_partial_dependency_graph(server, client, environment, clienth
         compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
-            "test::Resource[agent1,key=key2]": "set-a",
         },
     )
 
