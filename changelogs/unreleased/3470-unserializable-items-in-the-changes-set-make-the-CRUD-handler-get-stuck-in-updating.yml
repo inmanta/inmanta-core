@@ -1,6 +1,7 @@
-description: Cast sets to string during JSON serialization.
+description: Cast items in the 'changes' set that aren't JSON-serializable to str.
 issue-nr: 3470
 change-type: patch
 destination-branches: [iso5, master]
 sections: {
+  bugfix: "{{description}}"
 }
