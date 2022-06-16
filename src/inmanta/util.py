@@ -119,7 +119,7 @@ TaskMethod = Callable[[], Awaitable[object]]
 class TaskSchedule(ABC):
     """
     Abstract base class for a task schedule specification. Offers methods to inspect when the task should be scheduled, relative
-    to the current time.
+    to the current time. Stateless.
     """
 
     @abstractmethod
@@ -140,7 +140,9 @@ class TaskSchedule(ABC):
 
     @abstractmethod
     def log(self, action: TaskMethod) -> None:
-        # TODO: docstring
+        """
+        Log a message about the action being scheduled according to this schedule.
+        """
         ...
 
 
@@ -152,8 +154,8 @@ class IntervalSchedule(TaskSchedule):
     """
     Simple interval schedule for tasks.
 
-    :param interval: The interval between execution of actions.
-    :param initial_delay: Delay to the first execution. If not set, interval is used.
+    :param interval: The interval in seconds between execution of actions.
+    :param initial_delay: Delay in seconds to the first execution. If not set, interval is used.
     """
 
     interval: float
@@ -174,7 +176,8 @@ class IntervalSchedule(TaskSchedule):
 @dataclass(frozen=True)
 class CronSchedule(TaskSchedule):
     """
-    Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time.
+    Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time. Cron schedule is
+    always interpreted as UTC.
     """
 
     cron: str
@@ -188,8 +191,9 @@ class CronSchedule(TaskSchedule):
         return self.get_next_delay()
 
     def get_next_delay(self) -> float:
-        # no need for timezone-aware because no datetime state is kept/returned (only a delta)
-        now: datetime.datetime = datetime.datetime.now()
+        # TODO: document this!
+        # always interpret cron schedules as UTC
+        now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
         delay: datetime.timedelta = croniter(self.cron, now).get_next(datetime.datetime) - now
         return delay.total_seconds()
 
@@ -203,9 +207,6 @@ class Scheduler(object):
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
     action objects.
     """
-
-    # TODO: add test for non-unique actions, unique actions with different schedules,
-    #   actions that are unique only by being wrapped in partial, actions defined in function that is called twice, ...
 
     def __init__(self, name: str) -> None:
         self.name = name

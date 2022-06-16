@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -20,16 +20,83 @@ import dataclasses
 import datetime
 import logging
 import uuid
+from functools import partial
+from typing import Optional
 
 import pytest
 
 from inmanta import util
-from inmanta.util import CycleException, IntervalSchedule, ensure_future_and_handle_exception, stable_depth_first
+from inmanta.util import (
+    CronSchedule,
+    CycleException,
+    IntervalSchedule,
+    TaskSchedule,
+    ensure_future_and_handle_exception,
+    stable_depth_first,
+)
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 
 # TODO: util tests
+
+
+def test_interval_schedule() -> None:
+    simple: TaskSchedule = IntervalSchedule(interval=1.0)
+    assert simple.get_initial_delay() == 1.0
+    assert simple.get_next_delay() == 1.0
+    with_delay: TaskSchedule = IntervalSchedule(interval=1.0, initial_delay=0.0)
+    assert with_delay.get_initial_delay() == 0.0
+    assert with_delay.get_next_delay() == 1.0
+
+
+def test_interval_schedule_equals() -> None:
+    assert IntervalSchedule(interval=1.0) == IntervalSchedule(interval=1.0)
+    assert IntervalSchedule(interval=1.0) != IntervalSchedule(interval=2.0)
+    assert IntervalSchedule(interval=1.0, initial_delay=0.5) == IntervalSchedule(interval=1.0, initial_delay=0.5)
+    assert IntervalSchedule(interval=1.0, initial_delay=0.5) != IntervalSchedule(interval=1.0, initial_delay=0.0)
+
+
+def test_cron_schedule(monkeypatch) -> None:
+    def freeze_time(time: datetime.datetime) -> None:
+        """
+        Freeze time to a given value to avoid race conditions.
+        """
+        datetime_orig = datetime.datetime
+
+        class FrozenDatetimeMeta(type(datetime_orig)):
+            # mock isinstance checks on datetime objects
+            def __instancecheck__(self, instance):
+                return super().__instancecheck__(instance) or isinstance(instance, datetime_orig)
+
+        class frozendatetime(datetime.datetime, metaclass=FrozenDatetimeMeta):
+            @classmethod
+            def now(cls, tz: Optional[datetime.tzinfo] = None) -> datetime.datetime:
+                if tz is None:
+                    return time if time.tzinfo is None else time.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                else:
+                    aware: datetime.datetime = time if time.tzinfo is not None else time.replace(tzinfo=datetime.timezone.utc)
+                    return aware.astimezone(tz)
+
+        monkeypatch.setattr(datetime, "datetime", frozendatetime)
+
+    # min hour day month dow
+    schedule: TaskSchedule = CronSchedule(cron="1 2 * * *")
+
+    # year month day hour min sec ms
+    now: datetime.datetime = datetime.datetime(2022, 6, 16, 10, 15, 3, 0)
+    freeze_time(now)
+    next_delta: datetime.timedelta = datetime.datetime(2022, 6, 17, 2, 1, 0, 0) - now
+    assert schedule.get_initial_delay() == schedule.get_next_delay() == next_delta.total_seconds()
+
+    tomorrow: datetime.datetime = now + datetime.timedelta(days=1, seconds=42)
+    freeze_time(tomorrow)
+    assert schedule.get_initial_delay() == schedule.get_next_delay() == next_delta.total_seconds() - 42
+
+
+def test_cron_schedule_equals() -> None:
+    assert CronSchedule(cron="1 2 * * *") == CronSchedule(cron="1 2 * * *")
+    assert CronSchedule(cron="1 2 * * *") != CronSchedule(cron="0 2 * * *")
 
 
 async def test_scheduler_remove(caplog):
@@ -46,13 +113,89 @@ async def test_scheduler_remove(caplog):
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    assert scheduler._executing_tasks[(action, schedule)]
+    assert (action, schedule) in scheduler._scheduled
     scheduler.remove(action, schedule)
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
-    assert not scheduler._executing_tasks[(action, schedule)]
+    assert not scheduler._executing_tasks[action]
+    assert not (action, schedule) in scheduler._scheduled
     no_error_in_logs(caplog)
+
+
+async def test_scheduler_remove_same_action() -> None:
+    scheduler = util.Scheduler("remove_same_action")
+
+    async def myaction() -> None:
+        pass
+
+    schedule_one: TaskSchedule = IntervalSchedule(100)
+    schedule_two: TaskSchedule = IntervalSchedule(200)
+
+    # same action, different schedule => expect distinct tasks
+    scheduler.add_action(myaction, schedule_one)
+    scheduler.add_action(myaction, schedule_two)
+
+    # same action wrapped in `partial`, same schedule => expect distinct tasks
+    partial_one = partial(myaction)
+    partial_two = partial(myaction)
+    assert partial_one != partial_two
+    scheduler.add_action(partial_one, schedule_one)
+    scheduler.add_action(partial_two, schedule_one)
+
+    locally_defined: list[object] = []
+
+    def add_locally_defined() -> None:
+        async def myaction() -> None:
+            pass
+
+        assert (myaction, schedule_one) not in scheduler._scheduled
+        scheduler.add_action(myaction, schedule_one)
+        locally_defined.append(myaction)
+
+    add_locally_defined()
+    add_locally_defined()
+
+    scheduler.add_action(myaction, schedule_two)
+    assert (myaction, schedule_one) in scheduler._scheduled
+    assert (myaction, schedule_two) in scheduler._scheduled
+    assert (partial_one, schedule_one) in scheduler._scheduled
+    assert (partial_two, schedule_one) in scheduler._scheduled
+    assert (locally_defined[0], schedule_one) in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(myaction, schedule_one)
+    assert (myaction, schedule_one) not in scheduler._scheduled
+    assert (myaction, schedule_two) in scheduler._scheduled
+    assert (partial_one, schedule_one) in scheduler._scheduled
+    assert (partial_two, schedule_one) in scheduler._scheduled
+    assert (locally_defined[0], schedule_one) in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(myaction, schedule_two)
+    assert (myaction, schedule_two) not in scheduler._scheduled
+    assert (partial_one, schedule_one) in scheduler._scheduled
+    assert (partial_two, schedule_one) in scheduler._scheduled
+    assert (locally_defined[0], schedule_one) in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(partial_one, schedule_one)
+    assert (partial_one, schedule_one) not in scheduler._scheduled
+    assert (partial_two, schedule_one) in scheduler._scheduled
+    assert (locally_defined[0], schedule_one) in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(partial_two, schedule_one)
+    assert (partial_two, schedule_one) not in scheduler._scheduled
+    assert (locally_defined[0], schedule_one) in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(locally_defined[0], schedule_one)
+    assert (locally_defined[0], schedule_one) not in scheduler._scheduled
+    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+
+    scheduler.remove(locally_defined[1], schedule_one)
+    assert (locally_defined[1], schedule_one) not in scheduler._scheduled
 
 
 async def test_scheduler_stop(caplog):
@@ -152,7 +295,7 @@ async def test_scheduler_cancel_executing_tasks() -> None:
             raise
 
     sched = util.Scheduler("xxx")
-    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0))
+    sched.add_action(action, CronSchedule("* * * * * *"))
     await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
     assert task_status.task_is_executing
     assert not task_status.task_was_cancelled
