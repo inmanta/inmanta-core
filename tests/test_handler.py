@@ -87,12 +87,11 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")
 
 
-def test_3470_CRUD_handler_with_unserializable_items(caplog):
+def test_3470_CRUD_handler_with_unserializable_items():
     """
     This test case checks that unserializable items in the 'changes' set not longer make
     the CRUD handler hang.
     """
-    caplog.set_level(logging.DEBUG)
 
     class DummyCrud(CRUDHandler):
         def __init__(self):
@@ -104,19 +103,19 @@ def test_3470_CRUD_handler_with_unserializable_items(caplog):
         def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
             self.updated = True
 
-    @resource("aa::Aa", "aa", "aa")
+    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
     class TestResource(PurgeableResource):
         fields = ("value",)
 
-    res = TestResource(Id("aa::Aa", "aa", "aa", "aa", 1))
+    res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
 
     # Sets are not JSON serializable
     res.value = {"a", "b"}
     res.purged = False
 
-    ctx = HandlerContext(res, False)
+    ctx = HandlerContext(res, dry_run=False)
 
     handler = DummyCrud()
-    handler.execute(ctx, res, False)
+    handler.execute(ctx, res, dry_run=False)
 
     assert handler.updated
