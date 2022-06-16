@@ -62,6 +62,129 @@ from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 LOGGER = logging.getLogger(__name__)
 
 
+class PairedResource(object):
+    def __init__(
+        self,
+        new_resource: Dict[str, Any],
+        old_resource: Optional[Dict[str, Any]],
+        new_resource_set: Optional[str],
+        old_resource_set: Optional[str],
+    ) -> None:
+        self.new_resource = new_resource
+        self.old_resource = old_resource
+        self.new_resource_set = new_resource_set
+        self.old_resource_set = old_resource_set
+
+
+class PartialUpdateMerger(object):
+    def __init__(
+        self,
+        partial_updates: List[Dict[str, Any]],
+        resource_sets: Dict[ResourceIdStr, Optional[str]],
+        removed_resource_sets: List[str],
+    ) -> None:
+        self.partial_updates = partial_updates
+        self.resource_sets = resource_sets
+        self.removed_resource_sets = removed_resource_sets
+
+    def _pair_resources_partial_update_to_old_version(
+        self, old_resources: List[tuple[Dict[str, Any], Optional[str]]], partial_updates: List[Dict[str, Any]]
+    ) -> List[PairedResource]:
+        """
+        returns a list of paired resources
+
+        :param old_resources: a list of tuples containing the resource in the previous version of the model
+        and its resource_set.
+        :param partial_updates: The list of resources part of the partial compile.
+        """
+        paired_resources: List[PairedResource] = []
+        for partial_update in partial_updates:
+            key = Id.parse_id(partial_update["id"]).resource_str()
+            resource_set = self.resource_sets.get(key)
+            pair: PairedResource = PairedResource(
+                partial_update,
+                None,
+                resource_set,
+                None,
+            )
+            for old_resource in old_resources:
+                res = old_resource[0]
+                if key == Id.parse_id(res["id"]).resource_str():
+                    pair.old_resource = res
+                    pair.old_resource_set = old_resource[1]
+            paired_resources.append(pair)
+        return paired_resources
+
+    def _get_updated_resource_sets(self, paired_resources: List[PairedResource]) -> Set[str]:
+        """
+        returns a set of strings containing the name of all the resource_sets that have changed resources
+        in the result of the partial compile.
+
+        :param paired_resources: see pair_resources_partial_update_to_old_version
+        """
+        result: Set[str] = set()
+        for res in paired_resources:
+            resource_set = res.new_resource_set
+            if resource_set:
+                result.add(resource_set)
+        return result
+
+    async def _get_old_resources(self) -> List[tuple[Dict[str, Any], Optional[str]]]:
+        old_data = await data.Resource.get_list()
+        result: List[tuple[Dict[str, Any], Optional[str]]] = []
+        for res in old_data:
+            resource: Dict[str, ResourceVersionIdStr] = {
+                "id": res.resource_version_id,
+            }
+            resource.update(res.attributes)
+            result.append((resource, res.resource_set))
+        return result
+
+    async def merge_partial_with_old(self) -> List[Any]:
+
+        old_resources = await self._get_old_resources()
+        paired_resources = self._pair_resources_partial_update_to_old_version(old_resources, self.partial_updates)
+        updated_resource_sets = self._get_updated_resource_sets(paired_resources)
+
+        def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
+            res = Id.parse_id(resource["id"])
+            res.increment_version()
+            resource["id"] = res.resource_version_str()
+            return resource
+
+        to_keep: List[Dict[str, Any]] = [
+            copy_with_incremented_version(r[0])
+            for r in old_resources
+            if not r[1] in self.removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
+        ]
+
+        result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
+
+        for paired_resource in paired_resources:
+            assert paired_resource.new_resource is not None
+            assert (
+                paired_resource.old_resource is None
+                or Id.parse_id(paired_resource.old_resource["id"]).resource_str()
+                == Id.parse_id(paired_resource.new_resource["id"]).resource_str()
+            )
+            if paired_resource.old_resource is None:
+                result[paired_resource.new_resource["id"]] = paired_resource.new_resource
+            else:
+                if paired_resource.new_resource_set != paired_resource.old_resource_set:
+                    raise BadRequest(
+                        f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) to another resource set"
+                    )
+                if (
+                    paired_resource.new_resource_set is None and paired_resource.new_resource != paired_resource.old_resource
+                ):  # todo:: is the != comparison enough?
+                    raise BadRequest(
+                        f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot be updated via a partial compile"
+                    )
+                else:
+                    result[paired_resource.new_resource["id"]] = paired_resource.new_resource
+        return list(result.values())
+
+
 class OrchestrationService(protocol.ServerSlice):
     """Resource Manager service"""
 
@@ -464,8 +587,8 @@ class OrchestrationService(protocol.ServerSlice):
                 "Type validation failed for resources in put_patrial."
                 f"excepted an argument of type List[Dict[str, Any] but received {resources}"
             )
-
-        merged_resources = await self.merge_partial_with_old(resources, resource_sets, removed_resource_sets)
+        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets)
+        merged_resources = await merger.merge_partial_with_old()
         await self._put_version(
             env,
             version,
@@ -477,115 +600,6 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets,
             partial=True,
         )
-
-    async def merge_partial_with_old(
-        self,
-        partial_updates: List[Dict[str, Any]],
-        resource_sets: Dict[ResourceIdStr, Optional[str]],
-        removed_resource_sets: List[str],
-    ) -> List[Any]:
-        """
-        :param partial_updates: a list of dictonaries that results from a partial compile.
-        :param resource_sets: a dictionary mapping each resource (using its id) with a resource_set if it is in one
-        :param removed_resource_sets: The names of the resource sets removed in this partial compile.
-        """
-
-        def pair_resources_partial_update_to_old_version(
-            old_resources: List[tuple[Dict[str, Any], Optional[str]]], partial_updates: List[Dict[str, Any]]
-        ) -> List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]]:
-            """
-            returns a list of tuples (one tuple per resource) containing 4 elements:
-            1. the resource as returned by the partial compile
-            2. the resource as it is in the old version
-            3. the resource_set the resource belongs to in the partial compile
-            4. the resource_set the resource belongs to in the previous version
-
-            :param old_resources: a list of tuples containing the resource in the previous version of the model
-            and its resource_set.
-            :param partial_updates: The list of resources part of the partial compile.
-            """
-            paired_resources: List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]] = []
-            for partial_update in partial_updates:
-                key = Id.parse_id(partial_update["id"]).resource_str()
-                resource_set = resource_sets.get(key)
-                pair: tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]] = (
-                    partial_update,
-                    None,
-                    resource_set,
-                    None,
-                )
-                for old_resource in old_resources:
-                    res = old_resource[0]
-                    if key == Id.parse_id(res["id"]).resource_str():
-                        pair = (partial_update, res, resource_set, old_resource[1])
-                paired_resources.append(pair)
-            return paired_resources
-
-        def get_updated_resource_sets(
-            paired_resources: List[tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[str], Optional[str]]]
-        ) -> Set[str]:
-            """
-            returns a set of strings containing the name of all the resource_sets that have changed resources
-            in the result of the partial compile.
-
-            :param paired_resources: see pair_resources_partial_update_to_old_version
-            """
-            result: Set[str] = set()
-            for res in paired_resources:
-                resource_set = res[2]
-                if resource_set:
-                    result.add(resource_set)
-            return result
-
-        async def get_old_resources() -> List[tuple[Dict[str, Any], Optional[str]]]:
-            old_data = await data.Resource.get_list()
-            result: List[tuple[Dict[str, Any], Optional[str]]] = []
-            for res in old_data:
-                resource: Dict[str, ResourceVersionIdStr] = {
-                    "id": res.resource_version_id,
-                }
-                resource.update(res.attributes)
-                result.append((resource, res.resource_set))
-            return result
-
-        old_resources = await get_old_resources()
-        paired_resources = pair_resources_partial_update_to_old_version(old_resources, partial_updates)
-        updated_resource_sets = get_updated_resource_sets(paired_resources)
-
-        def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
-            res = Id.parse_id(resource["id"])
-            res.increment_version()
-            resource["id"] = res.resource_version_str()
-            return resource
-
-        to_keep: List[Dict[str, Any]] = [
-            copy_with_incremented_version(r[0])
-            for r in old_resources
-            if not r[1] in removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
-        ]
-
-        result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
-
-        for resource_partial, resource_old, resource_set_partial, resource_set_old in paired_resources:
-            assert resource_partial is not None
-            assert (
-                resource_old is None
-                or Id.parse_id(resource_old["id"]).resource_str() == Id.parse_id(resource_partial["id"]).resource_str()
-            )
-            if resource_old is None:
-                result[resource_partial["id"]] = resource_partial
-            else:
-                if resource_set_partial != resource_set_old:
-                    raise BadRequest(
-                        f"A partial compile cannot migrate a resource({resource_partial['id']}) to another resource set"
-                    )
-                if resource_set_partial is None and resource_partial != resource_old:  # todo:: is the != comparison enough?
-                    raise BadRequest(
-                        f"Resource ({resource_partial['id']}) without a resource set cannot be updated via a partial compile"
-                    )
-                else:
-                    result[resource_partial["id"]] = resource_partial
-        return list(result.values())
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
