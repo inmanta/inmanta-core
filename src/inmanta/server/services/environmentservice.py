@@ -167,6 +167,12 @@ class EnvironmentService(protocol.ServerSlice):
         """
         self.compiler_service.schedule_full_compile(env.id, await env.get(data.AUTO_FULL_COMPILE))
 
+    def _disable_schedule(self, env: data.Environment) -> None:
+        """
+        Removes scheduling of all appropriate actions for a single environment.
+        """
+        self.compiler_service.schedule_full_compile(env.id, schedule_cron="")
+
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
 
@@ -188,7 +194,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         if setting.update_schedules:
             # TODO: recreating all scheduled actions might not be appropriate because it resets the timer on all, not just the
-            # created one.
+            # updated one.
             LOGGER.info("Environment setting %s changed. Recreating scheduled actions.", key)
             self.add_background_task(self._enable_schedule(env))
 
@@ -328,7 +334,6 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
 
-    # TODO: update cron when created
     # v2 handlers
     @handle(methods_v2.environment_create)
     async def environment_create(
@@ -373,6 +378,7 @@ class EnvironmentService(protocol.ServerSlice):
         except StringDataRightTruncationError:
             raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
+        await self._enable_schedule(env)
         return env.to_dto()
 
     def validate_icon(self, icon: str) -> None:
@@ -454,7 +460,6 @@ class EnvironmentService(protocol.ServerSlice):
         env_list = await data.Environment.get_list(details=details)
         return [env.to_dto() for env in env_list]
 
-    # TODO: update cron when deleted?
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
         env = await data.Environment.get_by_id(environment_id)
@@ -465,12 +470,12 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
+        self._disable_schedule(env)
         await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-    # TODO: update cron when decommissioned?
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
