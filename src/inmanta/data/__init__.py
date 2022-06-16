@@ -2080,6 +2080,7 @@ class Setting(object):
         self.validator = validator
         self.recompile = recompile
         self.update = update_model
+        self.update_schedules = update_schedules
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
 
@@ -2090,6 +2091,7 @@ class Setting(object):
             "doc": self.doc,
             "recompile": self.recompile,
             "update": self.update,
+            "update_schedules": self.update_schedules,
             "agent_restart": self.agent_restart,
             "allowed_values": self.allowed_values,
         }
@@ -2102,6 +2104,7 @@ class Setting(object):
             doc=self.doc,
             recompile=self.recompile,
             update_model=self.update,
+            update_schedules=self.update_schedules,
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
         )
