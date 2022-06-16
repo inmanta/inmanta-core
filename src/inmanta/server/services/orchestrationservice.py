@@ -180,7 +180,8 @@ class PartialUpdateMerger(object):
                     )
                 if paired_resource.new_resource_set is None and not paired_resource.same_resource():
                     raise BadRequest(
-                        f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot be updated via a partial compile"
+                        f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot"
+                        " be updated via a partial compile"
                     )
                 else:
                     result[paired_resource.new_resource["id"]] = paired_resource.new_resource
