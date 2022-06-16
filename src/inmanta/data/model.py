@@ -200,6 +200,9 @@ class AttributeStateChange(BaseModel):
 
     @validator("current", "desired")
     def check_serializable(cls, v: Optional[Any]) -> Union[Optional[Any], str]:
+        """
+        Changes that are not json-serializable are cast to str (https://github.com/inmanta/inmanta-core/issues/3470)
+        """
         try:
             protocol.common.json_encode(v)
         except TypeError:
