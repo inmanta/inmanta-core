@@ -909,14 +909,6 @@ class CRUDHandler(ResourceHandler):
                     changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
-                for status in ["desired", "current"]:
-                    value = values[status]
-                    try:
-                        json_encode(value)
-                    except TypeError:
-                        value = str(value)
-                        changes[field][status] = value
-
                 ctx.add_change(field, desired=changes[field]["desired"], current=changes[field]["current"])
 
             if not dry_run:
