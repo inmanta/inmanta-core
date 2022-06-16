@@ -586,6 +586,10 @@ class OrchestrationService(protocol.ServerSlice):
                 "Type validation failed for resources in put_patrial."
                 f"excepted an argument of type List[Dict[str, Any] but received {resources}"
             )
+
+        for resource in resource_sets.keys():
+            print(resource)
+
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources = await merger.merge_partial_with_old()
         await self._put_version(
