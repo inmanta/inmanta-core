@@ -24,8 +24,8 @@ from typing import Dict, List, Optional, Union
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
+from inmanta.types import PrimitiveTypes
 
-from ..types import PrimitiveTypes
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI

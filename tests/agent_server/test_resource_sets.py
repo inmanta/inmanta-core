@@ -741,7 +741,7 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         removed_resource_sets=["set-c"],
     )
 
-    assert result.code == 200, result.result
+    assert result.code == 200
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 9

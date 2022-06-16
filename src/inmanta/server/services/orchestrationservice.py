@@ -85,6 +85,11 @@ class PairedResource(object):
         self.new_resource_set = new_resource_set
         self.old_resource_set = old_resource_set
 
+    def same_resource(self):
+        new_resource = set(self.new_resource).difference("id")
+        old_resource = set(self.old_resource).difference("id")
+        return new_resource == old_resource and all(self.new_resource[k] == self.old_resource[k] for k in new_resource)
+
 
 class PartialUpdateMerger(object):
     def __init__(
@@ -173,9 +178,7 @@ class PartialUpdateMerger(object):
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) to another resource set"
                     )
-                if (
-                    paired_resource.new_resource_set is None and paired_resource.new_resource != paired_resource.old_resource
-                ):  # todo:: is the != comparison enough?
+                if paired_resource.new_resource_set is None and not paired_resource.same_resource():
                     raise BadRequest(
                         f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot be updated via a partial compile"
                     )
