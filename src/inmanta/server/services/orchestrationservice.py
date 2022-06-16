@@ -62,6 +62,16 @@ from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 LOGGER = logging.getLogger(__name__)
 
 
+class ResourceWithResourceSet(object):
+    def __init__(
+        self,
+        resource: Dict[str, Any],
+        resource_set: Optional[str],
+    ) -> None:
+        self.resource = resource
+        self.resource_set = resource_set
+
+
 class PairedResource(object):
     def __init__(
         self,
@@ -88,7 +98,7 @@ class PartialUpdateMerger(object):
         self.removed_resource_sets = removed_resource_sets
 
     def _pair_resources_partial_update_to_old_version(
-        self, old_resources: List[tuple[Dict[str, Any], Optional[str]]], partial_updates: List[Dict[str, Any]]
+        self, old_resources: Dict[str, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
     ) -> List[PairedResource]:
         """
         returns a list of paired resources
@@ -107,11 +117,9 @@ class PartialUpdateMerger(object):
                 resource_set,
                 None,
             )
-            for old_resource in old_resources:
-                res = old_resource[0]
-                if key == Id.parse_id(res["id"]).resource_str():
-                    pair.old_resource = res
-                    pair.old_resource_set = old_resource[1]
+            if key in old_resources:
+                pair.old_resource = old_resources[key].resource
+                pair.old_resource_set = old_resources[key].resource_set
             paired_resources.append(pair)
         return paired_resources
 
@@ -129,20 +137,20 @@ class PartialUpdateMerger(object):
                 result.add(resource_set)
         return result
 
-    async def _get_old_resources(self) -> List[tuple[Dict[str, Any], Optional[str]]]:
+    async def _get_old_resources(self) -> Dict[str, ResourceWithResourceSet]:
         old_data = await data.Resource.get_list()
-        result: List[tuple[Dict[str, Any], Optional[str]]] = []
+        result: Dict[str, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: Dict[str, ResourceVersionIdStr] = {
                 "id": res.resource_version_id,
             }
             resource.update(res.attributes)
-            result.append((resource, res.resource_set))
+            result[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
         return result
 
     async def merge_partial_with_old(self) -> List[Any]:
 
-        old_resources = await self._get_old_resources()
+        old_resources: Dict[str, ResourceWithResourceSet] = await self._get_old_resources()
         paired_resources = self._pair_resources_partial_update_to_old_version(old_resources, self.partial_updates)
         updated_resource_sets = self._get_updated_resource_sets(paired_resources)
 
@@ -153,9 +161,10 @@ class PartialUpdateMerger(object):
             return resource
 
         to_keep: List[Dict[str, Any]] = [
-            copy_with_incremented_version(r[0])
-            for r in old_resources
-            if not r[1] in self.removed_resource_sets and (r[1] is None or not r[1] in updated_resource_sets)
+            copy_with_incremented_version(r.resource)
+            for r in list(old_resources.values())
+            if not r.resource_set in self.removed_resource_sets
+            and (r.resource_set is None or not r.resource_set in updated_resource_sets)
         ]
 
         result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
