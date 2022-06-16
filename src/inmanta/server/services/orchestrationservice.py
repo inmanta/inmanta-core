@@ -593,6 +593,12 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any] but received {resources}"
             )
 
+        for r in resource_sets.keys():
+            try:
+                Id.parse_id(r)
+            except Exception as e:
+                raise BadRequest(str(e))
+
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources = await merger.merge_partial_with_old()
         await self._put_version(
