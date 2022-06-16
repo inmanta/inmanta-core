@@ -921,8 +921,8 @@ class CRUDHandler(ResourceHandler):
                         self.delete_resource(ctx, desired)
 
                 elif not desired.purged and len(changes) > 0:
-                    ctx.debug("Calling update_resource", changes=changes)
-                    self.update_resource(ctx, dict(changes), desired)
+                    ctx.debug("Calling update_resource", changes=ctx.changes)
+                    self.update_resource(ctx, dict(ctx.changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:

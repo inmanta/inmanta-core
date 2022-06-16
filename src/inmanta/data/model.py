@@ -27,8 +27,7 @@ from pydantic import validator
 from pydantic.fields import ModelField
 
 import inmanta.ast.export as ast_export
-from inmanta import const
-from inmanta.protocol.common import json_encode
+from inmanta import const, protocol
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -199,13 +198,14 @@ class AttributeStateChange(BaseModel):
     current: Optional[Any] = None
     desired: Optional[Any] = None
 
-    @validator('current', 'desired')
-    def check_serializable(cls, v:Optional[Any]) -> Union[Optional[Any], str]:
+    @validator("current", "desired")
+    def check_serializable(cls, v: Optional[Any]) -> Union[Optional[Any], str]:
         try:
-            json_encode(v)
+            protocol.common.json_encode(v)
         except TypeError:
             return str(v)
         return v
+
 
 EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
 
