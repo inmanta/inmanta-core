@@ -17,3 +17,8 @@
 """
 
 COMPILER_VERSION = "2022.3"
+
+if __name__ == "__main__":
+    import inmanta.app
+
+    inmanta.app.app()
