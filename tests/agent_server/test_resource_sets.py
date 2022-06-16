@@ -732,7 +732,7 @@ async def test_put_partial_validation_error(server, client, environment, clienth
     )
 
 
-async def test_put_partial_ResourceIdStr(server, client, environment, clienthelper):
+async def test_put_partial_verify_params(server, client, environment, clienthelper):
     """
     resource_sets with a non resource id value as a key
     """

@@ -92,10 +92,12 @@ class PartialUpdateMerger(object):
         partial_updates: List[Dict[str, Any]],
         resource_sets: Dict[ResourceIdStr, Optional[str]],
         removed_resource_sets: List[str],
+        env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
         self.resource_sets = resource_sets
         self.removed_resource_sets = removed_resource_sets
+        self.env = env
 
     def _pair_resources_partial_update_to_old_version(
         self, old_resources: Dict[str, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
@@ -123,22 +125,8 @@ class PartialUpdateMerger(object):
             paired_resources.append(pair)
         return paired_resources
 
-    def _get_updated_resource_sets(self, paired_resources: List[PairedResource]) -> Set[str]:
-        """
-        returns a set of strings containing the name of all the resource_sets that have changed resources
-        in the result of the partial compile.
-
-        :param paired_resources: see pair_resources_partial_update_to_old_version
-        """
-        result: Set[str] = set()
-        for res in paired_resources:
-            resource_set = res.new_resource_set
-            if resource_set:
-                result.add(resource_set)
-        return result
-
     async def _get_old_resources(self) -> Dict[str, ResourceWithResourceSet]:
-        old_data = await data.Resource.get_list()
+        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         result: Dict[str, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: Dict[str, ResourceVersionIdStr] = {
@@ -151,8 +139,10 @@ class PartialUpdateMerger(object):
     async def merge_partial_with_old(self) -> List[Any]:
 
         old_resources: Dict[str, ResourceWithResourceSet] = await self._get_old_resources()
-        paired_resources = self._pair_resources_partial_update_to_old_version(old_resources, self.partial_updates)
-        updated_resource_sets = self._get_updated_resource_sets(paired_resources)
+        paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
+            old_resources, self.partial_updates
+        )
+        updated_resource_sets: Set[str] = set(res.new_resource_set for res in paired_resources if res.new_resource_set)
 
         def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
             res = Id.parse_id(resource["id"])
@@ -163,7 +153,7 @@ class PartialUpdateMerger(object):
         to_keep: List[Dict[str, Any]] = [
             copy_with_incremented_version(r.resource)
             for r in list(old_resources.values())
-            if not r.resource_set in self.removed_resource_sets
+            if r.resource_set not in self.removed_resource_sets
             and (r.resource_set is None or not r.resource_set in updated_resource_sets)
         ]
 
@@ -596,7 +586,7 @@ class OrchestrationService(protocol.ServerSlice):
                 "Type validation failed for resources in put_patrial."
                 f"excepted an argument of type List[Dict[str, Any] but received {resources}"
             )
-        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets)
+        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources = await merger.merge_partial_with_old()
         await self._put_version(
             env,
