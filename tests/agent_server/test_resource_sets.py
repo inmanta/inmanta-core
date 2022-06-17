@@ -219,7 +219,9 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
 
     assert result.code == 400, result.result
     assert result.result["message"] == (
-        "Invalid request: Resource test::Resource[agent1,key=key1] was found in the " "resource_sets but not in the resources"
+        "Invalid request: The following resource ids provided in the resource_sets "
+        "parameter are not present in the resources list: "
+        "test::Resource[agent1,key=key1]"
     )
 
 
@@ -1006,3 +1008,66 @@ async def test_put_partial_different_env(server, client):
     assert len(resource_list) == 1
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=1"
     assert resource_sets_from_db == {"test::Resource[agent1,key=key1]": None}
+
+
+async def test_put_partial_version(server, client, environment, clienthelper):
+    """
+    Verify the version of the resources
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+    }
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+    version = await clienthelper.get_version()
+    resources_partial = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % 5,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        version=version,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        compiler_version=get_compiler_version(),
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+        },
+    )
+
+    assert result.code == 400
+    assert result.result["message"] == (
+        "Invalid request: The resource version of resource "
+        "test::Resource[agent1,key=key1],v=5 does not match the version argument "
+        "(version: 2"
+    )

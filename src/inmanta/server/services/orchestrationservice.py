@@ -78,30 +78,26 @@ class ResourceWithResourceSet:
 class PairedResource:
     def __init__(
         self,
-        new_resource: Dict[str, Any],
-        old_resource: Optional[Dict[str, Any]],
-        new_resource_set: Optional[str],
-        old_resource_set: Optional[str],
+        new_resource: ResourceWithResourceSet,
+        old_resource: Optional[ResourceWithResourceSet],
     ) -> None:
         self.new_resource = new_resource
         self.old_resource = old_resource
-        self.new_resource_set = new_resource_set
-        self.old_resource_set = old_resource_set
 
     def is_update(self) -> bool:
         if self.old_resource is None:
             return False
-        attr_names_new_resource = set(self.new_resource).difference("id")
-        attr_names_old_resource = set(self.old_resource).difference("id")
+        attr_names_new_resource = set(self.new_resource.resource).difference("id")
+        attr_names_old_resource = set(self.old_resource.resource).difference("id")
         return attr_names_new_resource != attr_names_old_resource or any(
-            self.new_resource[k] != self.old_resource[k] for k in attr_names_new_resource
+            self.new_resource.resource[k] != self.old_resource.resource[k] for k in attr_names_new_resource
         )
 
     def is_new_resource(self) -> bool:
         return self.old_resource is None
 
     def resource_changed_resource_set(self) -> bool:
-        return self.new_resource_set != self.old_resource_set
+        return self.new_resource.resource_set != self.old_resource.resource_set
 
 
 class PartialUpdateMerger:
@@ -131,15 +127,9 @@ class PartialUpdateMerger:
         for partial_update in partial_updates:
             key = Id.parse_id(partial_update["id"]).resource_str()
             resource_set = self.resource_sets.get(key)
-            pair: PairedResource = PairedResource(
-                partial_update,
-                None,
-                resource_set,
-                None,
-            )
+            pair: PairedResource = PairedResource(ResourceWithResourceSet(partial_update, resource_set), None)
             if key in old_resources:
-                pair.old_resource = old_resources[key].resource
-                pair.old_resource_set = old_resources[key].resource_set
+                pair.old_resource = ResourceWithResourceSet(old_resources[key].resource, old_resources[key].resource_set)
             paired_resources.append(pair)
         return paired_resources
 
@@ -155,12 +145,13 @@ class PartialUpdateMerger:
         return result
 
     async def merge_partial_with_old(self) -> List[Any]:
-
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_old_resources()
         paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
             old_resources, self.partial_updates
         )
-        updated_resource_sets: Set[str] = set(res.new_resource_set for res in paired_resources if res.new_resource_set)
+        updated_resource_sets: Set[str] = set(
+            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
+        )
 
         def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
             res = Id.parse_id(resource["id"])
@@ -180,25 +171,25 @@ class PartialUpdateMerger:
         for paired_resource in paired_resources:
             assert paired_resource.new_resource is not None
             assert (
-                paired_resource.old_resource is None
-                or Id.parse_id(paired_resource.old_resource["id"]).resource_str()
-                == Id.parse_id(paired_resource.new_resource["id"]).resource_str()
+                paired_resource.is_new_resource()
+                or Id.parse_id(paired_resource.old_resource.resource["id"]).resource_str()
+                == Id.parse_id(paired_resource.new_resource.resource["id"]).resource_str()
             )
             if paired_resource.is_new_resource():
-                result[paired_resource.new_resource["id"]] = paired_resource.new_resource
+                result[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
-                        f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) "
+                        f"A partial compile cannot migrate a resource({paired_resource.new_resource.resource['id']}) "
                         "to another resource set"
                     )
-                if paired_resource.new_resource_set is None and paired_resource.is_update():
+                if paired_resource.new_resource.resource_set is None and paired_resource.is_update():
                     raise BadRequest(
-                        f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot"
+                        f"Resource ({paired_resource.new_resource.resource['id']}) without a resource set cannot"
                         " be updated via a partial compile"
                     )
                 else:
-                    result[paired_resource.new_resource["id"]] = paired_resource.new_resource
+                    result[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
         return list(result.values())
 
 
@@ -369,13 +360,15 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
+        for r in resources:
+            resource = Id.parse_id(r["id"])
+            if resource.get_version() != version:
+                raise BadRequest(
+                    f"The resource version of resource {r['id']} " f"does not match the version argument (version: {version}"
+                )
+
         if not resource_sets:
             resource_sets = {}
-
-        res_ids = [Id.parse_id(r["id"]).resource_str() for r in resources]
-        for resource in resource_sets.keys():
-            if resource not in res_ids:
-                raise BadRequest(f"Resource {resource} was found in the resource_sets but not in the resources")
 
         started = datetime.datetime.now().astimezone()
 
@@ -428,7 +421,7 @@ class OrchestrationService(protocol.ServerSlice):
                         cross_agent_dep.append((res_obj, rid))
         resource_ids = {res.resource_id for res in resource_objects}
         superfluous_ids = set(resource_sets.keys()) - resource_ids
-        if superfluous_ids and not partial:
+        if superfluous_ids:
             raise BadRequest(
                 "The following resource ids provided in the resource_sets parameter are not present "
                 f"in the resources list: {', '.join(superfluous_ids)}"
