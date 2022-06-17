@@ -143,7 +143,7 @@ class PartialUpdateMerger:
 
     async def merge_partial_with_old(self) -> List[Any]:
 
-        old_resources: Dict[str, ResourceWithResourceSet] = await self._get_old_resources()
+        old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_old_resources()
         paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
             old_resources, self.partial_updates
         )
