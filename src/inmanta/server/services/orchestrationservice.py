@@ -91,7 +91,7 @@ class PairedResource:
         return new_resource == old_resource and all(self.new_resource[k] == self.old_resource[k] for k in new_resource)
 
 
-class PartialUpdateMerger(object):
+class PartialUpdateMerger:
     def __init__(
         self,
         partial_updates: List[Dict[str, Any]],
