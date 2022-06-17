@@ -105,7 +105,7 @@ class PartialUpdateMerger:
         self.env = env
 
     def _pair_resources_partial_update_to_old_version(
-        self, old_resources: Dict[str, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
+        self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
     ) -> List[PairedResource]:
         """
         returns a list of paired resources
