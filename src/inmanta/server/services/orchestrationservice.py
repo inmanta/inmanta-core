@@ -174,7 +174,7 @@ class PartialUpdateMerger:
             if paired_resource.is_new_resource():
                 result[paired_resource.new_resource["id"]] = paired_resource.new_resource
             else:
-                if paired_resource.new_resource_set != paired_resource.old_resource_set:
+                if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) "
                         "to another resource set"
