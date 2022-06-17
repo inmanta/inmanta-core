@@ -1,0 +1,3 @@
+description: Remove module name warning when running in pytest
+change-type: patch
+destination-branches: [master, iso5]

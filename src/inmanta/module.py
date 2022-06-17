@@ -2464,7 +2464,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
                 )
             raise
 
-        if self.name != os.path.basename(self._path):
+        # Only show the warning when we are not running tests. Especially on jenkins the directory of the module often does not
+        # have the correct name.
+        if self.name != os.path.basename(self._path) and "PYTEST_CURRENT_TEST" not in os.environ:
             LOGGER.warning(
                 "The name in the module file (%s) does not match the directory name (%s)",
                 self.name,
