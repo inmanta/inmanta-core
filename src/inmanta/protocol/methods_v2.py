@@ -59,7 +59,7 @@ def put_partial(
     :param version: The version of the configuration model
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
-    :param version_info: Module version information
+    :param version_info: Model version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
