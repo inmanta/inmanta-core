@@ -200,6 +200,14 @@ class CronSchedule(TaskSchedule):
         LOGGER.debug("Scheduling action %s according to cron specifier '%s'", action, self.cron)
 
 
+def is_coroutine(function: object) -> bool:
+    return (
+        inspect.iscoroutinefunction(function)
+        or gen.is_coroutine_function(function)
+        or isinstance(function, functools.partial) and is_coroutine(function.func)
+    )
+
+
 class Scheduler(object):
     """
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
@@ -244,7 +252,7 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param schedule: The schedule for this action
         """
-        assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
+        assert is_coroutine(action)
 
         if self._stopped:
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)

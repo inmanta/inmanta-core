@@ -525,6 +525,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
+@pytest.mark.slowtest
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -598,9 +599,22 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # update the parameter to a new value
     await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
-    versions = await wait_for_version(client, environment, 3)
     logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, 3)
     assert versions["count"] == 3
+
+    # set a full compile schedule
+    soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+    cron_soon: str = "%d %d * * * %d" % (soon.minute, soon.hour, soon.second)
+    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, 4)
+    assert versions["count"] == 4
+
+    # TODO: overwrite for second compile
+    # TODO: overwrite for compile far in future
+    # TODO: anything else?
+    # TODO: delete
 
     # clear the environment
     state_dir = server_config.state_dir.get()

@@ -2004,6 +2004,7 @@ def convert_agent_trigger_method(value: object) -> str:
 def validate_cron(value: str) -> str:
     if not value:
         return ""
+    # TODO: switch to parse-crontab
     if not croniter.is_valid(value):
         raise ValueError("'%s' is not a valid cron expression" % value)
     return value

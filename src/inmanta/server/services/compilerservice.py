@@ -272,7 +272,7 @@ class CompileRun(object):
                     return await self._end_stage(returncode=0)
 
             async def update_modules() -> data.Report:
-                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
+                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "project", "update"], cwd=project_dir)
 
             async def install_modules() -> data.Report:
                 return await run_compile_stage_in_venv(
@@ -516,7 +516,7 @@ class CompilerService(ServerSlice):
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
 
-    def schedule_full_compile(self, env: uuid.UUID, schedule_cron: str) -> None:
+    def schedule_full_compile(self, env: data.Environment, schedule_cron: str) -> None:
         """
         Schedules full compiles for a single environment. Overrides any previously enabled schedule for this environment.
 
@@ -524,17 +524,17 @@ class CompilerService(ServerSlice):
         :param schedule_cron: The cron expression for the schedule, may be an empty string to disable full compile scheduling.
         """
         # remove old schedule if it exists
-        if env in self._scheduled_full_compiles:
-            self.remove_cron(*self._scheduled_full_compiles[env])
-            del self._scheduled_full_compiles[env]
+        if env.id in self._scheduled_full_compiles:
+            self.remove_cron(*self._scheduled_full_compiles[env.id])
+            del self._scheduled_full_compiles[env.id]
         # set up new schedule
         if schedule_cron:
-            action: TaskMethod = partial(
+            recompile: TaskMethod = partial(
                 # TODO: is do_export value correct?
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()
             )
-            self.schedule_cron(action, schedule_cron)
-            self._scheduled_full_compiles[env] = (action, schedule_cron)
+            self.schedule_cron(recompile, schedule_cron)
+            self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
 
     async def request_recompile(
         self,

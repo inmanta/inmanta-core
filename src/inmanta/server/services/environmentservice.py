@@ -151,7 +151,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self._enable_schedules()
+        await self._enable_schedules()
 
     async def _enable_schedules(self) -> None:
         """
@@ -165,13 +165,13 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Schedules appropriate actions for a single environment. Overrides old schedules.
         """
-        self.compiler_service.schedule_full_compile(env.id, await env.get(data.AUTO_FULL_COMPILE))
+        self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
 
     def _disable_schedule(self, env: data.Environment) -> None:
         """
         Removes scheduling of all appropriate actions for a single environment.
         """
-        self.compiler_service.schedule_full_compile(env.id, schedule_cron="")
+        self.compiler_service.schedule_full_compile(env, schedule_cron="")
 
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
