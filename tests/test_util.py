@@ -38,8 +38,6 @@ from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_
 
 LOGGER = logging.getLogger(__name__)
 
-# TODO: util tests
-
 
 def test_interval_schedule() -> None:
     simple: TaskSchedule = IntervalSchedule(interval=1.0)

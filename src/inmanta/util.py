@@ -191,7 +191,6 @@ class CronSchedule(TaskSchedule):
         return self.get_next_delay()
 
     def get_next_delay(self) -> float:
-        # TODO: document this!
         # always interpret cron schedules as UTC
         now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
         delay: datetime.timedelta = croniter(self.cron, now).get_next(datetime.datetime) - now

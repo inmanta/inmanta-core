@@ -529,8 +529,8 @@ class CompilerService(ServerSlice):
             del self._scheduled_full_compiles[env]
         # set up new schedule
         if schedule_cron:
-            # TODO: is do_export value correct?
             action: TaskMethod = partial(
+                # TODO: is do_export value correct?
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()
             )
             self.schedule_cron(action, schedule_cron)
