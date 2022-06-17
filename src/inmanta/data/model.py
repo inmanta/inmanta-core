@@ -285,7 +285,7 @@ class ModelVersionInfo(BaseModel):
 class Resource(BaseModel):
     environment: uuid.UUID
     model: int
-    resource_id: ResourceVersionIdStr
+    resource_id: ResourceIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str

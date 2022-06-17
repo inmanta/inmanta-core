@@ -4089,7 +4089,7 @@ class Resource(BaseDocument):
     model: int
 
     # ID related
-    resource_id: m.ResourceVersionIdStr
+    resource_id: m.ResourceIdStr
     resource_type: m.ResourceType
     resource_version_id: m.ResourceVersionIdStr
     resource_id_value: str

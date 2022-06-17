@@ -71,7 +71,7 @@ class ResourceWithResourceSet:
         self.resource = resource
         self.resource_set = resource_set
 
-    def is_shared_resource(self):
+    def is_shared_resource(self) -> bool:
         return self.resource_set is None
 
 
@@ -97,6 +97,7 @@ class PairedResource:
         return self.old_resource is None
 
     def resource_changed_resource_set(self) -> bool:
+        assert self.old_resource is not None
         return self.new_resource.resource_set != self.old_resource.resource_set
 
 
@@ -140,16 +141,16 @@ class PartialUpdateMerger:
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             resource.resource_id: resource.resource_set for resource in old_data
         }
-        result: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
+        old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: Dict[ResourceIdStr, ResourceVersionIdStr] = {
+            resource: Dict[str, Any] = {
                 "id": res.resource_version_id,
                 **res.attributes,
             }
-            result[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
-        return result, old_resource_sets
+            old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
+        return old_resources, old_resource_sets
 
-    def _merge_resources(self, old_resources) -> List[Any]:
+    def _merge_resources(self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet]) -> List[Any]:
         paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
             old_resources, self.partial_updates
         )
@@ -173,30 +174,32 @@ class PartialUpdateMerger:
         merged_resources: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
 
         for paired_resource in paired_resources:
-            assert paired_resource.new_resource is not None
+            new_resource = paired_resource.new_resource
+            old_resource = paired_resource.old_resource
+            assert new_resource is not None
             assert (
-                paired_resource.is_new_resource()
-                or Id.parse_id(paired_resource.old_resource.resource["id"]).resource_str()
-                == Id.parse_id(paired_resource.new_resource.resource["id"]).resource_str()
+                old_resource is None
+                or old_resource is not None
+                and Id.parse_id(old_resource.resource["id"]).resource_str()
+                == Id.parse_id(new_resource.resource["id"]).resource_str()
             )
             if paired_resource.is_new_resource():
-                merged_resources[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
+                merged_resources[new_resource.resource["id"]] = new_resource.resource
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
-                        f"A partial compile cannot migrate a resource({paired_resource.new_resource.resource['id']}) "
-                        "to another resource set"
+                        f"A partial compile cannot migrate a resource({new_resource.resource['id']}) " "to another resource set"
                     )
-                if paired_resource.new_resource.resource_set is None and paired_resource.is_update():
+                if new_resource.resource_set is None and paired_resource.is_update():
                     raise BadRequest(
-                        f"Resource ({paired_resource.new_resource.resource['id']}) without a resource set cannot"
+                        f"Resource ({new_resource.resource['id']}) without a resource set cannot"
                         " be updated via a partial compile"
                     )
                 else:
-                    merged_resources[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
+                    merged_resources[new_resource.resource["id"]] = new_resource.resource
         return list(merged_resources.values())
 
-    def _merge_resource_sets(self, old_resource_sets) -> Dict[ResourceIdStr, Optional[str]]:
+    def _merge_resource_sets(self, old_resource_sets: Dict[ResourceIdStr, Optional[str]]) -> Dict[ResourceIdStr, Optional[str]]:
         new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             k: v for k, v in old_resource_sets.items() if v not in self.removed_resource_sets
         }
@@ -347,10 +350,9 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: Optional[model.ModelVersionInfo] = None,
+        version_info: Optional[JsonType] = None,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
-        partial: bool = False,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -362,7 +364,6 @@ class OrchestrationService(protocol.ServerSlice):
          }
         :param version_info:
         :param compiler_version:
-        :param partial: set to True to do a partial compile, False to do a full compile.
         :return:
         """
 
@@ -629,16 +630,16 @@ class OrchestrationService(protocol.ServerSlice):
 
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
+        version_info_dict = version_info.dict() if version_info else None
         await self._put_version(
             env,
             version,
             merged_resources,
             resource_state,
             unknowns,
-            version_info,
+            version_info_dict,
             compiler_version,
             merged_resource_sets,
-            partial=True,
         )
 
     @handle(methods.release_version, version_id="id", env="tid")
