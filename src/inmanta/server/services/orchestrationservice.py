@@ -72,7 +72,7 @@ class ResourceWithResourceSet:
         self.resource_set = resource_set
 
 
-class PairedResource(object):
+class PairedResource:
     def __init__(
         self,
         new_resource: Dict[str, Any],
