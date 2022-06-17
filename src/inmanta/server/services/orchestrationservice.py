@@ -159,7 +159,7 @@ class PartialUpdateMerger:
             copy_with_incremented_version(r.resource)
             for r in list(old_resources.values())
             if r.resource_set not in self.removed_resource_sets
-            and (r.resource_set is None or r.resource_set not in updated_resource_sets)
+            and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
         result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
