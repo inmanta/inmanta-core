@@ -130,7 +130,7 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_old_resources(self) -> Dict[str, ResourceWithResourceSet]:
+    async def _get_old_resources(self) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         result: Dict[str, ResourceWithResourceSet] = {}
         for res in old_data:
