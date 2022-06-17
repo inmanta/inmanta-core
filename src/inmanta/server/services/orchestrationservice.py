@@ -171,7 +171,7 @@ class PartialUpdateMerger:
                 or Id.parse_id(paired_resource.old_resource["id"]).resource_str()
                 == Id.parse_id(paired_resource.new_resource["id"]).resource_str()
             )
-            if paired_resource.old_resource is None:
+            if paired_resource.is_new_resource():
                 result[paired_resource.new_resource["id"]] = paired_resource.new_resource
             else:
                 if paired_resource.new_resource_set != paired_resource.old_resource_set:
