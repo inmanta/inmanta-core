@@ -172,7 +172,7 @@ class PartialUpdateMerger:
             copy_with_incremented_version(r.resource)
             for r in list(old_resources.values())
             if r.resource_set not in self.removed_resource_sets
-            and (r.resource_set is None or r.resource_set not in updated_resource_sets)
+            and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
         result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
@@ -184,10 +184,10 @@ class PartialUpdateMerger:
                 or Id.parse_id(paired_resource.old_resource["id"]).resource_str()
                 == Id.parse_id(paired_resource.new_resource["id"]).resource_str()
             )
-            if paired_resource.old_resource is None:
+            if paired_resource.is_new_resource():
                 result[paired_resource.new_resource["id"]] = paired_resource.new_resource
             else:
-                if paired_resource.new_resource_set != paired_resource.old_resource_set:
+                if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
                         f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) "
                         "to another resource set"
