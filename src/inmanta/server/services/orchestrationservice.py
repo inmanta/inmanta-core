@@ -71,6 +71,9 @@ class ResourceWithResourceSet:
         self.resource = resource
         self.resource_set = resource_set
 
+    def is_shared_resource(self):
+        return self.resource_set is None
+
 
 class PairedResource:
     def __init__(
@@ -85,14 +88,20 @@ class PairedResource:
         self.new_resource_set = new_resource_set
         self.old_resource_set = old_resource_set
 
-    def same_resource(self) -> bool:
+    def is_update(self) -> bool:
         if self.old_resource is None:
             return False
         attr_names_new_resource = set(self.new_resource).difference("id")
         attr_names_old_resource = set(self.old_resource).difference("id")
-        return attr_names_new_resource == attr_names_old_resource and all(
-            self.new_resource[k] == self.old_resource[k] for k in new_resource
+        return attr_names_new_resource != attr_names_old_resource or any(
+            self.new_resource[k] != self.old_resource[k] for k in attr_names_new_resource
         )
+
+    def is_new_resource(self) -> bool:
+        return self.old_resource is None
+
+    def resource_changed_resource_set(self) -> bool:
+        return self.new_resource_set != self.old_resource_set
 
 
 class PartialUpdateMerger:
