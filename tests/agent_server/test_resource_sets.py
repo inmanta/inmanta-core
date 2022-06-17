@@ -921,6 +921,7 @@ async def test_put_partial_different_env(server, client):
     """
 
     result = await client.create_project("env-test-1")
+    assert result.code == 200
     project_id = result.result["project"]["id"]
 
     create_environment_result = await client.create_environment(project_id=project_id, name="env1")
