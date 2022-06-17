@@ -734,8 +734,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-a",
-            "test::Resource[agent1,key=key3]": "set-b",
-            "test::Resource[agent1,key=key4]": "set-b",
             "test::Resource[agent1,key=key91]": "set-f",
             "test::Resource[agent1,key=key92]": "set-f",
         },
