@@ -109,7 +109,7 @@ class PartialUpdateMerger:
         self.env = env
 
     def _pair_resources_partial_update_to_old_version(
-        self, old_resources: Dict[str, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
+        self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
     ) -> List[PairedResource]:
         """
         returns a list of paired resources
@@ -134,20 +134,20 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_old_resources(self) -> Dict[str, ResourceWithResourceSet]:
+    async def _get_old_resources(self) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         result: Dict[str, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: Dict[str, ResourceVersionIdStr] = {
                 "id": res.resource_version_id,
+                **res.attributes,
             }
-            resource.update(res.attributes)
             result[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
         return result
 
     async def merge_partial_with_old(self) -> List[Any]:
 
-        old_resources: Dict[str, ResourceWithResourceSet] = await self._get_old_resources()
+        old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_old_resources()
         paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
             old_resources, self.partial_updates
         )
@@ -183,7 +183,7 @@ class PartialUpdateMerger:
                         f"A partial compile cannot migrate a resource({paired_resource.new_resource['id']}) "
                         "to another resource set"
                     )
-                if paired_resource.new_resource_set is None and not paired_resource.same_resource():
+                if paired_resource.new_resource_set is None and paired_resource.is_update():
                     raise BadRequest(
                         f"Resource ({paired_resource.new_resource['id']}) without a resource set cannot"
                         " be updated via a partial compile"
