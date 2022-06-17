@@ -20,6 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
+from itertools import chain
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import asyncpg
@@ -113,10 +114,9 @@ class PartialUpdateMerger:
         self.resource_sets = resource_sets
         self.removed_resource_sets = removed_resource_sets
         self.env = env
+        self.paired_resources: Optional[List[PairedResource]] = None
 
-    def _pair_resources_partial_update_to_old_version(
-        self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], partial_updates: List[Dict[str, Any]]
-    ) -> List[PairedResource]:
+    def pair_resources_partial_update_to_old_version(self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet]) -> None:
         """
         returns a list of paired resources
 
@@ -124,6 +124,7 @@ class PartialUpdateMerger:
         and its resource_set.
         :param partial_updates: The list of resources part of the partial compile.
         """
+        partial_updates: List[Dict[str, Any]] = self.partial_updates
         paired_resources: List[PairedResource] = []
         for partial_update in partial_updates:
             key = Id.parse_id(partial_update["id"]).resource_str()
@@ -132,7 +133,7 @@ class PartialUpdateMerger:
             if key in old_resources:
                 pair.old_resource = ResourceWithResourceSet(old_resources[key].resource, old_resources[key].resource_set)
             paired_resources.append(pair)
-        return paired_resources
+        self.paired_resources = paired_resources
 
     async def _get_old_resources(
         self,
@@ -151,9 +152,8 @@ class PartialUpdateMerger:
         return old_resources, old_resource_sets
 
     def _merge_resources(self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet]) -> List[Any]:
-        paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
-            old_resources, self.partial_updates
-        )
+        assert self.paired_resources is not None
+        paired_resources: List[PairedResource] = self.paired_resources
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
         )
@@ -200,14 +200,20 @@ class PartialUpdateMerger:
         return list(merged_resources.values())
 
     def _merge_resource_sets(self, old_resource_sets: Dict[ResourceIdStr, Optional[str]]) -> Dict[ResourceIdStr, Optional[str]]:
+        assert self.paired_resources is not None
+        paired_resources: List[PairedResource] = self.paired_resources
+        updated_resource_sets: Set[str] = set(
+            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
+        )
         new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
-            k: v for k, v in old_resource_sets.items() if v not in self.removed_resource_sets
+            k: v for k, v in old_resource_sets.items() if v not in chain(self.removed_resource_sets, updated_resource_sets)
         }
         new_resource_sets.update(self.resource_sets)
         return new_resource_sets
 
     async def merge_partial_with_old(self) -> Tuple[List[Any], Dict[ResourceIdStr, Optional[str]]]:
         old_resources, old_resource_sets = await self._get_old_resources()
+        self.pair_resources_partial_update_to_old_version(old_resources)
         new_resources = self._merge_resources(old_resources)
         new_resource_sets = self._merge_resource_sets(old_resource_sets)
         return new_resources, new_resource_sets
