@@ -85,7 +85,7 @@ class PairedResource:
         self.new_resource_set = new_resource_set
         self.old_resource_set = old_resource_set
 
-    def same_resource(self):
+    def same_resource(self) -> bool:
         attr_names_new_resource = set(self.new_resource).difference("id")
         attr_names_old_resource = set(self.old_resource).difference("id")
         return attr_names_new_resource == attr_names_old_resource and all(self.new_resource[k] == self.old_resource[k] for k in new_resource)
