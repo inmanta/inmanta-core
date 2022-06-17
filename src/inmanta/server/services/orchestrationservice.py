@@ -133,19 +133,23 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_old_resources(self) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
+    async def _get_old_resources(
+        self,
+    ) -> Tuple[Dict[ResourceIdStr, ResourceWithResourceSet], Dict[ResourceIdStr, Optional[str]]]:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
-        result: Dict[str, ResourceWithResourceSet] = {}
+        old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            resource.resource_id: resource.resource_set for resource in old_data
+        }
+        result: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: Dict[str, ResourceVersionIdStr] = {
+            resource: Dict[ResourceIdStr, ResourceVersionIdStr] = {
                 "id": res.resource_version_id,
                 **res.attributes,
             }
             result[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
-        return result
+        return result, old_resource_sets
 
-    async def merge_partial_with_old(self) -> List[Any]:
-        old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_old_resources()
+    def _merge_resources(self, old_resources) -> List[Any]:
         paired_resources: List[PairedResource] = self._pair_resources_partial_update_to_old_version(
             old_resources, self.partial_updates
         )
@@ -166,7 +170,7 @@ class PartialUpdateMerger:
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
-        result: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
+        merged_resources: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
 
         for paired_resource in paired_resources:
             assert paired_resource.new_resource is not None
@@ -176,7 +180,7 @@ class PartialUpdateMerger:
                 == Id.parse_id(paired_resource.new_resource.resource["id"]).resource_str()
             )
             if paired_resource.is_new_resource():
-                result[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
+                merged_resources[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
@@ -189,8 +193,21 @@ class PartialUpdateMerger:
                         " be updated via a partial compile"
                     )
                 else:
-                    result[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
-        return list(result.values())
+                    merged_resources[paired_resource.new_resource.resource["id"]] = paired_resource.new_resource.resource
+        return list(merged_resources.values())
+
+    def _merge_resource_sets(self, old_resource_sets) -> Dict[ResourceIdStr, Optional[str]]:
+        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            k: v for k, v in old_resource_sets.items() if v not in self.removed_resource_sets
+        }
+        new_resource_sets.update(self.resource_sets)
+        return new_resource_sets
+
+    async def merge_partial_with_old(self) -> Tuple[List[Any], Dict[ResourceIdStr, Optional[str]]]:
+        old_resources, old_resource_sets = await self._get_old_resources()
+        new_resources = self._merge_resources(old_resources)
+        new_resource_sets = self._merge_resource_sets(old_resource_sets)
+        return new_resources, new_resource_sets
 
 
 class OrchestrationService(protocol.ServerSlice):
@@ -611,7 +628,7 @@ class OrchestrationService(protocol.ServerSlice):
                 raise BadRequest(str(e))
 
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
-        merged_resources = await merger.merge_partial_with_old()
+        merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
         await self._put_version(
             env,
             version,
@@ -620,7 +637,7 @@ class OrchestrationService(protocol.ServerSlice):
             unknowns,
             version_info,
             compiler_version,
-            resource_sets,
+            merged_resource_sets,
             partial=True,
         )
 

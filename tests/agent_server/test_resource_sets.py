@@ -227,7 +227,7 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
 
 async def test_put_partial_merge_not_in_resource_set(server, client, environment, clienthelper):
     """
-    The resources in an partial compile that don't belong to a resource set (rest set) are merged
+    The resources in a partial compile that don't belong to a resource set (rest set) are merged
     together with the resources in the rest set of the previous version of the model.
     """
     version = await clienthelper.get_version()
