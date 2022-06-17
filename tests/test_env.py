@@ -175,3 +175,16 @@ def test_gen_requirements_file_extras(tmpdir):
     dependency = "dep[opt,dev]==1.2.3"
     content: str = active_env._gen_requirements_file([dependency])
     assert content.strip() == "dep[dev,opt] == 1.2.3"
+
+
+def test_basic_logging(tmpdir, caplog):
+    with caplog.at_level(logging.INFO):
+        env_dir1 = tmpdir.mkdir("env1").strpath
+
+        venv1 = env.VirtualEnv(env_dir1)
+
+        venv1.use_virtual_env()
+
+        log_sequence = LogSequence(caplog)
+        log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
+        log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")

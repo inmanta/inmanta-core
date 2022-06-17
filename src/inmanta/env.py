@@ -53,7 +53,6 @@ class VirtualEnv(object):
     _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 
     def __init__(self, env_path: str) -> None:
-        LOGGER.info("Creating new virtual environment in %s", env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self.__cache_done: Set[str] = set()
@@ -87,6 +86,7 @@ class VirtualEnv(object):
         Init the virtual environment
         """
         self._parent_python = sys.executable
+        LOGGER.info("Using virtual environment at %s", self.env_path)
 
         # check if the virtual env exists
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
