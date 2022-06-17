@@ -62,7 +62,7 @@ from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 LOGGER = logging.getLogger(__name__)
 
 
-class ResourceWithResourceSet(object):
+class ResourceWithResourceSet:
     def __init__(
         self,
         resource: Dict[str, Any],
