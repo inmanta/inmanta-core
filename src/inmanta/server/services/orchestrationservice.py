@@ -136,8 +136,8 @@ class PartialUpdateMerger:
         for res in old_data:
             resource: Dict[str, ResourceVersionIdStr] = {
                 "id": res.resource_version_id,
+                **res.attributes,
             }
-            resource.update(res.attributes)
             result[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
         return result
 
