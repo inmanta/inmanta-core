@@ -23,6 +23,7 @@ import uuid
 
 import pytest
 
+import inmanta
 from inmanta import util
 from inmanta.util import CycleException, NamedLock, ensure_future_and_handle_exception, stable_depth_first
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
@@ -288,3 +289,10 @@ async def test_named_lock():
     await lock.release("a")
     # Don't leak
     assert not lock._named_locks
+
+
+def test_running_test_fixture():
+    """
+    Assert that the RUNNING_TESTS variable is set to True when we run the tests
+    """
+    assert inmanta.RUNNING_TESTS

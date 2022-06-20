@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, T
 
 from tornado import concurrent
 
-from inmanta import const, data, protocol, resources
+from inmanta import RUNNING_TESTS, const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
@@ -362,10 +362,20 @@ class HandlerContext(object):
             kwargs["traceback"] = traceback.format_exc()
         else:
             exc_info = False
-        try:
-            json_encode(kwargs)
-        except Exception as e:
-            raise Exception("Exception during serializing log message arguments") from e
+
+        for k, v in dict(kwargs).items():
+            try:
+                json_encode(v)
+            except TypeError:
+                if RUNNING_TESTS:
+                    # Fail the test when the value is not serializable
+                    raise Exception(f"Fail to serialize argument for log message {k}={v}")
+                else:
+                    # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                    kwargs[k] = str(v)
+
+            except Exception as e:
+                raise Exception("Exception during serializing log message arguments") from e
         log = data.LogLine.log(level, msg, **kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
