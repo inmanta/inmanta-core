@@ -205,9 +205,8 @@ class PartialUpdateMerger:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
         )
-        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
-            k: v for k, v in old_resource_sets.items() if v not in chain(self.removed_resource_sets, updated_resource_sets)
-        }
+        to_keep: List[str] = list(updated_resource_sets) + self.removed_resource_sets
+        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {k: v for k, v in old_resource_sets.items() if v not in to_keep}
         new_resource_sets.update(self.resource_sets)
         return new_resource_sets
 
@@ -398,7 +397,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         agents = set()
         # lookup for all RV's, lookup by resource id
-        rv_dict: Dict[ResourceVersionIdStr, data.Resource] = {}
+        rv_dict: Dict[ResourceIdStr, data.Resource] = {}
         # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
         provides_tree: Dict[str, List[str]] = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
@@ -476,7 +475,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
             # search for deleted resources (purge_on_delete)
-            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
+            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, list(rv_dict.keys()))
 
             previous_requires = {}
             for res in resources_to_purge:

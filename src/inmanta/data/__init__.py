@@ -4529,7 +4529,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_deleted_resources(
-        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceVersionIdStr]
+        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceIdStr]
     ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
