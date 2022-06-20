@@ -4537,7 +4537,7 @@ class Resource(BaseDocument):
 
         :param environment:
         :param current_version:
-        :param current_resources: A set of all resource ids in the current version.
+        :param current_resources: A Sequence of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
 
@@ -4582,7 +4582,7 @@ class Resource(BaseDocument):
 
         # determined deleted resources
 
-        deleted = set(resources) - current_resources
+        deleted = set(resources) - set(current_resources)
         LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 
         # filter out resources that should not be purged:
