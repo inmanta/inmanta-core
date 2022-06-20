@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
+from typing import Dict, Any
 
 import pytest
 
@@ -100,7 +101,7 @@ def test_3470_CRUD_handler_with_unserializable_items():
         def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
             resource.value = "a"
 
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource) -> None:
             self.updated = True
 
     @resource(name="aa::Aa", id_attribute="aa", agent="aa")
