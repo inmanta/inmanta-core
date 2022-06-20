@@ -457,3 +457,12 @@ if a is defined:
 end
 """)
     compiler.do_compile()
+
+
+def test_dict_sandbox(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+d = {"a": "A", "b": null}
+
+""")
+    compiler.do_compile()
