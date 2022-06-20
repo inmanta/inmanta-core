@@ -909,7 +909,7 @@ class CRUDHandler(ResourceHandler):
                     changes["purged"] = dict(desired=desired.purged, current=True)
 
             for field, values in changes.items():
-                ctx.add_change(field, desired=changes[field]["desired"], current=changes[field]["current"])
+                ctx.add_change(field, desired=values["desired"], current=values["current"])
 
             if not dry_run:
                 if "purged" in changes:
@@ -922,7 +922,7 @@ class CRUDHandler(ResourceHandler):
 
                 elif not desired.purged and len(changes) > 0:
                     ctx.debug("Calling update_resource", changes=ctx.changes)
-                    self.update_resource(ctx, dict(ctx.changes), desired)
+                    self.update_resource(ctx, changes, desired)
 
                 ctx.set_status(const.ResourceState.deployed)
             else:
