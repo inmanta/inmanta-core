@@ -85,6 +85,9 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
     include_package_data=True
     packages=find_namespace:
 
+    [options.packages.find]
+    include = inmanta_plugins*
+
 
 * The ``metadata`` section defines the following fields:
 
