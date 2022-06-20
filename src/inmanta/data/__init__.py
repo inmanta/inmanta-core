@@ -4572,8 +4572,8 @@ class Resource(BaseDocument):
             + str(len(values) + 1)
         )
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = await cls._fetch_query(query, *values)
-        resources = [r["resource_id"] for r in resources]
+        resources_records = await cls._fetch_query(query, *values)
+        resources = [r["resource_id"] for r in resources_records]
 
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
