@@ -366,3 +366,33 @@ z = c.tests[n = 42, **dct]
     x: Instance = scope.lookup("x").get_value()
     z: Instance = scope.lookup("z").get_value()
     assert x is z
+
+
+def test_dict_is_defined(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+d = {"a": "A", "b": null}
+
+# This doesn't work
+if "a" in d and d["a"] is defined:
+    std::print(d["a"])
+end
+    """)
+    compiler.do_compile()
+
+
+def test_dict_is_defined_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+d = {"a": "A", "b": null}
+
+# This works
+a = "a" in d
+    ? d["a"]
+    : null
+
+if a is defined:
+    std::print(a)
+end
+""")
+    compiler.do_compile()
