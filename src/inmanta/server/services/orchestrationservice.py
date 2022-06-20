@@ -20,7 +20,6 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from itertools import chain
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import asyncpg
