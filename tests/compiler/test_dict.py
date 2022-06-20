@@ -428,3 +428,32 @@ dict_6 = {r'{{value}}': "not interpolation"}
 
     for var, exp_val in zip(vars_to_lookup, expected_values):
         assert lookup(var) == exp_val
+
+
+def test_dict_is_defined(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+d = {"a": "A", "b": null}
+
+# This doesn't work
+if "a" in d and d["a"] is defined:
+    std::print(d["a"])
+end
+    """)
+    compiler.do_compile()
+
+def test_dict_is_defined_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+d = {"a": "A", "b": null}
+
+# This works
+a = "a" in d
+    ? d["a"]
+    : null
+
+if a is defined:
+    std::print(a)
+end
+""")
+    compiler.do_compile()
