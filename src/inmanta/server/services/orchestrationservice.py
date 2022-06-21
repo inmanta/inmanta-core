@@ -614,7 +614,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        resources: list[Any],
+        resources: object,
         resource_state: Dict[ResourceIdStr, ResourceState] = {},
         unknowns: List[Dict[str, PrimitiveTypes]] = [],
         version_info: Optional[model.ModelVersionInfo] = None,
