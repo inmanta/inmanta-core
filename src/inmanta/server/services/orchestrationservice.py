@@ -187,7 +187,7 @@ class PartialUpdateMerger:
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
-                        f"A partial compile cannot migrate a resource({new_resource.resource['id']}) " "to another resource set"
+                        f"A partial compile cannot migrate resource {new_resource.resource['id']} to another resource set"
                     )
                 if new_resource.resource_set is None and paired_resource.is_update():
                     raise BadRequest(
