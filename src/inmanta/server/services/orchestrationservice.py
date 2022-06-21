@@ -386,7 +386,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource = Id.parse_id(r["id"])
             if resource.get_version() != version:
                 raise BadRequest(
-                    f"The resource version of resource {r['id']} " f"does not match the version argument (version: {version}"
+                    f"The resource version of resource {r['id']} does not match the version argument (version: {version})"
                 )
 
         if not resource_sets:
