@@ -216,7 +216,7 @@ class PartialUpdateMerger:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
-        changed_resource_sets: List[str] = list(updated_resource_sets) + self.removed_resource_sets
+        changed_resource_sets: Set[str] = set(list(updated_resource_sets) + self.removed_resource_sets)
         unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             k: v for k, v in old_resource_sets.items() if v not in changed_resource_sets
         }
