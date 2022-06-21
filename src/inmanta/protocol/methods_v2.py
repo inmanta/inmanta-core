@@ -43,7 +43,7 @@ def put_partial(
     tid: uuid.UUID,
     version: int,
     resource_state: Dict[model.ResourceIdStr, ResourceState] = {},
-    unknowns: List[Dict[str, PrimitiveTypes]] = [],
+    unknowns: List[Dict[ResourceIdStr, PrimitiveTypes]] = [],
     version_info: Optional[model.ModelVersionInfo] = None,
     compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
