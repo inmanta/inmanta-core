@@ -65,7 +65,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceWithResourceSet:
     def __init__(
         self,
-        resource: Dict[str, Any],
+        resource: Dict[str, object],
         resource_set: Optional[str],
     ) -> None:
         self.resource = resource
@@ -104,9 +104,9 @@ class PairedResource:
 class PartialUpdateMerger:
     def __init__(
         self,
-        partial_updates: List[Dict[str, Any]],
-        resource_sets: Dict[ResourceIdStr, Optional[str]],
-        removed_resource_sets: List[str],
+        partial_updates: Sequence[Mapping[str, object]],
+        resource_sets: Mapping[ResourceIdStr, Optional[str]],
+        removed_resource_sets: Sequence[str],
         env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
@@ -138,7 +138,7 @@ class PartialUpdateMerger:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: Dict[str, Any] = {
+            resource: Dict[str, object] = {
                 "id": res.resource_version_id,
                 **res.attributes,
             }
@@ -158,14 +158,14 @@ class PartialUpdateMerger:
             resource["id"] = res.resource_version_str()
             return resource
 
-        to_keep: List[Dict[str, Any]] = [
+        to_keep: Sequence[Mapping[str, object]] = [
             copy_with_incremented_version(r.resource)
             for r in list(old_resources.values())
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
-        merged_resources: Dict[ResourceIdStr, Dict[str, Any]] = {r["id"]: r for r in to_keep}
+        merged_resources: Dict[ResourceIdStr, Dict[str, object]] = {r["id"]: r for r in to_keep}
 
         for paired_resource in paired_resources:
             new_resource = paired_resource.new_resource
@@ -173,8 +173,7 @@ class PartialUpdateMerger:
             assert new_resource is not None
             assert (
                 old_resource is None
-                or old_resource is not None
-                and Id.parse_id(old_resource.resource["id"]).resource_str()
+                or Id.parse_id(old_resource.resource["id"]).resource_str()
                 == Id.parse_id(new_resource.resource["id"]).resource_str()
             )
             if paired_resource.is_new_resource():
@@ -205,7 +204,7 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> Tuple[List[Any], Dict[ResourceIdStr, Optional[str]]]:
+    async def merge_partial_with_old(self) -> Tuple[List[object], Dict[ResourceIdStr, Optional[str]]]:
         old_resources = await self._get_old_resources()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
@@ -613,7 +612,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        resources: list[Any],
+        resources: object,
         resource_state: Dict[ResourceIdStr, ResourceState] = {},
         unknowns: List[Dict[str, PrimitiveTypes]] = [],
         version_info: Optional[model.ModelVersionInfo] = None,
