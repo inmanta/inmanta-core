@@ -184,9 +184,9 @@ class PartialUpdateMerger:
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
-                        f"A partial compile cannot migrate a resource({new_resource.resource['id']}) " "to another resource set"
+                        f"A partial compile cannot migrate resource {new_resource.resource['id']} to another resource set"
                     )
-                if new_resource.resource_set is None and paired_resource.is_update():
+                if new_resource.is_shared_resource() and paired_resource.is_update():
                     raise BadRequest(
                         f"Resource ({new_resource.resource['id']}) without a resource set cannot"
                         " be updated via a partial compile"
@@ -378,7 +378,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource = Id.parse_id(r["id"])
             if resource.get_version() != version:
                 raise BadRequest(
-                    f"The resource version of resource {r['id']} " f"does not match the version argument (version: {version}"
+                    f"The resource version of resource {r['id']} does not match the version argument (version: {version})"
                 )
 
         if not resource_sets:
