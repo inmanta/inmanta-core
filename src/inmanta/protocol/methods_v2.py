@@ -62,9 +62,8 @@ def put_partial(
     :param version_info: Model version information
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
-    :param **kwargs: support value 'resources' of type 'List[Dict[str, Any]]'
+    :param **kwargs: support value 'resources': a list of resource objects.
     """
-
 
 # TODO: create ticket to clean kwargs and type resources
 

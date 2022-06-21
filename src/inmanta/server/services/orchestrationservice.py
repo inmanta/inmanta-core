@@ -122,9 +122,8 @@ class PartialUpdateMerger:
 
         :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set
         """
-        partial_updates: List[Dict[str, Any]] = self.partial_updates
         paired_resources: List[PairedResource] = []
-        for partial_update in partial_updates:
+        for partial_update in self.partial_updates:
             key = Id.parse_id(partial_update["id"]).resource_str()
             resource_set = self.resource_sets.get(key)
             pair: PairedResource = PairedResource(ResourceWithResourceSet(partial_update, resource_set), None)
@@ -393,7 +392,7 @@ class OrchestrationService(protocol.ServerSlice):
             try:
                 Id.parse_id(r)
             except Exception as e:
-                raise BadRequest(str(e))
+                raise BadRequest("Invalid resource id in resource set: %s" % str(e))
 
         started = datetime.datetime.now().astimezone()
 
