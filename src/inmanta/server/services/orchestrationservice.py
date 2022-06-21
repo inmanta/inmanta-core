@@ -631,12 +631,21 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: object,
-        resource_state: Dict[ResourceIdStr, ResourceState] = {},
-        unknowns: List[Dict[str, PrimitiveTypes]] = [],
+        resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+        unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
         version_info: Optional[model.ModelVersionInfo] = None,
-        resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
-        removed_resource_sets: List[str] = [],
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        removed_resource_sets: Optional[List[str]] = None,
     ) -> None:
+        if resource_state is None:
+            resource_state = {}
+        if unknowns is None:
+            unknowns = []
+        if resource_sets is None:
+            resource_sets = {}
+        if removed_resource_sets is None:
+            removed_resource_sets = []
+
         try:
             pydantic.parse_obj_as(List[Dict[str, Any]], resources)
         except pydantic.ValidationError:

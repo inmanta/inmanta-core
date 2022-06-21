@@ -829,7 +829,9 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
     )
 
     assert result.code == 400
-    assert result.result["message"] == ("Invalid request: Invalid id for resource hello")
+    assert result.result["message"] == (
+        "Invalid request: Invalid resource id in resource set: " "Invalid id for resource hello"
+    )
 
 
 async def test_put_partial_different_env(server, client):
