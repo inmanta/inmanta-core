@@ -331,8 +331,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: A partial compile cannot migrate a "
-        "resource(test::Resource[agent1,key=key1],v=2) to another resource set"
+        "Invalid request: A partial compile cannot migrate resource "
+        "test::Resource[agent1,key=key1],v=2 to another resource set"
     )
 
 
@@ -985,5 +985,5 @@ async def test_put_partial_version(server, client, environment, clienthelper):
     assert result.result["message"] == (
         "Invalid request: The resource version of resource "
         "test::Resource[agent1,key=key1],v=5 does not match the version argument "
-        "(version: 2"
+        "(version: 2)"
     )
