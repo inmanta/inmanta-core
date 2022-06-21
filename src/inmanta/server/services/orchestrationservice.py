@@ -104,9 +104,9 @@ class PairedResource:
 class PartialUpdateMerger:
     def __init__(
         self,
-        partial_updates: List[Dict[str, Any]],
-        resource_sets: Dict[ResourceIdStr, Optional[str]],
-        removed_resource_sets: List[str],
+        partial_updates: Sequence[Mapping[str, object]],
+        resource_sets: Mapping[ResourceIdStr, Optional[str]],
+        removed_resource_sets: Sequence[str],
         env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
