@@ -66,8 +66,6 @@ def put_partial(
     """
 
 
-# TODO: create ticket to clean kwargs and type resources
-
 # Method for working with projects
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
 def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
