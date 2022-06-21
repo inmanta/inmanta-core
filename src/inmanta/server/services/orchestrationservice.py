@@ -137,9 +137,6 @@ class PartialUpdateMerger:
         self,
     ) -> Tuple[Dict[ResourceIdStr, ResourceWithResourceSet], Dict[ResourceIdStr, Optional[str]]]:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
-        old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
-            resource.resource_id: resource.resource_set for resource in old_data
-        }
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: Dict[str, Any] = {
@@ -147,7 +144,7 @@ class PartialUpdateMerger:
                 **res.attributes,
             }
             old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
-        return old_resources, old_resource_sets
+        return old_resources
 
     def _merge_resources(
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
@@ -203,13 +200,20 @@ class PartialUpdateMerger:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
         )
-        to_keep: List[str] = list(updated_resource_sets) + self.removed_resource_sets
-        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {k: v for k, v in old_resource_sets.items() if v not in to_keep}
+        changed_resource_sets: List[str] = list(updated_resource_sets) + self.removed_resource_sets
+        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            k: v for k, v in old_resource_sets.items() if v not in changed_resource_sets
+        }
         new_resource_sets.update(self.resource_sets)
         return new_resource_sets
 
     async def merge_partial_with_old(self) -> Tuple[List[Any], Dict[ResourceIdStr, Optional[str]]]:
-        old_resources, old_resource_sets = await self._get_old_resources()
+        old_resources = await self._get_old_resources()
+
+        old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            res_id: res.resource_set for res_id, res in old_resources.items()
+        }
+
         paired_resources = self.pair_resources_partial_update_to_old_version(old_resources)
         new_resources = self._merge_resources(old_resources, paired_resources)
         new_resource_sets = self._merge_resource_sets(old_resource_sets, paired_resources)
@@ -385,6 +389,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         if not resource_sets:
             resource_sets = {}
+
+        for r in resource_sets.keys():
+            try:
+                Id.parse_id(r)
+            except Exception as e:
+                raise BadRequest(str(e))
 
         started = datetime.datetime.now().astimezone()
 
@@ -619,12 +629,6 @@ class OrchestrationService(protocol.ServerSlice):
                 "Type validation failed for resources argument. "
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
-
-        for r in resource_sets.keys():
-            try:
-                Id.parse_id(r)
-            except Exception as e:
-                raise BadRequest(str(e))
 
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources, merged_resource_sets = await merger.merge_partial_with_old()

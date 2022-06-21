@@ -146,7 +146,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key2]": "set-a",
         },
@@ -210,7 +209,6 @@ async def test_put_partial_resources_in_resource_set(server, client, environment
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-a",
@@ -271,7 +269,6 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={},
     )
 
@@ -329,7 +326,6 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={"test::Resource[agent1,key=key1]": "set-b"},
     )
 
@@ -385,7 +381,6 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={},
     )
 
@@ -462,7 +457,6 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-b",
@@ -658,7 +652,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-a",
@@ -749,7 +742,6 @@ async def test_put_partial_validation_error(server, client, environment, clienth
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-b",
@@ -829,7 +821,6 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
             "test::Resource[agent1,key=key2]": "set-b",
@@ -915,7 +906,6 @@ async def test_put_partial_different_env(server, client):
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={},
     )
 
@@ -986,7 +976,6 @@ async def test_put_partial_version(server, client, environment, clienthelper):
         resource_state={},
         unknowns=[],
         version_info=None,
-        compiler_version=get_compiler_version(),
         resource_sets={
             "test::Resource[agent1,key=key1]": "set-a",
         },
