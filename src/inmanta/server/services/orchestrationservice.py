@@ -201,9 +201,9 @@ class PartialUpdateMerger:
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
         )
         changed_resource_sets: List[str] = list(updated_resource_sets) + self.removed_resource_sets
-        new_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+        unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             k: v for k, v in old_resource_sets.items() if v not in changed_resource_sets
-        unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {k: v for k, v in old_resource_sets.items() if v not in to_keep}
+        }
         return {**unchanged_resource_sets, **self.resource_sets}
 
     async def merge_partial_with_old(self) -> Tuple[List[Any], Dict[ResourceIdStr, Optional[str]]]:
