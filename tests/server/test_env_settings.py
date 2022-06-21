@@ -33,7 +33,7 @@ async def test_environment_settings(client, server, environment_default):
 
     # set invalid value
     result = await client.set_setting(tid=environment_default, id="auto_deploy", value="test")
-    assert result.code == 500
+    assert result.code == 400
 
     # set non existing setting
     result = await client.set_setting(tid=environment_default, id="auto_deploy_non", value=False)
@@ -94,7 +94,7 @@ async def test_environment_settings(client, server, environment_default):
 
     # Internal agent is missing
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value={"agent1": ""})
-    assert result.code == 500
+    assert result.code == 400
     assert "The internal agent must be present in the autostart_agent_map" in result.result["message"]
     # Assert agent_map didn't change
     result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
@@ -102,7 +102,7 @@ async def test_environment_settings(client, server, environment_default):
     assert result.result["value"] == agent_map
 
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 500
+    assert result.code == 400
     assert "Agent map should be a dict" in result.result["message"]
     # Assert agent_map didn't change
     result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
