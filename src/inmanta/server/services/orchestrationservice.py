@@ -122,7 +122,7 @@ class PartialUpdateMerger:
 
         :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set
         """
-        partial_updates: List[Dict[str, Any]] = self.partial_updates
+        partial_updates: Sequence[Mapping[str, object]] = self.partial_updates
         paired_resources: List[PairedResource] = []
         for partial_update in partial_updates:
             key = Id.parse_id(partial_update["id"]).resource_str()
