@@ -65,7 +65,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceWithResourceSet:
     def __init__(
         self,
-        resource: Dict[str, Any],
+        resource: Dict[str, object],
         resource_set: Optional[str],
     ) -> None:
         self.resource = resource
