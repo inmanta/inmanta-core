@@ -88,8 +88,6 @@ def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, creat
     no_error_in_logs(caplog)
     log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")
 
-    log_contains(caplog, "inmanta.agent.handler", logging.DEBUG, "resource aa::Aa[aa,aa=aa],v=1: Calling read_resource")
-
 
 @pytest.mark.parametrize(
     "running_test",
@@ -134,12 +132,13 @@ def test_3470_CRUD_handler_with_unserializable_changes(running_test: bool, monke
     if running_test:
         handler.execute(ctx, res, dry_run=False)
         assert ctx.status is ResourceState.failed
-        error_message = "Fail to serialize attribute {'a'}"
+        error_message = "Failed to serialize attribute {'a'}"
 
         assert error_message in caplog.text
 
     else:
         handler.execute(ctx, res, dry_run=False)
+        assert ctx.status is ResourceState.deployed
         assert handler.updated
 
 
@@ -186,10 +185,11 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
 
     if running_test:
         handler.execute(ctx, res, dry_run=False)
-        error_message = "Fail to serialize argument for log message"
+        error_message = "Failed to serialize argument for log message"
         assert ctx.status is ResourceState.failed
         assert error_message in caplog.text
 
     else:
         handler.execute(ctx, res, dry_run=False)
+        assert ctx.status is ResourceState.deployed
         assert handler.updated

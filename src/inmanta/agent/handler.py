@@ -370,7 +370,7 @@ class HandlerContext(object):
             except TypeError:
                 if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
-                    raise Exception(f"Fail to serialize argument for log message {k}={v}")
+                    raise Exception(f"Failed to serialize argument for log message {k}={v}")
                 else:
                     # In production, try to cast the non-serializable value to str to prevent the handler from failing.
                     kwargs[k] = str(v)

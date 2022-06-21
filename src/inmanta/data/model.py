@@ -210,7 +210,7 @@ class AttributeStateChange(BaseModel):
         except TypeError:
             if inmanta.RUNNING_TESTS:
                 # Fail the test when the value is not serializable
-                raise Exception(f"Fail to serialize attribute {v}")
+                raise Exception(f"Failed to serialize attribute {v}")
             else:
                 # In production, try to cast the non-serializable value to str to prevent the handler from failing.
                 return str(v)
