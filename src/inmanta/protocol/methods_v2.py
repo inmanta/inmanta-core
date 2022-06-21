@@ -26,6 +26,7 @@ from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
+from ..data.model import ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -45,7 +46,6 @@ def put_partial(
     resource_state: Dict[model.ResourceIdStr, ResourceState] = {},
     unknowns: List[Dict[ResourceIdStr, PrimitiveTypes]] = [],
     version_info: Optional[model.ModelVersionInfo] = None,
-    compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
     removed_resource_sets: List[str] = [],
     **kwargs: object,  # bypass the type checking for resources that result from the partial compile
@@ -60,7 +60,6 @@ def put_partial(
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Model version information
-    :param compiler_version: version of the compiler, if not provided, this call will return an error
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
     :param **kwargs: support value 'resources' of type 'List[Dict[str, Any]]'
