@@ -28,7 +28,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, T
 
 from tornado import concurrent
 
-from inmanta import RUNNING_TESTS, const, data, protocol, resources
+import inmanta
+from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
@@ -367,7 +368,7 @@ class HandlerContext(object):
             try:
                 json_encode(v)
             except TypeError:
-                if RUNNING_TESTS:
+                if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
                     raise Exception(f"Fail to serialize argument for log message {k}={v}")
                 else:

@@ -145,9 +145,7 @@ def test_3470_CRUD_handler_with_unserializable_changes(running_test: bool, monke
 
 @pytest.mark.parametrize(
     "running_test",
-    [
-        (True, False),
-    ],
+    [True, False],
 )
 def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: bool, monkeypatch, caplog):
     """
@@ -166,7 +164,7 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
         def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
             resource.value = "b"
             unserializable_set = {"b"}
-            ctx.debug(msg="Unserializable kwargs: ", kwargs={"unserializable", unserializable_set})
+            ctx.debug(msg="Unserializable kwargs: ", kwargs={"unserializable": unserializable_set})
 
         def update_resource(
             self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
@@ -188,9 +186,8 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
 
     if running_test:
         handler.execute(ctx, res, dry_run=False)
-        assert ctx.status is ResourceState.failed
         error_message = "Fail to serialize argument for log message"
-
+        assert ctx.status is ResourceState.failed
         assert error_message in caplog.text
 
     else:
