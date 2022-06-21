@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
 import pydantic
@@ -65,7 +65,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceWithResourceSet:
     def __init__(
         self,
-        resource: Dict[str, object],
+        resource: Mapping[str, object],
         resource_set: Optional[str],
     ) -> None:
         self.resource = resource
@@ -76,6 +76,10 @@ class ResourceWithResourceSet:
 
 
 class PairedResource:
+    """
+    Paires 2 ResourceWithResourceSet together.
+    """
+
     def __init__(
         self,
         new_resource: ResourceWithResourceSet,
@@ -85,6 +89,9 @@ class PairedResource:
         self.old_resource = old_resource
 
     def is_update(self) -> bool:
+        """
+        return true if new_resource is an update of old_resource: old_resource exists but is different form new_resource.
+        """
         if self.old_resource is None:
             return False
         attr_names_new_resource = set(self.new_resource.resource).difference("id")
@@ -94,14 +101,24 @@ class PairedResource:
         )
 
     def is_new_resource(self) -> bool:
+        """
+        return true if old_resource doesn't exist
+        """
         return self.old_resource is None
 
     def resource_changed_resource_set(self) -> bool:
+        """
+        return true if the resource_set is not the same
+        """
         assert self.old_resource is not None
         return self.new_resource.resource_set != self.old_resource.resource_set
 
 
 class PartialUpdateMerger:
+    """
+    This class is used to merge the result of a partial compile with the old resources and resource_sets
+    """
+
     def __init__(
         self,
         partial_updates: Sequence[Mapping[str, object]],
@@ -149,18 +166,20 @@ class PartialUpdateMerger:
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
     ) -> List[Any]:
         updated_resource_sets: Set[str] = set(
-            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
+            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
 
         def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
-            res = Id.parse_id(resource["id"])
-            res.increment_version()
-            resource["id"] = res.resource_version_str()
+            old_res = Id.parse_id(resource["id"])
+            new_res = Id(
+                old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
+            )
+            resource["id"] = new_res.resource_version_str()
             return resource
 
         to_keep: Sequence[Mapping[str, object]] = [
             copy_with_incremented_version(r.resource)
-            for r in list(old_resources.values())
+            for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
@@ -170,7 +189,6 @@ class PartialUpdateMerger:
         for paired_resource in paired_resources:
             new_resource = paired_resource.new_resource
             old_resource = paired_resource.old_resource
-            assert new_resource is not None
             assert (
                 old_resource is None
                 or Id.parse_id(old_resource.resource["id"]).resource_str()
@@ -196,7 +214,7 @@ class PartialUpdateMerger:
         self, old_resource_sets: Dict[ResourceIdStr, Optional[str]], paired_resources: List[PairedResource]
     ) -> Dict[ResourceIdStr, Optional[str]]:
         updated_resource_sets: Set[str] = set(
-            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set
+            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
         changed_resource_sets: List[str] = list(updated_resource_sets) + self.removed_resource_sets
         unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {

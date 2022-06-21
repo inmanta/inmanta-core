@@ -65,6 +65,7 @@ def put_partial(
     :param **kwargs: support value 'resources': a list of resource objects.
     """
 
+
 # TODO: create ticket to clean kwargs and type resources
 
 # Method for working with projects

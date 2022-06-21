@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 from inmanta import const, data, resources
 from inmanta.data import model
