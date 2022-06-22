@@ -27,6 +27,12 @@ from inmanta.util import get_compiler_version
 LOGGER = logging.getLogger(__name__)
 
 
+class CacheEnveloppe:
+    def __init__(self, timestamp: float, statements: List[Statement]):
+        self.timestamp = timestamp
+        self.statements = statements
+
+
 class CacheManager:
     def __init__(self) -> None:
         self.hits = 0
@@ -74,13 +80,22 @@ class CacheManager:
             if not os.path.exists(cache_filename):
                 self.misses += 1
                 return None
+            mtime = os.path.getmtime(filename)
             if os.path.getmtime(filename) > os.path.getmtime(cache_filename):
                 self.misses += 1
                 return None
             with open(cache_filename, "rb") as fh:
                 result = ASTUnpickler(fh, namespace).load()
+                if not isinstance(result, CacheEnveloppe):
+                    # old cache format
+                    self.misses += 1
+                    return None
+                if result.timestamp != mtime:
+                    # mtime is not exactly the same
+                    self.misses += 1
+                    return None
                 self.hits += 1
-                return result
+                return result.statements
         except Exception:
             self.failures += 1
             LOGGER.warning("Compile cache loading failure, ignoring cache entry for %s", filename, exc_info=True)
@@ -93,8 +108,10 @@ class CacheManager:
             return
         try:
             cache_filename = self.get_file_name(filename)
+            mtime = os.path.getmtime(filename)
+            cache_entry = CacheEnveloppe(mtime, statements)
             with open(cache_filename, "wb") as fh:
-                ASTPickler(fh, protocol=4).dump(statements)
+                ASTPickler(fh, protocol=4).dump(cache_entry)
         except Exception:
             LOGGER.warning("Compile cache failure, failed to cache statements for %s", filename, exc_info=True)
 
@@ -102,9 +119,10 @@ class CacheManager:
         if not self.cache_enabled.get():
             # cache not enabled
             return
-        LOGGER.info(
-            "Compiler cache observed %d hits and %d misses (%d%%)",
-            self.hits,
-            self.misses,
-            (100 * self.hits) / (self.hits + self.misses),
-        )
+        if self.hits + self.misses != 0:
+            LOGGER.info(
+                "Compiler cache observed %d hits and %d misses (%d%%)",
+                self.hits,
+                self.misses,
+                (100 * self.hits) / (self.hits + self.misses),
+            )
