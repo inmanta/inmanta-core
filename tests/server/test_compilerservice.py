@@ -604,17 +604,41 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert versions["count"] == 3
 
     # set a full compile schedule
-    soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
-    cron_soon: str = "%d %d * * * %d" % (soon.minute, soon.hour, soon.second)
-    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+    async def schedule_soon() -> None:
+        soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+        cron_soon: str = "%d %d * * * %d" % (soon.minute, soon.hour, soon.second)
+        await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+
+    async def is_compiling() -> None:
+        return (await client.is_compiling(environment)).code == 200
+
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
     logger.info("wait for 4")
     versions = await wait_for_version(client, environment, 4)
     assert versions["count"] == 4
 
-    # TODO: overwrite for second compile
-    # TODO: overwrite for compile far in future
-    # TODO: anything else?
-    # TODO: delete
+    # override existing schedule
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, 5)
+    assert versions["count"] == 5
+
+    # delete schedule
+    await schedule_soon()
+    await client.environment_setting_delete(environment, id="auto_full_compile")
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
+
+    # override with schedule in far future, check that it doesn't trigger an immediate recompile
+    recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
+    cron_recent: str = "%d %d * * * %d" % (recent.minute, recent.hour, recent.second)
+    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
 
     # clear the environment
     state_dir = server_config.state_dir.get()
