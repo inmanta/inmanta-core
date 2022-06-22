@@ -123,7 +123,7 @@ class PairedResource:
 
 class PartialUpdateMerger:
     """
-    This class is used to merge the result of a partial compile with the old resources and resource_sets
+    This class is used to merge the result of a partial compile with the previous resources and resource_sets
     """
 
     def __init__(
