@@ -27,7 +27,9 @@ from inmanta.util import get_compiler_version
 LOGGER = logging.getLogger(__name__)
 
 
-class CacheEnveloppe:
+class CacheEnvelope:
+    """Every cached file gets the exact modification to of the file it is caching, to have cheap, accurate invalidation"""
+
     def __init__(self, timestamp: float, statements: List[Statement]):
         self.timestamp = timestamp
         self.statements = statements
@@ -86,7 +88,7 @@ class CacheManager:
                 return None
             with open(cache_filename, "rb") as fh:
                 result = ASTUnpickler(fh, namespace).load()
-                if not isinstance(result, CacheEnveloppe):
+                if not isinstance(result, CacheEnvelope):
                     # old cache format
                     self.misses += 1
                     return None
@@ -109,7 +111,7 @@ class CacheManager:
         try:
             cache_filename = self.get_file_name(filename)
             mtime = os.path.getmtime(filename)
-            cache_entry = CacheEnveloppe(mtime, statements)
+            cache_entry = CacheEnvelope(mtime, statements)
             with open(cache_filename, "wb") as fh:
                 ASTPickler(fh, protocol=4).dump(cache_entry)
         except Exception:
