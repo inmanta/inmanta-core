@@ -72,7 +72,7 @@ LOGGER = logging.getLogger(__name__)
 class ResourceWithResourceSet:
     def __init__(
         self,
-        resource: Mapping[str, object],
+        resource: ResourceMinimal,
         resource_set: Optional[str],
     ) -> None:
         self.resource = resource
@@ -101,10 +101,12 @@ class PairedResource:
         """
         if self.old_resource is None:
             return False
-        attr_names_new_resource = set(self.new_resource.resource).difference("id")
-        attr_names_old_resource = set(self.old_resource.resource).difference("id")
+        new_resource_dict = self.new_resource.resource.dict()
+        old_resource_dict = self.old_resource.resource.dict()
+        attr_names_new_resource = set(new_resource_dict.keys()).difference("id")
+        attr_names_old_resource = set(old_resource_dict.keys()).difference("id")
         return attr_names_new_resource != attr_names_old_resource or any(
-            self.new_resource.resource[k] != self.old_resource.resource[k] for k in attr_names_new_resource
+            new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
         )
 
     def is_new_resource(self) -> bool:
@@ -128,7 +130,7 @@ class PartialUpdateMerger:
 
     def __init__(
         self,
-        partial_updates: Sequence[Mapping[str, object]],
+        partial_updates: Sequence[ResourceMinimal],
         resource_sets: Mapping[ResourceIdStr, Optional[str]],
         removed_resource_sets: Sequence[str],
         env: data.Environment,
@@ -148,7 +150,7 @@ class PartialUpdateMerger:
         """
         paired_resources: List[PairedResource] = []
         for partial_update in self.partial_updates:
-            key = Id.parse_id(partial_update["id"]).resource_str()
+            key = Id.parse_id(partial_update.id).resource_str()
             resource_set = self.resource_sets.get(key)
             pair: PairedResource = PairedResource(ResourceWithResourceSet(partial_update, resource_set), None)
             if key in old_resources:
@@ -158,14 +160,11 @@ class PartialUpdateMerger:
 
     async def _get_old_resources(
         self,
-    ) -> Tuple[Dict[ResourceIdStr, ResourceWithResourceSet], Dict[ResourceIdStr, Optional[str]]]:
+    ) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: Dict[str, object] = {
-                "id": res.resource_version_id,
-                **res.attributes,
-            }
+            resource: ResourceMinimal = ResourceMinimal(id=res.resource_version_id, **res.attributes)
             old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
         return old_resources
 
@@ -176,45 +175,44 @@ class PartialUpdateMerger:
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
 
-        def copy_with_incremented_version(resource: Dict[str, Any]) -> Dict[str, Any]:
-            old_res = Id.parse_id(resource["id"])
+        def incremented_ressouce_version(resource: ResourceMinimal) -> ResourceMinimal:
+            old_res = Id.parse_id(resource.id)
             new_res = Id(
                 old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
             )
-            resource["id"] = new_res.resource_version_str()
+            resource.id = new_res.resource_version_str()
             return resource
 
         to_keep: Sequence[Mapping[str, object]] = [
-            copy_with_incremented_version(r.resource)
+            incremented_ressouce_version(r.resource)
             for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
-        merged_resources: Dict[ResourceIdStr, Dict[str, object]] = {r["id"]: r for r in to_keep}
+        merged_resources: Dict[ResourceIdStr, Dict[str, object]] = {r.id: r.dict() for r in to_keep}
 
         for paired_resource in paired_resources:
             new_resource = paired_resource.new_resource
             old_resource = paired_resource.old_resource
             assert (
                 old_resource is None
-                or Id.parse_id(old_resource.resource["id"]).resource_str()
-                == Id.parse_id(new_resource.resource["id"]).resource_str()
+                or Id.parse_id(old_resource.resource.id).resource_str() == Id.parse_id(new_resource.resource.id).resource_str()
             )
             if paired_resource.is_new_resource():
-                merged_resources[new_resource.resource["id"]] = new_resource.resource
+                merged_resources[new_resource.resource.id] = new_resource.resource.dict()
             else:
                 if paired_resource.resource_changed_resource_set():
                     raise BadRequest(
-                        f"A partial compile cannot migrate resource {new_resource.resource['id']} to another resource set"
+                        f"A partial compile cannot migrate resource {new_resource.resource.id} to another resource set"
                     )
                 if new_resource.is_shared_resource() and paired_resource.is_update():
                     raise BadRequest(
-                        f"Resource ({new_resource.resource['id']}) without a resource set cannot"
+                        f"Resource ({new_resource.resource.id}) without a resource set cannot"
                         " be updated via a partial compile"
                     )
                 else:
-                    merged_resources[new_resource.resource["id"]] = new_resource.resource
+                    merged_resources[new_resource.resource.id] = new_resource.resource.dict()
         return list(merged_resources.values())
 
     def _merge_resource_sets(
@@ -654,7 +652,7 @@ class OrchestrationService(protocol.ServerSlice):
             removed_resource_sets = []
 
         try:
-            pydantic.parse_obj_as(List[ResourceMinimal], resources)
+            resources = pydantic.parse_obj_as(List[ResourceMinimal], resources)
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "
