@@ -23,8 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import Extra
-from pydantic import validator
+from pydantic import Extra, validator
 from pydantic.fields import ModelField
 
 import inmanta
