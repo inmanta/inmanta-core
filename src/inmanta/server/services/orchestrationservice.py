@@ -183,14 +183,14 @@ class PartialUpdateMerger:
             resource.id = new_res.resource_version_str()
             return resource
 
-        to_keep: Sequence[Mapping[str, object]] = [
+        to_keep: Sequence[ResourceMinimal] = [
             incremented_ressouce_version(r.resource)
             for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
-        merged_resources: Dict[ResourceIdStr, Dict[str, object]] = {r.id: r.dict() for r in to_keep}
+        merged_resources: Dict[ResourceVersionIdStr, Dict[str, Any]] = {r.id: r.dict() for r in to_keep}
 
         for paired_resource in paired_resources:
             new_resource = paired_resource.new_resource
@@ -221,13 +221,13 @@ class PartialUpdateMerger:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
-        changed_resource_sets: Set[str] = set(list(updated_resource_sets) + self.removed_resource_sets)
+        changed_resource_sets: Set[str] = set(list(updated_resource_sets) + list(self.removed_resource_sets))
         unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             k: v for k, v in old_resource_sets.items() if v not in changed_resource_sets
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> Tuple[List[object], Dict[ResourceIdStr, Optional[str]]]:
+    async def merge_partial_with_old(self) -> Tuple[List[Dict[str, Any]], Dict[ResourceIdStr, Optional[str]]]:
         old_resources = await self._get_old_resources()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
@@ -410,9 +410,9 @@ class OrchestrationService(protocol.ServerSlice):
         if not resource_sets:
             resource_sets = {}
 
-        for r in resource_sets.keys():
+        for res_set in resource_sets.keys():
             try:
-                Id.parse_id(r)
+                Id.parse_id(res_set)
             except Exception as e:
                 raise BadRequest("Invalid resource id in resource set: %s" % str(e))
 
