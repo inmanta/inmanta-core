@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ def test_caching(snippetcompiler):
 a=1
 """
     )
-    # don't know hit count, may very on previous testcases
+    # don't know hit count, may vary on previous testcases
     assert parser.cache_manager.misses > 1
     assert parser.cache_manager.failures == 0
 
