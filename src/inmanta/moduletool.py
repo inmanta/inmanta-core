@@ -1091,16 +1091,31 @@ graft inmanta_plugins/{self._module.name}/templates
                 )
                 config_in = toml.load(fh)
 
-        try:
-            build_system = config_in.setdefault("build-system", {})
-            requires = build_system.setdefault("requires", [])
-            for req in ["setuptools", "wheel"]:
-                if req not in requires:
-                    requires.append(req)
-            build_system["build-backend"] = "setuptools.build_meta"
+        # Simple schema validation on relevant part
+        build_system = config_in.setdefault("build-system", {})
+        if not isinstance(build_system, dict):
+            raise CLIException(
+                f"Invalid pyproject.toml: 'build-system' should be of type dict but is of type '{type(build_system)}'",
+                exitcode=1,
+            )
 
-        except Exception as e:
-            raise CLIException(f"The existing pyproject.toml is malformed: {e}", exitcode=1)
+        requires = build_system.setdefault("requires", [])
+        if not isinstance(requires, list):
+            if isinstance(requires, str):
+                # is it a single string, convert to list
+                build_system["requires"] = [requires]
+                requires = build_system["requires"]
+            else:
+                raise CLIException(
+                    f"Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type '{type(requires)}'",
+                    exitcode=1,
+                )
+
+        for req in ["setuptools", "wheel"]:
+            if req not in requires:
+                requires.append(req)
+        build_system["build-backend"] = "setuptools.build_meta"
+
         return toml.dumps(config_in)
 
     def get_setup_cfg(self, in_folder: str, warn_on_merge: bool = False) -> configparser.ConfigParser:

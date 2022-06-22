@@ -18,6 +18,7 @@
 import configparser
 import logging
 import os
+import re
 import shutil
 import subprocess
 
@@ -27,6 +28,7 @@ from pytest import MonkeyPatch
 
 import toml
 from inmanta import moduletool
+from inmanta.command import CLIException
 from inmanta.module import DummyProject, ModuleV1, ModuleV2Metadata
 from inmanta.moduletool import ModuleConverter, ModuleVersionException
 from utils import log_contains
@@ -189,3 +191,26 @@ graft inmanta_plugins/{module_name}/files
 graft inmanta_plugins/{module_name}/templates
         """.strip()
         )
+
+
+def test_module_conversion_in_place_bad_pyproject_toml(tmpdir, caplog):
+    caplog.at_level(level=logging.INFO)
+    module_name = "elaboratev1module"
+    tmpdir = os.path.join(tmpdir, module_name)
+    path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
+    shutil.copytree(path, tmpdir)
+
+    with open(os.path.join(tmpdir, "pyproject.toml"), "w") as fh:
+        fh.write(
+            """
+[build-system]
+    requires = {}
+        """
+        )
+
+    dummyproject = DummyProject()
+    module_in = ModuleV1(dummyproject, tmpdir)
+    with pytest.raises(
+        CLIException, match=re.escape("Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type")
+    ):
+        ModuleConverter(module_in).convert_in_place()
