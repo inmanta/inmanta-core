@@ -37,7 +37,14 @@ from inmanta.data import (
     QueryType,
     model,
 )
-from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import (
+    DesiredStateVersion,
+    PromoteTriggerMethod,
+    ResourceDiff,
+    ResourceIdStr,
+    ResourceMinimal,
+    ResourceVersionIdStr,
+)
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -647,7 +654,7 @@ class OrchestrationService(protocol.ServerSlice):
             removed_resource_sets = []
 
         try:
-            pydantic.parse_obj_as(List[Dict[str, Any]], resources)
+            pydantic.parse_obj_as(List[ResourceMinimal], resources)
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "

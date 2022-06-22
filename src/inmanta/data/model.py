@@ -23,6 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
+from pydantic import Extra
 from pydantic.fields import ModelField
 
 import inmanta.ast.export as ast_export
@@ -280,6 +281,13 @@ class ModelVersionInfo(BaseModel):
 
     export_metadata: ModelMetadata
     model: Optional[JsonType]
+
+
+class ResourceMinimal(BaseModel):
+    id: ResourceVersionIdStr
+
+    class Config:
+        extra = Extra.allow
 
 
 class Resource(BaseModel):
