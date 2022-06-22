@@ -115,7 +115,7 @@ class PairedResource:
 
     def resource_changed_resource_set(self) -> bool:
         """
-        return true if the resource_set is not the same
+        return true if the resource_set in new_resource and old_resource are not the same
         """
         assert self.old_resource is not None
         return self.new_resource.resource_set != self.old_resource.resource_set
