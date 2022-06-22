@@ -96,6 +96,7 @@ from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -1516,3 +1517,11 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True
