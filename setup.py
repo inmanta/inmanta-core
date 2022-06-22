@@ -32,6 +32,7 @@ requires = [
     "typing_inspect~=0.7",
     "build~=0.7",
     "ruamel.yaml~=0.17",
+    "toml~=0.10.2 ",
 ]
 
 # Package a dummy extensions so that the namespace package for extensions is not empty
