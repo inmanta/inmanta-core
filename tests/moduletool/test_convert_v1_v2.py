@@ -186,6 +186,7 @@ jinja2"""
             fh.read().strip()
             == f"""
 include inmanta_plugins/{module_name}/setup.cfg
+include inmanta_plugins/{module_name}/py.typed
 recursive-include inmanta_plugins/{module_name}/model *.cf
 graft inmanta_plugins/{module_name}/files
 graft inmanta_plugins/{module_name}/templates
