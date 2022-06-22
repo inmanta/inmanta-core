@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-python-dateutil from 2.8.17 to 2.8.18
+destination-branches:
+- master
+sections: {}
