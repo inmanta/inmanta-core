@@ -20,11 +20,10 @@ from pathlib import Path
 from time import sleep
 
 import inmanta.parser.plyInmantaParser as parser
-from conftest import SnippetCompilationTest
 from inmanta.parser.cache import CacheManager
 
 
-def test_caching(snippetcompiler: SnippetCompilationTest):
+def test_caching(snippetcompiler):
     # reset counts
     parser.cache_manager = CacheManager()
     snippetcompiler.setup_for_snippet(
