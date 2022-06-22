@@ -1066,6 +1066,7 @@ class ModuleConverter:
             fh.write(
                 f"""
 include inmanta_plugins/{self._module.name}/setup.cfg
+include inmanta_plugins/{self._module.name}/py.typed
 recursive-include inmanta_plugins/{self._module.name}/model *.cf
 graft inmanta_plugins/{self._module.name}/files
 graft inmanta_plugins/{self._module.name}/templates
