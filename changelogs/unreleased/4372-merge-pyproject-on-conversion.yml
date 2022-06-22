@@ -1,4 +1,4 @@
-description: inmanta module v1tov2 will now merge pyproject.toml
+description: inmanta module v1tov2 and inmanta module build will now merge setup.cfg and pyproject.toml
 issue-nr: 4372
 change-type: minor
 destination-branches: [master, iso5]
