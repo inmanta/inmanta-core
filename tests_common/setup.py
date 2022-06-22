@@ -17,7 +17,7 @@
 """
 from os import path
 
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 version = "4.4.4"
 
@@ -64,7 +64,7 @@ setup(
     project_urls={"Bug Tracker": "https://github.com/inmanta/inmanta-core/issues"},
     # Packaging
     package_dir={"": "src"},
-    packages=find_packages("src"),
+    packages=find_namespace_packages(where='src'),
     include_package_data=True,
     install_requires=requires,
     entry_points={"pytest11": ["pytest-inmanta-tests = inmanta_tests.plugin"]},
