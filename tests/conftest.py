@@ -63,6 +63,8 @@ from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+import build.env
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -1128,3 +1130,10 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop()
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True

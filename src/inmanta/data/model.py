@@ -23,10 +23,12 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
+from pydantic import validator
 from pydantic.fields import ModelField
 
+import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const
+from inmanta import const, protocol
 from inmanta.const import Change, ResourceState
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
@@ -197,6 +199,23 @@ class AttributeStateChange(BaseModel):
 
     current: Optional[Any] = None
     desired: Optional[Any] = None
+
+    @validator("current", "desired")
+    @classmethod
+    def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
+        """
+        Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
+        """
+        try:
+            protocol.common.json_encode(v)
+        except TypeError:
+            if inmanta.RUNNING_TESTS:
+                # Fail the test when the value is not serializable
+                raise Exception(f"Failed to serialize attribute {v}")
+            else:
+                # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                return str(v)
+        return v
 
 
 class Event(BaseModel):
