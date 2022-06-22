@@ -1016,7 +1016,7 @@ class ModuleConverter:
 
         output_directory = os.path.abspath(output_directory)
 
-        # convert meta-data (also preforms validation, so we do it first to fail fast)
+        # convert meta-data (also performs validation, so we do it first to fail fast)
         setup_cfg = self.get_setup_cfg(self._module.path, warn_on_merge=False)
 
         # copy all files
