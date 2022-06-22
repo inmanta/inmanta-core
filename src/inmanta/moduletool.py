@@ -38,6 +38,7 @@ from pkg_resources import parse_version
 
 import build
 import build.env
+import toml
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -1016,24 +1017,15 @@ class ModuleConverter:
         output_directory = os.path.abspath(output_directory)
 
         # convert meta-data (also preforms validation, so we do it first to fail fast)
-        setup_cfg = self.get_setup_cfg()
+        setup_cfg = self.get_setup_cfg(self._module.path, warn_on_merge=False)
 
         # copy all files
         shutil.copytree(self._module.path, output_directory)
 
-        self._do_update(output_directory, setup_cfg)
+        self._do_update(output_directory, setup_cfg, warn_on_merge=False)
 
     def convert_in_place(self) -> None:
         output_directory = os.path.abspath(self._module.path)
-
-        setup_cfg = ConfigParser()
-
-        if os.path.exists(os.path.join(output_directory, "setup.cfg")):
-            LOGGER.warning("setup.cfg file already exists, merging. This will remove all comments from the file")
-            setup_cfg.read(os.path.join(output_directory, "setup.cfg"))
-
-        if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
-            raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
 
         if os.path.exists(os.path.join(output_directory, "MANIFEST.in")):
             raise CLIException("MANIFEST.in already exists, aborting. Please remove/rename this file", exitcode=1)
@@ -1041,10 +1033,10 @@ class ModuleConverter:
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
             raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
-        setup_cfg = self.get_setup_cfg(setup_cfg)
-        self._do_update(output_directory, setup_cfg)
+        setup_cfg = self.get_setup_cfg(output_directory, warn_on_merge=True)
+        self._do_update(output_directory, setup_cfg, warn_on_merge=True)
 
-    def _do_update(self, output_directory: str, setup_cfg: ConfigParser) -> None:
+    def _do_update(self, output_directory: str, setup_cfg: ConfigParser, warn_on_merge: bool = False) -> None:
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
         # remove requirements.txt
@@ -1062,8 +1054,10 @@ class ModuleConverter:
                 pass
 
         # write out pyproject.toml
+        # read before erasing
+        pyproject = self.get_pyproject(output_directory, warn_on_merge=warn_on_merge)
         with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
-            fh.write(self.get_pyproject())
+            fh.write(pyproject)
         # write out setup.cfg
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
             setup_cfg.write(fh)
@@ -1079,13 +1073,45 @@ graft inmanta_plugins/{self._module.name}/templates
                 + "\n"
             )
 
-    def get_pyproject(self) -> str:
-        return """[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-"""
+    def get_pyproject(self, in_folder: str, warn_on_merge: bool = False) -> str:
+        """
+        Adds this to the existing config
 
-    def get_setup_cfg(self, config_in: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
+        [build-system]
+        requires = ["setuptools", "wheel"]
+        build-backend = "setuptools.build_meta"
+        """
+        config_in = {}
+        if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
+            with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
+                loglevel = logging.WARNING if warn_on_merge else logging.INFO
+                LOGGER.log(
+                    level=loglevel,
+                    msg="pyproject.toml file already exists, merging. This will remove all comments from the file",
+                )
+                config_in = toml.load(fh)
+
+        try:
+            build_system = config_in.setdefault("build-system", {})
+            requires = build_system.setdefault("requires", [])
+            for req in ["setuptools", "wheel"]:
+                if req not in requires:
+                    requires.append(req)
+            build_system["build-backend"] = "setuptools.build_meta"
+
+        except Exception as e:
+            raise CLIException(f"The existing pyproject.toml is malformed: {e}", exitcode=1)
+        return toml.dumps(config_in)
+
+    def get_setup_cfg(self, in_folder: str, warn_on_merge: bool = False) -> configparser.ConfigParser:
+        config_in = ConfigParser()
+        if os.path.exists(os.path.join(in_folder, "setup.cfg")):
+            loglevel = logging.WARNING if warn_on_merge else logging.INFO
+            LOGGER.log(
+                level=loglevel, msg="setup.cfg file already exists, merging. This will remove all comments from the file"
+            )
+            config_in.read(os.path.join(in_folder, "setup.cfg"))
+
         # convert main config
         config = self._module.metadata.to_v2().to_config(config_in)
 
