@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 from os import path
 
 requires = [
@@ -70,7 +70,7 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
-    packages=find_packages("src") + namespace_packages,
+    packages=find_namespace_packages(where="src") + namespace_packages,
     # https://www.python.org/dev/peps/pep-0561/#packaging-type-information
     package_data={"": ["misc/*", "docs/*"], "inmanta": ["py.typed"]},
     zip_safe=False,
