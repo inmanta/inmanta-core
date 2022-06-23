@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import dataclasses
 import datetime
 import enum
 import functools
@@ -39,7 +40,7 @@ from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optiona
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-from croniter import croniter
+from crontab import CronTab
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
@@ -182,10 +183,16 @@ class CronSchedule(TaskSchedule):
     """
 
     cron: str
+    _crontab: CronTab = dataclasses.field(init=False, compare=False)
 
     def __post_init__(self) -> None:
-        if not croniter.is_valid(self.cron):
-            raise ValueError("'%s' is not a valid cron expression" % self.cron)
+        crontab: CronTab
+        try:
+            crontab = CronTab(self.cron)
+        except ValueError as e:
+            raise ValueError("'%s' is not a valid cron expression: %s" % (self.cron, e))
+        # can not assign directly on frozen dataclass, see dataclass docs
+        object.__setattr__(self, "_crontab", crontab)
 
     def get_initial_delay(self) -> float:
         # no special treatment for first execution
@@ -194,8 +201,7 @@ class CronSchedule(TaskSchedule):
     def get_next_delay(self) -> float:
         # always interpret cron schedules as UTC
         now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
-        delay: datetime.timedelta = croniter(self.cron, now).get_next(datetime.datetime) - now
-        return delay.total_seconds()
+        return self._crontab.next(now=now)
 
     def log(self, action: TaskMethod) -> None:
         LOGGER.debug("Scheduling action %s according to cron specifier '%s'", action, self.cron)

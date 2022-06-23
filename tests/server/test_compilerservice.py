@@ -606,7 +606,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     # set a full compile schedule
     async def schedule_soon() -> None:
         soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
-        cron_soon: str = "%d %d * * * %d" % (soon.minute, soon.hour, soon.second)
+        cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
         await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
 
     async def is_compiling() -> None:
@@ -625,7 +625,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     versions = await wait_for_version(client, environment, 5)
     assert versions["count"] == 5
 
-    # delete schedule
+    # delete schedule, verify it is cancelled
     await schedule_soon()
     await client.environment_setting_delete(environment, id="auto_full_compile")
     with pytest.raises(AssertionError, match="Bounded wait failed"):

@@ -29,6 +29,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import RawConfigParser
+from crontab import CronTab
 from itertools import chain
 from typing import (
     Any,
@@ -58,7 +59,6 @@ import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
-from croniter import croniter
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -2004,9 +2004,10 @@ def convert_agent_trigger_method(value: object) -> str:
 def validate_cron(value: str) -> str:
     if not value:
         return ""
-    # TODO: switch to parse-crontab
-    if not croniter.is_valid(value):
-        raise ValueError("'%s' is not a valid cron expression" % value)
+    try:
+        CronTab(value)
+    except ValueError as e:
+        raise ValueError("'%s' is not a valid cron expression: %s" % (value, e))
     return value
 
 
