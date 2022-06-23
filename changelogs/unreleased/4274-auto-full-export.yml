@@ -1,0 +1,6 @@
+description: Added auto_full_compile environment option to schedule regular full compiles
+issue-nr: 4274
+change-type: minor
+destination-branches:
+  - iso5
+  - master
