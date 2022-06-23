@@ -84,7 +84,7 @@ class ResourceWithResourceSet:
 
 class PairedResource:
     """
-    Paires 2 ResourceWithResourceSet together.
+    Pairs an old and a new ResourceWithResourceSet for the same id. Offers methods to inspect the difference.
     """
 
     def __init__(
