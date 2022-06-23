@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import os
 import logging
 import re
 from itertools import accumulate
@@ -49,6 +49,7 @@ from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
+from inmanta.const import CF_CACHE_DIR
 
 # the token map is imported from the lexer. This is required.
 
@@ -1196,5 +1197,5 @@ def parse(namespace: Namespace, filename: str, content: Optional[str] = None) ->
     if statements is not None:
         return statements
     statements = base_parse(namespace, filename, content)
-    cache_manager.cache(filename, statements)
+    cache_manager.cache(namespace, filename, statements)
     return statements

@@ -1502,6 +1502,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+        cache_manager.attach_to_project(path)
 
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()

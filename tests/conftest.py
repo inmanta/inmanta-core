@@ -118,6 +118,7 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
+from inmanta.parser.plyInmantaParser import cache_manager
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -484,6 +485,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():
