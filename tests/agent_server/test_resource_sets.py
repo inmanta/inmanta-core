@@ -964,7 +964,7 @@ async def test_put_partial_version(server, client, environment, clienthelper):
         {
             "key": "key1",
             "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % 5,
+            "id": "test::Resource[agent1,key=key1],v=%d" % version + 1,
             "send_event": False,
             "purged": False,
             "requires": [],
