@@ -64,6 +64,9 @@ setup(
     project_urls={"Bug Tracker": "https://github.com/inmanta/inmanta-core/issues"},
     # Packaging
     package_dir={"": "src"},
+    # find_namespace_packages scans all directories for packages and namespace_packages,
+    # even those without an __init__.py file where find_packages will not consider directories without
+    # the __init__.py file
     packages=find_namespace_packages(where="src"),
     include_package_data=True,
     install_requires=requires,

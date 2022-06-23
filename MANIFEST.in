@@ -14,4 +14,6 @@ recursive-include tests *
 global-exclude *.pyc
 global-exclude */__pycache__/*
 global-exclude **/.env/**
-exclude docs/build/**
+exclude docs/**
+exclude tests/**
+exclude misc/**

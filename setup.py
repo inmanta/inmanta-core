@@ -70,9 +70,11 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
+    # find_namespace_packages scans all directories for packages and namespace_packages,
+    # even those without an __init__.py file where find_packages will not consider directories without
+    # the __init__.py file
     packages=find_namespace_packages(where="src"),
     # https://www.python.org/dev/peps/pep-0561/#packaging-type-information
-    package_data={"": ["misc/*", "docs/*"], "inmanta": ["py.typed"]},
     zip_safe=False,
     include_package_data=True,
     install_requires=requires,

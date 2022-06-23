@@ -1,4 +1,4 @@
 description: "fix deprecation warning for setuptools"
 change-type: patch
-destination-branches: [iso4, iso5]
+destination-branches: [iso4, iso5, master]
 issue-nr: 4388
