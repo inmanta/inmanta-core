@@ -22,6 +22,7 @@ pyyaml==6.0
 setuptools==62.6.0
 texttable==1.6.4
 tornado==6.1
+toml==0.10.2
 typing_inspect==0.7.1
 build==0.8.0
 ruamel.yaml==0.17.21
