@@ -151,17 +151,17 @@ class EnvironmentService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        await self._enable_schedules()
+        await self._enable_schedules_all_envs()
 
-    async def _enable_schedules(self) -> None:
+    async def _enable_schedules_all_envs(self) -> None:
         """
         Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
         """
         env: data.Environment
         for env in await data.Environment.get_list(details=False):
-            await self._enable_schedule(env)
+            await self._enable_schedules(env)
 
-    async def _enable_schedule(self, env: data.Environment) -> None:
+    async def _enable_schedules(self, env: data.Environment) -> None:
         """
         Schedules appropriate actions for a single environment. Overrides old schedules.
         """
@@ -196,7 +196,7 @@ class EnvironmentService(protocol.ServerSlice):
             # TODO: recreating all scheduled actions might not be appropriate because it resets the timer on all, not just the
             # updated one.
             LOGGER.info("Environment setting %s changed. Recreating scheduled actions.", key)
-            self.add_background_task(self._enable_schedule(env))
+            self.add_background_task(self._enable_schedules(env))
 
         return warnings
 
@@ -378,7 +378,7 @@ class EnvironmentService(protocol.ServerSlice):
         except StringDataRightTruncationError:
             raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
-        await self._enable_schedule(env)
+        await self._enable_schedules(env)
         return env.to_dto()
 
     def validate_icon(self, icon: str) -> None:
