@@ -2261,7 +2261,6 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
         ),
-        # TODO: end-to-end test
         AUTO_FULL_COMPILE: Setting(
             name=AUTO_FULL_COMPILE,
             default="",
