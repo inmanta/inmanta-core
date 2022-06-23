@@ -28,7 +28,7 @@ from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const, protocol
+from inmanta import const, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -310,10 +310,8 @@ class ResourceMinimal(BaseModel):
 
     @classmethod
     @validator("id")
-    def name_must_contain_space(cls, v):
-        from inmanta.resources import Id  # prevent circular import
-
-        if Id.is_resource_version_id(v):
+    def id_is_resource_version_id(cls, v):
+        if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
 
@@ -325,10 +323,10 @@ class ResourceMinimal(BaseModel):
         takes a resource and return the same resource with it version incremented
         (the input resource is modified)
         """
-        from inmanta.resources import Id  # prevent circular import
-
-        old_res = Id.parse_id(self.id)
-        new_res = Id(old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1)
+        old_res = resources.Id.parse_id(self.id)
+        new_res = resources.Id(
+            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
+        )
         self.id = new_res.resource_version_str()
         return self
 
