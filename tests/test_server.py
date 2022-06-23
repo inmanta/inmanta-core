@@ -386,10 +386,15 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
 
     async def wait_for_session() -> bool:
         result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
-        assert len(result.result["resources"]) == 3
-        return result.code == 200
+        return result.code == 200 and len(result.result["resources"]) == 3
 
+
+    """
+    This retry_limited is required to prevent 409 errors in case the agent didn't obtain
+    a session yet by the time the get_resources_for_agent API call is made.
+    """
     await retry_limited(wait_for_session, 10)
+
 
     action_id = uuid.uuid4()
     now = datetime.now()
