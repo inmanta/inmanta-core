@@ -176,7 +176,7 @@ class PartialUpdateMerger:
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
     ) -> list[dict[str, object]]:
         updated_resource_sets: Set[str] = set(
-            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
+            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
         )
         """
         Merges the resources of the partial compile with the old resources. To do so it keeps the old resources that are not in
