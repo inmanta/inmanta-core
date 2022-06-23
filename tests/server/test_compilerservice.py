@@ -811,10 +811,8 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "handled": True,
         "version": 1,
     }
-    await Compile(**old_compile).insert()
     compile_id_new = uuid.uuid4()
     new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
-    await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
@@ -834,8 +832,14 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "name": "Recompiling configuration model",
         "compile": compile_id_new,
     }
-    await Report(**report1).insert()
-    await Report(**report2).insert()
+
+    async with Compile.get_connection() as con:
+        async with con.transaction():
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+            await Report(**report1).insert(connection=con)
+            await Report(**report2).insert(connection=con)
+
     yield compile_id_old, compile_id_new
 
 
