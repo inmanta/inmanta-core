@@ -234,7 +234,7 @@ class PartialUpdateMerger:
         self, old_resource_sets: Dict[ResourceIdStr, Optional[str]], paired_resources: List[PairedResource]
     ) -> Dict[ResourceIdStr, Optional[str]]:
         updated_resource_sets: Set[str] = set(
-            res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
+            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
         )
         changed_resource_sets: Set[str] = updated_resource_sets.union(self.removed_resource_sets)
         unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
