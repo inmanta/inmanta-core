@@ -170,7 +170,7 @@ class PartialUpdateMerger:
 
     def _merge_resources(
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
-    ) -> List[Any]:
+    ) -> List[object]:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
