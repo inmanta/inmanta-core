@@ -81,6 +81,20 @@ class ResourceWithResourceSet:
     def is_shared_resource(self) -> bool:
         return self.resource_set is None
 
+    def is_update(self, other: "ResourceWithResourceSet") -> bool:
+        """
+        return true if the ResourceWithResourceSet is an update of other: other exists but is different from self
+        """
+        if other is None:
+            return False
+        new_resource_dict = self.resource.dict()
+        old_resource_dict = other.resource.dict()
+        attr_names_new_resource = set(new_resource_dict.keys()).difference("id")
+        attr_names_old_resource = set(old_resource_dict.keys()).difference("id")
+        return attr_names_new_resource != attr_names_old_resource or any(
+            new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
+        )
+
 
 class PairedResource:
     """
@@ -99,15 +113,7 @@ class PairedResource:
         """
         return true if new_resource is an update of old_resource: old_resource exists but is different form new_resource.
         """
-        if self.old_resource is None:
-            return False
-        new_resource_dict = self.new_resource.resource.dict()
-        old_resource_dict = self.old_resource.resource.dict()
-        attr_names_new_resource = set(new_resource_dict.keys()).difference("id")
-        attr_names_old_resource = set(old_resource_dict.keys()).difference("id")
-        return attr_names_new_resource != attr_names_old_resource or any(
-            new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
-        )
+        return self.new_resource.is_update(self.old_resource)
 
     def is_new_resource(self) -> bool:
         """
@@ -152,7 +158,9 @@ class PartialUpdateMerger:
         for partial_update in self.partial_updates:
             key = Id.parse_id(partial_update.id).resource_str()
             resource_set = self.resource_sets.get(key)
-            pair: PairedResource = PairedResource(new_resource=ResourceWithResourceSet(partial_update, resource_set), old_resource=None)
+            pair: PairedResource = PairedResource(
+                new_resource=ResourceWithResourceSet(partial_update, resource_set), old_resource=None
+            )
             if key in old_resources:
                 pair.old_resource = ResourceWithResourceSet(old_resources[key].resource, old_resources[key].resource_set)
             paired_resources.append(pair)
@@ -175,9 +183,6 @@ class PartialUpdateMerger:
     def _merge_resources(
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
     ) -> list[dict[str, object]]:
-        updated_resource_sets: Set[str] = set(
-            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
-        )
         """
         Merges the resources of the partial compile with the old resources. To do so it keeps the old resources that are not in
         the removed_resource_sets, that are in the shared resource_set and that are not being updated. It then adds the
@@ -185,21 +190,12 @@ class PartialUpdateMerger:
         - cannot move a resource to another resource set
         - cannot update resources without a resource set.
         """
-
-        def incremented_resource_version(resource: ResourceMinimal) -> ResourceMinimal:
-            """
-            takes a resource as argument and return the same resource with it version incremented
-            (the input resource is modified)
-            """
-            old_res = Id.parse_id(resource.id)
-            new_res = Id(
-                old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
-            )
-            resource.id = new_res.resource_version_str()
-            return resource
+        updated_resource_sets: Set[str] = set(
+            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
+        )
 
         to_keep: Sequence[ResourceMinimal] = [
-            incremented_ressouce_version(r.resource)
+            r.resource.incremented_resource_version()
             for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
