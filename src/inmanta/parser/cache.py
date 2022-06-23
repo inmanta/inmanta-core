@@ -50,6 +50,8 @@ class CacheManager:
         :param filename: the filename of the source file
         :return: the filename of the cached file
         """
+        # Make mypy happy
+        assert self.root_cache_dir is not None
         # Obtains directory where the cache file will be stored
         cache_folder = os.path.join(self.root_cache_dir, *namespace.get_full_name().split("::"))
         # create cache folder
