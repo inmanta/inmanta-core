@@ -28,9 +28,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CacheEnvelope:
-    """Every cached file gets the exact modification to of the file it is caching, to have cheap, accurate invalidation"""
+    """Every cached file gets the exact modification time of the file it is caching, to have cheap, accurate invalidation"""
 
-    def __init__(self, timestamp: float, statements: List[Statement]):
+    def __init__(self, timestamp: float, statements: List[Statement]) -> None:
         self.timestamp = timestamp
         self.statements = statements
 
