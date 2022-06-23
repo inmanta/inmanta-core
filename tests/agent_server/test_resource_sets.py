@@ -964,7 +964,7 @@ async def test_put_partial_version(server, client, environment, clienthelper):
         {
             "key": "key1",
             "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version + 1,
+            "id": "test::Resource[agent1,key=key1],v=%d" % (version + 1),
             "send_event": False,
             "purged": False,
             "requires": [],
@@ -986,6 +986,6 @@ async def test_put_partial_version(server, client, environment, clienthelper):
     assert result.code == 400
     assert result.result["message"] == (
         "Invalid request: The resource version of resource "
-        "test::Resource[agent1,key=key1],v=5 does not match the version argument "
+        "test::Resource[agent1,key=key1],v=3 does not match the version argument "
         "(version: 2)"
     )
