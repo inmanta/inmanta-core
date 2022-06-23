@@ -32,7 +32,7 @@ a=1
 """
     )
     # don't know hit count, may vary on previous testcases
-    assert parser.cache_manager.misses > 1
+    assert parser.cache_manager.misses >= 1
     assert parser.cache_manager.failures == 0
 
     # reset counts
