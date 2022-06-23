@@ -190,7 +190,7 @@ class PartialUpdateMerger:
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
         ]
 
-        merged_resources: Dict[ResourceVersionIdStr, Dict[str, Any]] = {r.id: r.dict() for r in to_keep}
+        merged_resources: Dict[ResourceVersionIdStr, Dict[str, object]] = {r.id: r.dict() for r in to_keep}
 
         for paired_resource in paired_resources:
             new_resource = paired_resource.new_resource
