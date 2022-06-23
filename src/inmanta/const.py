@@ -303,4 +303,5 @@ class NotificationSeverity(str, Enum):
     warning = "warning"
     error = "error"
 
+
 CF_CACHE_DIR = ".cfcache"

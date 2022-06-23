@@ -20,13 +20,13 @@ import os
 import shutil
 import sys
 from typing import List, Optional, Set
-from inmanta.const import CF_CACHE_DIR
 
 import py
 import pytest
 from pkg_resources import Requirement
 
 from inmanta import plugins
+from inmanta.const import CF_CACHE_DIR
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import (
     DummyProject,

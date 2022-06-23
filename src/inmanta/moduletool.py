@@ -41,7 +41,7 @@ import build.env
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import MAX_UPDATE_ATTEMPT, CF_CACHE_DIR
+from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,

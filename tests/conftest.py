@@ -111,6 +111,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -118,7 +119,6 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
-from inmanta.parser.plyInmantaParser import cache_manager
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"

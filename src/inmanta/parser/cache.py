@@ -17,14 +17,14 @@
 """
 import logging
 import os
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
+from inmanta.const import CF_CACHE_DIR
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from inmanta.util import get_compiler_version
-from inmanta.const import CF_CACHE_DIR
 
 LOGGER = logging.getLogger(__name__)
 

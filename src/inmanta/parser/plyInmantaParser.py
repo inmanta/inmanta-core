@@ -15,8 +15,8 @@
 
     Contact: code@inmanta.com
 """
-import os
 import logging
+import os
 import re
 from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
@@ -45,11 +45,11 @@ from inmanta.ast.statements.define import (
 )
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
+from inmanta.const import CF_CACHE_DIR
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
-from inmanta.const import CF_CACHE_DIR
 
 # the token map is imported from the lexer. This is required.
 

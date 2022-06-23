@@ -30,9 +30,9 @@ import pytest
 from pytest import MonkeyPatch
 
 from inmanta import moduletool
+from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
-from inmanta.const import CF_CACHE_DIR
 
 
 def run_module_build_soft(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
