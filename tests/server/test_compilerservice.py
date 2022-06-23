@@ -844,10 +844,10 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
 
     async with Compile.get_connection() as con:
         async with con.transaction():
-            await Compile(**old_compile).insert()
-            await Compile(**new_compile).insert()
-            await Report(**report1).insert()
-            await Report(**report2).insert()
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+            await Report(**report1).insert(connection=con)
+            await Report(**report2).insert(connection=con)
 
     yield compile_id_old, compile_id_new
 
