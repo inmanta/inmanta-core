@@ -4233,7 +4233,6 @@ class Resource(BaseDocument):
                     # This prevents injection attacks.
                     if util.is_sub_dict(attributes, resource.attributes):
                         result.append(resource)
-
         return result
 
     @classmethod
