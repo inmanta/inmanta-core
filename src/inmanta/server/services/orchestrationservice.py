@@ -186,7 +186,7 @@ class PartialUpdateMerger:
         - cannot update resources without a resource set.
         """
 
-        def incremented_ressouce_version(resource: ResourceMinimal) -> ResourceMinimal:
+        def incremented_resource_version(resource: ResourceMinimal) -> ResourceMinimal:
             """
             takes a resource as argument and return the same resource with it version incremented
             (the input resource is modified)
