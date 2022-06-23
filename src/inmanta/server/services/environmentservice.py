@@ -167,7 +167,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
 
-    def _disable_schedule(self, env: data.Environment) -> None:
+    def _disable_schedules(self, env: data.Environment) -> None:
         """
         Removes scheduling of all appropriate actions for a single environment.
         """
@@ -470,7 +470,7 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
-        self._disable_schedule(env)
+        self._disable_schedules(env)
         await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)
