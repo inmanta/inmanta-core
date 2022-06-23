@@ -39,7 +39,14 @@ Prerequisites
        git clone https://github.com/inmanta/examples.git
 
 
-The cloned repository contains a **project.yml**, which looks like this:
+5. Change directory to `SR Linux` examples:
+
+   .. code-block:: sh
+
+      cd examples/Networking/SR\ Linux/
+
+
+This folder contains a **project.yml**, which looks like this:
 
     .. code-block:: yaml
 
@@ -61,11 +68,10 @@ The ``modulepath`` setting defines that modules will be stored in ``libs`` direc
 The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
 The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
 
-5. Install the required modules:
+1. Install the required modules inside the `SR Linux` folder:
 
    .. code-block:: sh
 
-       cd Networking/SR\ Linux/
        inmanta project install
 
    .. note::
@@ -85,7 +91,7 @@ Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
 
 .. code-block:: sh
 
-    cd Networking/SR\ Linux/containerlab
+    cd examples/Networking/SR\ Linux/containerlab
     sudo clab deploy -t topology.yml
 
 `Containerlab` will spin-up:
