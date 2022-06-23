@@ -2057,7 +2057,6 @@ class Setting(object):
         validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
         recompile: bool = False,
         update_model: bool = False,
-        update_schedules: bool = False,
         agent_restart: bool = False,
         allowed_values: Optional[List[m.EnvSettingType]] = None,
     ) -> None:
@@ -2071,7 +2070,6 @@ class Setting(object):
         :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
-        :param update_schedules: Update scheduled tasks
         :param agent_restart: Restart autostarted agents when this settings is updated.
         :param allowed_values: list of possible values (if type is enum)
         """
@@ -2082,7 +2080,6 @@ class Setting(object):
         self.validator = validator
         self.recompile = recompile
         self.update = update_model
-        self.update_schedules = update_schedules
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
 
@@ -2093,7 +2090,6 @@ class Setting(object):
             "doc": self.doc,
             "recompile": self.recompile,
             "update": self.update,
-            "update_schedules": self.update_schedules,
             "agent_restart": self.agent_restart,
             "allowed_values": self.allowed_values,
         }
@@ -2106,7 +2102,6 @@ class Setting(object):
             doc=self.doc,
             recompile=self.recompile,
             update_model=self.update,
-            update_schedules=self.update_schedules,
             agent_restart=self.agent_restart,
             allowed_values=self.allowed_values,
         )
@@ -2267,7 +2262,6 @@ class Environment(BaseDocument):
             default="",
             typ="str",
             validator=validate_cron,
-            update_schedules=True,
             doc=(
                 "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
                 " (`min hour dom month dow` or macros). A compile will be requested at the scheduled time. The actual"

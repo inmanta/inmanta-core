@@ -259,7 +259,6 @@ class EnvironmentSetting(BaseModel):
     :param doc: The documentation/help string for this setting
     :param recompile: Trigger a recompile of the model when a setting is updated?
     :param update_model: Update the configuration model (git pull on project and repos)
-    :param update_schedules: Update scheduled tasks
     :param agent_restart: Restart autostarted agents when this settings is updated.
     :param allowed_values: list of possible values (if type is enum)
     """
@@ -270,7 +269,6 @@ class EnvironmentSetting(BaseModel):
     doc: str
     recompile: bool
     update_model: bool
-    update_schedules: bool
     agent_restart: bool
     allowed_values: Optional[List[EnvSettingType]]
 

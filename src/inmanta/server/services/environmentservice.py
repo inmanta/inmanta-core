@@ -24,8 +24,9 @@ import re
 import shutil
 import uuid
 from collections import defaultdict
+from collections.abc import Set
 from enum import Enum
-from typing import Dict, List, Optional, Pattern, Set, cast
+from typing import Dict, List, Optional, Pattern, cast
 
 from asyncpg import StringDataRightTruncationError
 
@@ -110,6 +111,7 @@ class EnvironmentListener:
         pass
 
 
+
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
@@ -161,11 +163,16 @@ class EnvironmentService(protocol.ServerSlice):
         for env in await data.Environment.get_list(details=False):
             await self._enable_schedules(env)
 
-    async def _enable_schedules(self, env: data.Environment) -> None:
+    async def _enable_schedules(self, env: data.Environment, setting: Optional[data.Setting] = None) -> None:
         """
-        Schedules appropriate actions for a single environment. Overrides old schedules.
+        Schedules appropriate actions for a single environment according to the settting value. Overrides old schedules.
+
+        :param setting: Only schedule appropriate actions for this setting, if any.
         """
-        self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
+        if setting is None or setting.name == data.AUTO_FULL_COMPILE:
+            if setting is not None:
+                LOGGER.info("Environment setting %s changed. Rescheduling full compiles.", setting.name)
+            self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
 
     def _disable_schedules(self, env: data.Environment) -> None:
         """
@@ -192,11 +199,7 @@ class EnvironmentService(protocol.ServerSlice):
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
                 self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
 
-        if setting.update_schedules:
-            # TODO: recreating all scheduled actions might not be appropriate because it resets the timer on all, not just the
-            # updated one.
-            LOGGER.info("Environment setting %s changed. Recreating scheduled actions.", key)
-            self.add_background_task(self._enable_schedules(env))
+        self.add_background_task(self._enable_schedules(env, setting))
 
         return warnings
 
