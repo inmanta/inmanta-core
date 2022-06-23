@@ -61,7 +61,7 @@ class CacheManager:
         # Make mypy happy
         assert self.root_cache_dir is not None
         # Obtains directory where the cache file will be stored
-        cache_folder = os.path.join(self.root_cache_dir, *namespace.get_full_name().split("::"))
+        cache_folder = os.path.join(self.root_cache_dir, *namespace.to_path())
         # create cache folder
         os.makedirs(cache_folder, exist_ok=True)
 
