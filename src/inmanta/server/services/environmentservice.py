@@ -316,7 +316,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
         except ValueError as e:
-            raise ServerError(f"Invalid value. {e}")
+            raise BadRequest(f"Invalid value. {e}")
 
     @handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:

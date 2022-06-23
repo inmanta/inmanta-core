@@ -111,6 +111,7 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "files", "test.txt"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
