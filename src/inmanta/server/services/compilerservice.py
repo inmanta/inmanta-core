@@ -530,7 +530,6 @@ class CompilerService(ServerSlice):
         # set up new schedule
         if schedule_cron:
             recompile: TaskMethod = partial(
-                # TODO: is do_export value correct?
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()
             )
             self.schedule_cron(recompile, schedule_cron)
