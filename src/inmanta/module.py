@@ -1447,6 +1447,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         autostd: bool = True,
         main_file: str = "main.cf",
         venv_path: Optional[str] = None,
+        attach_cf_cache: bool = True,
     ) -> None:
         """
         Initialize the project, this includes
@@ -1502,7 +1503,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
-        cache_manager.attach_to_project(path)
+        if attach_cf_cache:
+            cache_manager.attach_to_project(path)
 
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
@@ -2163,7 +2165,7 @@ class DummyProject(Project):
     """Placeholder project that does nothing"""
 
     def __init__(self, autostd: bool = True) -> None:
-        super().__init__(tempfile.gettempdir(), autostd=autostd)
+        super().__init__(tempfile.gettempdir(), autostd=autostd, attach_cf_cache=False)
 
     def _get_metadata_from_disk(self) -> ProjectMetadata:
         return ProjectMetadata(name="DUMMY")
