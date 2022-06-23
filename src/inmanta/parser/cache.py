@@ -131,6 +131,11 @@ class CacheManager:
         except Exception:
             LOGGER.warning("Compile cache failure, failed to cache statements for %s", filename, exc_info=True)
 
+    def reset_stats(self) -> None:
+        self.hits = 0
+        self.misses = 0
+        self.failures = 0
+
     def log_stats(self) -> None:
         if not self.cache_enabled.get():
             # cache not enabled

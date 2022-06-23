@@ -20,12 +20,11 @@ from pathlib import Path
 from time import sleep
 
 import inmanta.parser.plyInmantaParser as parser
-from inmanta.parser.cache import CacheManager
 
 
 def test_caching(snippetcompiler):
     # reset counts
-    parser.cache_manager = CacheManager()
+    parser.cache_manager.reset_stats()
     snippetcompiler.setup_for_snippet(
         """
 a=1
@@ -36,7 +35,7 @@ a=1
     assert parser.cache_manager.failures == 0
 
     # reset counts
-    parser.cache_manager = CacheManager()
+    parser.cache_manager.reset_stats()
     # reset project ast cache
     snippetcompiler._load_project(autostd=True, install_project=True)
 
@@ -45,14 +44,15 @@ a=1
     assert parser.cache_manager.hits == 2  # main.cf and std::init
 
     main_file = os.path.join(snippetcompiler.project_dir, "main.cf")
-    cached_main = parser.cache_manager.get_file_name(main_file)
+    root_ns = snippetcompiler.project.root_ns
+    cached_main = parser.cache_manager._get_file_name(root_ns.get_child_or_create("main.cf"), main_file)
     Path(main_file).touch()
     # make the cache a tiny bit newer
     sleep(0.001)
     Path(cached_main).touch()
 
     # reset counts
-    parser.cache_manager = CacheManager()
+    parser.cache_manager.reset_stats()
     # reset project ast cache
     snippetcompiler._load_project(autostd=True, install_project=True)
 
