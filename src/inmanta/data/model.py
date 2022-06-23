@@ -305,6 +305,7 @@ class ResourceMinimal(BaseModel):
     """
     Represents a resource object as it comes in over the API. Provides strictly required validation only.
     """
+
     id: ResourceVersionIdStr
 
     class Config:
