@@ -152,7 +152,7 @@ class PartialUpdateMerger:
         for partial_update in self.partial_updates:
             key = Id.parse_id(partial_update.id).resource_str()
             resource_set = self.resource_sets.get(key)
-            pair: PairedResource = PairedResource(ResourceWithResourceSet(partial_update, resource_set), None)
+            pair: PairedResource = PairedResource(new_resource=ResourceWithResourceSet(partial_update, resource_set), old_resource=None)
             if key in old_resources:
                 pair.old_resource = ResourceWithResourceSet(old_resources[key].resource, old_resources[key].resource_set)
             paired_resources.append(pair)
