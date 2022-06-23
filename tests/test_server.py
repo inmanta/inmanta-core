@@ -384,9 +384,13 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
-    assert result.code == 200
-    assert len(result.result["resources"]) == 3
+    async def wait_for_session():
+        result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
+        assert result.code == 200
+        assert len(result.result["resources"]) == 3
+        return result
+
+    await retry_limited(wait_for_session, 10)
 
     action_id = uuid.uuid4()
     now = datetime.now()
