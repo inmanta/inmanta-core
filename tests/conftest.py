@@ -1131,6 +1131,7 @@ async def migrate_db_from(
 
     await bootloader.stop()
 
+
 @pytest.fixture(scope="function", autouse=True)
 async def set_running_tests():
     """

@@ -282,6 +282,7 @@ def test_get_product_meta_data():
     """ Basic smoke test for testing utils"""
     assert get_product_meta_data() is not None
 
+
 def test_running_test_fixture():
     """
     Assert that the RUNNING_TESTS variable is set to True when we run the tests
