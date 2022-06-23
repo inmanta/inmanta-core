@@ -43,11 +43,11 @@ from .openapi.model import OpenAPI
 def put_partial(
     tid: uuid.UUID,
     version: int,
-    resource_state: Dict[model.ResourceIdStr, ResourceState] = {},
-    unknowns: List[Dict[ResourceIdStr, PrimitiveTypes]] = [],
+    resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+    unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[model.ModelVersionInfo] = None,
-    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
-    removed_resource_sets: List[str] = [],
+    resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for resources that result from the partial compile
 ) -> None:
     """
