@@ -174,7 +174,7 @@ class PartialUpdateMerger:
 
     def _merge_resources(
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
-    ) -> List[object]:
+    ) -> list[dict[str, object]]:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
@@ -242,7 +242,7 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> Tuple[List[object], Dict[ResourceIdStr, Optional[str]]]:
+    async def merge_partial_with_old(self) -> Tuple[list[dict[str, object]], Dict[ResourceIdStr, Optional[str]]]:
         old_resources = await self._get_old_resources()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
