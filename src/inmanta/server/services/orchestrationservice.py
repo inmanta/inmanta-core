@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
 import pydantic
