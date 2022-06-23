@@ -3055,7 +3055,7 @@ class Agent(BaseDocument):
         """
 
         async with cls.get_connection(connection) as con:
-            async with connection.transaction():
+            async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
                     cls._get_value(env),
