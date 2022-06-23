@@ -16,7 +16,9 @@
     Contact: code@inmanta.com
 """
 import configparser
+import logging
 import os
+import re
 import shutil
 import subprocess
 
@@ -24,12 +26,16 @@ import pytest
 from pkg_resources import Requirement
 from pytest import MonkeyPatch
 
+import toml
 from inmanta import moduletool
+from inmanta.command import CLIException
 from inmanta.module import DummyProject, ModuleV1, ModuleV2Metadata
 from inmanta.moduletool import ModuleConverter, ModuleVersionException
+from utils import log_contains
 
 
-def test_module_conversion(tmpdir):
+def test_module_conversion(tmpdir, caplog):
+    caplog.at_level(level=logging.INFO)
     module_name = "elaboratev1module"
     path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
     dummyproject = DummyProject()
@@ -40,9 +46,22 @@ def test_module_conversion(tmpdir):
     ModuleConverter(module_in).convert(tmpdir)
 
     assert_v2_module(module_name, tmpdir)
+    log_contains(
+        caplog,
+        "inmanta.moduletool",
+        logging.INFO,
+        "pyproject.toml file already exists, merging. This will remove all comments from the file",
+    )
+    log_contains(
+        caplog,
+        "inmanta.moduletool",
+        logging.INFO,
+        "setup.cfg file already exists, merging. This will remove all comments from the file",
+    )
 
 
-def test_module_conversion_in_place(tmpdir):
+def test_module_conversion_in_place(tmpdir, caplog):
+    caplog.at_level(level=logging.INFO)
     module_name = "elaboratev1module"
     tmpdir = os.path.join(tmpdir, module_name)
     path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
@@ -51,6 +70,18 @@ def test_module_conversion_in_place(tmpdir):
     module_in = ModuleV1(dummyproject, tmpdir)
     ModuleConverter(module_in).convert_in_place()
     assert_v2_module(module_name, tmpdir)
+    log_contains(
+        caplog,
+        "inmanta.moduletool",
+        logging.WARNING,
+        "pyproject.toml file already exists, merging. This will remove all comments from the file",
+    )
+    log_contains(
+        caplog,
+        "inmanta.moduletool",
+        logging.WARNING,
+        "setup.cfg file already exists, merging. This will remove all comments from the file",
+    )
 
 
 def test_module_conversion_in_place_minimal(tmpdir):
@@ -121,6 +152,13 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
         assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
+        with open(os.path.join(tmpdir, "pyproject.toml"), "r") as fht:
+            contentt = toml.load(fht)
+
+            assert set(contentt["build-system"]["requires"]) == {"jinja2", "setuptools", "wheel"}, contentt
+            assert contentt["build-system"]["build-backend"] == "setuptools.build_meta"
+            assert contentt["tool"]["black"]["line-length"] == 128
+
     with open(os.path.join(tmpdir, "setup.cfg"), "r") as fh:
         content = fh.read()
         meta = ModuleV2Metadata.parse(content)
@@ -139,6 +177,7 @@ inmanta-module-mod2
 inmanta-module-std
 jinja2"""
             )
+            assert raw_content["isort"]["multi_line_output"].strip() == "3"
         else:
             assert raw_content["options"]["install_requires"].strip() == """inmanta-module-std"""
 
@@ -147,8 +186,32 @@ jinja2"""
             fh.read().strip()
             == f"""
 include inmanta_plugins/{module_name}/setup.cfg
+include inmanta_plugins/{module_name}/py.typed
 recursive-include inmanta_plugins/{module_name}/model *.cf
 graft inmanta_plugins/{module_name}/files
 graft inmanta_plugins/{module_name}/templates
         """.strip()
         )
+
+
+def test_module_conversion_in_place_bad_pyproject_toml(tmpdir, caplog):
+    caplog.at_level(level=logging.INFO)
+    module_name = "elaboratev1module"
+    tmpdir = os.path.join(tmpdir, module_name)
+    path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
+    shutil.copytree(path, tmpdir)
+
+    with open(os.path.join(tmpdir, "pyproject.toml"), "w") as fh:
+        fh.write(
+            """
+[build-system]
+    requires = {}
+        """
+        )
+
+    dummyproject = DummyProject()
+    module_in = ModuleV1(dummyproject, tmpdir)
+    with pytest.raises(
+        CLIException, match=re.escape("Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type")
+    ):
+        ModuleConverter(module_in).convert_in_place()
