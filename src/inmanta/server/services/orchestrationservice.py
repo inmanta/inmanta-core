@@ -161,6 +161,10 @@ class PartialUpdateMerger:
     async def _get_old_resources(
         self,
     ) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
+        """
+        Makes a call to the DB to get the latest resources in the environment and return a dict
+        where the keys are the Ids of the resources and the values are ResourceWithResourceSete
+        """
         old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
@@ -170,12 +174,23 @@ class PartialUpdateMerger:
 
     def _merge_resources(
         self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
-    ) -> List[Any]:
+    ) -> List[object]:
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if res.new_resource.resource_set is not None
         )
+        """
+        Merges the resources of the partial compile with the old resources. To do so it keeps the old resources that are not in
+        the removed_resource_sets, that are in the shared resource_set and that are not being updated. It then adds the
+        resources coming form the partial compile if they don't break any rule:
+        - cannot move a resource to another resource set
+        - cannot update resources without a resource set.
+        """
 
         def incremented_ressouce_version(resource: ResourceMinimal) -> ResourceMinimal:
+            """
+            takes a resource as argument and return the same resource with it version incremented
+            (the input resource is modified)
+            """
             old_res = Id.parse_id(resource.id)
             new_res = Id(
                 old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
@@ -227,7 +242,7 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> Tuple[List[Dict[str, Any]], Dict[ResourceIdStr, Optional[str]]]:
+    async def merge_partial_with_old(self) -> Tuple[List[object], Dict[ResourceIdStr, Optional[str]]]:
         old_resources = await self._get_old_resources()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
