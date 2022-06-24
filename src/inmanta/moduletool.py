@@ -32,26 +32,6 @@ from pkg_resources import parse_version
 
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.module import (
-    DummyProject,
-    FreezeOperator,
-    InmantaModuleRequirement,
-    InstallMode,
-    InvalidMetadata,
-    InvalidModuleException,
-    Module,
-    ModuleGeneration,
-    ModuleLike,
-    ModuleMetadataFileNotFound,
-    ModuleNotFoundException,
-    ModuleV1,
-    ModuleV2,
-    ModuleV2Source,
-    Project,
-    gitprovider,
-)
-from inmanta.stable_api import stable_api
 from inmanta.const import MAX_UPDATE_ATTEMPT
 from inmanta.module import FreezeOperator, InstallMode, Module, Project, gitprovider
 
