@@ -20,11 +20,9 @@ from pathlib import Path
 from time import sleep
 
 import inmanta.parser.plyInmantaParser as parser
-from inmanta import compiler
+from inmanta import compiler, loader
 from inmanta.module import Project
 from inmanta.parser.cache import CacheManager
-from inmanta import loader
-
 
 
 def test_caching(snippetcompiler):
