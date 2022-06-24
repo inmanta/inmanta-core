@@ -3059,12 +3059,12 @@ class Agent(BaseDocument):
                 unpause_on_resume = await cls._fetch_query(
                     f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 await cls._execute_query(
                     f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 return sorted([r["name"] for r in unpause_on_resume])
 
