@@ -3,6 +3,6 @@ description: The compiler cache (.cfc) files are now stored in the .cfcache dire
 issue-nr: 4407
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso5, iso4]
+destination-branches: [iso5]
 sections:
   minor-improvement: "{{description}}"
