@@ -2266,7 +2266,7 @@ class Environment(BaseDocument):
                 "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
                 " (`min hour dom month dow` or macros). A compile will be requested at the scheduled time. The actual"
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
-                " RECOMPILE_BACKOFF environment variable. This setting has no effect when server_compile is disabled."
+                " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
