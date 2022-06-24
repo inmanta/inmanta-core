@@ -650,7 +650,6 @@ class Project(ModuleLike[ProjectMetadata]):
         autostd: bool = True,
         main_file: str = "main.cf",
         venv_path: Optional[str] = None,
-        attach_cf_cache: bool = True,
     ) -> None:
         """
         Initialize the project, this includes
@@ -697,8 +696,7 @@ class Project(ModuleLike[ProjectMetadata]):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
-        if attach_cf_cache:
-            cache_manager.attach_to_project(path)
+        cache_manager.attach_to_project(path)
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._imports_cache: Optional[List[DefineImport]] = None  # Cache for expensive method calls
