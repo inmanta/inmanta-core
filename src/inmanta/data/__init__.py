@@ -4116,7 +4116,7 @@ class Resource(BaseDocument):
     model: int
 
     # ID related
-    resource_id: m.ResourceVersionIdStr
+    resource_id: m.ResourceIdStr
     resource_type: m.ResourceType
     resource_version_id: m.ResourceVersionIdStr
     resource_id_value: str
@@ -4556,7 +4556,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_deleted_resources(
-        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceVersionIdStr]
+        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceIdStr]
     ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
@@ -4564,7 +4564,7 @@ class Resource(BaseDocument):
 
         :param environment:
         :param current_version:
-        :param current_resources: A set of all resource ids in the current version.
+        :param current_resources: A Sequence of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
 
@@ -4599,8 +4599,8 @@ class Resource(BaseDocument):
             + str(len(values) + 1)
         )
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = await cls._fetch_query(query, *values)
-        resources = [r["resource_id"] for r in resources]
+        resources_records = await cls._fetch_query(query, *values)
+        resources = [r["resource_id"] for r in resources_records]
 
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
@@ -4609,7 +4609,7 @@ class Resource(BaseDocument):
 
         # determined deleted resources
 
-        deleted = set(resources) - current_resources
+        deleted = set(resources) - set(current_resources)
         LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 
         # filter out resources that should not be purged:
