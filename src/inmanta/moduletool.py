@@ -42,7 +42,7 @@ import toml
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import MAX_UPDATE_ATTEMPT
+from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -890,7 +890,7 @@ class ModuleBuildFailedError(Exception):
         return self.msg
 
 
-BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
+BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
 class V2ModuleBuilder:

@@ -27,6 +27,7 @@ from pkg_resources import Requirement
 
 from inmanta import plugins
 from inmanta.compiler.config import feature_compiler_cache
+from inmanta.const import CF_CACHE_DIR
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import (
     DummyProject,
@@ -46,7 +47,7 @@ from utils import PipIndex, module_from_template, v1_module_from_template
 @pytest.mark.parametrize_any("editable_install", [True, False])
 def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
     # Work around caching problem in venv
-    feature_compiler_cache.set("False")
+    feature_compiler_cache.set("True")
     # Disable modules_dir
     snippetcompiler.modules_dir = None
 
@@ -68,6 +69,10 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
 
     snippetcompiler.do_export()
     assert "Hello world" in capsys.readouterr().out
+
+    # Make sure the cache files are created
+    cache_folder = os.path.join(snippetcompiler.project_dir, CF_CACHE_DIR)
+    assert len(os.listdir(cache_folder)) > 0
 
 
 def test_v1_and_v2_module_installed_simultaneously(

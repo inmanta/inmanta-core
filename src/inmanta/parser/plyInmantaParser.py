@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import logging
 import re
 from itertools import accumulate
@@ -1174,5 +1173,5 @@ def parse(namespace: Namespace, filename: str, content: Optional[str] = None) ->
     if statements is not None:
         return statements
     statements = base_parse(namespace, filename, content)
-    cache_manager.cache(filename, statements)
+    cache_manager.cache(namespace, filename, statements)
     return statements
