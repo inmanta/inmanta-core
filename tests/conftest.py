@@ -75,6 +75,9 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
+from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
+from inmanta.moduletool import ModuleTool
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.module import Project
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
@@ -393,6 +396,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():

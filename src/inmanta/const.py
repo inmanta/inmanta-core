@@ -289,3 +289,22 @@ class DesiredStateVersionStatus(str, Enum):
     candidate = "candidate"
     retired = "retired"
     skipped_candidate = "skipped_candidate"
+
+
+class NotificationSeverity(str, Enum):
+    """
+    The possible values determine the styling used by the frontend to show them,
+    so notifications with severity 'info' will be shown as informational messages,
+    the ones with 'error' as error messages and so on.
+    The 'message' category corresponds to a generic message, which
+    is shown without extra styling on the frontend.
+    """
+
+    message = "message"
+    info = "info"
+    success = "success"
+    warning = "warning"
+    error = "error"
+
+
+CF_CACHE_DIR = ".cfcache"
