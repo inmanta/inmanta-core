@@ -38,14 +38,8 @@ import pkg_resources
 from pkg_resources import Requirement
 
 from inmanta import const
-
-<<<<<<< HEAD
 from inmanta.ast import CompilerException
-
-=======
 from inmanta.server.bootloader import InmantaBootloader
-
->>>>>>> master
 from inmanta.stable_api import stable_api
 from packaging import version
 
