@@ -690,6 +690,7 @@ class Project(ModuleLike[ProjectMetadata]):
         self.modules: Dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
+        cache_manager.attach_to_project(path)
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._imports_cache: Optional[List[DefineImport]] = None  # Cache for expensive method calls
