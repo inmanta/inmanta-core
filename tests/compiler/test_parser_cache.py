@@ -50,7 +50,7 @@ a=1
     assert parser.cache_manager.hits == 2  # main.cf and std::init
 
     main_file = os.path.join(snippetcompiler.project_dir, "main.cf")
-    root_ns = snippetcompiler.project.root_ns
+    root_ns = Project.get().root_ns
     cached_main = parser.cache_manager._get_file_name(root_ns.get_child_or_create("main.cf"), main_file)
     Path(main_file).touch()
     # make the cache a tiny bit newer
