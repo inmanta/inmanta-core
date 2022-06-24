@@ -23,8 +23,9 @@ import uuid
 
 import pytest
 
+import inmanta
 from inmanta import util
-from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
+from inmanta.util import CycleException, NamedLock, ensure_future_and_handle_exception, stable_depth_first
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
@@ -274,3 +275,24 @@ def test_is_sub_dict():
 def test_get_product_meta_data():
     """Basic smoke test for testing utils"""
     assert get_product_meta_data() is not None
+
+
+async def test_named_lock():
+    lock = NamedLock()
+    await lock.acquire("a")
+    await lock.acquire("b")
+    await lock.release("b")
+    fut = asyncio.create_task(lock.acquire("a"))
+    assert not fut.done()
+    await lock.release("a")
+    await fut
+    await lock.release("a")
+    # Don't leak
+    assert not lock._named_locks
+
+
+def test_running_test_fixture():
+    """
+    Assert that the RUNNING_TESTS variable is set to True when we run the tests
+    """
+    assert inmanta.RUNNING_TESTS

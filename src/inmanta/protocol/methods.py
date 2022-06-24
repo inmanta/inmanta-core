@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from inmanta import const, data, resources
 from inmanta.data import model
@@ -524,6 +524,7 @@ def put_version(
     unknowns: list = None,
     version_info: dict = None,
     compiler_version: str = None,
+    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
 ):
     """
     Store a new version of the configuration model
@@ -537,6 +538,7 @@ def put_version(
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
+    :param resource_sets: a dictionary describing which resource belongs to which resource set
     """
 
 

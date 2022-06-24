@@ -199,6 +199,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -223,6 +224,8 @@ class OrchestrationService(protocol.ServerSlice):
             )
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
+        if not resource_sets:
+            resource_sets = {}
 
         started = datetime.datetime.now().astimezone()
 
@@ -244,6 +247,8 @@ class OrchestrationService(protocol.ServerSlice):
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
                 if res_obj.status in const.UNDEPLOYABLE_STATES:
                     undeployable.append(res_obj)
+            if res_obj.resource_id in resource_sets:
+                res_obj.resource_set = resource_sets[res_obj.resource_id]
 
             # collect all agents
             agents.add(res_obj.agent)
@@ -271,6 +276,13 @@ class OrchestrationService(protocol.ServerSlice):
                     if rid.get_agent_name() != agent:
                         # it is a CAD
                         cross_agent_dep.append((res_obj, rid))
+        resource_ids = {res.resource_id for res in resource_objects}
+        superfluous_ids = set(resource_sets.keys()) - resource_ids
+        if superfluous_ids:
+            raise BadRequest(
+                f"The following resource ids provided in the resource_sets parameter are not present "
+                f"in the resources list: {', '.join(superfluous_ids)}"
+            )
 
         # hook up all CADs
         for f, t in cross_agent_dep:

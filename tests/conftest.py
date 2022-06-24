@@ -96,6 +96,7 @@ from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -110,6 +111,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -443,6 +445,9 @@ def deactive_venv():
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
     old_working_set = pkg_resources.working_set
+    old_available_extensions = (
+        dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
+    )
 
     yield
 
@@ -462,6 +467,7 @@ def deactive_venv():
         del os.environ["VIRTUAL_ENV"]
     env.mock_process_env(python_path=old_process_env)
     loader.PluginModuleFinder.reset()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
 
 def reset_metrics():
@@ -479,6 +485,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():
@@ -490,6 +497,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = None
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -683,7 +691,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     config.Config.set("server", "agent-process-purge-interval", "0")
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
     yield config
     shutil.rmtree(state_dir)
@@ -782,7 +789,6 @@ async def server_multi(
     config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
-    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
 
@@ -858,6 +864,7 @@ async def create_environment(client, use_custom_env_settings: bool) -> str:
         await env_obj.set(data.AUTO_DEPLOY, False)
         await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
         await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
     return env_id
 
@@ -1509,3 +1516,11 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True

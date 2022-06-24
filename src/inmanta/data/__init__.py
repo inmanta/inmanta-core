@@ -1146,8 +1146,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except asyncio.TimeoutError:
             cls._connection_pool.terminate()
+            # Don't propagate this exception but just write a log message. This way:
+            #   * A timeout here still makes sure that the other server slices get stopped
+            #   * The tests don't fail when this timeout occurs
+            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        except asyncio.CancelledError:
+            cls._connection_pool.terminate()
+            # Propagate cancel
+            raise
+        except Exception:
+            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+            raise
         finally:
             cls._connection_pool = None
 
@@ -1946,6 +1957,16 @@ def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     return f_value
 
 
+def convert_positive_float(value: Union[float, int, str]) -> float:
+    if isinstance(value, float):
+        float_value = value
+    else:
+        float_value = float(value)
+    if float_value < 0:
+        raise ValueError(f"This value should be positive, got: {value}")
+    return float_value
+
+
 def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError("Agent map should be a dict")
@@ -1979,7 +2000,14 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
+TYPE_MAP = {
+    "int": "integer",
+    "bool": "boolean",
+    "dict": "jsonb",
+    "str": "varchar",
+    "enum": "varchar",
+    "positive_float": "double precision",
+}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -2000,6 +2028,7 @@ PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
+RECOMPILE_BACKOFF = "recompile_backoff"
 
 
 class Setting(object):
@@ -2251,6 +2280,14 @@ class Environment(BaseDocument):
             typ="int",
             validator=convert_int,
             doc="The number of days to retain notifications for",
+        ),
+        RECOMPILE_BACKOFF: Setting(
+            name=RECOMPILE_BACKOFF,
+            default=0.1,
+            typ="positive_float",
+            validator=convert_positive_float,
+            doc="""The number of seconds to wait before the server may attempt to do a new recompile.
+                    Recompiles are triggered after facts updates for example.""",
         ),
     }
 
@@ -3970,12 +4007,11 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-
         query = f"""SELECT DISTINCT ra.*
                         FROM {cls.table_name()} ra
                         INNER JOIN
                         {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1
+                        WHERE r.environment=$1 AND ra.environment=$1
                      """
         values = [cls._get_value(environment)]
 
@@ -4095,6 +4131,7 @@ class Resource(BaseDocument):
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
     last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -4980,6 +5017,7 @@ class Resource(BaseDocument):
             attributes=self.attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
+            resource_set=self.resource_set,
         )
 
 
@@ -5826,7 +5864,12 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+    # or until the gather itself is cancelled.
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+    if exceptions:
+        raise exceptions[0]
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions

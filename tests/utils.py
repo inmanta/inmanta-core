@@ -207,7 +207,7 @@ class LogSequence(object):
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index)
             assert idxe == -1 or idxe >= index
-        assert index >= 0
+        assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
     def assert_not(self, loggerpart, level, msg):

@@ -38,6 +38,7 @@ import pydantic
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
+from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
 from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
@@ -638,7 +639,17 @@ class CompilerService(ServerSlice):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        wait_time = opt.server_autrecompile_wait.get()
+        if Config.is_set("server", "auto-recompile-wait"):
+            wait_time = opt.server_autrecompile_wait.get()
+            LOGGER.warning(
+                "The server-auto-recompile-wait is enabled and set to %s seconds. "
+                "This option is deprecated in favor of the recompile_backoff environment setting.",
+                wait_time,
+            )
+        else:
+            env = await data.Environment.get_by_id(compile.environment)
+            wait_time = await env.get(data.RECOMPILE_BACKOFF)
+            LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
@@ -649,9 +660,7 @@ class CompilerService(ServerSlice):
             )
         if wait > 0:
             LOGGER.info(
-                "server-auto-recompile-wait is enabled and set to %s seconds, "
-                "waiting for %.2f seconds before running a new compile",
-                wait_time,
+                "Waiting for %.2f seconds before running a new compile",
                 wait,
             )
         else:
