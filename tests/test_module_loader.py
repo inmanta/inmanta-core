@@ -69,6 +69,10 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
     snippetcompiler.do_export()
     assert "Hello world" in capsys.readouterr().out
 
+    # Make sure the cache files are created
+    cache_folder = os.path.join(snippetcompiler.project_dir, CF_CACHE_DIR)
+    assert len(os.listdir(cache_folder)) > 0
+
 
 def test_v1_and_v2_module_installed_simultaneously(
     tmpdir: py.path.local, snippetcompiler_clean, capsys, caplog, modules_dir: str
