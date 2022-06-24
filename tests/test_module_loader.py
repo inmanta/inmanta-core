@@ -47,7 +47,7 @@ from utils import PipIndex, module_from_template, v1_module_from_template
 @pytest.mark.parametrize_any("editable_install", [True, False])
 def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
     # Work around caching problem in venv
-    feature_compiler_cache.set("False")
+    feature_compiler_cache.set("True")
     # Disable modules_dir
     snippetcompiler.modules_dir = None
 
