@@ -102,6 +102,19 @@ class InvalidQueryType(Exception):
         self.message = message
 
 
+class RowLockMode(enum.Enum):
+    """
+    Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
+    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
+    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
+    """
+
+    FOR_UPDATE: str = "FOR UPDATE"
+    FOR_NO_KEY_UPDATE: str = "FOR NO KEY UPDATE"
+    FOR_SHARE: str = "FOR SHARE"
+    FOR_KEY_SHARE: str = "FOR KEY SHARE"
+
+
 class RangeOperator(enum.Enum):
     LT = "<"
     LE = "<="
@@ -1229,8 +1242,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return value
 
     @classmethod
-    async def _fetchrow(cls, query: str, *values: object) -> Optional[Record]:
-        async with cls.get_connection() as con:
+    async def _fetchrow(
+        cls, query: str, *values: object, *, connection: Optional[asyncpg.connection.connection] = None
+    ) -> Optional[Record]:
+        async with cls.get_connection(connection) as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
@@ -1337,6 +1352,20 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
+    async def lock_by_id(
+        cls: Type[TBaseDocument],
+        doc_id: uuid.UUID,
+        mode: RowLockMode,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Acquire a row-level lock on a single environment. Callers should adhere to a consistent locking order accross
+        transactions.
+        Passing a connection object is mandatory. The connection is expected to be in a transaction.
+        """
+        await cls.get_list(id=doc_id, lock=mode, connection=connection)
+
+    @classmethod
     async def get_one(
         cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query: object
     ) -> Optional[TBaseDocument]:
@@ -1382,11 +1411,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
+        *,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1407,6 +1438,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def get_list_with_columns(
         cls: Type[TBaseDocument],
+        *,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -1438,12 +1470,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if offset is not None and offset > 0:
             sql_query += " OFFSET $" + str(len(values) + 1)
             values.append(int(offset))
+        if lock is not None:
+            sql_query += f" {lock.value}"
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
     @classmethod
     async def get_list_paged(
         cls: Type[TBaseDocument],
+        *,
         page_by_column: str,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
@@ -2099,6 +2134,8 @@ class Setting(object):
 class Environment(BaseDocument):
     """
     A deployment environment of a project
+    Any transactions that update Environment should adhere to the locking order described in
+    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
@@ -2393,7 +2430,7 @@ class Environment(BaseDocument):
             # Cascade is done by PostgreSQL
             await self.delete()
 
-    async def get_next_version(self) -> int:
+    async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         record = await self._fetchrow(
             f"""
 UPDATE {self.table_name()}
@@ -2402,6 +2439,7 @@ WHERE id = $1
 RETURNING last_version;
 """,
             self.id,
+            connection=connection,
         )
         version = cast(int, record[0])
         self.last_version = version
@@ -2410,6 +2448,7 @@ RETURNING last_version;
     @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
+        *,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -2446,6 +2485,7 @@ RETURNING last_version;
     @classmethod
     async def get_list_without_details(
         cls: Type[TBaseDocument],
+        *,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -5025,7 +5065,7 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
+    Any transactions that update Environment, ResourceAction, Resource, Parameter and/or ConfigurationModel
     should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
@@ -5087,6 +5127,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_list(
         cls,
+        *,
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
