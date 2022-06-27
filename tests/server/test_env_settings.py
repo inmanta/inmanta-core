@@ -25,7 +25,7 @@ def get_environment_setting_default(setting: str) -> Any:
     return data.Environment._settings[setting].default
 
 
-def check_environment_setting_default(settings_dict: Dict[str:Any]) -> None:
+def check_environment_setting_default(settings_dict: Dict[str, Any]) -> None:
     for setting_name, setting_value in settings_dict.items():
         assert setting_value == get_environment_setting_default(setting_name)
 
