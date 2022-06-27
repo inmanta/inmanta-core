@@ -72,7 +72,6 @@ def test_cron_schedule(monkeypatch) -> None:
         """
         Freeze time to a given value to avoid race conditions.
         """
-        datetime_orig = datetime.datetime
 
         class frozendatetime(datetime.datetime):
             @classmethod
