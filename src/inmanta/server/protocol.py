@@ -307,7 +307,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None) -> None:
         """
         Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
-        same. Clients that wish to be able to delete tasks should make sure to use a unique action object.
+        same. Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
 
         :param interval: The interval between executions of the task.
         :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.

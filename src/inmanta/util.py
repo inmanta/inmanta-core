@@ -220,7 +220,7 @@ class Scheduler(object):
     """
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
-    action objects.
+    `call` functions.
     """
 
     def __init__(self, name: str) -> None:
