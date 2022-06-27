@@ -641,11 +641,11 @@ class AgentInstance(object):
     def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
         schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
         self.process._sched.add_action(action, schedule)
-        self._time_triggered_actions.add((action, schedule))
+        self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
 
     def _disable_time_triggers(self) -> None:
-        for action, schedule in self._time_triggered_actions:
-            self.process._sched.remove(action, schedule)
+        for task in self._time_triggered_actions:
+            self.process._sched.remove(task)
         self._time_triggered_actions.clear()
 
     def notify_ready(

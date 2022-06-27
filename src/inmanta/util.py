@@ -148,7 +148,10 @@ class TaskSchedule(ABC):
         ...
 
 
-ScheduledTask = Tuple[TaskMethod, TaskSchedule]
+@dataclass(frozen=True)
+class ScheduledTask:
+    action: TaskMethod
+    schedule: TaskSchedule
 
 
 @dataclass(frozen=True)
@@ -267,10 +270,10 @@ class Scheduler(object):
 
         schedule.log(action)
 
-        task_spec: ScheduledTask = (action, schedule)
+        task_spec: ScheduledTask = ScheduledTask(action, schedule)
         if task_spec in self._scheduled:
             # start fresh to respect initial delay, if set
-            self.remove(action, schedule)
+            self.remove(task_spec)
 
         def action_function() -> None:
             LOGGER.info("Calling %s" % action)
@@ -293,11 +296,10 @@ class Scheduler(object):
         handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
 
-    def remove(self, action: TaskMethod, schedule: TaskSchedule) -> None:
+    def remove(self, task: ScheduledTask) -> None:
         """
         Remove a scheduled action
         """
-        task: ScheduledTask = (action, schedule)
         if task in self._scheduled:
             IOLoop.current().remove_timeout(self._scheduled[task])
             del self._scheduled[task]
