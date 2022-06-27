@@ -74,15 +74,7 @@ def test_cron_schedule(monkeypatch) -> None:
         """
         datetime_orig = datetime.datetime
 
-        class FrozenDatetimeMeta(type(datetime_orig)):
-            """
-            Metaclass for the datetime mock in order to force isinstance check compatibility with the original datetime class.
-            """
-
-            def __instancecheck__(self, instance):
-                return super().__instancecheck__(instance) or isinstance(instance, datetime_orig)
-
-        class frozendatetime(datetime.datetime, metaclass=FrozenDatetimeMeta):
+        class frozendatetime(datetime.datetime):
             @classmethod
             def now(cls, tz: Optional[datetime.tzinfo] = None) -> datetime.datetime:
                 if tz is None:
