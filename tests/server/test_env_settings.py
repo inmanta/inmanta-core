@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Any, Dict
+from typing import Dict
 
 from inmanta import data
 from inmanta.util import get_compiler_version
@@ -45,7 +45,6 @@ async def test_environment_settings(client, server, environment_default):
     assert "auto_deploy" in result.result["metadata"]
 
     check_only_contains_default_setting(result.result["settings"])
-
 
     # set invalid value
     result = await client.set_setting(tid=environment_default, id="auto_deploy", value="test")
