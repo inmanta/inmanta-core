@@ -22,11 +22,15 @@ from inmanta import data
 from inmanta.util import get_compiler_version
 
 
-def get_environment_setting_default(setting: str) -> Any:
+def get_environment_setting_default(setting: str) -> object:
     return data.Environment._settings[setting].default
 
 
-def check_environment_setting_default(settings_dict: Dict[str, Any]) -> None:
+def check_only_contains_default_setting(settings_dict: Dict[str, object]) -> None:
+    """
+    Depending on when the background cleanup processes are run, it is possible that environment settings are set, independently
+    of the tests below. This method ensures these settings are properly set with their default values.
+    """
     for setting_name, setting_value in settings_dict.items():
         assert setting_value == get_environment_setting_default(setting_name)
 
@@ -41,7 +45,9 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
     assert "metadata" in result.result
     assert "auto_deploy" in result.result["metadata"]
-    assert len(result.result["settings"]) == 0
+
+    check_only_contains_default_setting(result.result["settings"])
+
 
     # set invalid value
     result = await client.set_setting(tid=environment_default, id="auto_deploy", value="test")
@@ -87,7 +93,7 @@ async def test_environment_settings(client, server, environment_default):
     assert result.code == 200
     assert "settings" in result.result
 
-    check_environment_setting_default(result.result["settings"])
+    check_only_contains_default_setting(result.result["settings"])
 
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
     assert result.code == 200
@@ -138,7 +144,7 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
-    check_environment_setting_default(response.result["data"]["settings"])
+    check_only_contains_default_setting(response.result["data"]["settings"])
 
     response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value=False)
     assert response.code == 200
