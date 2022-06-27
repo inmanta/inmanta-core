@@ -1,0 +1,5 @@
+description: Add option to bytecompile the python in a v2 module wheel
+issue-nr: 1190
+issue-repo: irt
+change-type: patch
+destination-branches: [master, iso5]
