@@ -31,6 +31,8 @@ requires = [
     "tornado~=6.0",
     "typing_inspect~=0.7",
     "build~=0.7",
+    # This extra can be removed when this issue is resolved: https://github.com/psf/requests/issues/6177
+    "requests[use_chardet_on_py3]",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]
