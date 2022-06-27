@@ -632,9 +632,9 @@ async def test_server_recompile(server, client, environment, monkeypatch):
         await retry_limited(is_compiling, 4)
     assert (await client.list_versions(environment)).result["count"] == 5
 
-    # override with schedule in far future, check that it doesn't trigger an immediate recompile
+    # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
     recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
-    cron_recent: str = "%d %d * * * %d" % (recent.minute, recent.hour, recent.second)
+    cron_recent: str = "%d %d %d * * *" % (recent.second, recent.minute, recent.hour)
     await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
     with pytest.raises(AssertionError, match="Bounded wait failed"):
         await retry_limited(is_compiling, 4)

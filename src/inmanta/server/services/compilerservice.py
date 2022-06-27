@@ -529,8 +529,12 @@ class CompilerService(ServerSlice):
             del self._scheduled_full_compiles[env.id]
         # set up new schedule
         if schedule_cron:
+            metadata: Dict[str, str] = {
+                "type": "schedule",
+                "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
+            }
             recompile: TaskMethod = partial(
-                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4()
+                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
             )
             self.schedule_cron(recompile, schedule_cron)
             self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)

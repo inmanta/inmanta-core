@@ -42,6 +42,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 def test_interval_schedule() -> None:
+    """
+    Verifies that the IntervalSchedule class' primary methods work as expected.
+    """
     simple: TaskSchedule = IntervalSchedule(interval=1.0)
     assert simple.get_initial_delay() == 1.0
     assert simple.get_next_delay() == 1.0
@@ -51,6 +54,9 @@ def test_interval_schedule() -> None:
 
 
 def test_interval_schedule_equals() -> None:
+    """
+    Verifies that the IntervalSchedule class' equality checks work as expected.
+    """
     assert IntervalSchedule(interval=1.0) == IntervalSchedule(interval=1.0)
     assert IntervalSchedule(interval=1.0) != IntervalSchedule(interval=2.0)
     assert IntervalSchedule(interval=1.0, initial_delay=0.5) == IntervalSchedule(interval=1.0, initial_delay=0.5)
@@ -58,6 +64,10 @@ def test_interval_schedule_equals() -> None:
 
 
 def test_cron_schedule(monkeypatch) -> None:
+    """
+    Verifies that the CronSchedule class' primary methods work as expected.
+    """
+
     def freeze_time(time: datetime.datetime) -> None:
         """
         Freeze time to a given value to avoid race conditions.
@@ -65,7 +75,10 @@ def test_cron_schedule(monkeypatch) -> None:
         datetime_orig = datetime.datetime
 
         class FrozenDatetimeMeta(type(datetime_orig)):
-            # mock isinstance checks on datetime objects
+            """
+            Metaclass for the datetime mock in order to force isinstance check compatibility with the original datetime class.
+            """
+
             def __instancecheck__(self, instance):
                 return super().__instancecheck__(instance) or isinstance(instance, datetime_orig)
 
@@ -95,6 +108,9 @@ def test_cron_schedule(monkeypatch) -> None:
 
 
 def test_cron_schedule_equals() -> None:
+    """
+    Verifies that the CronSchedule class' equality checks work as expected.
+    """
     assert CronSchedule(cron="1 2 * * *") == CronSchedule(cron="1 2 * * *")
     assert CronSchedule(cron="1 2 * * *") != CronSchedule(cron="0 2 * * *")
 
@@ -124,6 +140,13 @@ async def test_scheduler_remove(caplog):
 
 
 async def test_scheduler_remove_same_action() -> None:
+    """
+    Verify that removing an action from the scheduler works as intended in the presence of other similar scheduled actions.
+    As long as there exists no other scheduled action for exactly the same action and schedule, removal should be unambiguous.
+    This test includes verification of potential edge cases such as `partial` of the same function, locally defined functions
+    within a body that gets evaluated twice, ...
+    """
+
     scheduler = util.Scheduler("remove_same_action")
 
     async def myaction() -> None:
