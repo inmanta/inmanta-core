@@ -18,6 +18,8 @@
 import json
 import logging
 import os
+import shutil
+from typing import Dict, List, Optional
 
 import pytest
 
@@ -419,10 +421,15 @@ exp::Test3(
 
 async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     """
-    test that the resourceSet is exported correctly
+    Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
 
-    init_py = """
+    async def export_model(
+        model: str,
+        partial_compile: bool,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ) -> None:
+        init_py = """
 from inmanta.resources import (
     Resource,
     resource,
@@ -431,7 +438,45 @@ from inmanta.resources import (
 class Res(Resource):
     fields = ("name",)
 """
-    init_cf = """
+
+        module_name: str = "minimalv1module"
+        module_path: str = str(tmpdir.join("modulev1"))
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        v1_module_from_template(
+            os.path.join(modules_dir, module_name),
+            module_path,
+            new_content_init_cf=model,
+            new_content_init_py=init_py,
+            new_name="modulev1",
+        )
+
+        snippetcompiler.setup_for_snippet(
+            """
+    import modulev1
+            """,
+            add_to_module_path=[str(tmpdir)],
+        )
+        await snippetcompiler.do_export_and_deploy(
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
+
+    async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]]) -> None:
+        """
+        Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+
+        :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
+                           belong to.
+        """
+        resources = await Resource.get_resources_in_latest_version(environment=environment)
+        assert len(resources) == len(assignment)
+        actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+        assert actual_assignment == actual_assignment
+
+    # Full compile
+    await export_model(
+        model="""
 entity Res extends std::Resource:
     string name
 end
@@ -442,37 +487,53 @@ a = Res(name="the_resource_a")
 b = Res(name="the_resource_b")
 c = Res(name="the_resource_c")
 d = Res(name="the_resource_d")
+e = Res(name="the_resource_e")
+z = Res(name="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
-    """
-
-    module_name: str = "minimalv1module"
-    module_path: str = str(tmpdir.join("modulev1"))
-    v1_module_from_template(
-        os.path.join(modules_dir, module_name),
-        module_path,
-        new_content_init_cf=init_cf,
-        new_content_init_py=init_py,
-        new_name="modulev1",
-    )
-    snippetcompiler.setup_for_snippet(
-        """
-import modulev1
+std::ResourceSet(name="resource_set_3", resources=[d, e])
         """,
-        add_to_module_path=[str(tmpdir)],
+        partial_compile=False,
+    )
+    await assert_resource_set_assignment(
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_b": "resource_set_2",
+            "the_resource_c": "resource_set_1",
+            "the_resource_d": "resource_set_3",
+            "the_resource_e": "resource_set_3",
+            "the_resource_z": None,
+        }
     )
 
-    await snippetcompiler.do_export_and_deploy()
-    resources = await Resource.get_list(environment=environment)
-    assert len(resources) == 4
-    assert resources[0].resource_id_value == "the_resource_a"
-    assert resources[0].resource_set == "resource_set_1"
-    assert resources[1].resource_id_value == "the_resource_b"
-    assert resources[1].resource_set == "resource_set_2"
-    assert resources[2].resource_id_value == "the_resource_c"
-    assert resources[2].resource_set == "resource_set_1"
-    assert resources[3].resource_id_value == "the_resource_d"
-    assert resources[3].resource_set is None
+    # Partial compile
+    await export_model(
+        model="""
+    entity Res extends std::Resource:
+        string name
+    end
+
+    implement Res using std::none
+
+    a = Res(name="the_resource_a")
+    c2 = Res(name="the_resource_c2")
+    f = Res(name="the_resource_f")
+    std::ResourceSet(name="resource_set_1", resources=[a,c2])
+    std::ResourceSet(name="resource_set_4", resources=[f])
+            """,
+        partial_compile=True,
+        resource_sets_to_remove=["resource_set_2"],
+    )
+    await assert_resource_set_assignment(
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_c2": "resource_set_1",
+            "the_resource_d": "resource_set_3",
+            "the_resource_e": "resource_set_3",
+            "the_resource_f": "resource_set_4",
+            "the_resource_z": None,
+        }
+    )
 
 
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:

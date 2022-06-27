@@ -1115,16 +1115,35 @@ class SnippetCompilationTest(KeepOnFail):
             dirs.extend(add_to_module_path)
         return f"[{', '.join(dirs)}]"
 
-    def do_export(self, include_status=False, do_raise=True):
-        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+    def do_export(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return self._do_export(
+            deploy=False,
+            include_status=include_status,
+            do_raise=do_raise,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
     def get_exported_json(self) -> JsonType:
         with open(os.path.join(self.project_dir, "dump.json")) as fh:
             return json.load(fh)
 
-    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+    def _do_export(
+        self,
+        deploy=False,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
         """
-        helper function to allow actual export to be run an a different thread
+        helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
 
@@ -1152,10 +1171,31 @@ class SnippetCompilationTest(KeepOnFail):
         # continue the export
         export = Exporter(options)
 
-        return export.run(types, scopes, model_export=False, include_status=include_status)
+        return export.run(
+            types,
+            scopes,
+            model_export=False,
+            include_status=include_status,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
-    async def do_export_and_deploy(self, include_status=False, do_raise=True):
-        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
+    async def do_export_and_deploy(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return await off_main_thread(
+            lambda: self._do_export(
+                deploy=True,
+                include_status=include_status,
+                do_raise=do_raise,
+                partial_compile=partial_compile,
+                resource_sets_to_remove=resource_sets_to_remove,
+            )
+        )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
         """
