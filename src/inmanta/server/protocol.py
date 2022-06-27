@@ -36,7 +36,16 @@ from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes, JsonType
-from inmanta.util import CronSchedule, CycleException, IntervalSchedule, Scheduler, TaskHandler, TaskMethod, stable_depth_first
+from inmanta.util import (
+    CronSchedule,
+    CycleException,
+    IntervalSchedule,
+    ScheduledTask,
+    Scheduler,
+    TaskHandler,
+    TaskMethod,
+    stable_depth_first,
+)
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager
@@ -318,7 +327,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """
         Remove a cron-scheduled task.
         """
-        self._sched.remove(call, CronSchedule(cron=cron))
+        self._sched.remove(ScheduledTask(action=call, schedule=CronSchedule(cron=cron)))
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """

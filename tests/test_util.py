@@ -130,7 +130,7 @@ async def test_scheduler_remove(caplog):
         await asyncio.sleep(0.01)
 
     assert (action, schedule) in scheduler._scheduled
-    scheduler.remove(action, schedule)
+    scheduler.remove(action=action, schedule=schedule)
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
@@ -187,7 +187,7 @@ async def test_scheduler_remove_same_action() -> None:
     assert (locally_defined[0], schedule_one) in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(myaction, schedule_one)
+    scheduler.remove(action=myaction, schedule=schedule_one)
     assert (myaction, schedule_one) not in scheduler._scheduled
     assert (myaction, schedule_two) in scheduler._scheduled
     assert (partial_one, schedule_one) in scheduler._scheduled
@@ -195,29 +195,29 @@ async def test_scheduler_remove_same_action() -> None:
     assert (locally_defined[0], schedule_one) in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(myaction, schedule_two)
+    scheduler.remove(action=myaction, schedule=schedule_two)
     assert (myaction, schedule_two) not in scheduler._scheduled
     assert (partial_one, schedule_one) in scheduler._scheduled
     assert (partial_two, schedule_one) in scheduler._scheduled
     assert (locally_defined[0], schedule_one) in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(partial_one, schedule_one)
+    scheduler.remove(action=partial_one, schedule=schedule_one)
     assert (partial_one, schedule_one) not in scheduler._scheduled
     assert (partial_two, schedule_one) in scheduler._scheduled
     assert (locally_defined[0], schedule_one) in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(partial_two, schedule_one)
+    scheduler.remove(action=partial_two, schedule=schedule_one)
     assert (partial_two, schedule_one) not in scheduler._scheduled
     assert (locally_defined[0], schedule_one) in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(locally_defined[0], schedule_one)
+    scheduler.remove(action=locally_defined[0], schedule=schedule_one)
     assert (locally_defined[0], schedule_one) not in scheduler._scheduled
     assert (locally_defined[1], schedule_one) in scheduler._scheduled
 
-    scheduler.remove(locally_defined[1], schedule_one)
+    scheduler.remove(action=locally_defined[1], schedule=schedule_one)
     assert (locally_defined[1], schedule_one) not in scheduler._scheduled
 
 

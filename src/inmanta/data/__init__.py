@@ -29,7 +29,6 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import RawConfigParser
-from crontab import CronTab
 from itertools import chain
 from typing import (
     Any,
@@ -59,6 +58,7 @@ import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+from crontab import CronTab
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m

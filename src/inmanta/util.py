@@ -214,7 +214,8 @@ def is_coroutine(function: object) -> bool:
     return (
         inspect.iscoroutinefunction(function)
         or gen.is_coroutine_function(function)
-        or isinstance(function, functools.partial) and is_coroutine(function.func)
+        or isinstance(function, functools.partial)
+        and is_coroutine(function.func)
     )
 
 

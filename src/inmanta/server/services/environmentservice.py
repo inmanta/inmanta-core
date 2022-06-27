@@ -111,7 +111,6 @@ class EnvironmentListener:
         pass
 
 
-
 class EnvironmentService(protocol.ServerSlice):
     """Slice with project and environment management"""
 
