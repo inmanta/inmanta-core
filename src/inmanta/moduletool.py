@@ -1135,7 +1135,9 @@ graft inmanta_plugins/{self._module.name}/templates
         config.add_section("options.packages.find")
 
         # add requirements
-        module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
+        module_requirements: List[InmantaModuleRequirement] = [
+            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+        ]
         python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
             requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
