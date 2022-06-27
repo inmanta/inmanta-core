@@ -129,7 +129,6 @@ class TaskSchedule(ABC):
         """
         Returns the number of seconds from now until this task should be scheduled for the first time.
         """
-        ...
 
     @abstractmethod
     def get_next_delay(self) -> float:
@@ -138,14 +137,12 @@ class TaskSchedule(ABC):
         i.e. assumes the task has already run at least once and a negligible amount of time has passed since the last run
         completed.
         """
-        ...
 
     @abstractmethod
     def log(self, action: TaskMethod) -> None:
         """
         Log a message about the action being scheduled according to this schedule.
         """
-        ...
 
 
 @dataclass(frozen=True)
