@@ -35,10 +35,12 @@ from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
 
 
-def run_module_build_soft(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
+def run_module_build_soft(
+    module_path: str, set_path_argument: bool, output_dir: Optional[str] = None, byte_code: bool = False
+) -> None:
     if not set_path_argument:
         module_path = None
-    moduletool.ModuleTool().build(module_path, output_dir)
+    moduletool.ModuleTool().build(module_path, output_dir, byte_code=byte_code)
 
 
 def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
@@ -60,13 +62,14 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 
 
 @pytest.mark.parametrize_any(
-    "module_name, is_v2_module, set_path_argument",
+    "module_name, is_v2_module, set_path_argument, byte_code",
     [
-        ("minimalv2module", True, True),
-        ("minimalv2module", True, False),
-        ("elaboratev2module", True, True),
-        ("elaboratev2module", True, False),
-        ("elaboratev1module", False, False),
+        ("minimalv2module", True, True, False),
+        ("minimalv2module", True, False, False),
+        ("elaboratev2module", True, True, False),
+        ("elaboratev2module", True, False, False),
+        ("elaboratev1module", False, False, False),
+        ("elaboratev1module", False, False, True),
     ],
 )
 def test_build_v2_module(
@@ -76,6 +79,7 @@ def test_build_v2_module(
     module_name: str,
     is_v2_module: bool,
     set_path_argument: bool,
+    byte_code: bool,
     monkeypatch: MonkeyPatch,
 ) -> None:
     """
@@ -92,7 +96,7 @@ def test_build_v2_module(
 
     if not set_path_argument:
         monkeypatch.chdir(module_copy_dir)
-    run_module_build_soft(module_copy_dir, set_path_argument)
+    run_module_build_soft(module_copy_dir, set_path_argument, byte_code=byte_code)
 
     dist_dir = os.path.join(module_copy_dir, "dist")
     dist_dir_content = os.listdir(dist_dir)
@@ -104,8 +108,15 @@ def test_build_v2_module(
     with zipfile.ZipFile(wheel_file) as zip:
         zip.extractall(extract_dir)
 
+    if byte_code:
+        assert "linux_x86_64" in wheel_file
+    else:
+        assert "none-any" in wheel_file
+
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
-    assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
+    assert os.path.exists(
+        os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py" if not byte_code else "__init__.pyc")
+    )
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
 
     if "elaborate" in module_name:
@@ -113,8 +124,16 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
+        assert os.path.exists(
+            os.path.join(
+                extract_dir, "inmanta_plugins", module_name, "other_module.py" if not byte_code else "other_module.pyc"
+            )
+        )
+        assert os.path.exists(
+            os.path.join(
+                extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py" if not byte_code else "__init__.pyc"
+            )
+        )
 
 
 def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
