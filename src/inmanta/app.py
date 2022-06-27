@@ -505,7 +505,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--partial",
         dest="partial_compile",
-        help="Execute a partial compile",
+        help="Execute a partial export",
         action="store_true",
         default=False,
     )
