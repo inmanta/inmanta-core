@@ -28,6 +28,8 @@ requires = [
     "texttable",
     "tornado",
     "typing_inspect",
+    # This dependency can be removed when requests no longer defaults to chardet if it is installed, see https://github.com/psf/requests/issues/6177
+    "requests[use_chardet_on_py3]",
 ]
 
 
