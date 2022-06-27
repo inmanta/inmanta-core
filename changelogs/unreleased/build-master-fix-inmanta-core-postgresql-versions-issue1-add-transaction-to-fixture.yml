@@ -1,0 +1,3 @@
+description: Fix race condition in the old_and_new_compile_report fixture when used in combination with the server_with_frequent_cleanups fixture.
+change-type: patch
+destination-branches: [master, iso5, iso4]

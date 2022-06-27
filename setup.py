@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 from os import path
 
 requires = [
@@ -32,12 +32,12 @@ requires = [
     "tornado~=6.0",
     "typing_inspect~=0.7",
     "build~=0.7",
+    # This dependency can be removed when requests no longer defaults to chardet if it is installed, see https://github.com/psf/requests/issues/6177
+    "requests[use_chardet_on_py3]",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]
 
-# Package a dummy extensions so that the namespace package for extensions is not empty
-namespace_packages = ["inmanta_ext.core", "inmanta_plugins.1"]
 
 # read the contents of your README file
 this_directory = path.abspath(path.dirname(__file__))
@@ -74,9 +74,10 @@ setup(
     },
     # Packaging
     package_dir={"": "src"},
-    packages=find_packages("src") + namespace_packages,
+    # All data files should be treated as namespace package according to
+    # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#subdirectory-for-data-files
+    packages=find_namespace_packages(where="src"),
     # https://www.python.org/dev/peps/pep-0561/#packaging-type-information
-    package_data={"": ["misc/*", "docs/*"], "inmanta": ["py.typed"]},
     zip_safe=False,
     include_package_data=True,
     install_requires=requires,

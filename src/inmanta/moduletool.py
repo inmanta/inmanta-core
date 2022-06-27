@@ -42,7 +42,7 @@ import toml
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import MAX_UPDATE_ATTEMPT
+from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -890,7 +890,7 @@ class ModuleBuildFailedError(Exception):
         return self.msg
 
 
-BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
+BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
 class V2ModuleBuilder:
@@ -1135,7 +1135,9 @@ graft inmanta_plugins/{self._module.name}/templates
         config.add_section("options.packages.find")
 
         # add requirements
-        module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
+        module_requirements: List[InmantaModuleRequirement] = [
+            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+        ]
         python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
             requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])

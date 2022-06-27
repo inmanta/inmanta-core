@@ -26,6 +26,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import plugins
+from inmanta.const import CF_CACHE_DIR
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import (
     DummyProject,
@@ -67,12 +68,7 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
     assert "Hello world" in capsys.readouterr().out
 
     # Make sure the cache files are created
-    if editable_install:
-        cache_folder = os.path.join(module_copy_dir, "model/__cfcache__")
-    else:
-        cache_folder = os.path.join(
-            snippetcompiler.project.virtualenv.site_packages_dir, "inmanta_plugins", module_name, "model/__cfcache__"
-        )
+    cache_folder = os.path.join(snippetcompiler.project_dir, CF_CACHE_DIR)
     assert len(os.listdir(cache_folder)) > 0
 
 

@@ -23,12 +23,12 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import validator
+from pydantic import Extra, validator
 from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const, protocol
+from inmanta import const, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -301,10 +301,40 @@ class ModelVersionInfo(BaseModel):
     model: Optional[JsonType]
 
 
+class ResourceMinimal(BaseModel):
+    """
+    Represents a resource object as it comes in over the API. Provides strictly required validation only.
+    """
+
+    id: ResourceVersionIdStr
+
+    @classmethod
+    @validator("id")
+    def id_is_resource_version_id(cls, v):
+        if resources.Id.is_resource_version_id(v):
+            return v
+        raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+
+    class Config:
+        extra = Extra.allow
+
+    def incremented_resource_version(self: "ResourceMinimal") -> "ResourceMinimal":
+        """
+        takes a resource and return the same resource with it version incremented
+        (the input resource is modified)
+        """
+        old_res = resources.Id.parse_id(self.id)
+        new_res = resources.Id(
+            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
+        )
+        self.id = new_res.resource_version_str()
+        return self
+
+
 class Resource(BaseModel):
     environment: uuid.UUID
     model: int
-    resource_id: ResourceVersionIdStr
+    resource_id: ResourceIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
