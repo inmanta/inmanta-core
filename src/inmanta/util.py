@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import contextlib
 import datetime
 import enum
 import functools
@@ -501,3 +502,15 @@ class NamedLock:
             if self._named_locks_counters[name] <= 0:
                 del self._named_locks[name]
                 del self._named_locks_counters[name]
+
+
+class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextManager[T]):
+    """
+    nullcontext ported from Python 3.10 to support async
+    """
+
+    async def __aenter__(self) -> T:
+        return self.enter_result
+
+    async def __aexit__(self, *excinfo: object) -> None:
+        pass
