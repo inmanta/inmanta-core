@@ -241,6 +241,8 @@ class PartialUpdateMerger:
     async def merge_partial_with_old(self) -> Tuple[list[dict[str, object]], Dict[ResourceIdStr, Optional[str]]]:
         old_resources = await self._get_old_resources()
 
+        # TODO: check that resource versions are properly set when a version is reserved
+
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
         }

@@ -357,6 +357,8 @@ class Exporter(object):
         """
         self.types = types
         self.scopes = scopes
+
+        # TODO: make sure not to reserve a version for partial
         self._version = self.get_version(no_commit)
 
         if types is not None:
