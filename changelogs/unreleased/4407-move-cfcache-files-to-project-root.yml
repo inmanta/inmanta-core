@@ -1,0 +1,8 @@
+---
+description: The compiler cache (.cfc) files are now stored in the .cfcache directory in the root of the inmanta project instead of in the __cfcache__ directory in the inmanta modules.
+issue-nr: 4407
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso5]
+sections:
+  minor-improvement: "{{description}}"
