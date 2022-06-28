@@ -620,9 +620,9 @@ class ActiveEnv(PythonEnvironment):
         """
         # add all requirements of all in scope packages installed in this environment
 
-        inmanta_requirements = set([requirement.key for requirement in cls._get_requirements_on_inmanta_package()])
+        inmanta_requirements: Set[str] = set([requirement.key for requirement in cls._get_requirements_on_inmanta_package()])
 
-        full_strict_scope = set()
+        full_strict_scope: Set[str] = set()
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else [])
 
         for dist_info in pkg_resources.working_set:

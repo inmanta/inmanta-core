@@ -38,14 +38,14 @@ from inmanta import env, loader, module
 from packaging import version
 from utils import LogSequence
 
-if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-    pytest.skip(
-        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
-        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
-        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
-        "on the python package repository.",
-        allow_module_level=True,
-    )
+# if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+#     pytest.skip(
+#         "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
+#         "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
+#         "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
+#         "on the python package repository.",
+#         allow_module_level=True,
+#     )
 
 
 def test_basic_install(tmpdir):
