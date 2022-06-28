@@ -493,4 +493,4 @@ def test_init_project(tmpdir):
     assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
-    assert any(["already exists" in error for error in stderr])
+    assert any("already exists" in error for error in stderr)
