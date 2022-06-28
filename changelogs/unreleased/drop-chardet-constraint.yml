@@ -2,5 +2,3 @@ description: Dropped dependency on requests[chardet] because compatibility has b
 change-type: patch
 destination-branches:
   - iso4
-  - iso5
-  - master
