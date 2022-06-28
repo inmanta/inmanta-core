@@ -18,7 +18,6 @@
 import argparse
 import logging
 import os
-import re
 import shutil
 import subprocess
 from importlib.abc import Loader
