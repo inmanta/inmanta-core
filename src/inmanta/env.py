@@ -338,7 +338,8 @@ class PythonEnvironment:
             requirements=inmanta_requirements,
         )
 
-    def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
+    @classmethod
+    def _get_requirements_on_inmanta_package(cls) -> Sequence[Requirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
@@ -607,7 +608,7 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(cls, in_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> None:
+    def check(cls, strict_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
 
@@ -618,21 +619,39 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         """
         # add all requirements of all in scope packages installed in this environment
-        all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
-            requirement
-            for dist_info in pkg_resources.working_set
-            if in_scope is None or in_scope.fullmatch(dist_info.key)
-            for requirement in dist_info.requires()
-        )
+
+        inmanta_requirements = set([requirement.key for requirement in cls._get_requirements_on_inmanta_package()])
+
+        full_strict_scope = set()
+        all_constraints: Set[Requirement] = set(constraints if constraints is not None else [])
+
+        for dist_info in pkg_resources.working_set:
+            requires = [requirement for requirement in dist_info.requires()]
+            package = Requirement.parse(f"{dist_info.key}=={dist_info.version}")
+            if strict_scope.fullmatch(dist_info.key) or dist_info.key in inmanta_requirements:
+                full_strict_scope.add(package.key)
+                full_strict_scope.update([require.key for require in requires])
+            all_constraints.add(package)
+            all_constraints.update(requires)
+
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
-            (constraint, installed_versions.get(constraint.key, None))
-            for constraint in all_constraints
-            if (constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint)
-            if not constraint.marker or constraint.marker.evaluate()
-        ]
-        if len(constraint_violations) != 0:
-            raise ConflictingRequirements("Conflicting requirements:", constraint_violations)
+
+        constraint_violations: set[Tuple[Requirement, Optional[version.Version]]] = set()
+        constraint_violations_strict: set[Tuple[Requirement, Optional[version.Version]]] = set()
+        for constraint in all_constraints:
+            if (constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint) and (
+                not constraint.marker or (constraint.marker and constraint.marker.evaluate())
+            ):
+                if constraint.key in full_strict_scope:
+                    constraint_violations_strict.add((constraint, installed_versions.get(constraint.key, None)))
+                else:
+                    constraint_violations.add((constraint, installed_versions.get(constraint.key, None)))
+
+        if len(constraint_violations_strict) != 0:
+            raise ConflictingRequirements("Conflicting requirements:", constraint_violations_strict)
+
+        for constraint, v in constraint_violations:
+            LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
