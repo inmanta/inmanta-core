@@ -672,6 +672,7 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
+        # TODO: lock should really be acquired here because _put_version call should still be within lock
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
         merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
         version_info_dict = version_info.dict() if version_info else None
