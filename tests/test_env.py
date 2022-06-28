@@ -385,7 +385,7 @@ build-backend = "setuptools.build_meta"
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,
-    tmpvenv_active: str,
+    tmpvenv_active_inherit: str,
 ) -> None:
     """
     Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
@@ -398,8 +398,14 @@ def test_active_env_check_basic(
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
-            assert env.ActiveEnv.check(in_scope) == expect[0]
-            if not expect[0]:
+            if expect[0]:
+                env.ActiveEnv.check(in_scope)
+            else:
+                with pytest.raises(env.ConflictingRequirements):
+                    env.ActiveEnv.check(in_scope)
+            if expect[1] == "":
+                assert caplog.text == ""
+            else:
                 assert expect[1] in {rec.message for rec in caplog.records}
 
     assert_all_checks()
@@ -409,25 +415,36 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0")
+        expect_test=(False, ""),
+        expect_nonext=(True, "Incompatibility between constraint " "test-package-one~=1.0 and installed version 2.0.0"),
     )
 
 
-def test_active_env_check_constraints(tmpvenv_active: str) -> None:
+def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
     """
+    caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
+    def check_log(version: Optional[version.Version]) -> None:
+        assert f"Incompatibility between constraint test-package-one~=1.0 and installed version {version}" in {
+            rec.message for rec in caplog.records
+        }
+
     env.ActiveEnv.check(in_scope)
 
-    with pytest.raises(env.ConflictingRequirements):
-        env.ActiveEnv.check(in_scope, constraints)
+    caplog.clear()
+    env.ActiveEnv.check(in_scope, constraints)
+    check_log(None)
 
+    caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
     env.ActiveEnv.check(in_scope, constraints)
+    assert caplog.text == ""
 
+    caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
     with pytest.raises(env.ConflictingRequirements):

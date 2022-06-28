@@ -608,7 +608,12 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(cls, strict_scope: Optional[Pattern[str]] = None, constraints: Optional[List[Requirement]] = None) -> None:
+    def check(
+        cls,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[List[Requirement]] = None,
+        verify_inmanta_packages: bool = True,
+    ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
 
@@ -617,6 +622,7 @@ class ActiveEnv(PythonEnvironment):
             The pattern is matched against an all-lowercase package name.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
+        :param verify_inmanta_packages: if true, also checks against product and extension packages.
         """
         # add all requirements of all in scope packages installed in this environment
 
@@ -628,7 +634,7 @@ class ActiveEnv(PythonEnvironment):
         for dist_info in pkg_resources.working_set:
             requires = [requirement for requirement in dist_info.requires()]
             package = Requirement.parse(f"{dist_info.key}=={dist_info.version}")
-            if strict_scope.fullmatch(dist_info.key) or dist_info.key in inmanta_requirements:
+            if strict_scope.fullmatch(dist_info.key) or (verify_inmanta_packages and dist_info.key in inmanta_requirements):
                 full_strict_scope.add(package.key)
                 full_strict_scope.update([require.key for require in requires])
             all_constraints.add(package)
