@@ -3965,12 +3965,11 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-
         query = f"""SELECT DISTINCT ra.*
                         FROM {cls.table_name()} ra
                         INNER JOIN
                         {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1
+                        WHERE r.environment=$1 AND ra.environment=$1
                      """
         values = [cls._get_value(environment)]
 
