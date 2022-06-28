@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-pyyaml from 6.0.8 to 6.0.9
+destination-branches:
+- iso5
+sections: {}
