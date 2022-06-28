@@ -342,7 +342,6 @@ def test_check_bad_shutdown():
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
     assert "SHUTDOWN COMPLETE" not in out
-    assert not err
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
@@ -391,7 +390,7 @@ caused by:
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
         _, err = process.communicate(timeout=30)
-        assert err.decode() == output
+        assert output in err.decode()
 
     exec("compile")
     exec("export", "-J", "out.json")
@@ -482,5 +481,4 @@ def test_init_project(tmpdir):
     assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
-    assert len(stderr) == 1
-    assert "already exists" in stderr[0]
+    assert any("already exists" in error for error in stderr)
