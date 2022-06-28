@@ -5,7 +5,11 @@ include setup.cfg
 include src/inmanta/py.typed
 include src/inmanta/parser/parser.out
 
+# explainers for compiler exceptions
 recursive-include src *.j2
+
+# data for RPM build
+graft misc
 
 global-exclude *.pyc
 global-exclude */__pycache__/*
