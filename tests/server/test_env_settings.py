@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 from typing import Dict
+
+import pytest
 
 from inmanta import data
 from inmanta.util import get_compiler_version
