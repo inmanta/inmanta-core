@@ -492,13 +492,6 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
-        "--no-cache",
-        dest="feature_compiler_cache",
-        help="Disable caching of compiled CF files",
-        action="store_false",
-        default=True,
-    )
-    parser.add_argument(
         "--partial",
         dest="partial_compile",
         help="Execute a partial export",
