@@ -398,7 +398,7 @@ caused by:
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
         _, err = process.communicate(timeout=30)
-        assert err.decode() == output
+        assert output in err.decode()
 
     no_cache_option = [] if cache_cf_files else ["--no-cache"]
 
@@ -494,5 +494,4 @@ def test_init_project(tmpdir):
     assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
-    assert len(stderr) == 1
-    assert "already exists" in stderr[0]
+    assert any(["already exists" in error for error in stderr])
