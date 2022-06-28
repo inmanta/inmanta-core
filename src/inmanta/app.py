@@ -491,11 +491,36 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
+    parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
+        "--partial",
+        dest="partial_compile",
+        help="Execute a partial export",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--delete-resource-set",
+        dest="delete_resource_set",
+        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
+        "be used together with the --partial option.",
+        action="append",
+    )
     compiler_features.add_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
+    if not options.partial_compile and options.delete_resource_set:
+        raise CLIException(
+            "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+        )
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -558,7 +583,13 @@ def export(options: argparse.Namespace) -> None:
 
     export = Exporter(options)
     results = export.run(
-        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+        types,
+        scopes,
+        metadata=metadata,
+        model_export=options.model_export,
+        export_plugin=options.export_plugin,
+        partial_compile=options.partial_compile,
+        resource_sets_to_remove=options.delete_resource_set,
     )
     version = results[0]
 

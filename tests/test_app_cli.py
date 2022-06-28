@@ -466,3 +466,21 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert len(result.result["versions"]) == 0
 
     shutil.rmtree(workspace)
+
+
+async def test_export_invalid_argument_combination() -> None:
+    """
+    Ensure that the `inmanta export` command exits with an error when the --delete-resource-set option is
+    provided without the --partial option being provided.
+    """
+    args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    assert process.returncode == 1
+    assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
