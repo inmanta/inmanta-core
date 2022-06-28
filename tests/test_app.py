@@ -333,7 +333,6 @@ def test_check_bad_shutdown():
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
     assert "SHUTDOWN COMPLETE" not in out
-    assert not err
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
