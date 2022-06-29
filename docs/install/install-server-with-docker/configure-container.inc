@@ -97,6 +97,37 @@ There are two ways you can achieve this:
             - ./resources/my-env-file:/etc/inmanta/env
 
 
+Changing inmanta user/group id
+##############################
+
+If you mount a folder of your host in the container, and expect the inmanta user to interact with it,
+you might face the issue that the inmanta user inside the container doesn't have ownership of the files.
+You could fix this by changing the ownership in the container, but this change would also be reflected
+on the host, meaning that you would lose the ownership of you files.  This is a very uncomfortable
+situation.
+While ``Podman`` has been offering the possibility to do a mapping of a user id in the container to a
+user id on the host at runtime, which would solve our problem here, ``Docker`` still doesn't offer this
+functionality.  
+The inmanta container allows you to change the user and group id of the inmanta user inside the
+container when starting the container to match the user on the host, getting rid that way of any
+conflict in the files ownership.
+
+This can be done easily by simply setting those environment variables:
+ - ``INMANTA_UID``: Will change, when starting the container, the id of the inmanta user.
+ - ``INMANTA_GID``: Will change, when starting the container, the id of the inmanta group.
+
+If you use docker-compose, you can simply update this section of the example above:
+
+.. code-block:: yaml
+
+    inmanta-server:
+        container_name: inmanta_orchestrator
+        ...
+        environment:
+            INMANTA_UID: 1000
+            INMANTA_GID: 1000
+
+
 Log rotation
 ############
 
