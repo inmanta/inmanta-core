@@ -629,6 +629,7 @@ class ActiveEnv(PythonEnvironment):
         full_strict_scope: Set[str] = set()
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else [])
 
+        dist_info: DistInfoDistribution
         for dist_info in pkg_resources.working_set:
             requires = [requirement for requirement in dist_info.requires()]
             package = Requirement.parse(f"{dist_info.key}=={dist_info.version}")
