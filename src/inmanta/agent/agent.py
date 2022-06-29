@@ -17,6 +17,7 @@
 """
 import abc
 import asyncio
+import base64
 import datetime
 import logging
 import os
@@ -1203,12 +1204,14 @@ class Agent(SessionEndpoint):
                 if result.code == 200 and result.result is not None:
                     try:
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
-                        await self._install(
-                            [
-                                (ModuleSource(name, content.encode(), hash_value), requires)
-                                for hash_value, (path, name, content, requires) in result.result["sources"].items()
-                            ]
-                        )
+                        modules = []
+                        for hash_value, (path, name, _, requires) in result.result["sources"].items():
+                            response: protocol.Result = await self._client.get_file(hash_value)
+                            modules.append(
+                                (ModuleSource(name, base64.b64decode(response.result["content"]), hash_value), requires)
+                            )
+
+                        await self._install(modules)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
