@@ -511,7 +511,7 @@ mode.
         build.add_argument(
             "-b",
             "--byte-code",
-            help="Produce a module wheel that only contains only python bytecode for the plugins.",
+            help="Produce a module wheel that contains only python bytecode for the plugins.",
             action="store_true",
             default=False,
             dest="byte_code",
