@@ -341,10 +341,12 @@ class PluginModuleLoader(FileLoader):
             if module == []:
                 return []
             init, last = module[:-1], module[-1]
-            if last == "__init__.py":
+            if last == "__init__.py" or last == "__init__.pyc":
                 return init
             if last.endswith(".py"):
                 return list(chain(init, [last[:-3]]))
+            if last.endswith(".pyc"):
+                return list(chain(init, [last[:-4]]))
             return module
 
         top_level_inmanta_module: str = parts[0]

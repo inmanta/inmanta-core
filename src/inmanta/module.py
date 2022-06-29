@@ -54,7 +54,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union,
+    Union, Generator,
 )
 
 import more_itertools
@@ -2385,6 +2385,16 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
+    def _list_python_files(self, plugin_dir: str) -> Generator[None, str, None]:
+        """ Generate a list of all python files
+        """
+        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
+            yield file_name
+
+        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
+            if "__pycache__" not in file_name:
+                yield file_name
+
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
@@ -2404,7 +2414,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                 Path(file_name),
                 ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
-            for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
+            for file_name in self._list_python_files(plugin_dir)
         )
 
     def load_plugins(self) -> None:
