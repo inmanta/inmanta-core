@@ -47,26 +47,6 @@ class CodeService(protocol.ServerSlice):
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
 
-    @handle(methods.upload_code, code_id="id", env="tid")
-    async def upload_code(self, env: data.Environment, code_id: int, resource: str, sources: JsonType) -> Apireturn:
-        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
-        if code is not None:
-            raise ServerError("Code for this version has already been uploaded.")
-
-        hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
-        if hasherrors:
-            return 400, {"message": "Hashes in source map do not match to source_code"}
-
-        for file_hash in self.file_slice.stat_file_internal(sources.keys()):
-            self.file_slice.upload_file_internal(file_hash, sources[file_hash][2].encode())
-
-        compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
-
-        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact)
-        await code.insert()
-
-        return 200
-
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
         # validate

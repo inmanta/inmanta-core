@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import base64
 import hashlib
 from asyncio import gather
 from logging import DEBUG, INFO
@@ -34,11 +35,13 @@ async def test_agent_code_loading(caplog, server, agent_factory, client, environ
 
     caplog.set_level(DEBUG)
 
-    def make_source_structure(into, file, module, source):
+    async def make_source_structure(into: dict, file: str, module: str, source: bytes) -> str:
+        data = source.encode()
         sha1sum = hashlib.new("sha1")
-        sha1sum.update(source.encode())
+        sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        into[hv] = [file, module, source, []]
+        into[hv] = (file, module, [])
+        await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
         return hv
 
     codea = """
@@ -55,22 +58,22 @@ def xx():
 
     sources = {}
     sources2 = {}
-    hv1 = make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea)
-    hv2 = make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb)
+    hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea)
+    hv2 = await make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb)
 
-    res = await client.upload_code(tid=environment, id=5, resource="test::Test", sources=sources)
+    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
     assert res.code == 200
 
     # 2 identical versions
-    res = await client.upload_code(tid=environment, id=5, resource="test::Test2", sources=sources)
+    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test2": sources})
     assert res.code == 200
-    res = await client.upload_code(tid=environment, id=6, resource="test::Test2", sources=sources)
+    res = await client.upload_code_batched(tid=environment, id=6, resources={"test::Test2": sources})
     assert res.code == 200
 
     # two distinct versions
-    res = await client.upload_code(tid=environment, id=5, resource="test::Test3", sources=sources)
+    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test3": sources})
     assert res.code == 200
-    res = await client.upload_code(tid=environment, id=6, resource="test::Test3", sources=sources2)
+    res = await client.upload_code_batched(tid=environment, id=6, resources={"test::Test3": sources2})
     assert res.code == 200
 
     agent: Agent = await agent_factory(

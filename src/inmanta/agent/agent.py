@@ -1205,7 +1205,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
                         await self._install(
                             [
-                                (ModuleSource(name, content, hash_value), requires)
+                                (ModuleSource(name, content.encode(), hash_value), requires)
                                 for hash_value, (path, name, content, requires) in result.result["sources"].items()
                             ]
                         )
