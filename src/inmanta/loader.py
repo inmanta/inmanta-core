@@ -444,47 +444,6 @@ class PluginModuleFinder(Finder):
         sys.meta_path.append(module_finder)
         cls.MODULE_FINDER = module_finder
 
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
-        """
-        :param fullname: A fully qualified import path to the module or package to be imported.
-        """
-        if self._should_handle_import(fullname):
-            LOGGER.debug("Loading module: %s", fullname)
-            path_to_module = self._get_path_to_module(fullname)
-            if path_to_module is not None:
-                return PluginModuleLoader(fullname, path_to_module)
-            else:
-                # The given module is not present in self.modulepath.
-                return None
-        return None
-
-    def _should_handle_import(self, fq_import_path: str) -> bool:
-        if fq_import_path == const.PLUGINS_PACKAGE:
-            return False
-        return fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}.")
-
-    def _get_path_to_module(self, fullname: str) -> Optional[str]:
-        """
-        Return the path to the file in the module path that belongs to the module given by `fullname`.
-        None is returned when the given module is not present in the module path.
-
-        :param fullname: A fully-qualified import path to a module.
-        """
-        relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
-        # special case: top-level package
-        if relative_path == "":
-            return ""
-        for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, relative_path)
-            if os.path.exists(f"{path_to_module}.py"):
-                return f"{path_to_module}.py"
-            if os.path.isdir(path_to_module):
-                path_to_module = os.path.join(path_to_module, "__init__.py")
-                if os.path.exists(path_to_module):
-                    return path_to_module
-
-        return None
-
 
 @stable_api
 def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
