@@ -32,6 +32,7 @@ from inmanta.util import (
     CycleException,
     IntervalSchedule,
     NamedLock,
+    ScheduledTask,
     TaskSchedule,
     ensure_future_and_handle_exception,
     stable_depth_first,
@@ -120,8 +121,8 @@ async def test_scheduler_remove(caplog):
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    assert (action, schedule) in scheduler._scheduled
-    scheduler.remove(action=action, schedule=schedule)
+    assert ScheduledTask(action=action, schedule=schedule) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=action, schedule=schedule))
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
@@ -163,7 +164,7 @@ async def test_scheduler_remove_same_action() -> None:
         async def myaction() -> None:
             pass
 
-        assert (myaction, schedule_one) not in scheduler._scheduled
+        assert ScheduledTask(action=myaction, schedule=schedule_one) not in scheduler._scheduled
         scheduler.add_action(myaction, schedule_one)
         locally_defined.append(myaction)
 
@@ -171,45 +172,45 @@ async def test_scheduler_remove_same_action() -> None:
     add_locally_defined()
 
     scheduler.add_action(myaction, schedule_two)
-    assert (myaction, schedule_one) in scheduler._scheduled
-    assert (myaction, schedule_two) in scheduler._scheduled
-    assert (partial_one, schedule_one) in scheduler._scheduled
-    assert (partial_two, schedule_one) in scheduler._scheduled
-    assert (locally_defined[0], schedule_one) in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=myaction, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=myaction, schedule=schedule_two) in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=myaction, schedule=schedule_one)
-    assert (myaction, schedule_one) not in scheduler._scheduled
-    assert (myaction, schedule_two) in scheduler._scheduled
-    assert (partial_one, schedule_one) in scheduler._scheduled
-    assert (partial_two, schedule_one) in scheduler._scheduled
-    assert (locally_defined[0], schedule_one) in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=myaction, schedule=schedule_one))
+    assert ScheduledTask(action=myaction, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=myaction, schedule=schedule_two) in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=myaction, schedule=schedule_two)
-    assert (myaction, schedule_two) not in scheduler._scheduled
-    assert (partial_one, schedule_one) in scheduler._scheduled
-    assert (partial_two, schedule_one) in scheduler._scheduled
-    assert (locally_defined[0], schedule_one) in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=myaction, schedule=schedule_two))
+    assert ScheduledTask(action=myaction, schedule=schedule_two) not in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=partial_one, schedule=schedule_one)
-    assert (partial_one, schedule_one) not in scheduler._scheduled
-    assert (partial_two, schedule_one) in scheduler._scheduled
-    assert (locally_defined[0], schedule_one) in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=partial_one, schedule=schedule_one))
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=partial_two, schedule=schedule_one)
-    assert (partial_two, schedule_one) not in scheduler._scheduled
-    assert (locally_defined[0], schedule_one) in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=partial_two, schedule=schedule_one))
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=locally_defined[0], schedule=schedule_one)
-    assert (locally_defined[0], schedule_one) not in scheduler._scheduled
-    assert (locally_defined[1], schedule_one) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=locally_defined[0], schedule=schedule_one))
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
 
-    scheduler.remove(action=locally_defined[1], schedule=schedule_one)
-    assert (locally_defined[1], schedule_one) not in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=locally_defined[1], schedule=schedule_one))
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) not in scheduler._scheduled
 
 
 async def test_scheduler_stop(caplog):
@@ -309,7 +310,7 @@ async def test_scheduler_cancel_executing_tasks() -> None:
             raise
 
     sched = util.Scheduler("xxx")
-    sched.add_action(action, CronSchedule("* * * * * *"))
+    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0))
     await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
     assert task_status.task_is_executing
     assert not task_status.task_was_cancelled

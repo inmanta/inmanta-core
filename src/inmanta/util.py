@@ -254,7 +254,7 @@ class Scheduler(object):
         self,
         action: TaskMethod,
         schedule: TaskSchedule,
-    ) -> None:
+    ) -> ScheduledTask:
         """
         Add a new action
 
@@ -294,6 +294,7 @@ class Scheduler(object):
 
         handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
+        return task_spec
 
     def remove(self, task: ScheduledTask) -> None:
         """
