@@ -41,6 +41,7 @@ from time import time
 from typing import (
     Any,
     Dict,
+    Generator,
     Generic,
     Iterable,
     Iterator,
@@ -54,7 +55,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    Union, Generator,
+    Union,
 )
 
 import more_itertools
@@ -2386,8 +2387,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> Generator[None, str, None]:
-        """ Generate a list of all python files
-        """
+        """Generate a list of all python files"""
         for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
             yield file_name
 
