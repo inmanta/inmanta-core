@@ -242,6 +242,21 @@ class PartialUpdateMerger:
         old_resources = await self._get_old_resources()
 
         # TODO: check that resource versions are properly set when a version is reserved
+        # TODO: first acquire version, then in second transaction lock resources? Differs from ticket description but I think
+        #   the ticket was written on the assumption that we needed new_version - 1
+        #
+        #   => The above is not correct: we want the put_partial calls to be FIFO, so the one that fetches the lowest version
+        #   should finish the first. Make sure to document this! We could potentially do this only under the resource lock
+        #   though.
+        #
+        #   The lock taken here should conflict with itself in both directions, but only ensure that if put_version is busy,
+        #   put_partial waits, not necessarily the other way around. But there's no harm in doing so anyway and it's easier.
+        #
+        #   Should full compile's reserve_version block on the resource write by put_partial to ensure it does not start
+        #   compilation until this version is in? No, auto full compiles should be disabled when manually exporting partials.
+        #   Only when partials go through the compiler queue should it be enabled. Main concern is put_partials'
+        #   interoperability
+        version = await env.get_next_version()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
