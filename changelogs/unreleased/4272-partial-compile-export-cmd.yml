@@ -1,0 +1,6 @@
+---
+description: Add support for partial compiles using the `inmanta export` command.
+issue-nr: 4272
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [iso5]
