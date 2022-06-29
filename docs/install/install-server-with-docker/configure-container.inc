@@ -108,7 +108,7 @@ situation.
 While ``Podman`` has been offering the possibility to do a mapping of a user id in the container to a
 user id on the host at runtime, which would solve our problem here, ``Docker`` still doesn't offer this
 functionality.  
-The solution we then propose here is to change the user and group id of the inmanta user inside the
+The inmanta container allows you to change the user and group id of the inmanta user inside the
 container when starting the container to match the user on the host, getting rid that way of any
 conflict in the files ownership.
 
