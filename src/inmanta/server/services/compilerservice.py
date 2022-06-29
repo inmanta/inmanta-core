@@ -548,7 +548,7 @@ class CompilerService(ServerSlice):
             metadata=metadata,
             environment_variables=env_vars,
             partial=partial,
-            removed_resource_sets=removed_resource_sets
+            removed_resource_sets=removed_resource_sets,
         )
         await compile.insert()
         await self._queue(compile)

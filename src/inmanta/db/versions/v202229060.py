@@ -25,8 +25,8 @@ async def update(connection: Connection) -> None:
     schema = """
 
     ALTER TABLE public.compile
-        ADD COLUMN partial NOT NULL boolean DEFAULT FALSE,
-        ADD COLUMN removed_resource_sets ;
+        ADD COLUMN partial boolean DEFAULT FALSE,
+        ADD COLUMN removed_resource_sets varchar[] DEFAULT array[]::varchar[];
     """
     async with connection.transaction():
         await connection.execute(schema)

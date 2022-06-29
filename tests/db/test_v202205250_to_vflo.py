@@ -26,6 +26,7 @@ from inmanta.data import Resource
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202205250.sql"))
 async def test_added_resource_set_column(
     migrate_db_from: Callable[[], Awaitable[None]],
+    postgresql_client,
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
     get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
 ) -> None:
@@ -35,14 +36,19 @@ async def test_added_resource_set_column(
     """
 
     # Assert state before running the DB migration script
-    assert "resource_set" not in (await get_columns_in_db_table("resource"))
+    assert "partial" not in (await get_columns_in_db_table("compile"))
+    assert "removed_resource_sets" not in (await get_columns_in_db_table("compile"))
 
     # Migrate DB schema
     await migrate_db_from()
 
     # Assert state after running the DB migration script
-    assert "resource_set" in (await get_columns_in_db_table("resource"))
+    assert "partial" in (await get_columns_in_db_table("compile"))
+    assert "removed_resource_sets" in (await get_columns_in_db_table("compile"))
 
-    resources = await Resource.get_list()
-    assert len(resources) == 4
-    assert all([not res.resource_set for res in resources])
+    compiles = await postgresql_client.fetch("SELECT * FROM public.compile;")
+    for c in compiles:
+        assert "partial" in c
+        assert c["partial"] is False
+        assert "removed_resource_sets" in c
+        assert c["removed_resource_sets"] is []
