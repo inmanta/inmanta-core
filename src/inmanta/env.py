@@ -617,7 +617,8 @@ class ActiveEnv(PythonEnvironment):
         Check this Python environment for incompatible dependencies in installed packages.
 
         :param strict_scope: A full pattern representing the package names that are considered in scope for the installed
-            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts. Any conflicts for packages that do not match this pattern will only raise a warning.
+            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts.
+            Any conflicts for packages that do not match this pattern will only raise a warning.
             The pattern is matched against an all-lowercase package name.
         :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
             packages meet the given constraints. All listed packages are expected to be installed.
