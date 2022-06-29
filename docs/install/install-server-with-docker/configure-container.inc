@@ -127,6 +127,7 @@ If you use docker-compose, you can simply update this section of the example abo
             INMANTA_UID: 1000
             INMANTA_GID: 1000
 
+
 Log rotation
 ############
 
