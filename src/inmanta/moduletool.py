@@ -511,7 +511,7 @@ mode.
         build.add_argument(
             "-b",
             "--byte-code",
-            help="Produce a module wheel that only contains bytecode.",
+            help="Produce a module wheel that only contains only python bytecode for the plugins.",
             action="store_true",
             default=False,
             dest="byte_code",
@@ -950,20 +950,25 @@ class V2ModuleBuilder:
                 # Add it to the manifest. The read has moved the pointer to the end of the file
                 LOGGER.info("Adding .pyc include line to the MANIFEST")
                 fh.write("\nrecursive-include inmanta_plugins *.pyc\n")
+                fh.write("global-exclude */__pycache__/*\n")
 
         # For wheel to build a non universal python wheel we need to trick it into thinking it contains
         # compiled extensions against a specific python ABI. If not we might install this wheel on a python with incompatible
-        # python python code
+        # python code
         dummy_file = os.path.join(build_path, "inmanta_plugins", self._module.name, "_cdummy.c")
         with open(dummy_file, "w") as fd:
             fd.write("// Dummy python file")
+
+        setup_file = os.path.join(build_path, "setup.py")
+        if os.path.exists(setup_file):
+            LOGGER.warning("This command will overwrite setup.py to make sure a correct wheel is generated.")
 
         with open(os.path.join(build_path, "setup.py"), "w") as fd:
             fd.write(
                 f"""
 from distutils.core import setup
 from Cython.Build import cythonize
-setup(name="{self._module.name}",
+setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
     version="{self._module.version}",
     ext_modules=cythonize("inmanta_plugins/{self._module.name}/_cdummy.c"),
 )
@@ -1133,7 +1138,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
     @classmethod
     def get_pyproject(
-        cls, in_folder: str, warn_on_merge: bool = False, build_requires: list[str] = ["setuptools", "wheel"]
+        cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None
     ) -> str:
         """
         Adds this to the existing config
@@ -1142,6 +1147,9 @@ graft inmanta_plugins/{self._module.name}/templates
         requires = ["setuptools", "wheel"]
         build-backend = "setuptools.build_meta"
         """
+        if build_requires is None:
+            build_requires = ["setuptools", "wheel"]
+
         config_in = {}
         if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
             with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
