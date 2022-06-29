@@ -2394,8 +2394,11 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if plugin_dir is None:
             return iter(())
 
-        if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
+        if not os.path.exists(os.path.join(plugin_dir, "__init__.py")) and not os.path.exists(
+            os.path.join(plugin_dir, "__init__.pyc")
+        ):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
+
         return (
             (
                 Path(file_name),

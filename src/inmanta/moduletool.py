@@ -1137,9 +1137,7 @@ graft inmanta_plugins/{self._module.name}/templates
             )
 
     @classmethod
-    def get_pyproject(
-        cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None
-    ) -> str:
+    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:
         """
         Adds this to the existing config
 
