@@ -53,7 +53,7 @@ class SourceInfo(object):
         """
         self.path = path
         self._hash: Optional[str] = None
-        self._content: Optional[str] = None
+        self._content: Optional[bytes] = None
         self._requires: Optional[List[str]] = None
         self.module_name = module_name
 
@@ -62,16 +62,16 @@ class SourceInfo(object):
         """Get the sha1 hash of the file"""
         if self._hash is None:
             sha1sum = hashlib.new("sha1")
-            sha1sum.update(self.content.encode("utf-8"))
+            sha1sum.update(self.content)
             self._hash = sha1sum.hexdigest()
 
         return self._hash
 
     @property
-    def content(self) -> str:
+    def content(self) -> bytes:
         """Get the content of the file"""
         if self._content is None:
-            with open(self.path, "r", encoding="utf-8") as fd:
+            with open(self.path, "rb") as fd:
                 self._content = fd.read()
         return self._content
 
@@ -151,7 +151,7 @@ class CodeManager(object):
         """Return the hashes of all source files"""
         return (info.hash for info in self.__file_info.values())
 
-    def get_file_content(self, hash: str) -> str:
+    def get_file_content(self, hash: str) -> bytes:
         """Get the file content for the given hash"""
         for info in self.__file_info.values():
             if info.hash == hash:
@@ -167,7 +167,7 @@ class CodeManager(object):
 @dataclass(frozen=True)
 class ModuleSource:
     name: str
-    source: str
+    source: bytes
     hash_value: str
 
 
@@ -247,7 +247,7 @@ class CodeLoader(object):
             source_file = os.path.join(module_dir, "__init__.py")
 
             # write the new source
-            with open(source_file, "w+", encoding="utf-8") as fd:
+            with open(source_file, "wb+") as fd:
                 fd.write(module_source.source)
             return True
         else:
