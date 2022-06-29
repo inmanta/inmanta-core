@@ -95,9 +95,9 @@ def test_code_loader(tmp_path, caplog):
 
     cl = loader.CodeLoader(tmp_path)
 
-    def deploy(code: str) -> None:
+    def deploy(code: bytes) -> None:
         sha1sum = hashlib.new("sha1")
-        sha1sum.update(code.encode())
+        sha1sum.update(code)
         hv: str = sha1sum.hexdigest()
         cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_unit_test", code, hv)])
 
@@ -108,7 +108,7 @@ def test_code_loader(tmp_path, caplog):
         """
 def test():
     return 10
-        """
+        """.encode()
     )
     assert any("Deploying code " in message for message in caplog.messages)
     caplog.clear()
@@ -122,7 +122,7 @@ def test():
         """
 def test():
     return 20
-        """
+        """.encode()
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 20
@@ -135,7 +135,7 @@ def test():
         """
 def test():
     return 20
-        """
+        """.encode()
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 20
@@ -147,10 +147,11 @@ def test_code_loader_dependency(tmp_path, caplog):
     cl = loader.CodeLoader(tmp_path)
 
     def get_module_source(module: str, code: str) -> ModuleSource:
+        data = code.encode()
         sha1sum = hashlib.new("sha1")
-        sha1sum.update(code.encode())
+        sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
-        return ModuleSource(module, code, hv)
+        return ModuleSource(module, data, hv)
 
     source_init: ModuleSource = get_module_source(
         "inmanta_plugins.inmanta_unit_test_modular",
@@ -187,12 +188,12 @@ def helper():
 def test_2312_code_loader_missing_init(tmp_path) -> None:
     cl = loader.CodeLoader(tmp_path)
 
-    code: str = """
+    code: bytes = """
 def test():
     return 10
-        """
+        """.encode()
     sha1sum = hashlib.new("sha1")
-    sha1sum.update(code.encode())
+    sha1sum.update(code)
     hv: str = sha1sum.hexdigest()
     cl.deploy_version([ModuleSource("inmanta_plugins.my_module.my_sub_mod", code, hv)])
 
@@ -208,10 +209,10 @@ def test_code_loader_import_error(tmp_path, caplog):
 import badimmport
 def test():
     return 10
-    """
+    """.encode()
 
     sha1sum = hashlib.new("sha1")
-    sha1sum.update(code.encode())
+    sha1sum.update(code)
     hv = sha1sum.hexdigest()
 
     with pytest.raises(ImportError):
