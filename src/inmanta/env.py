@@ -35,7 +35,7 @@ from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import Requirement
+from pkg_resources import DistInfoDistribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -623,17 +623,18 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         """
         # add all requirements of all in scope packages installed in this environment
-
+        if not constraints:
+            constraints = []
         inmanta_requirements: Set[str] = set([requirement.key for requirement in cls._get_requirements_on_inmanta_package()])
 
-        full_strict_scope: Set[str] = set()
+        full_strict_scope: Set[str] = set([constraint.key for constraint in constraints] if constraints is not None else [])
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else [])
 
         dist_info: DistInfoDistribution
         for dist_info in pkg_resources.working_set:
             requires = [requirement for requirement in dist_info.requires()]
             package = Requirement.parse(f"{dist_info.key}=={dist_info.version}")
-            if strict_scope.fullmatch(dist_info.key) or dist_info.key in inmanta_requirements:
+            if strict_scope.fullmatch(dist_info.key) or dist_info.key in inmanta_requirements or dist_info.key in constraints:
                 full_strict_scope.add(package.key)
                 full_strict_scope.update([require.key for require in requires])
             all_constraints.add(package)
@@ -643,20 +644,23 @@ class ActiveEnv(PythonEnvironment):
 
         constraint_violations: set[Tuple[Requirement, Optional[version.Version]]] = set()
         constraint_violations_strict: set[Tuple[Requirement, Optional[version.Version]]] = set()
-        for constraint in all_constraints:
-            if (constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint) and (
-                not constraint.marker or (constraint.marker and constraint.marker.evaluate())
+        for c in all_constraints:
+            if (c.key not in installed_versions or str(installed_versions[c.key]) not in c) and (
+                not c.marker or (c.marker and c.marker.evaluate())
             ):
-                if constraint.key in full_strict_scope:
-                    constraint_violations_strict.add((constraint, installed_versions.get(constraint.key, None)))
+                if c.key in full_strict_scope:
+                    constraint_violations_strict.add((c, installed_versions.get(c.key, None)))
                 else:
-                    constraint_violations.add((constraint, installed_versions.get(constraint.key, None)))
+                    constraint_violations.add((c, installed_versions.get(c.key, None)))
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements("Conflicting requirements:", constraint_violations_strict)
 
         for constraint, v in constraint_violations:
             LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
+
+    def _get_all_requires(dist_info: DistInfoDistribution):
+        return
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:

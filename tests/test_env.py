@@ -38,14 +38,14 @@ from inmanta import env, loader, module
 from packaging import version
 from utils import LogSequence
 
-if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
-    pytest.skip(
-        "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
-        "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
-        "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
-        "on the python package repository.",
-        allow_module_level=True,
-    )
+# if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
+#     pytest.skip(
+#         "The tests in this module will fail if it runs against inmanta-core installed in editable mode, "
+#         "because the build tag on the development branch is set to .dev0 by default. The inmanta package protection feature "
+#         "would make pip install a non-editable version of the same package. But no version with build tag .dev0 exists "
+#         "on the python package repository.",
+#         allow_module_level=True,
+#     )
 
 
 def test_basic_install(tmpdir):
@@ -395,18 +395,31 @@ def test_active_env_check_basic(
     in_scope_test: Pattern[str] = re.compile("test-package-.*")
     in_scope_nonext: Pattern[str] = re.compile("nonexistant-package")
 
+    error_msg: str = "Incompatibility between constraint"
+
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+        """
+        verify what the check methode for 2 different scopes: for an existing package and a non existing one.
+
+        param: expect_test: tuple with as first value a bool and as seconde value a string. the bool is true if the execution
+        will not raise an error, false if it will raise an error. the second argument is the warning message that can be find
+        in the logs.
+        param: expect_nonext: tuple with as first value a bool and as seconde value a string. the bool is true if the execution
+        will not raise an error, false if it will raise an error. the second argument is the warning message that can be find
+        in the logs.
+        """
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
             if expect[0]:
                 env.ActiveEnv.check(in_scope)
+                if expect[1] == "":
+                    assert error_msg not in {rec.message for rec in caplog.records}
+                else:
+                    assert expect[1] in {rec.message for rec in caplog.records}
             else:
-                with pytest.raises(env.ConflictingRequirements):
+                with pytest.raises(env.ConflictingRequirements) as e:
                     env.ActiveEnv.check(in_scope)
-            if expect[1] == "":
-                assert caplog.text == ""
-            else:
-                assert expect[1] in {rec.message for rec in caplog.records}
+                assert expect[1] in e.value.msg
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
@@ -415,8 +428,8 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, ""),
-        expect_nonext=(True, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0"),
+        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0"),
+        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0"),
     )
 
 
@@ -436,8 +449,8 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     env.ActiveEnv.check(in_scope)
 
     caplog.clear()
-    env.ActiveEnv.check(in_scope, constraints)
-    check_log(None)
+    with pytest.raises(env.ConflictingRequirements):
+        env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
