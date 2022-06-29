@@ -521,12 +521,17 @@ class CompilerService(ServerSlice):
         remote_id: uuid.UUID,
         metadata: JsonType = {},
         env_vars: Dict[str, str] = {},
+        partial: bool = False,
+        removed_resource_sets: Optional[List[str]] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :return: the compile id of the requested compile and any warnings produced during the request
         """
+        if removed_resource_sets is None:
+            removed_resource_sets = []
+
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
@@ -542,6 +547,8 @@ class CompilerService(ServerSlice):
             force_update=force_update,
             metadata=metadata,
             environment_variables=env_vars,
+            partial=partial,
+            removed_resource_sets=removed_resource_sets
         )
         await compile.insert()
         await self._queue(compile)
