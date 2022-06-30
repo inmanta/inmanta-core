@@ -24,7 +24,6 @@ from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
