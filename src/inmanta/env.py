@@ -116,7 +116,7 @@ class PythonWorkingSet:
             if dist not in installed_distributions:
                 return acc | {dist}
 
-            # recurse on direct dependencies if they have not yet been recursed on in a previous iteration
+            # recurse on direct dependencies
             return _get_tree_recursive(
                 (requirement.key for requirement in installed_distributions[dist].requires()),
                 acc=acc | {dist},
