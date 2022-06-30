@@ -119,6 +119,7 @@ def ensure_future_and_handle_exception(
 TaskMethod = Callable[[], Awaitable[object]]
 
 
+@stable_api
 class TaskSchedule(ABC):
     """
     Abstract base class for a task schedule specification. Offers methods to inspect when the task should be scheduled, relative
@@ -146,12 +147,14 @@ class TaskSchedule(ABC):
         """
 
 
+@stable_api
 @dataclass(frozen=True)
 class ScheduledTask:
     action: TaskMethod
     schedule: TaskSchedule
 
 
+@stable_api
 @dataclass(frozen=True)
 class IntervalSchedule(TaskSchedule):
     """
@@ -176,6 +179,7 @@ class IntervalSchedule(TaskSchedule):
         )
 
 
+@stable_api
 @dataclass(frozen=True)
 class CronSchedule(TaskSchedule):
     """
@@ -217,6 +221,7 @@ def is_coroutine(function: object) -> bool:
     )
 
 
+@stable_api
 class Scheduler(object):
     """
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
@@ -250,6 +255,7 @@ class Scheduler(object):
             except ValueError:
                 pass
 
+    @stable_api
     def add_action(
         self,
         action: TaskMethod,
@@ -296,6 +302,7 @@ class Scheduler(object):
         self._scheduled[task_spec] = handle
         return task_spec
 
+    @stable_api
     def remove(self, task: ScheduledTask) -> None:
         """
         Remove a scheduled action
@@ -304,6 +311,7 @@ class Scheduler(object):
             IOLoop.current().remove_timeout(self._scheduled[task])
             del self._scheduled[task]
 
+    @stable_api
     def stop(self) -> None:
         """
         Stop the scheduler
