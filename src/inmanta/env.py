@@ -701,7 +701,10 @@ class ActiveEnv(PythonEnvironment):
             raise ConflictingRequirements("Conflicting requirements:", constraint_violations_strict)
 
         for constraint, v in constraint_violations:
-            LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
+            if v:
+                LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
+            else:
+                LOGGER.warning("Constraint %s is not installed" % constraint)
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
