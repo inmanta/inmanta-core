@@ -1,6 +1,3 @@
-import elaboratev2module::alwaysimported
-
-
 entity Printer:
     string message
 end

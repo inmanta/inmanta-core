@@ -543,8 +543,10 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     )
 
     # set up project: import submodule only, don't add the module to requirements
-    project: Project = snippetcompiler_clean.setup_for_snippet("import elaboratev2module::alwaysimported", autostd=False)
-    assert {tup[0] for tup in project.load_module_recursive()} == {"elaboratev2module", "elaboratev2module::alwaysimported"}
+    project: Project = snippetcompiler_clean.setup_for_snippet("import elaboratev2module::nested::sub", autostd=False)
+    assert {tup[0] for tup in project.load_module_recursive()} == {
+        "elaboratev2module", "elaboratev2module::nested", "elaboratev2module::nested::sub"
+    }
 
 
 @pytest.mark.slowtest
