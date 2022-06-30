@@ -450,7 +450,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
     env.ActiveEnv.check(in_scope, constraints)
-    assert "Incompatibility between constraint" not in "caplog.tex"
+    assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
