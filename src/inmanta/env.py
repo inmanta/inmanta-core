@@ -700,9 +700,6 @@ class ActiveEnv(PythonEnvironment):
         for constraint, v in constraint_violations:
             LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
 
-    def _get_all_requires(dist_info: Distribution):
-        return
-
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
         """
