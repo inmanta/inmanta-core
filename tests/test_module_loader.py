@@ -27,7 +27,7 @@ from pkg_resources import Requirement
 
 from inmanta import plugins
 from inmanta.const import CF_CACHE_DIR
-from inmanta.env import LocalPackagePath, process_env
+from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -40,7 +40,8 @@ from inmanta.module import (
     Project,
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool
-from utils import PipIndex, module_from_template, v1_module_from_template
+from packaging.version import Version
+from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -562,8 +563,11 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
-    with pytest.raises(InvalidModuleException):
+    with pytest.raises(InvalidModuleException) as e:
         ModuleTool().install(editable=False, path=module_path)
+
+    assert ("these package versions have conflicting dependencies.") in str(e.value.msg)
+
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
 
@@ -571,7 +575,6 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
 @pytest.mark.slowtest
 def test_project_requirements_dont_overwrite_core_requirements_index(
     snippetcompiler_clean,
-    local_module_package_index: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
 ) -> None:
@@ -611,8 +614,132 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install project
-    with pytest.raises(InvalidModuleException):
+    with pytest.raises(ConflictingRequirements):
         project.install_modules()
 
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
+
+
+@pytest.mark.slowtest
+def test_module_conflicting_dependencies_with_v2_modules(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    Show an error message when installing a module that breaks the dependencies
+    of another one. minimalv2module depends on y~=1.0.0 which requires x~=1.0.0.
+    after the install of minimalv2module we try to install minimalv2module2 which
+    requires x~=2.0.0. The y~=1.0.0 requirement is now broken as python package x
+    has now version 2.0.0 and y needs 1.0.0.
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # Create an python package x with version 1.0.0
+    create_python_package("x", Version("1.0.0"), str(tmpdir.join("x-1.0.0")), publish_index=index)
+
+    # Create an python package x with version 2.0.0
+    create_python_package("x", Version("2.0.0"), str(tmpdir.join("x-2.0.0")), publish_index=index)
+
+    # Create an python package y with version 1.0.0 that depends on x~=1.0.0
+    create_python_package(
+        "y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), requirements=[Requirement.parse("x~=1.0.0")], publish_index=index
+    )
+
+    # Create the first module
+    module_name1: str = "minimalv2module"
+    module_path1: str = str(tmpdir.join(module_name1))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name1),
+        module_path1,
+        new_requirements=[Requirement.parse("y~=1.0.0")],
+        publish_index=index,
+    )
+
+    # Create the second module
+    module_name2: str = "minimalv2module2"
+    module_path2: str = str(tmpdir.join(module_name2))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_path2,
+        new_name="minimalv2module2",
+        new_requirements=[Requirement.parse("x~=2.0.0")],
+        publish_index=index,
+    )
+
+    req1 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name1))
+    req2 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+    # Setup project
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "",
+        install_project=False,
+        python_package_sources=[index.url],
+        python_requires=[req1, req2],
+        autostd=False,
+    )
+
+    msg: str = "Module dependency resolution conflict:"
+    # Install project
+    with pytest.raises(ConflictingRequirements) as e:
+        project.install_modules()
+    assert e.value.args[0].startswith(msg)
+
+
+@pytest.mark.slowtest
+def test_module_conflicting_dependencies_with_v1_module(
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    Show an error message when installing a module that breaks the dependencies
+    of another one. modulev1 depends on y~=1.0.0.
+    after the install of modulev1 we try to install minimalv2module2 which
+    requires y~=2.0.0. those 2 requirements conflict which each other.
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # Create an python package x with version 1.0.0
+    create_python_package("y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), publish_index=index)
+
+    # Create an python package x with version 2.0.0
+    create_python_package("y", Version("2.0.0"), str(tmpdir.join("y-2.0.0")), publish_index=index)
+
+    # Create the first module
+    module_name1: str = "minimalv1module"
+    module_path1: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name1),
+        module_path1,
+        new_name="modulev1",
+        new_requirements=[Requirement.parse("y~=1.0.0")],
+    )
+
+    # Create the second module
+    module_name2: str = "minimalv2module"
+    module_path2: str = str(tmpdir.join(module_name2))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name2),
+        module_path2,
+        new_requirements=[Requirement.parse("y~=2.0.0")],
+        publish_index=index,
+    )
+
+    req = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+
+    # Setup project
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import modulev1",
+        install_project=False,
+        python_package_sources=[index.url],
+        python_requires=[req],
+        autostd=False,
+        add_to_module_path=[str(tmpdir)],
+    )
+
+    # Install project
+    msg: str = "Module dependency resolution conflict:"
+    with pytest.raises(ConflictingRequirements) as e:
+        project.install_modules()
+    assert e.value.args[0].startswith(msg)

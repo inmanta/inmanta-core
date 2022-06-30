@@ -240,7 +240,7 @@ def test_process_env_install_from_index_conflicting_reqs(
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
-    assert "conflicting dependencies" in e.value.args[0]
+    assert "conflicting dependencies" in e.value.msg
     assert package_name not in env.process_env.get_installed_packages()
 
 
@@ -385,7 +385,7 @@ build-backend = "setuptools.build_meta"
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,
-    tmpvenv_active: str,
+    tmpvenv_active_inherit: str,
 ) -> None:
     """
     Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
@@ -395,12 +395,31 @@ def test_active_env_check_basic(
     in_scope_test: Pattern[str] = re.compile("test-package-.*")
     in_scope_nonext: Pattern[str] = re.compile("nonexistant-package")
 
+    error_msg: str = "Incompatibility between constraint"
+
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+        """
+        verify what the check method for 2 different scopes: for an existing package and a non existing one.
+
+        param: expect_test: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
+        in the logs.
+        param: expect_nonext: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
+        in the logs.
+        """
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
-            assert env.ActiveEnv.check(in_scope) == expect[0]
-            if not expect[0]:
-                assert expect[1] in {rec.message for rec in caplog.records}
+            if expect[0]:
+                env.ActiveEnv.check(in_scope)
+                if expect[1] == "":
+                    assert error_msg not in {rec.message for rec in caplog.records}
+                else:
+                    assert expect[1] in {rec.message for rec in caplog.records}
+            else:
+                with pytest.raises(env.ConflictingRequirements) as e:
+                    env.ActiveEnv.check(in_scope)
+                assert expect[1] in e.value.msg
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
@@ -409,11 +428,12 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0")
+        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0"),
+        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0"),
     )
 
 
-def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
+def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
     """
@@ -421,26 +441,22 @@ def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
-    def check_log(version: Optional[version.Version]) -> None:
-        assert f"Incompatibility between constraint test-package-one~=1.0 and installed version {version}" in {
-            rec.message for rec in caplog.records
-        }
-
-    assert env.ActiveEnv.check(in_scope)
+    env.ActiveEnv.check(in_scope)
 
     caplog.clear()
-    assert not env.ActiveEnv.check(in_scope, constraints)
-    check_log(None)
+    with pytest.raises(env.ConflictingRequirements):
+        env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
-    assert env.ActiveEnv.check(in_scope, constraints)
+    env.ActiveEnv.check(in_scope, constraints)
+    assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
-    assert not env.ActiveEnv.check(in_scope, constraints)
-    check_log(v)
+    with pytest.raises(env.ConflictingRequirements):
+        env.ActiveEnv.check(in_scope, constraints)
 
 
 def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
@@ -456,7 +472,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     match = re.search(
         r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
         r"package versions have conflicting dependencies",
-        excinfo.value.args[0],
+        excinfo.value.msg,
     )
     assert match is not None
 
