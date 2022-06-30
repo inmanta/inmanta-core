@@ -256,6 +256,9 @@ class PartialUpdateMerger:
         #   compilation until this version is in? No, auto full compiles should be disabled when manually exporting partials.
         #   Only when partials go through the compiler queue should it be enabled. Main concern is put_partials'
         #   interoperability
+        #
+        #   conclusion: acquire resource lock -> get version through different connection (add comment) -> update lock order
+        #   docstrings in inmanta.data
         version = await env.get_next_version()
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
