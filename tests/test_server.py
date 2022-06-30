@@ -653,52 +653,6 @@ async def test_token_without_auth(server, client, environment):
     assert token.code == 400
 
 
-def make_source(collector, filename, module, source, req):
-    myhash = hash_file(source.encode())
-    collector[myhash] = [filename, module, source, req]
-    return collector
-
-
-async def test_code_upload(server, client, agent, environment):
-    """Test upload of a single code definition"""
-    version = (await client.reserve_version(environment)).result["data"]
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
-
-    sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
-    sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
-
-    res = await client.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
-    assert res.code == 200
-
-    res = await agent._client.get_code(tid=environment, id=version, resource="std::File")
-    assert res.code == 200
-    assert res.result["sources"] == sources
-
-
 async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
@@ -731,7 +685,7 @@ async def test_batched_code_upload(
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
 
-            assert info.content == code[2]
+            assert info.content.decode() == code[2]
             assert info.requires == code[3]
 
 
