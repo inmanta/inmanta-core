@@ -2132,9 +2132,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """
         reqs = chain(
-            chain.from_iterable(
-                [mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]
-            ).self.get_strict_python_requirements_as_list()
+            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
+            self.get_strict_python_requirements_as_list(),
         )
         return list(set(reqs))
 
