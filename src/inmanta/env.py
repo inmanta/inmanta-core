@@ -72,7 +72,10 @@ class ConflictingRequirements(CompilerException):
         msg: str = message
         if conflicts is not None:
             for constraint, v in conflicts:
-                msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
+                if v:
+                    msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
+                else:
+                    msg += "\n\t* Constraint %s is not installed" % constraint
         return msg
 
 

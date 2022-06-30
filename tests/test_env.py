@@ -441,11 +441,6 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
-    def check_log(version: Optional[version.Version]) -> None:
-        assert f"Incompatibility between constraint test-package-one~=1.0 and installed version {version}" in {
-            rec.message for rec in caplog.records
-        }
-
     env.ActiveEnv.check(in_scope)
 
     caplog.clear()
@@ -455,7 +450,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
     env.ActiveEnv.check(in_scope, constraints)
-    assert caplog.text == ""
+    assert "Incompatibility between constraint" not in "caplog.tex"
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
