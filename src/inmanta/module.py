@@ -1905,6 +1905,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
         except InvalidModuleException:
             raise
+        except env.ConflictingRequirements:
+            raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
 
@@ -1991,11 +1993,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
-        if not env.ActiveEnv.check(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
-            raise CompilerException(
-                "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
-                " before attempting another compile. Run `pip check` to check for any incompatibilities."
-            )
+        constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
+        try:
+            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
+        except env.ConflictingRequirements as e:
+            message: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules."
+            raise env.ConflictingRequirements(message, e.conflicts)
 
     def _modules_cache_is_valid(self) -> bool:
         """
