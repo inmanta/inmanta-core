@@ -536,6 +536,28 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
 
 
 @pytest.mark.slowtest
+def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_module_package_index: str) -> None:
+    """
+    Verify that module loading works as expected for a v2 module installed in the environment while it is not in any of the
+    requirements files. This is relevant for correct working of pytest-inmanta's auto-generated projects.
+    """
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
+    process_env.install_from_index(
+        [ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module"))],
+        index_urls=[local_module_package_index],
+    )
+
+    # set up project: import submodule only, don't add the module to requirements
+    project: Project = snippetcompiler_clean.setup_for_snippet("import elaboratev2module::nested::sub", autostd=False)
+    assert {tup[0] for tup in project.load_module_recursive()} == {
+        "elaboratev2module",
+        "elaboratev2module::nested",
+        "elaboratev2module::nested::sub",
+    }
+
+
+@pytest.mark.slowtest
 def test_project_requirements_dont_overwrite_core_requirements_source(
     snippetcompiler_clean,
     local_module_package_index: str,
