@@ -399,13 +399,13 @@ def test_active_env_check_basic(
 
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
         """
-        verify what the check methode for 2 different scopes: for an existing package and a non existing one.
+        verify what the check method for 2 different scopes: for an existing package and a non existing one.
 
-        param: expect_test: tuple with as first value a bool and as seconde value a string. the bool is true if the execution
-        will not raise an error, false if it will raise an error. the second argument is the warning message that can be find
+        param: expect_test: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
         in the logs.
-        param: expect_nonext: tuple with as first value a bool and as seconde value a string. the bool is true if the execution
-        will not raise an error, false if it will raise an error. the second argument is the warning message that can be find
+        param: expect_nonext: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
         in the logs.
         """
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:

@@ -567,8 +567,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
         ModuleTool().install(editable=False, path=module_path)
 
     assert (
-        "these package versions have conflicting dependencies.\nERROR: ResolutionImpossible: for help visit "
-        "https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts"
+        "these package versions have conflicting dependencies."
     ) in str(e.value.msg)
 
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
