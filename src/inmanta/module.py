@@ -1796,25 +1796,28 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if module.name in set_up:
                 # already set up
                 return
+            if isinstance(module, ModuleV2):
+                # register it as a v2 module so that any subsequent require_v2 calls
+                require_v2(module.name)
             load_module_v2_requirements(module)
             set_up.add(module.name)
 
-        def load_sub_module(module: Module, submod: str) -> None:
+        def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
             them for reload.
             Does not install any v2 modules.
             """
-            parts: List[str] = submod.split("::")
+            parts: List[str] = imp.name.split("::")
             for i in range(1, len(parts) + 1):
                 subs = "::".join(parts[0:i])
-                if subs in done[module_name]:
+                if subs in done[module.name]:
                     continue
                 (nstmt, nb) = module.get_ast(subs)
 
-                done[module_name][subs] = imp
-                ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
+                done[module.name][subs] = imp
+                ast_by_top_level_mod[module.name].append((subs, nstmt, nb))
 
                 # get imports and add to list
                 subs_imports: List[DefineImport] = module.get_imports(subs)
@@ -1856,7 +1859,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                     bypass_module_cache=bypass_module_cache,
                 )
                 setup_module(module)
-                load_sub_module(module, ns)
+                load_sub_module(module, imp)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
 
