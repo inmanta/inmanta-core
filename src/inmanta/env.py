@@ -34,7 +34,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import Distribution, Requirement
