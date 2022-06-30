@@ -45,10 +45,9 @@ def put_partial(
     version: int,
     resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
     unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
-    version_info: Optional[model.ModelVersionInfo] = None,
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
-    **kwargs: object,  # bypass the type checking for resources that result from the partial compile
+    **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> None:
     """
     Store a new version of the configuration model after a partial recompile.
@@ -59,10 +58,11 @@ def put_partial(
     :param version: The version of the configuration model
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
-    :param version_info: Model version information
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
-    :param **kwargs: support value 'resources': a list of resource objects.
+    :param **kwargs: The following arguments are supported:
+              * resources: a list of resource objects.
+              * version_info: Model version information
     """
 
 

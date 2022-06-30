@@ -17,6 +17,7 @@
 """
 import argparse
 import configparser
+import datetime
 import inspect
 import logging
 import os
@@ -509,6 +510,14 @@ mode.
             dest="output_dir",
         )
         build.add_argument(
+            "--dev",
+            dest="dev_build",
+            help="Perform a development build of the module. This adds the build tag `.dev<timestamp>` to the "
+            "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
+            default=False,
+            action="store_true",
+        )
+        build.add_argument(
             "-b",
             "--byte-code",
             help="Produce a module wheel that contains only python bytecode for the plugins.",
@@ -566,7 +575,9 @@ mode.
             raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
         ModuleConverter(module).convert_in_place()
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None, byte_code: bool = False) -> str:
+    def build(
+        self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
+    ) -> str:
         """
         Build a v2 module and return the path to the build artifact.
         """
@@ -583,9 +594,9 @@ mode.
         if isinstance(module, ModuleV1):
             with tempfile.TemporaryDirectory() as tmpdir:
                 ModuleConverter(module).convert(tmpdir)
-                return V2ModuleBuilder(tmpdir).build(output_dir, byte_code)
+                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build, byte_code=byte_code)
         else:
-            return V2ModuleBuilder(path).build(output_dir, byte_code)
+            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build, byte_code=byte_code)
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -910,7 +921,7 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str, byte_code: bool = False) -> str:
+    def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
         Build the module and return the path to the build artifact.
 
@@ -924,6 +935,8 @@ class V2ModuleBuilder:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module.path, build_path)
+            if dev_build:
+                self._add_dev_build_tag_to_setup_cfg(build_path)
             self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
             if byte_code:
@@ -932,6 +945,24 @@ class V2ModuleBuilder:
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
             return path_to_wheel
+
+    def _add_dev_build_tag_to_setup_cfg(self, build_path: str) -> None:
+        """
+        Add a build_tag of the format `.dev<timestamp>` to the setup.cfg file. The timestamp has the form %Y%m%d%H%M%S.
+        """
+        path_setup_cfg = os.path.join(build_path, "setup.cfg")
+        # Read setup.cfg file
+        config_in = ConfigParser()
+        config_in.read(path_setup_cfg)
+        # Set build_tag
+        if not config_in.has_section("egg_info"):
+            config_in.add_section("egg_info")
+        timestamp_uct = datetime.datetime.now(datetime.timezone.utc)
+        timestamp_uct_str = timestamp_uct.strftime("%Y%m%d%H%M%S")
+        config_in.set("egg_info", "tag_build", f".dev{timestamp_uct_str}")
+        # Write file back
+        with open(path_setup_cfg, "w") as fh:
+            config_in.write(fh)
 
     def _byte_compile_code(self, build_path: str) -> None:
         # Backup src dir and replace .py files with .pyc files

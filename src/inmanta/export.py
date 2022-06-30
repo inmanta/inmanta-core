@@ -351,10 +351,17 @@ class Exporter(object):
         include_status: bool = False,
         model_export: bool = False,
         export_plugin: Optional[str] = None,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
     ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
         """
+        if resource_sets_to_remove is None:
+            resource_sets_to_remove = []
+        if not partial_compile and resource_sets_to_remove:
+            raise Exception("Cannot remove resource sets when a full compile was done")
+
         self.types = types
         self.scopes = scopes
         self._version = self.get_version(no_commit)
@@ -403,7 +410,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model)
+            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -477,9 +484,11 @@ class Exporter(object):
         resources: List[Dict[str, str]],
         metadata: Dict[str, str],
         model: Dict,
+        partial_compile: bool,
+        resource_sets_to_remove: List[str],
     ) -> None:
         """
-        Commit the entire list of resource to the configurations server.
+        Commit the entire list of resources to the configuration server.
         """
         tid = cfg_env.get()
         if tid is None:
@@ -521,16 +530,28 @@ class Exporter(object):
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        result = conn.put_version(
-            tid=tid,
-            version=version,
-            resources=resources,
-            resource_sets=self._resource_sets,
-            unknowns=unknown_parameters,
-            resource_state=self._resource_state,
-            version_info=version_info,
-            compiler_version=get_compiler_version(),
-        )
+        if partial_compile:
+            result = conn.put_partial(
+                tid=tid,
+                version=version,
+                resources=resources,
+                resource_sets=self._resource_sets,
+                unknowns=unknown_parameters,
+                resource_state=self._resource_state,
+                version_info=version_info,
+                removed_resource_sets=resource_sets_to_remove,
+            )
+        else:
+            result = conn.put_version(
+                tid=tid,
+                version=version,
+                resources=resources,
+                resource_sets=self._resource_sets,
+                unknowns=unknown_parameters,
+                resource_state=self._resource_state,
+                version_info=version_info,
+                compiler_version=get_compiler_version(),
+            )
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])

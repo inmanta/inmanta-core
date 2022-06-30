@@ -18,6 +18,7 @@
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -36,11 +37,15 @@ from inmanta.moduletool import V2ModuleBuilder
 
 
 def run_module_build_soft(
-    module_path: str, set_path_argument: bool, output_dir: Optional[str] = None, byte_code: bool = False
-) -> None:
+    module_path: str,
+    set_path_argument: bool,
+    output_dir: Optional[str] = None,
+    dev_build: bool = False,
+    byte_code: bool = False,
+) -> str:
     if not set_path_argument:
         module_path = None
-    moduletool.ModuleTool().build(module_path, output_dir, byte_code=byte_code)
+    return moduletool.ModuleTool().build(module_path, output_dir, dev_build=dev_build, byte_code=byte_code)
 
 
 def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
@@ -216,3 +221,15 @@ def test_build_invalid_module(tmpdir, modules_v2_dir: str):
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
+
+
+def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
+    """
+    Test whether the functionality to create a development build of a module, works correctly.
+    """
+    module_name = "minimalv2module"
+    module_dir = os.path.join(modules_v2_dir, module_name)
+    module_copy_dir = os.path.join(tmpdir, module_name)
+    shutil.copytree(module_dir, module_copy_dir)
+    path_to_wheel = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True)
+    assert re.search(r"\.dev[0-9]{14}", path_to_wheel)

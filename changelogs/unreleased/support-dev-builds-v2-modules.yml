@@ -1,0 +1,8 @@
+---
+description: Added support to create development builds of V2 modules
+issue-nr: 1184
+issue-repo: irt
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"
