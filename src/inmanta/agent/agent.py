@@ -1209,6 +1209,8 @@ class Agent(SessionEndpoint):
                         for hash_value, (path, name, _, requires) in result.result["sources"].items():
                             # We do not use the provided source because this might break any binary or non-utf8 content
                             response: protocol.Result = await self._client.get_file(hash_value)
+                            if response.code != 200 or response.result is None:
+                                raise Exception(f"Failed to fetch code for {name}: {path}.")
                             modules.append(
                                 (ModuleSource(name, base64.b64decode(response.result["content"]), hash_value), requires)
                             )

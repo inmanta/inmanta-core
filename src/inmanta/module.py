@@ -2386,7 +2386,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    def _list_python_files(self, plugin_dir: str) -> Generator[None, str, None]:
+    def _list_python_files(self, plugin_dir: str) -> Iterator[str]:
         """Generate a list of all python files"""
         for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
             yield file_name
