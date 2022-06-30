@@ -54,7 +54,7 @@ def test_code_manager(tmpdir: py.path.local):
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)
         content: str
-        with open(filename, "r", encoding="utf-8") as fd:
+        with open(filename, "rb") as fd:
             content = fd.read()
             assert source_info.content == content
             assert len(source_info.hash) > 0
