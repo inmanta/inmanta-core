@@ -17,14 +17,17 @@
 """
 import base64
 import hashlib
+import py_compile
+import tempfile
+import uuid
 from asyncio import gather
 from logging import DEBUG, INFO
 
 from inmanta.agent import Agent
 from utils import LogSequence
+import inmanta
 
-
-async def test_agent_code_loading(caplog, server, agent_factory, client, environment):
+async def test_agent_code_loading(caplog, server, agent_factory, client, environment: uuid.UUID) -> None:
     """
     Test goals:
     1. ensure the agent doesn't re-load the same code if not required
@@ -35,8 +38,18 @@ async def test_agent_code_loading(caplog, server, agent_factory, client, environ
 
     caplog.set_level(DEBUG)
 
-    async def make_source_structure(into: dict, file: str, module: str, source: bytes) -> str:
-        data = source.encode()
+    async def make_source_structure(into: dict, file: str, module: str, source: str, byte_code: bool = False) -> str:
+        if byte_code:
+            fd, source_file = tempfile.mkstemp(suffix=".py")
+            with open(fd, "w+") as fh:
+                fh.write(source)
+            py_compile.compile(source_file, source_file + "c")
+
+            with open(source_file + "c", "rb") as fh:
+                data = fh.read()
+        else:
+            data = source.encode()
+
         sha1sum = hashlib.new("sha1")
         sha1sum.update(data)
         hv: str = sha1sum.hexdigest()
@@ -56,10 +69,19 @@ def xx():
     pass
     """
 
+    codec = """
+import inmanta
+inmanta.test_agent_code_loading = 15
+    """
+    # set a different value to check if the agent has loaded the code. use setattr to avoid type complaints
+    setattr(inmanta, "test_agent_code_loading", 0)
+
     sources = {}
     sources2 = {}
+    sources3 = {}
     hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea)
     hv2 = await make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb)
+    hv3 = await make_source_structure(sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec)
 
     res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
     assert res.code == 200
@@ -76,6 +98,10 @@ def xx():
     res = await client.upload_code_batched(tid=environment, id=6, resources={"test::Test3": sources2})
     assert res.code == 200
 
+    # bytecompile version
+    res = await client.upload_code_batched(tid=environment, id=7, resources={"test::Test4": sources3})
+    assert res.code == 200
+
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
@@ -85,12 +111,11 @@ def xx():
         version=5,
         resource_types=["test::Test", "test::Test2", "test::Test3"],
     )
-
     r2 = agent.ensure_code(environment=environment, version=5, resource_types=["test::Test", "test::Test2"])
-
     r3 = agent.ensure_code(environment=environment, version=6, resource_types=["test::Test2", "test::Test3"])
+    r4 = agent.ensure_code(environment=environment, version=7, resource_types=["test::Test4"])
 
-    await gather(r1, r2, r3)
+    await gather(r1, r2, r3, r4)
 
     # Test 1 is deployed once, as seen by the agent
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test version=5").contains(
@@ -116,3 +141,12 @@ def xx():
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=5")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")
+
+    # Loader loads byte code file
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test4 version=7")
+    LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
+        "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
+    )
+
+    assert getattr(inmanta, "test_agent_code_loading") == 15
+    delattr(inmanta, "test_agent_code_loading")
