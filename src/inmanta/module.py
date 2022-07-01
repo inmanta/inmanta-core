@@ -1610,7 +1610,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
             self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
 
-        self.verify_python_environment()
+        self.verify()
 
     def load(self, install: bool = False) -> None:
         """
@@ -2133,11 +2133,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
     def collect_python_requirements(self) -> List[str]:
         """
-        Collect the list of all python requirements of all modules in this project, including those on inmanta modules.
+        Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """
         reqs = chain(
-            chain.from_iterable([mod.get_all_python_requirements_as_list() for mod in self.modules.values()]),
-            self.get_all_python_requirements_as_list(),
+            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
+            self.get_strict_python_requirements_as_list(),
         )
         return list(set(reqs))
 
