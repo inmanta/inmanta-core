@@ -35,7 +35,7 @@ from utils import log_contains
 
 
 def test_module_conversion(tmpdir, caplog):
-    caplog.at_level(level=logging.INFO)
+    caplog.set_level(level=logging.INFO)
     module_name = "elaboratev1module"
     path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
     dummyproject = DummyProject()
