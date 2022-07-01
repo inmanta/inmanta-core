@@ -1597,15 +1597,20 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
+
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
-        self.verify()
+
+        # Verify non-python part
+        self.verify_modules_cache()
+        self.verify_module_version_compatibility()
+
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
             self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
-            # installing new dependencies into the virtual environment might introduce new conflicts
-            self.verify_python_environment()
+
+        self.verify()
 
     def load(self, install: bool = False) -> None:
         """
@@ -2138,7 +2143,10 @@ two or more of the installed modules."
         """
         Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """
-        reqs = chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()])
+        reqs = chain(
+            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
+            self.get_strict_python_requirements_as_list(),
+        )
         return list(set(reqs))
 
     def get_root_namespace(self) -> Namespace:
