@@ -104,7 +104,6 @@ class CodeService(protocol.ServerSlice):
         sources = {}
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
-                content = self.file_slice.get_file_internal(code_hash)
-                sources[code_hash] = (file_name, module, content.decode(), req)
+                sources[code_hash] = (file_name, module, "", req)
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}

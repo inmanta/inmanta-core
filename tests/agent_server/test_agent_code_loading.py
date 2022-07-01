@@ -43,7 +43,7 @@ async def test_agent_code_loading(caplog, server, agent_factory, client, environ
             fd, source_file = tempfile.mkstemp(suffix=".py")
             with open(fd, "w+") as fh:
                 fh.write(source)
-            py_compile.compile(source_file, source_file + "c")
+            py_compile.compile(source_file, cfile=source_file + "c")
 
             with open(source_file + "c", "rb") as fh:
                 data = fh.read()
@@ -81,7 +81,9 @@ inmanta.test_agent_code_loading = 15
     sources3 = {}
     hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea)
     hv2 = await make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb)
-    hv3 = await make_source_structure(sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec)
+    hv3 = await make_source_structure(
+        sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec, byte_code=True
+    )
 
     res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
     assert res.code == 200
@@ -113,9 +115,7 @@ inmanta.test_agent_code_loading = 15
     )
     r2 = agent.ensure_code(environment=environment, version=5, resource_types=["test::Test", "test::Test2"])
     r3 = agent.ensure_code(environment=environment, version=6, resource_types=["test::Test2", "test::Test3"])
-    r4 = agent.ensure_code(environment=environment, version=7, resource_types=["test::Test4"])
-
-    await gather(r1, r2, r3, r4)
+    await gather(r1, r2, r3)
 
     # Test 1 is deployed once, as seen by the agent
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test version=5").contains(
@@ -143,6 +143,7 @@ inmanta.test_agent_code_loading = 15
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")
 
     # Loader loads byte code file
+    await agent.ensure_code(environment=environment, version=7, resource_types=["test::Test4"])
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test4 version=7")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
