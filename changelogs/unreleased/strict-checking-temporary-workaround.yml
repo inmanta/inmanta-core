@@ -1,0 +1,5 @@
+description: Temporarily convert strict checking errors to warnings
+change-type: patch
+destination-branches:
+  - master
+  - iso5
