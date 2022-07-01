@@ -1600,6 +1600,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
+        # Verify non-python part
+        self.verify_modules_cache()
+        self.verify_module_version_compatibility()
+
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
