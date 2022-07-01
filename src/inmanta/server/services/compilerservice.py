@@ -376,6 +376,14 @@ class CompileRun(object):
                 compile_data_json_file.name,
             ]
 
+            if self.request.partial == True:
+                cmd.append("-p")
+
+            if self.reques.removed_resource_sets is not None:
+                for resource_set in self.request.removed_resource_sets:
+                    cmd.append("--delete-resource-set")
+                    cmd.append(resource_set)
+
             if not self.request.do_export:
                 f = NamedTemporaryFile()
                 cmd.append("-j")

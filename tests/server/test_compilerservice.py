@@ -340,6 +340,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
             metadata=meta,
             environment_variables=env_vars,
             force_update=update,
+            partial=True,
         )
         await compile.insert()
 
