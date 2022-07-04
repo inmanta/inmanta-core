@@ -23,9 +23,10 @@ import uuid
 from asyncio import gather
 from logging import DEBUG, INFO
 
+import inmanta
 from inmanta.agent import Agent
 from utils import LogSequence
-import inmanta
+
 
 async def test_agent_code_loading(caplog, server, agent_factory, client, environment: uuid.UUID) -> None:
     """
