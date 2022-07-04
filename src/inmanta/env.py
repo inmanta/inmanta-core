@@ -352,6 +352,7 @@ class PythonEnvironment:
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
@@ -364,6 +365,7 @@ class PythonEnvironment:
             upgrade=upgrade,
             allow_pre_releases=allow_pre_releases,
             constraints_files=[*constraint_files],
+            upgrade_strategy=upgrade_strategy,
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
@@ -495,11 +497,14 @@ class ActiveEnv(PythonEnvironment):
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
         try:
-            super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
+            super(ActiveEnv, self).install_from_index(
+                requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
+            )
         finally:
             self.notify_change()
 
@@ -961,15 +966,12 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
         if not self.__using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
-            requirements,
-            index_urls,
-            upgrade,
-            allow_pre_releases,
-            constraint_files,
+            requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:

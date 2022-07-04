@@ -697,7 +697,8 @@ def test_project_install_incompatible_dependencies(
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
     assert e.value.msg == (
-        "ERROR: Could not find a version that satisfies the requirement lorem~=0.0.1,~=0.1.1 (from versions: 0.0.1, 0.1.0, 0.1.1)\n"
+        "ERROR: Could not find a version that satisfies the requirement lorem~=0.0.1,~=0.1.1 "
+        "(from versions: 0.0.1, 0.1.0, 0.1.1)\n"
         "ERROR: No matching distribution found for lorem~=0.0.1,~=0.1.1\n"
     )
 

@@ -1600,15 +1600,20 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
+        indexes = [repo for repo in self.metadata.repo if repo.type.value == "package"]
+        index_urls = [repo.url for repo in indexes] if indexes else None
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq = self.collect_python_requirements()
+        pyreq = [Requirement.parse(x) for x in self.collect_python_requirements()]
+
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
+            self.virtualenv.install_from_index(
+                pyreq, upgrade=update_dependencies, index_urls=index_urls, upgrade_strategy=env.PipUpgradeStrategy.EAGER
+            )
 
         self.verify()
 
