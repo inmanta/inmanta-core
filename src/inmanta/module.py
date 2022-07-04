@@ -533,7 +533,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         # These could be constraints (-c) as well, but that requires additional sanitation
         # Because for pip not every valid -r is a valid -c
         current_requires = project.get_strict_python_requirements_as_list()
-        requirements += current_requires
+        requirements += [Requirement.parse(r) for r in current_requires]
 
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
