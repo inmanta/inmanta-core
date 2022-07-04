@@ -693,6 +693,7 @@ def test_project_install_incompatible_dependencies(
         ],
     )
 
+    # install project
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
