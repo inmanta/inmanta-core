@@ -693,16 +693,12 @@ def test_project_install_incompatible_dependencies(
         ],
     )
 
-    # install project
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
     assert e.value.msg == (
-        "Module dependency resolution conflict: a module dependency constraint was "
-        "violated by another module. This most likely indicates an incompatibility "
-        "between two or more of the installed modules.\n"
-        "\t* Incompatibility between constraint lorem~=0.0.1 and installed version "
-        "0.1.1"
+        "ERROR: Could not find a version that satisfies the requirement lorem~=0.0.1,~=0.1.1 (from versions: 0.0.1, 0.1.0, 0.1.1)\n"
+        "ERROR: No matching distribution found for lorem~=0.0.1,~=0.1.1\n"
     )
 
 
