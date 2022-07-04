@@ -1206,7 +1206,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        return [repo.url for repo in self.repo if repo.type.value == ModuleRepoType.package]
+        return [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
 
 
 @stable_api
@@ -1601,8 +1601,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes: List[ModuleRepoInfo] = self.metadata.get_index_urls()
-        index_urls: Optional[List[str]] = [repo.url for repo in indexes] if indexes else None
+        indexes_urls: List[ModuleRepoInfo] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
@@ -1613,7 +1612,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
             self.virtualenv.install_from_index(
-                pyreq, upgrade=update_dependencies, index_urls=index_urls, upgrade_strategy=env.PipUpgradeStrategy.EAGER
+                pyreq,
+                upgrade=update_dependencies,
+                index_urls=indexes_urls if indexes_urls else None,
+                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
             )
 
         self.verify()
