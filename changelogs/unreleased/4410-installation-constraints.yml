@@ -1,0 +1,4 @@
+description: Take into account the requirements.txt on the project when installing or updating
+issue-nr: 4410
+change-type: patch
+destination-branches: [master, iso5]

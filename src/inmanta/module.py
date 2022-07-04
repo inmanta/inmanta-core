@@ -528,6 +528,13 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
+
+        # Get known requires and add them to prevent invalidating constraints through updates
+        # These could be constraints (-c) as well, but that requires additional sanitation
+        # Because for pip not every valid -r is a valid -c
+        current_requires = project.get_strict_python_requirements_as_list()
+        requirements += current_requires
+
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
             preinstalled_version: str = str(preinstalled.version)
