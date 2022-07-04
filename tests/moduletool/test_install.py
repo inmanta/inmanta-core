@@ -696,11 +696,7 @@ def test_project_install_incompatible_dependencies(
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-    assert e.value.msg == (
-        "ERROR: Could not find a version that satisfies the requirement lorem~=0.0.1,~=0.1.1 "
-        "(from versions: 0.0.1, 0.1.0, 0.1.1)\n"
-        "ERROR: No matching distribution found for lorem~=0.0.1,~=0.1.1\n"
-    )
+    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
 
 
 def test_project_install_requirement_not_loaded(

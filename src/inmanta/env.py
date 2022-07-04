@@ -321,8 +321,6 @@ class PythonEnvironment:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             if "versions have conflicting dependencies" in stderr:
                 raise ConflictingRequirements(stderr)
-            if "Could not find a version" in stderr:
-                raise ConflictingRequirements(stderr)
             raise e
         except Exception:
             raise
