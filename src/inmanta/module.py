@@ -1205,6 +1205,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         """
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
+    def get_index_urls(self) -> List[str]:
+        return [repo.url for repo in self.repo if repo.type.value == ModuleRepoType.package]
+
 
 @stable_api
 class ModuleLike(ABC, Generic[TMetadata]):
@@ -1474,9 +1477,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        self.module_source: ModuleV2Source = ModuleV2Source(
-            [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
-        )
+        self.module_source: ModuleV2Source = ModuleV2Source(self.metadata.get_index_urls())
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
             local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
             remote_repo=CompositeModuleRepo(
@@ -1600,7 +1601,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes: List[ModuleRepoInfo] = [repo for repo in self.metadata.repo if repo.type.value == "package"]
+        indexes: List[ModuleRepoInfo] = self.metadata.get_index_urls()
         index_urls: Optional[List[str]] = [repo.url for repo in indexes] if indexes else None
         # Verify non-python part
         self.verify_modules_cache()
