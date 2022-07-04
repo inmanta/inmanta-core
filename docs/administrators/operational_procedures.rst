@@ -1,3 +1,5 @@
+.. _operational_procedures:
+
 Operational Procedures
 ----------------------
 
@@ -6,6 +8,7 @@ This document describes the best practices for various operational procedures.
 .. note::
     issue templates for all procedures are available at the bottom of this page
 
+.. _operational_procedures_release:
 
 Project Release for Production
 ###############################
@@ -40,6 +43,8 @@ Procedure
 
 5. Commit this change (`git commit -a`)
 6. Push to the release branch (`git push`)
+
+.. _operational_procedures_upgrade:
 
 Upgrade of service model on the orchestrator
 #############################################
