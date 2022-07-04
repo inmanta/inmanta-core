@@ -697,13 +697,7 @@ def test_project_install_incompatible_dependencies(
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-    assert e.value.msg == (
-        "Module dependency resolution conflict: a module dependency constraint was "
-        "violated by another module. This most likely indicates an incompatibility "
-        "between two or more of the installed modules.\n"
-        "\t* Incompatibility between constraint lorem~=0.0.1 and installed version "
-        "0.1.1"
-    )
+    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
 
 
 def test_project_install_requirement_not_loaded(
