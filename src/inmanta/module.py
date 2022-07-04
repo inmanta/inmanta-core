@@ -1597,15 +1597,20 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if not self.is_using_virtual_env():
             self.use_virtual_env()
+
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
-        self.verify()
+
+        # Verify non-python part
+        self.verify_modules_cache()
+        self.verify_module_version_compatibility()
+
         # do python install
         pyreq = self.collect_python_requirements()
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
             self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
-            # installing new dependencies into the virtual environment might introduce new conflicts
-            self.verify_python_environment()
+
+        self.verify()
 
     def load(self, install: bool = False) -> None:
         """
@@ -1796,25 +1801,28 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if module.name in set_up:
                 # already set up
                 return
+            if isinstance(module, ModuleV2):
+                # register it as a v2 module so that any subsequent require_v2 calls
+                require_v2(module.name)
             load_module_v2_requirements(module)
             set_up.add(module.name)
 
-        def load_sub_module(module: Module, submod: str) -> None:
+        def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
             them for reload.
             Does not install any v2 modules.
             """
-            parts: List[str] = submod.split("::")
+            parts: List[str] = imp.name.split("::")
             for i in range(1, len(parts) + 1):
                 subs = "::".join(parts[0:i])
-                if subs in done[module_name]:
+                if subs in done[module.name]:
                     continue
                 (nstmt, nb) = module.get_ast(subs)
 
-                done[module_name][subs] = imp
-                ast_by_top_level_mod[module_name].append((subs, nstmt, nb))
+                done[module.name][subs] = imp
+                ast_by_top_level_mod[module.name].append((subs, nstmt, nb))
 
                 # get imports and add to list
                 subs_imports: List[DefineImport] = module.get_imports(subs)
@@ -1856,7 +1864,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                     bypass_module_cache=bypass_module_cache,
                 )
                 setup_module(module)
-                load_sub_module(module, ns)
+                load_sub_module(module, imp)
             except (InvalidModuleException, ModuleNotFoundException) as e:
                 raise ModuleLoadingException(ns, imp, e)
 
@@ -1904,6 +1912,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             if module is None and allow_v1:
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
         except InvalidModuleException:
+            raise
+        except env.ConflictingRequirements:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -1991,11 +2001,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
-        if not env.ActiveEnv.check(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
-            raise CompilerException(
-                "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
-                " before attempting another compile. Run `pip check` to check for any incompatibilities."
-            )
+        constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
+        try:
+            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
+        except env.ConflictingRequirements as e:
+            message: str = "Module dependency resolution conflict: a module dependency constraint \
+was violated by another module. This most likely indicates an incompatibility between \
+two or more of the installed modules."
+            raise env.ConflictingRequirements(message, e.conflicts)
 
     def _modules_cache_is_valid(self) -> bool:
         """
@@ -2130,7 +2143,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Collect the list of all python requirements of all modules in this project, excluding those on inmanta modules.
         """
-        reqs = chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()])
+        reqs = chain(
+            chain.from_iterable([mod.get_strict_python_requirements_as_list() for mod in self.modules.values()]),
+            self.get_strict_python_requirements_as_list(),
+        )
         return list(set(reqs))
 
     def get_root_namespace(self) -> Namespace:
