@@ -70,6 +70,7 @@ class VersionConflict:
     :param requirement: The requirement that is unsatisfied.
     :param installed_version: The version that is currently installed. None if the package is not installed.
     """
+
     requirement: Requirement
     installed_version: Optional[version.Version] = None
 
