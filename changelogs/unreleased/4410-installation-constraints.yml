@@ -2,3 +2,5 @@ description: Take into account the requirements.txt on the project when installi
 issue-nr: 4410
 change-type: patch
 destination-branches: [master, iso5]
+sections:
+    upgrade-note: "`inmanta project install` and `inmanta project update` now always take into account the `requirements.txt` of the project to provide additional version constraints to pip"
