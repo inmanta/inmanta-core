@@ -90,7 +90,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-        "All other version conflicts will only result in a warning. This option is mutually exclusive with the "
+        "All other version conflicts will result in a warning. This option is mutually exclusive with the "
         "--strict-deps-check option.",
     )
     parser.add_argument(
