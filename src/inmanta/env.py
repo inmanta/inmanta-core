@@ -62,7 +62,7 @@ class PackageNotFound(Exception):
     pass
 
 
-@dataclass(eq=True, order=True, frozen=True)
+@dataclass(eq=True, frozen=True)
 class VersionConflict:
     """
     Represents a version conflict that exists in a Python environment.
