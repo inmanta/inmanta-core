@@ -34,10 +34,10 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Tuple, TypeVar, Set
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import Distribution, Requirement, DistInfoDistribution
+from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException

@@ -293,7 +293,7 @@ compatible with the dependencies specified by the updated modules.
 
     def update(
         self, module: Optional[str] = None, project: Optional[Project] = None, no_strict_deps_check: bool = False
-   ) -> None:
+    ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
