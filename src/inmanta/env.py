@@ -736,7 +736,11 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
 
         if len(constraint_violations_strict) != 0:
-            raise ConflictingRequirements("Conflicting requirements:", constraint_violations_strict)
+            raise ConflictingRequirements(
+                "The following conflicting requirements exist. Add additional constraints to the requirements.txt file of "
+                "the inmanta project to resolve this problem.",
+                constraint_violations_strict,
+            )
 
         for violation in constraint_violations:
             LOGGER.warning("%s", violation)
