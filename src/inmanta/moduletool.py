@@ -86,7 +86,8 @@ def add_strict_deps_check_argument(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help="Don't verify the version constraints of the installed python packages in a strict way.",
+        help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
+             "All other version conflicts will only result in a warning.",
     )
 
 

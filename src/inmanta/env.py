@@ -64,6 +64,12 @@ class PackageNotFound(Exception):
 
 @dataclass(eq=True, order=True, frozen=True)
 class VersionConflict:
+    """
+    Represents a version conflict that exists in a Python environment.
+
+    :param requirement: The requirement that is unsatisfied.
+    :param installed_version: The version that is currently installed. None if the package is not installed.
+    """
     requirement: Requirement
     installed_version: Optional[version.Version] = None
 
@@ -669,7 +675,7 @@ class ActiveEnv(PythonEnvironment):
         constraints: Optional[List[Requirement]] = None,
     ) -> Tuple[Set[VersionConflict], Set[VersionConflict]]:
         """
-        Return the contains violations that would be returned by the check method.
+        Return the constraint violations that would be returned by the check method.
         """
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[Requirement] = frozenset(

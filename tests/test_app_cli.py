@@ -66,10 +66,12 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
-        await process.communicate()
+        (stdout, stderr) = await process.communicate()
+        print(stdout.decode())
+        print(stderr.decode())
         raise e
 
 
