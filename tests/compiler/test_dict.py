@@ -439,8 +439,10 @@ d = {"a": "A", "b": null}
 if "a" in d and d["a"] is defined:
     std::print(d["s"])
 end
-    """)
+    """
+    )
     compiler.do_compile()
+
 
 def test_dict_is_defined_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
@@ -455,13 +457,14 @@ a = "a" in d
 if a is defined:
     std::print(a)
 end
-""")
+"""
+    )
     compiler.do_compile()
 
 
 def test_dict_sandbox(snippetcompiler):
     snippetcompiler.setup_for_snippet(
-    """
+        """
     a = {
         "A": {
             "1": "ok",
@@ -477,5 +480,6 @@ def test_dict_sandbox(snippetcompiler):
     else:
         std::print("undefined")
     end
-    """)
+    """
+    )
     compiler.do_compile()
