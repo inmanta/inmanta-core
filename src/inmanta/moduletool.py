@@ -828,8 +828,8 @@ version: 0.0.1dev0"""
         self,
         module: Optional[str] = None,
         project: Optional[Project] = None,
-        no_strict_deps_check: Optional[bool] = None,
-        strict_deps_check: Optional[bool] = None,
+        no_strict_deps_check: bool = False,
+        strict_deps_check: bool = False,
     ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
