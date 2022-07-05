@@ -80,15 +80,42 @@ class ModuleVersionException(CLIException):
         super().__init__(msg, exitcode=5)
 
 
-def add_strict_deps_check_argument(parser: argparse.ArgumentParser) -> None:
+def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add the --no-strict-deps-check and --strict-deps-check options to the given parser.
+    """
     parser.add_argument(
         "--no-strict-deps-check",
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
         help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-        "All other version conflicts will only result in a warning.",
+        "All other version conflicts will only result in a warning. This option is mutually exclusive with the "
+        "--strict-deps-check option.",
     )
+    parser.add_argument(
+        "--strict-deps-check",
+        dest="strict_deps_check",
+        action="store_true",
+        default=False,
+        help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+        "This option is mutually exclusive with the --no-strict-deps-check option.",
+    )
+
+
+def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> Optional[bool]:
+    """
+    Perform input validation on the --no-strict-deps-check and --strict-deps-check options and
+    return True iff strict dependency checking should be used.
+    """
+    if no_strict_deps_check and strict_deps_check:
+        raise Exception("Options --no-strict-deps-check and --strict-deps-check cannot be set together")
+    if not no_strict_deps_check and not strict_deps_check:
+        # If none of the *strict_deps_check options are provided, use the value set in the project.yml file
+        return None
+    if no_strict_deps_check:
+        return False
+    return strict_deps_check
 
 
 class ModuleLikeTool(object):
@@ -219,7 +246,7 @@ This command might reinstall Python packages in the development venv if the curr
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
         )
-        add_strict_deps_check_argument(install)
+        add_deps_check_arguments(install)
 
         update = subparser.add_parser(
             "update",
@@ -234,7 +261,7 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
-        add_strict_deps_check_argument(update)
+        add_deps_check_arguments(update)
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
@@ -285,23 +312,28 @@ compatible with the dependencies specified by the updated modules.
             no_input=default,
         )
 
-    def install(self, no_strict_deps_check: bool = False) -> None:
+    def install(self, no_strict_deps_check: bool = False, strict_deps_check: bool = False) -> None:
         """
         Install all modules the project requires.
         """
-        project: Project = self.get_project(load=False, strict_deps_check=not no_strict_deps_check)
+        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
+        project: Project = self.get_project(load=False, strict_deps_check=strict)
         project.install_modules()
 
     def update(
-        self, module: Optional[str] = None, project: Optional[Project] = None, no_strict_deps_check: bool = False
+        self,
+        module: Optional[str] = None,
+        project: Optional[Project] = None,
+        no_strict_deps_check: bool = False,
+        strict_deps_check: bool = False,
     ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-
+        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
         if project is None:
             # rename var to make mypy happy
-            my_project = self.get_project(load=False, strict_deps_check=not no_strict_deps_check)
+            my_project = self.get_project(load=False, strict_deps_check=strict)
         else:
             my_project = project
 
@@ -437,7 +469,7 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
-        add_strict_deps_check_argument(update)
+        add_deps_check_arguments(update)
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -793,14 +825,17 @@ version: 0.0.1dev0"""
                 install(build_artifact)
 
     def update(
-        self, module: Optional[str] = None, project: Optional[Project] = None, no_strict_deps_check: bool = False
+        self,
+        module: Optional[str] = None,
+        project: Optional[Project] = None,
+        no_strict_deps_check: Optional[bool] = None,
+        strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-
         LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
-        ProjectTool().update(module, project, no_strict_deps_check)
+        ProjectTool().update(module, project, no_strict_deps_check, strict_deps_check)
 
     def status(self, module: Optional[str] = None) -> None:
         """

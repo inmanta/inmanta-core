@@ -1164,6 +1164,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                                        `first-type.relation-name` and only then `then-type.relation-name`.
     :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
                               should check the virtual environment for version conflicts in a strict way or not.
+                                * A strict check means that all transitive dependencies will be checked for version conflicts
+                                  and that any violation will result in an error
+                                * When a non-strict check is done, only version conflicts in a direct dependency will result
+                                  in an error. All other violations will only result in a warning message.
     """
 
     _raw_parser: Type[YamlParser] = YamlParser
