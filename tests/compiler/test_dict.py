@@ -375,7 +375,7 @@ d = {"a": "A", "b": null}
 
 # This doesn't work
 if "a" in d and d["a"] is defined:
-    std::print(d["a"])
+    std::print(d["s"])
 end
     """)
     compiler.do_compile()
@@ -400,8 +400,21 @@ end
 
 def test_dict_sandbox(snippetcompiler):
     snippetcompiler.setup_for_snippet(
-        """
-d = {"a": "A", "b": null}
-
-""")
+    """
+    a = {
+        "A": {
+            "1": "ok",
+            "2": null,
+            "3": []
+        },
+        "B": null,
+        "C": [],
+        "D": "ok"
+    }
+    if a["B"] is defined:
+        std::print("lookup")
+    else:
+        std::print("undefined")
+    end
+    """)
     compiler.do_compile()
