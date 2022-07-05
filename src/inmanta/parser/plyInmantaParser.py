@@ -27,7 +27,7 @@ from ply.yacc import YaccProduction
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import IsDefined, Not, Operator
+from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import Literal, Statement
 from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
 from inmanta.ast.statements.call import FunctionCall
@@ -68,6 +68,7 @@ precedence = (
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
+    ("nonassoc", "IS_DEFINED"),
     ("left", "CID", "ID"),
     ("left", "(", "["),
     ("left", "MLS"),
@@ -691,6 +692,41 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
+
+
+"""
+Solution 1
+- Both (1) and (2) work as intended on their own but I can't tie them up in an "And" node
+- I don't see how to check that a key belongs to the dict with this solution
+"""
+# def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
+#     """boolean_expression : map_lookup IS DEFINED %prec IS_DEFINED"""
+#
+#     # p[0] = NotEqual(p[1], Literal(list()))                                            # (1)
+#     # p[0] = NotEqual(p[1], Literal(NoneValue()))                                       # (2)
+#     p[0] = And(NotEqual(p[1], Literal(list())), NotEqual(p[1], Literal(NoneValue())))   # And(1, 2)
+#     attach_lnr(p, 2)
+
+"""
+Solution 2
+- easier to check for key belonging to dict
+- (1), (2) and (3) work as intended on their own but again I can't tie it up in an "And" node
+- only base case with var_ref considered here (attributes and nested dicts need to be added)
+"""
+
+
+def p_boolean_expression_is_defined_not_map_lookup(p: YaccProduction) -> None:
+    """boolean_expression : var_ref '[' operand ']' IS DEFINED %prec IS_DEFINED"""
+
+    # | attr_ref '[' operand ']' IS DEFINED %prec IS_DEFINED
+    # | map_lookup '[' operand ']' IS DEFINED %prec IS_DEFINED
+
+    key_in_dict = In(p[3], p[1])  # (1)
+    not_none = NotEqual(MapLookup(p[1], p[3]), Literal(NoneValue()))  # (2)
+    not_empty_list = NotEqual(MapLookup(p[1], p[3]), Literal(list()))  # (3)
+
+    p[0] = And(And(key_in_dict, not_none), not_empty_list)
+    attach_lnr(p, 2)
 
 
 def p_operand(p: YaccProduction) -> None:
