@@ -34,10 +34,10 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Tuple, TypeVar, Set
 
 import pkg_resources
-from pkg_resources import Distribution, Requirement
+from pkg_resources import Distribution, Requirement, DistInfoDistribution
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -62,20 +62,29 @@ class PackageNotFound(Exception):
     pass
 
 
+@dataclass(eq=True, order=True, frozen=True)
+class VersionConflict:
+    requirement: Requirement
+    installed_version: Optional[version.Version] = None
+
+    def __str__(self) -> str:
+        if self.installed_version:
+            return f"Incompatibility between constraint {self.requirement} and installed version {self.installed_version}"
+        else:
+            return f"Constraint {self.requirement} is not installed"
+
+
 class ConflictingRequirements(CompilerException):
-    def __init__(self, message: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]] = None):
+    def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
         CompilerException.__init__(self, msg=self.get_msg(message, conflicts))
         self.conflicts = conflicts
 
     @classmethod
-    def get_msg(cls, message: str, conflicts: Optional[List[Tuple[Requirement, Optional[version.Version]]]]) -> str:
+    def get_msg(cls, message: str, conflicts: Optional[Set[VersionConflict]]) -> str:
         msg: str = message
         if conflicts is not None:
-            for constraint, v in conflicts:
-                if v:
-                    msg += "\n\t* Incompatibility between constraint %s and installed version %s" % (constraint, v)
-                else:
-                    msg += "\n\t* Constraint %s is not installed" % constraint
+            for current_conflict in sorted(conflicts, key=lambda x: x.requirement.key):
+                msg += f"\n\t* {current_conflict}"
         return msg
 
 
@@ -649,20 +658,13 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(
+    def get_constraint_violations_for_check(
         cls,
         strict_scope: Optional[Pattern[str]] = None,
         constraints: Optional[List[Requirement]] = None,
-    ) -> None:
+    ) -> Tuple[Set[VersionConflict], Set[VersionConflict]]:
         """
-        Check this Python environment for incompatible dependencies in installed packages.
-
-        :param strict_scope: A full pattern representing the package names that are considered in scope for the installed
-            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts.
-            Any conflicts for packages that do not match this pattern will only raise a warning.
-            The pattern is matched against an all-lowercase package name.
-        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
-            packages meet the given constraints. All listed packages are expected to be installed.
+        Return the contains violations that would be returned by the check method.
         """
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[Requirement] = frozenset(
@@ -686,25 +688,86 @@ class ActiveEnv(PythonEnvironment):
 
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
 
-        constraint_violations: set[Tuple[Requirement, Optional[version.Version]]] = set()
-        constraint_violations_strict: set[Tuple[Requirement, Optional[version.Version]]] = set()
+        constraint_violations: set[VersionConflict] = set()
+        constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
             if (c.key not in installed_versions or str(installed_versions[c.key]) not in c) and (
                 not c.marker or (c.marker and c.marker.evaluate())
             ):
+                version_conflict = VersionConflict(
+                    requirement=c,
+                    installed_version=installed_versions.get(c.key, None),
+                )
                 if c.key in full_strict_scope:
-                    constraint_violations_strict.add((c, installed_versions.get(c.key, None)))
+                    constraint_violations_strict.add(version_conflict)
                 else:
-                    constraint_violations.add((c, installed_versions.get(c.key, None)))
+                    constraint_violations.add(version_conflict)
+
+        return constraint_violations, constraint_violations_strict
+
+    @classmethod
+    def check(
+        cls,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[List[Requirement]] = None,
+    ) -> None:
+        """
+        Check this Python environment for incompatible dependencies in installed packages.
+
+        :param strict_scope: A full pattern representing the package names that are considered in scope for the installed
+            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts.
+            Any conflicts for packages that do not match this pattern will only raise a warning.
+            The pattern is matched against an all-lowercase package name.
+        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
+            packages meet the given constraints. All listed packages are expected to be installed.
+        """
+        constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements("Conflicting requirements:", constraint_violations_strict)
 
-        for constraint, v in constraint_violations:
-            if v:
-                LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
-            else:
-                LOGGER.warning("Constraint %s is not installed" % constraint)
+        for violation in constraint_violations:
+            LOGGER.warning("%s", violation)
+
+    @classmethod
+    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
+        """
+        Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
+        in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
+        when the `--strict-deps-check` commandline option is provided.
+
+        :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
+            compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
+            against an all-lowercase package name.
+        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
+            packages meet the given constraints. All listed packages are expected to be installed.
+        :return: True iff the check succeeds.
+        """
+        constraint_violations_non_strict, constraint_violations_strict = cls.get_constraint_violations_for_check(
+            in_scope, constraints
+        )
+
+        dist_info: DistInfoDistribution
+        # add all requirements of all in scope packages installed in this environment
+        all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
+            requirement
+            for dist_info in pkg_resources.working_set
+            if in_scope.fullmatch(dist_info.key)
+            for requirement in dist_info.requires()
+        )
+
+        installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+        constraint_violations: Set[Tuple[Requirement, Optional[version.Version]]] = set(
+            (constraint, installed_versions.get(constraint.key, None))
+            for constraint in all_constraints
+            if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
+        )
+
+        all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
+        for violation in all_violations:
+            LOGGER.warning("%s", violation)
+
+        return len(constraint_violations) == 0
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:

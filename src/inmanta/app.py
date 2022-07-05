@@ -303,6 +303,7 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    moduletool.add_strict_deps_check_argument(parser)
 
 
 @command(
@@ -516,6 +517,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         "be used together with the --partial option.",
         action="append",
     )
+    moduletool.add_strict_deps_check_argument(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)

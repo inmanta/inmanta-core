@@ -80,6 +80,16 @@ class ModuleVersionException(CLIException):
         super().__init__(msg, exitcode=5)
 
 
+def add_strict_deps_check_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-strict-deps-check",
+        dest="no_strict_deps_check",
+        action="store_true",
+        default=False,
+        help="Don't verify the version constraints of the installed python packages in a strict way.",
+    )
+
+
 class ModuleLikeTool(object):
     """Shared code for modules and projects"""
 
@@ -100,8 +110,8 @@ class ModuleLikeTool(object):
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load: bool = False) -> Project:
-        project = Project.get()
+    def get_project(self, load: bool = False, strict_deps_check: Optional[bool] = None) -> Project:
+        project = Project.get(strict_deps_check=strict_deps_check)
         if load:
             project.load()
         return project
@@ -194,7 +204,7 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
-        subparser.add_parser(
+        install = subparser.add_parser(
             "install",
             help="Install all modules required for this project.",
             description="""
@@ -208,8 +218,9 @@ This command might reinstall Python packages in the development venv if the curr
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
         )
+        add_strict_deps_check_argument(install)
 
-        subparser.add_parser(
+        update = subparser.add_parser(
             "update",
             help=(
                 "Update all modules to the latest version compatible with the module version constraints and install missing "
@@ -222,6 +233,7 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
+        add_strict_deps_check_argument(update)
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
@@ -272,21 +284,23 @@ compatible with the dependencies specified by the updated modules.
             no_input=default,
         )
 
-    def install(self) -> None:
+    def install(self, no_strict_deps_check: bool = False) -> None:
         """
         Install all modules the project requires.
         """
-        project: Project = self.get_project(load=False)
+        project: Project = self.get_project(load=False, strict_deps_check=not no_strict_deps_check)
         project.install_modules()
 
-    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+    def update(
+        self, module: Optional[str] = None, project: Optional[Project] = None, no_strict_deps_check: bool = False
+   ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
 
         if project is None:
             # rename var to make mypy happy
-            my_project = self.get_project(load=False)
+            my_project = self.get_project(load=False, strict_deps_check=not no_strict_deps_check)
         else:
             my_project = project
 
@@ -409,7 +423,7 @@ class ModuleTool(ModuleLikeTool):
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar="command", help="the command to  execute")
 
-        subparser.add_parser(
+        update = subparser.add_parser(
             "update",
             help=(
                 "(deprecated: use `inmanta project update` instead) Update all modules to the latest version compatible with"
@@ -422,6 +436,7 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
+        add_strict_deps_check_argument(update)
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -776,13 +791,15 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
-    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+    def update(
+        self, module: Optional[str] = None, project: Optional[Project] = None, no_strict_deps_check: bool = False
+    ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
 
         LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
-        ProjectTool().update(module, project)
+        ProjectTool().update(module, project, no_strict_deps_check)
 
     def status(self, module: Optional[str] = None) -> None:
         """
