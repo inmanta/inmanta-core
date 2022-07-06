@@ -598,7 +598,9 @@ class CompilerService(ServerSlice):
         Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
-        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
+        return c.to_dto().json(
+            include={"environment", "started", "do_export", "environment_variables", "partial", "removed_resource_sets"}
+        )
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:

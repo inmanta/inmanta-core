@@ -3664,6 +3664,8 @@ class Compile(BaseDocument):
             metadata=self.metadata,
             environment_variables=self.environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
+            partial=self.partial,
+            removed_resource_sets=self.removed_resource_sets,
         )
 
 
