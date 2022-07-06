@@ -18,7 +18,6 @@
 import argparse
 import logging
 import os
-import re
 import shutil
 import subprocess
 from importlib.abc import Loader
@@ -651,7 +650,6 @@ Run `inmanta project update` to resolve this.
 
 @pytest.mark.slowtest
 def test_project_install_incompatible_dependencies(
-    caplog,
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_dir: str,
@@ -697,20 +695,9 @@ def test_project_install_incompatible_dependencies(
 
     # install project
     os.chdir(module.Project.get().path)
-    with pytest.raises(
-        CompilerException,
-        match=(
-            "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts before"
-            " attempting another compile. Run `pip check` to check for any incompatibilities."
-        ),
-    ):
+    with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-
-    assert any(
-        re.match("Incompatibility between constraint lorem~=(0.1.1|0.0.1) and installed version (0.1.1|0.0.1)", rec.message)
-        is not None
-        for rec in caplog.records
-    )
+    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
 
 
 def test_project_install_requirement_not_loaded(

@@ -24,8 +24,9 @@ import re
 import shutil
 import uuid
 from collections import defaultdict
+from collections.abc import Set
 from enum import Enum
-from typing import Dict, List, Optional, Pattern, Set, cast
+from typing import Dict, List, Optional, Pattern, cast
 
 from asyncpg import StringDataRightTruncationError
 
@@ -37,6 +38,7 @@ from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerE
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_COMPILER,
     SLICE_DATABASE,
     SLICE_ENVIRONMENT,
     SLICE_ORCHESTRATION,
@@ -47,6 +49,7 @@ from inmanta.server import (
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
+from inmanta.server.services.compilerservice import CompilerService
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
@@ -126,7 +129,14 @@ class EnvironmentService(protocol.ServerSlice):
         self.agent_state_lock = asyncio.Lock()
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_SERVER, SLICE_DATABASE, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE]
+        return [
+            SLICE_COMPILER,
+            SLICE_SERVER,
+            SLICE_DATABASE,
+            SLICE_AUTOSTARTED_AGENT_MANAGER,
+            SLICE_ORCHESTRATION,
+            SLICE_RESOURCE,
+        ]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
@@ -136,8 +146,38 @@ class EnvironmentService(protocol.ServerSlice):
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
+        self.compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+
+    async def start(self) -> None:
+        await super().start()
+        await self._enable_schedules_all_envs()
+
+    async def _enable_schedules_all_envs(self) -> None:
+        """
+        Schedules appropriate actions for schedule-related settings for all environments. Overrides old schedules.
+        """
+        env: data.Environment
+        for env in await data.Environment.get_list(details=False):
+            await self._enable_schedules(env)
+
+    async def _enable_schedules(self, env: data.Environment, setting: Optional[data.Setting] = None) -> None:
+        """
+        Schedules appropriate actions for a single environment according to the settting value. Overrides old schedules.
+
+        :param setting: Only schedule appropriate actions for this setting, if any.
+        """
+        if setting is None or setting.name == data.AUTO_FULL_COMPILE:
+            if setting is not None:
+                LOGGER.info("Environment setting %s changed. Rescheduling full compiles.", setting.name)
+            self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
+
+    def _disable_schedules(self, env: data.Environment) -> None:
+        """
+        Removes scheduling of all appropriate actions for a single environment.
+        """
+        self.compiler_service.schedule_full_compile(env, schedule_cron="")
 
     async def _setting_change(self, env: data.Environment, key: str) -> Warnings:
         setting = env._settings[key]
@@ -157,6 +197,8 @@ class EnvironmentService(protocol.ServerSlice):
             else:
                 LOGGER.info("Environment setting %s changed. Restarting agents.", key)
                 self.add_background_task(self.autostarted_agent_manager.restart_agents(env))
+
+        self.add_background_task(self._enable_schedules(env, setting))
 
         return warnings
 
@@ -276,7 +318,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
         except ValueError as e:
-            raise ServerError(f"Invalid value. {e}")
+            raise BadRequest(f"Invalid value. {e}")
 
     @handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -338,6 +380,7 @@ class EnvironmentService(protocol.ServerSlice):
         except StringDataRightTruncationError:
             raise BadRequest("Maximum size of the icon data url or the description exceeded")
         await self.notify_listeners(EnvironmentAction.created, env.to_dto())
+        await self._enable_schedules(env)
         return env.to_dto()
 
     def validate_icon(self, icon: str) -> None:
@@ -429,6 +472,7 @@ class EnvironmentService(protocol.ServerSlice):
         if is_protected_environment:
             raise Forbidden(f"Environment {environment_id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
+        self._disable_schedules(env)
         await asyncio.gather(self.autostarted_agent_manager.stop_agents(env), env.delete_cascade())
 
         self.resource_service.close_resource_action_logger(environment_id)

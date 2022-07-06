@@ -29,6 +29,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import RawConfigParser
+from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
@@ -58,6 +59,7 @@ import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+from crontab import CronTab
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -937,13 +939,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
         self.__process_kwargs(from_postgres, kwargs)
 
     @classmethod
-    def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
+    def get_connection(
+        cls, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> AbstractAsyncContextManager[asyncpg.connection.Connection]:
         """
-        Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
+        Returns a context manager to acquire a connection. If an existing connection is passed, returns a dummy context manager
+        wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
+        already been acquired.
         """
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire()
+        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
 
     @classmethod
     def table_name(cls) -> str:
@@ -1237,18 +1243,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def _fetch_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> Sequence[Record]:
-        if connection is None:
-            async with cls.get_connection() as con:
-                return await con.fetch(query, *values)
-        return await connection.fetch(query, *values)
+        async with cls.get_connection(connection) as con:
+            return await con.fetch(query, *values)
 
     @classmethod
     async def _execute_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> str:
-        if connection:
-            return await connection.execute(query, *values)
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1884,7 +1886,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
-        async def perform_query(con: asyncpg.connection.Connection) -> List[Union[Record, TBaseDocument]]:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 result: List[Union[Record, TBaseDocument]] = []
                 async for record in con.cursor(query, *values):
@@ -1893,11 +1895,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     else:
                         result.append(cls(from_postgres=True, **record))
                 return result
-
-        if connection is None:
-            async with cls.get_connection() as con:
-                return await perform_query(con)
-        return await perform_query(connection)
 
     def to_dict(self) -> JsonType:
         """
@@ -2000,6 +1997,16 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
+def validate_cron(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        CronTab(value)
+    except ValueError as e:
+        raise ValueError("'%s' is not a valid cron expression: %s" % (value, e))
+    return value
+
+
 TYPE_MAP = {
     "int": "integer",
     "bool": "boolean",
@@ -2023,6 +2030,7 @@ AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
@@ -2055,7 +2063,7 @@ class Setting(object):
                         is requested from the database, it will return the default value and also store
                         the default value in the database.
         :param doc: The documentation/help string for this setting
-        :param validator: A validation and casting function for input settings.
+        :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
@@ -2244,6 +2252,18 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
+        ),
+        AUTO_FULL_COMPILE: Setting(
+            name=AUTO_FULL_COMPILE,
+            default="",
+            typ="str",
+            validator=validate_cron,
+            doc=(
+                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
+                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
+                " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
+            ),
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
@@ -2923,7 +2943,7 @@ class AgentInstance(BaseDocument):
         if not endpoints:
             return
 
-        async def _execute_query(con: asyncpg.connection.Connection) -> None:
+        async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
                 INSERT INTO
@@ -2936,12 +2956,6 @@ class AgentInstance(BaseDocument):
                 """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
-
-        if connection:
-            await _execute_query(connection)
-        else:
-            async with cls.get_connection() as con:
-                await _execute_query(con)
 
     @classmethod
     async def log_instance_expiry(
@@ -3064,25 +3078,19 @@ class Agent(BaseDocument):
         Restores default halted state. Returns a list of agents that should be unpaused.
         """
 
-        async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
-            async with connection.transaction():
+        async with cls.get_connection(connection) as con:
+            async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 await cls._execute_query(
                     f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 return sorted([r["name"] for r in unpause_on_resume])
-
-        if connection is not None:
-            return await query_with_connection(connection)
-
-        async with cls.get_connection() as con:
-            return await query_with_connection(con)
 
     @classmethod
     async def pause(
@@ -4007,12 +4015,11 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-
         query = f"""SELECT DISTINCT ra.*
                         FROM {cls.table_name()} ra
                         INNER JOIN
                         {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1
+                        WHERE r.environment=$1 AND ra.environment=$1
                      """
         values = [cls._get_value(environment)]
 
@@ -4117,7 +4124,7 @@ class Resource(BaseDocument):
     model: int
 
     # ID related
-    resource_id: m.ResourceVersionIdStr
+    resource_id: m.ResourceIdStr
     resource_type: m.ResourceType
     resource_version_id: m.ResourceVersionIdStr
     resource_id_value: str
@@ -4218,6 +4225,8 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         resource_type: Optional[m.ResourceType] = None,
         attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
         Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
@@ -4240,7 +4249,7 @@ class Resource(BaseDocument):
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -4557,7 +4566,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_deleted_resources(
-        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceVersionIdStr]
+        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceIdStr]
     ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
@@ -4565,7 +4574,7 @@ class Resource(BaseDocument):
 
         :param environment:
         :param current_version:
-        :param current_resources: A set of all resource ids in the current version.
+        :param current_resources: A Sequence of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
 
@@ -4600,8 +4609,8 @@ class Resource(BaseDocument):
             + str(len(values) + 1)
         )
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = await cls._fetch_query(query, *values)
-        resources = [r["resource_id"] for r in resources]
+        resources_records = await cls._fetch_query(query, *values)
+        resources = [r["resource_id"] for r in resources_records]
 
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
@@ -4610,7 +4619,7 @@ class Resource(BaseDocument):
 
         # determined deleted resources
 
-        deleted = set(resources) - current_resources
+        deleted = set(resources) - set(current_resources)
         LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 
         # filter out resources that should not be purged:
@@ -5290,7 +5299,7 @@ class ConfigurationModel(BaseDocument):
     async def mark_done_if_done(
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
+        async with cls.get_connection(connection) as con:
             """
             Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
             this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
@@ -5327,12 +5336,6 @@ class ConfigurationModel(BaseDocument):
                     cls._get_value(DONE_STATES),
                 ]
                 await cls._execute_query(query, *values, connection=con)
-
-        if connection is None:
-            async with cls.get_connection() as con:
-                await do_query_exclusive(con)
-        else:
-            await do_query_exclusive(connection)
 
     @classmethod
     async def get_increment(

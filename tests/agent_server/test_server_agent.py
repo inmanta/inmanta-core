@@ -1312,7 +1312,15 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "send_event": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        }
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
     ]
 
     # set auto deploy and push
@@ -1330,7 +1338,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
@@ -3220,7 +3228,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "id": f"test::Wait[agent1,key=key3],v={version}",
             "send_event": False,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+            "requires": [f"test::Wait[agent1,key=key2],v={version}"],
         },
     ]
 

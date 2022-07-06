@@ -1,0 +1,4 @@
+name: module_imports_self
+license: Apache 2.0
+version: 1.0
+description: A module where the _init.cf file imports a namespace defined in the same module.

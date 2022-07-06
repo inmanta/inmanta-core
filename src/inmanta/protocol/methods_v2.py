@@ -24,10 +24,46 @@ from typing import Dict, List, Optional, Union
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
+from inmanta.types import PrimitiveTypes
 
+from ..data.model import ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
+
+
+@typedmethod(
+    path="/version/partial",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.compiler],
+    api_version=2,
+    varkw=True,
+)
+def put_partial(
+    tid: uuid.UUID,
+    version: int,
+    resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+    unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
+    resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[List[str]] = None,
+    **kwargs: object,  # bypass the type checking for the resources and version_info argument
+) -> None:
+    """
+    Store a new version of the configuration model after a partial recompile.
+
+    The version number must be obtained through the reserve_version call
+
+    :param tid: The id of the environment
+    :param version: The version of the configuration model
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id
+    :param unknowns: A list of unknown parameters that caused the model to be incomplete
+    :param resource_sets: a dictionary describing which resources belong to which resource set
+    :param removed_resource_sets: a list of resource_sets that should be deleted from the model
+    :param **kwargs: The following arguments are supported:
+              * resources: a list of resource objects.
+              * version_info: Model version information
+    """
 
 
 # Method for working with projects

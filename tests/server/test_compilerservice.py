@@ -525,6 +525,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
+@pytest.mark.slowtest
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -598,9 +599,46 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # update the parameter to a new value
     await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
-    versions = await wait_for_version(client, environment, 3)
     logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, 3)
     assert versions["count"] == 3
+
+    # set a full compile schedule
+    async def schedule_soon() -> None:
+        soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+        cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
+        await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+
+    async def is_compiling() -> None:
+        return (await client.is_compiling(environment)).code == 200
+
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, 4)
+    assert versions["count"] == 4
+
+    # override existing schedule
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, 5)
+    assert versions["count"] == 5
+
+    # delete schedule, verify it is cancelled
+    await schedule_soon()
+    await client.environment_setting_delete(environment, id="auto_full_compile")
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
+
+    # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
+    recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
+    cron_recent: str = "%d %d %d * * *" % (recent.second, recent.minute, recent.hour)
+    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
 
     # clear the environment
     state_dir = server_config.state_dir.get()
@@ -820,10 +858,8 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "handled": True,
         "version": 1,
     }
-    await Compile(**old_compile).insert()
     compile_id_new = uuid.uuid4()
     new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
-    await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
@@ -843,8 +879,14 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "name": "Recompiling configuration model",
         "compile": compile_id_new,
     }
-    await Report(**report1).insert()
-    await Report(**report2).insert()
+
+    async with Compile.get_connection() as con:
+        async with con.transaction():
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+            await Report(**report1).insert(connection=con)
+            await Report(**report2).insert(connection=con)
+
     yield compile_id_old, compile_id_new
 
 

@@ -96,6 +96,7 @@ from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -110,6 +111,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -483,6 +485,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():
@@ -986,6 +989,7 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        strict_deps_check: Optional[bool] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1003,6 +1007,7 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
+        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1013,7 +1018,7 @@ class SnippetCompilationTest(KeepOnFail):
             install_mode,
             relation_precedence_rules,
         )
-        return self._load_project(autostd, install_project, install_v2_modules)
+        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
     def _load_project(
         self,
@@ -1021,9 +1026,12 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         main_file: str = "main.cf",
+        strict_deps_check: Optional[bool] = None,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
+        self.project = Project(
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+        )
         Project.set(self.project)
         self.project.use_virtual_env()
         self._patch_process_env()
@@ -1112,16 +1120,35 @@ class SnippetCompilationTest(KeepOnFail):
             dirs.extend(add_to_module_path)
         return f"[{', '.join(dirs)}]"
 
-    def do_export(self, include_status=False, do_raise=True):
-        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+    def do_export(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return self._do_export(
+            deploy=False,
+            include_status=include_status,
+            do_raise=do_raise,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
     def get_exported_json(self) -> JsonType:
         with open(os.path.join(self.project_dir, "dump.json")) as fh:
             return json.load(fh)
 
-    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+    def _do_export(
+        self,
+        deploy=False,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
         """
-        helper function to allow actual export to be run an a different thread
+        helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
 
@@ -1149,10 +1176,31 @@ class SnippetCompilationTest(KeepOnFail):
         # continue the export
         export = Exporter(options)
 
-        return export.run(types, scopes, model_export=False, include_status=include_status)
+        return export.run(
+            types,
+            scopes,
+            model_export=False,
+            include_status=include_status,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
-    async def do_export_and_deploy(self, include_status=False, do_raise=True):
-        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
+    async def do_export_and_deploy(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return await off_main_thread(
+            lambda: self._do_export(
+                deploy=True,
+                include_status=include_status,
+                do_raise=do_raise,
+                partial_compile=partial_compile,
+                resource_sets_to_remove=resource_sets_to_remove,
+            )
+        )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
         """
@@ -1513,3 +1561,11 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True
