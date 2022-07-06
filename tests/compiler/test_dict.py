@@ -441,7 +441,10 @@ dict_6 = {r'{{value}}': "not interpolation"}
         ('a["B"]', False),
         ('a["C"]', False),
         ('a["D"]', True),
+        ('a["E"]', True),
         ('a["K"]', False),
+        ('t.a["a"]', True),
+        ('t.a["b"]', False),
         # ('a["K"]["a"]', False),
         # ('a["K"]["k"]', False),
         # ('b', False),
@@ -454,9 +457,8 @@ def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
     snippetcompiler.setup_for_snippet(
         """
     entity Test:
-        bool value_is_defined
+        dict a = {"a": "ok", "b": null}
     end
-
     implement Test using std::none
     t = Test()
 
@@ -468,16 +470,12 @@ def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
         },
         "B": null,
         "C": [],
-        "D": "ok"
+        "D": "ok",
+        "E": [null]
     }"""
-        f"""if {lookup_path} is defined:
-        t.value_is_defined = true
-    else:
-        t.value_is_defined = false
-    end
+        f"""
+    assert_expectation = {str(expectation).lower()}
+    assert_expectation = {lookup_path} is defined
     """
     )
-    (_, scopes) = compiler.do_compile()
-
-    root = scopes.get_child("__config__")
-    assert root.lookup("t").get_value().lookup("value_is_defined").get_value() == expectation
+    compiler.do_compile()
