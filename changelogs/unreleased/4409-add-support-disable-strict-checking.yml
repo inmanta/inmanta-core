@@ -1,0 +1,8 @@
+---
+description: Add support to enable/disable strict dependency checking in the compiler and in the module tools using the --strict-deps-check and --no-strict-deps-check options.
+issue-nr: 4516
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: "The compiler and the module tools now by default check all dependencies transitively for version conflicts. When a version conflict is found, an error is raised. A fallback to the old behavior is possible by providing the `--no-strict-deps-check` option."

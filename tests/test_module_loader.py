@@ -26,6 +26,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import plugins
+from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
 from inmanta.module import (
@@ -644,10 +645,13 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("strict_deps_check", [True, False, None])
 def test_module_conflicting_dependencies_with_v2_modules(
     snippetcompiler_clean,
     modules_v2_dir: str,
     tmpdir: py.path.local,
+    caplog,
+    strict_deps_check: Optional[bool],
 ) -> None:
     """
     Show an error message when installing a module that breaks the dependencies
@@ -658,13 +662,13 @@ def test_module_conflicting_dependencies_with_v2_modules(
     """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
-    # Create an python package x with version 1.0.0
+    # Create a python package x with version 1.0.0
     create_python_package("x", Version("1.0.0"), str(tmpdir.join("x-1.0.0")), publish_index=index)
 
-    # Create an python package x with version 2.0.0
+    # Create a python package x with version 2.0.0
     create_python_package("x", Version("2.0.0"), str(tmpdir.join("x-2.0.0")), publish_index=index)
 
-    # Create an python package y with version 1.0.0 that depends on x~=1.0.0
+    # Create a python package y with version 1.0.0 that depends on x~=1.0.0
     create_python_package(
         "y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), requirements=[Requirement.parse("x~=1.0.0")], publish_index=index
     )
@@ -699,21 +703,32 @@ def test_module_conflicting_dependencies_with_v2_modules(
         python_package_sources=[index.url],
         python_requires=[req1, req2],
         autostd=False,
+        strict_deps_check=strict_deps_check,
     )
 
-    msg: str = "Module dependency resolution conflict:"
     # Install project
-    with pytest.raises(ConflictingRequirements) as e:
-        project.install_modules()
-    assert e.value.args[0].startswith(msg)
+    msg: str = "Incompatibility between constraint x"
+    if strict_deps_check is None or strict_deps_check:
+        with pytest.raises(ConflictingRequirements) as e:
+            project.install_modules()
+        assert msg in e.value.args[0]
+    else:
+        # The version conflict is present in a transitive dependency, so without strict_deps_check enabled,
+        # only a warning message will be logged.
+        with caplog.at_level(logging.WARNING):
+            caplog.clear()
+            project.install_modules()
+            assert msg in caplog.text
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("strict_deps_check", [True, False, None])
 def test_module_conflicting_dependencies_with_v1_module(
     snippetcompiler_clean,
     modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
+    strict_deps_check: Optional[bool],
 ) -> None:
     """
     Show an error message when installing a module that breaks the dependencies
@@ -722,10 +737,10 @@ def test_module_conflicting_dependencies_with_v1_module(
     requires y~=2.0.0. those 2 requirements conflict which each other.
     """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-    # Create an python package x with version 1.0.0
+    # Create a python package x with version 1.0.0
     create_python_package("y", Version("1.0.0"), str(tmpdir.join("y-1.0.0")), publish_index=index)
 
-    # Create an python package x with version 2.0.0
+    # Create a python package x with version 2.0.0
     create_python_package("y", Version("2.0.0"), str(tmpdir.join("y-2.0.0")), publish_index=index)
 
     # Create the first module
@@ -758,10 +773,14 @@ def test_module_conflicting_dependencies_with_v1_module(
         python_requires=[req],
         autostd=False,
         add_to_module_path=[str(tmpdir)],
+        strict_deps_check=strict_deps_check,
     )
 
     # Install project
-    msg: str = "Module dependency resolution conflict:"
-    with pytest.raises(ConflictingRequirements) as e:
+    with pytest.raises(CompilerException) as e:
+        # The version conflict is present in a direct dependency, so this always results in an error.
         project.install_modules()
-    assert e.value.args[0].startswith(msg)
+    if strict_deps_check is None or strict_deps_check:
+        assert "Incompatibility between constraint y" in e.value.args[0]
+    else:
+        assert "requirements conflicts were found" in e.value.args[0]

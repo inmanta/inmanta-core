@@ -1162,6 +1162,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                                        `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
                                        place, the compiler will first freeze
                                        `first-type.relation-name` and only then `then-type.relation-name`.
+    :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
+                              should check the virtual environment for version conflicts in a strict way or not.
+                                * A strict check means that all transitive dependencies will be checked for version conflicts
+                                  and that any violation will result in an error
+                                * When a non-strict check is done, only version conflicts in a direct dependency will result
+                                  in an error. All other violations will only result in a warning message.
     """
 
     _raw_parser: Type[YamlParser] = YamlParser
@@ -1178,6 +1184,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
     relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
+    strict_deps_check: bool = True
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -1204,6 +1211,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         Return all RelationPrecedenceRules defined in the project.yml file.
         """
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
+
+    def get_index_urls(self) -> List[str]:
+        return [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
 
 
 @stable_api
@@ -1448,6 +1458,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_file: str = "main.cf",
         venv_path: Optional[str] = None,
         attach_cf_cache: bool = True,
+        strict_deps_check: Optional[bool] = None,
     ) -> None:
         """
         Initialize the project, this includes
@@ -1465,6 +1476,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param path: The directory where the project is located
         :param venv_path: Path to the directory that will contain the Python virtualenv.
                           This can be an existing or a non-existing directory.
+        :param strict_deps_check: Overrides the strict_deps_check configuration option from the project.yml file if the
+                                  provided value is different from None.
         """
         if not os.path.exists(path):
             raise ProjectNotFoundException(f"Directory {path} doesn't exist")
@@ -1474,9 +1487,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        self.module_source: ModuleV2Source = ModuleV2Source(
-            [repo.url for repo in self._metadata.repo if repo.type == ModuleRepoType.package]
-        )
+        self.module_source: ModuleV2Source = ModuleV2Source(self.metadata.get_index_urls())
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
             local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
             remote_repo=CompositeModuleRepo(
@@ -1505,6 +1516,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.autostd = autostd
         if attach_cf_cache:
             cache_manager.attach_to_project(path)
+
+        if strict_deps_check is not None:
+            self.strict_deps_check = strict_deps_check
+        else:
+            self.strict_deps_check = self._metadata.strict_deps_check
 
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
@@ -1564,12 +1580,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
     @classmethod
-    def get(cls, main_file: str = "main.cf") -> "Project":
+    def get(cls, main_file: str = "main.cf", strict_deps_check: Optional[bool] = None) -> "Project":
         """
         Get the instance of the project
         """
         if cls._project is None:
-            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
+            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file, strict_deps_check=strict_deps_check)
 
         return cls._project
 
@@ -1600,15 +1616,22 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
+        indexes_urls: List[str] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
 
         # do python install
-        pyreq = self.collect_python_requirements()
+        pyreq: List[Requirement] = [Requirement.parse(x) for x in self.collect_python_requirements()]
+
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_list(pyreq, upgrade=update_dependencies, upgrade_strategy=env.PipUpgradeStrategy.EAGER)
+            self.virtualenv.install_from_index(
+                pyreq,
+                upgrade=update_dependencies,
+                index_urls=indexes_urls if indexes_urls else None,
+                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+            )
 
         self.verify()
 
@@ -2001,14 +2024,21 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies no incompatibilities exist within the Python environment with respect to installed module v2 requirements.
         """
-        constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-        try:
-            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
-        except env.ConflictingRequirements as e:
-            message: str = "Module dependency resolution conflict: a module dependency constraint \
-was violated by another module. This most likely indicates an incompatibility between \
-two or more of the installed modules."
-            raise env.ConflictingRequirements(message, e.conflicts)
+        if self.strict_deps_check:
+            constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
+            try:
+                env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
+            except env.ConflictingRequirements as e:
+                message: str = "Module dependency resolution conflict: a module dependency constraint \
+    was violated by another module. This most likely indicates an incompatibility between \
+    two or more of the installed modules."
+                raise env.ConflictingRequirements(message, e.conflicts)
+        else:
+            if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
+                raise CompilerException(
+                    "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts"
+                    " before attempting another compile. Run `pip check` to check for any incompatibilities."
+                )
 
     def _modules_cache_is_valid(self) -> bool:
         """
