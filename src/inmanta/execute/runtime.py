@@ -144,7 +144,7 @@ class WrappedValueVariable(VariableABC[T]):
         waiter.ready(self)
 
 
-class ResultVariable(VariableABC, ResultCollector[T], ISetPromise[T]):
+class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     """
     A ResultVariable is like a future
      - it has a list of waiters
@@ -265,6 +265,51 @@ class ResultVariable(VariableABC, ResultCollector[T], ISetPromise[T]):
     def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
         assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self
         return self._node
+
+
+class ResultVariableProxy(VariableABC[T]):
+    """
+    A proxy for a ResultVariable that implements the VariableABC interface. Allows for assignment between variables without
+    resolving the right hand side at the time of assignment.
+    """
+
+    __slots__ = ("variable", "waiters")
+
+    def __init__(self, variable: Optional[ResultVariable[T]] = None) -> None:
+        self.variable: Optional[ResultVariable[T]] = variable
+        self.waiters: Optional[list["Waiter"]] = []
+
+    def connect(self, variable: ResultVariable[T]) -> None:
+        """
+        Connect this proxy to a variable. A proxy can only be connected to a single variable.
+        """
+        if self.variable is not None and self.variable != variable:
+            raise Exception("Trying to connect a variable to a proxy that is already connected to another variable.")
+        self.variable = variable
+        assert self.waiters is not None  # only set to None after a variable is connected to prevent data leaks
+        for waiter in self.waiters:
+            self.variable.waitfor(waiter)
+        self.waiters = None
+
+    def get_value(self) -> T:
+        """
+        Returns the value object for this variable
+        """
+        if self.variable is None:
+            raise Exception(
+                "Trying to get value for proxy variable that has not been connected yet. Use `waitfor` to wait for a value."
+            )
+        return self.variable.get_value()
+
+    def waitfor(self, waiter: "Waiter") -> None:
+        """
+        Informs this variable that a waiter waits on its value. Once the variable receives a value, it should inform the waiter.
+        """
+        if self.variable is not None:
+            self.variable.waitfor(waiter)
+        else:
+            assert self.waiters is not None  # only set to None after a variable is connected to prevent data leaks
+            self.waiters.append(waiter)
 
 
 class RelationAttributeVariable:
@@ -864,6 +909,7 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
+            # TODO: try replace=True
             e.set_statement(self.owner)
             raise e
 

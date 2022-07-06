@@ -235,6 +235,10 @@ class VariableReferenceHook(RawResumer):
     attributes. Calls variable resumer with the variable object as soon as it's available.
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
+
+    :param instance: The instance this variable is an attribute of, if any. Can be a reference to a nested relation instance.
+    :param name: The name of the variable or instance attribute.
+    :param variable_resumer: The resumer that should be called when a value becomes available.
     """
 
     __slots__ = ("instance", "name", "variable_resumer")
@@ -270,7 +274,12 @@ class VariableReferenceHook(RawResumer):
         variable: ResultVariable[object]
         if self.instance is not None:
             # get the Instance
-            instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            try:
+                instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            # TODO: only catch OptionalValueException
+            except Exception as e:
+                breakpoint()
+                return
 
             if isinstance(instance, list):
                 raise RuntimeException(self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance))
