@@ -54,6 +54,7 @@ class Statement(Namespaced):
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
+        self.lexpos: Optional[int] = None
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
