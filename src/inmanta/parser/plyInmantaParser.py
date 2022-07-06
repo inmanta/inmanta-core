@@ -67,7 +67,6 @@ precedence = (
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
-    ("nonassoc", "IS_DEFINED"),
     ("left", "CID", "ID"),
     ("left", "(", "["),
     ("left", "MLS"),
@@ -693,39 +692,31 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-"""
-Solution 1
-- Both (1) and (2) work as intended on their own but I can't tie them up in an "And" node
-- I don't see how to check that a key belongs to the dict with this solution
-"""
-# def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
-#     """boolean_expression : map_lookup IS DEFINED %prec IS_DEFINED"""
-#
-#     # p[0] = NotEqual(p[1], Literal(list()))                                            # (1)
-#     # p[0] = NotEqual(p[1], Literal(NoneValue()))                                       # (2)
-#     p[0] = And(NotEqual(p[1], Literal(list())), NotEqual(p[1], Literal(NoneValue())))   # And(1, 2)
-#     attach_lnr(p, 2)
-
-"""
-Solution 2
-- easier to check for key belonging to dict
-- (1), (2) and (3) work as intended on their own but again I can't tie it up in an "And" node
-- only base case with var_ref considered here (attributes and nested dicts need to be added)
-"""
+def p_boolean_expression_is_defined_map_lookup_0(p: YaccProduction) -> None:
+    """boolean_expression : is_defined_expr IS DEFINED"""
+    p[0] = p[1]
 
 
-def p_boolean_expression_is_defined_not_map_lookup(p: YaccProduction) -> None:
-    """boolean_expression : var_ref '[' operand ']' IS DEFINED %prec IS_DEFINED"""
+def p_is_defined_expr_is_defined_map_lookup_1(p: YaccProduction) -> None:
+    """is_defined_expr : var_ref '[' operand ']'
+    | attr_ref '[' operand ']'
+    | map_lookup '[' operand ']'"""
 
-    # | attr_ref '[' operand ']' IS DEFINED %prec IS_DEFINED
-    # | map_lookup '[' operand ']' IS DEFINED %prec IS_DEFINED
+    location = Location(file, p.lineno(2))
+    lexpos = p.lexpos(2)
 
-    key_in_dict = In(p[3], p[1])  # (1)
-    not_none = NotEqual(MapLookup(p[1], p[3]), Literal(NoneValue()))  # (2)
-    not_empty_list = NotEqual(MapLookup(p[1], p[3]), Literal(list()))  # (3)
+    def attach_lnr_to_statement(inp: Statement) -> Statement:
+        "set location"
+        inp.location = location
+        inp.lexpos = lexpos
+        return inp
 
-    p[0] = And(And(key_in_dict, not_none), not_empty_list)
-    attach_lnr(p, 2)
+    key_in_dict = attach_lnr_to_statement(In(p[3], p[1]))
+    not_none = attach_lnr_to_statement(NotEqual(MapLookup(p[1], p[3]), attach_lnr_to_statement(Literal(NoneValue()))))
+    not_empty_list = attach_lnr_to_statement(NotEqual(MapLookup(p[1], p[3]), attach_lnr_to_statement(CreateList(list()))))
+
+    out = attach_lnr_to_statement(And(attach_lnr_to_statement(And(key_in_dict, not_none)), not_empty_list))
+    p[0] = out
 
 
 def p_operand(p: YaccProduction) -> None:
