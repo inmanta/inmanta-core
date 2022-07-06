@@ -1,5 +1,5 @@
 ---
-description: Add support to enable/disable strict dependency checking in the compiler and in the module tools using the --strict-deps-check and --no-strict-deps-check options. Strict dependency checking is disable by default.
+description: Add support to enable/disable strict dependency checking in the compiler and in the module tools using the --strict-deps-check and --no-strict-deps-check options. Strict dependency checking is disabled by default.
 issue-nr: 4516
 change-type: minor
 destination-branches: [iso5]

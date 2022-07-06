@@ -713,7 +713,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
 
     # Install project
     msg: str = "Incompatibility between constraint x"
-    if strict_deps_check is None or strict_deps_check:
+    if strict_deps_check:
         with pytest.raises(ConflictingRequirements) as e:
             project.install_modules()
         assert msg in e.value.args[0]
@@ -785,7 +785,7 @@ def test_module_conflicting_dependencies_with_v1_module(
     with pytest.raises(CompilerException) as e:
         # The version conflict is present in a direct dependency, so this always results in an error.
         project.install_modules()
-    if strict_deps_check is None or strict_deps_check:
+    if strict_deps_check:
         assert "Incompatibility between constraint y" in e.value.args[0]
     else:
         assert "requirements conflicts were found" in e.value.args[0]
