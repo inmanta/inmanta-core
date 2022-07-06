@@ -676,7 +676,7 @@ class ActiveEnv(PythonEnvironment):
         constraints: Optional[List[Requirement]] = None,
     ) -> Tuple[Set[VersionConflict], Set[VersionConflict]]:
         """
-        Return the constraint violations that exist in this venv.
+        Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations, in that order.
         """
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[Requirement] = frozenset(
@@ -750,7 +750,7 @@ class ActiveEnv(PythonEnvironment):
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
-        when the `--strict-deps-check` commandline option is provided.
+        when the `--no-strict-deps-check` commandline option is provided.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
