@@ -430,41 +430,36 @@ dict_6 = {r'{{value}}': "not interpolation"}
         assert lookup(var) == exp_val
 
 
-def test_dict_is_defined(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-d = {"a": "A", "b": null}
-
-# This doesn't work
-if "a" in d and d["a"] is defined:
-    std::print(d["s"])
-end
+@pytest.mark.parametrize(
+    "lookup_path, expectation",
+    [
+        ('a["A"]["1"]', True),
+        ('a["A"]["2"]', False),
+        ('a["A"]["3"]', False),
+        ('a["A"]["4"]', False),
+        ('a["A"]', True),
+        ('a["B"]', False),
+        ('a["C"]', False),
+        ('a["D"]', True),
+        ('a["K"]', False),
+        # ('a["K"]["a"]', False),
+        # ('a["K"]["k"]', False),
+        # ('b', False),
+    ],
+)
+def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
     """
-    )
-    compiler.do_compile()
-
-
-def test_dict_is_defined_2(snippetcompiler):
+    Check that calling "is defined" on dictionaries works as syntactic sugar for != null
+    """
     snippetcompiler.setup_for_snippet(
         """
-d = {"a": "A", "b": null}
+    entity Test:
+        bool value_is_defined
+    end
 
-# This works
-a = "a" in d
-    ? d["a"]
-    : null
+    implement Test using std::none
+    t = Test()
 
-if a is defined:
-    std::print(a)
-end
-"""
-    )
-    compiler.do_compile()
-
-
-def test_dict_sandbox(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
     a = {
         "A": {
             "1": "ok",
@@ -474,12 +469,15 @@ def test_dict_sandbox(snippetcompiler):
         "B": null,
         "C": [],
         "D": "ok"
-    }
-    if a["B"] is defined:
-        std::print("lookup")
+    }"""
+        f"""if {lookup_path} is defined:
+        t.value_is_defined = true
     else:
-        std::print("undefined")
+        t.value_is_defined = false
     end
     """
     )
-    compiler.do_compile()
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert root.lookup("t").get_value().lookup("value_is_defined").get_value() == expectation
