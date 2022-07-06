@@ -676,7 +676,8 @@ class ActiveEnv(PythonEnvironment):
         constraints: Optional[List[Requirement]] = None,
     ) -> Tuple[Set[VersionConflict], Set[VersionConflict]]:
         """
-        Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations, in that order.
+        Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
+        in that order.
         """
         # all requirements of all packages installed in this environment
         installed_constraints: abc.Set[Requirement] = frozenset(
