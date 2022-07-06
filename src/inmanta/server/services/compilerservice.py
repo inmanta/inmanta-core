@@ -376,10 +376,10 @@ class CompileRun(object):
                 compile_data_json_file.name,
             ]
 
-            if self.request.partial == True:
+            if self.request.partial:
                 cmd.append("-p")
 
-            if self.reques.removed_resource_sets is not None:
+            if self.request.removed_resource_sets is not None:
                 for resource_set in self.request.removed_resource_sets:
                     cmd.append("--delete-resource-set")
                     cmd.append(resource_set)
