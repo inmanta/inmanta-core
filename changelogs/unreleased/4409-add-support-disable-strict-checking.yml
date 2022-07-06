@@ -5,3 +5,4 @@ change-type: minor
 destination-branches: [master]
 sections:
   minor-improvement: "{{description}}"
+  upgrade-note: "The compiler and the module tools now by default check all dependencies transitively for version conflicts. When a version conflict is found, an error is raised. A fallback to the old behavior is possible by providing the `--no-strict-deps-check` option."
