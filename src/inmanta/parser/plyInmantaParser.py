@@ -27,7 +27,7 @@ import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
-from inmanta.ast.statements import Literal, Statement, ExpressionStatement
+from inmanta.ast.statements import ExpressionStatement, Literal, Statement
 from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
@@ -692,28 +692,21 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
-def p_boolean_expression_is_defined_map_lookup_0(p: YaccProduction) -> None:
-    """boolean_expression : is_defined_expr IS DEFINED"""
-    p[0] = p[1]
-
-
-def p_is_defined_expr_is_defined_map_lookup_1(p: YaccProduction) -> None:
-    """is_defined_expr : var_ref '[' operand ']'
-    | attr_ref '[' operand ']'
-    | map_lookup '[' operand ']'"""
+def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
+    """boolean_expression : map_lookup IS DEFINED"""
 
     location = Location(file, p.lineno(2))
     lexpos = p.lexpos(2)
 
     def attach_lnr_to_statement(inp: ExpressionStatement) -> ExpressionStatement:
-        "set location"
         inp.location = location
         inp.lexpos = lexpos
         return inp
 
-    key_in_dict = attach_lnr_to_statement(In(p[3], p[1]))
-    not_none = attach_lnr_to_statement(NotEqual(MapLookup(p[1], p[3]), attach_lnr_to_statement(Literal(NoneValue()))))
-    not_empty_list = attach_lnr_to_statement(NotEqual(MapLookup(p[1], p[3]), attach_lnr_to_statement(CreateList(list()))))
+    # syntactic sugar for `is defined` on dicts
+    key_in_dict = attach_lnr_to_statement(In(p[1].key, p[1].themap))
+    not_none = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(Literal(NoneValue()))))
+    not_empty_list = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(CreateList(list()))))
 
     out = attach_lnr_to_statement(And(attach_lnr_to_statement(And(key_in_dict, not_none)), not_empty_list))
     p[0] = out
