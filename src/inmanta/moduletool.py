@@ -347,8 +347,12 @@ compatible with the dependencies specified by the updated modules.
                 if module in v2_modules
             ]
             if v2_python_specs:
+                # Get known requires and add them to prevent invalidating constraints through updates
+                # These could be constraints (-c) as well, but that requires additional sanitation
+                # Because for pip not every valid -r is a valid -c
+                current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_from_index(
-                    v2_python_specs,
+                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
                     my_project.module_source.urls,
                     upgrade=True,
                     allow_pre_releases=my_project.install_mode != InstallMode.release,
