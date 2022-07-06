@@ -27,7 +27,7 @@ import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
-from inmanta.ast.statements import Literal, Statement
+from inmanta.ast.statements import Literal, Statement, ExpressionStatement
 from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
@@ -705,7 +705,7 @@ def p_is_defined_expr_is_defined_map_lookup_1(p: YaccProduction) -> None:
     location = Location(file, p.lineno(2))
     lexpos = p.lexpos(2)
 
-    def attach_lnr_to_statement(inp: Statement) -> Statement:
+    def attach_lnr_to_statement(inp: ExpressionStatement) -> ExpressionStatement:
         "set location"
         inp.location = location
         inp.lexpos = lexpos
