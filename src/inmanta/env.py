@@ -751,7 +751,7 @@ class ActiveEnv(PythonEnvironment):
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
-        when the `--no-strict-deps-check` commandline option is provided.
+        by default. The self.check() method is invoked when the `--strict-deps-check` commandline option is provided.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched

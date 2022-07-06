@@ -1184,7 +1184,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
     relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
-    strict_deps_check: bool = True
+    strict_deps_check: bool = False
 
     @validator("modulepath", pre=True)
     @classmethod
