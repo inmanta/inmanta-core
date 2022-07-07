@@ -549,9 +549,9 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     remote_id1 = uuid.uuid4()
 
     # Do a compile
-    compile_id, _ = await compilerslice.request_recompile(env, force_update=True, do_export=False, remote_id=remote_id1)
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
-    async def wait_for_report():
+    async def wait_for_report() -> bool:
         report = await client.get_report(compile_id)
         return report.code == 200
 
@@ -562,7 +562,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     # Do a partial compile
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=True, do_export=False, remote_id=remote_id1, partial=True
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
     )
 
     async def wait_for_report():
@@ -576,7 +576,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
-        env, force_update=True, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
     )
 
     async def wait_for_report():

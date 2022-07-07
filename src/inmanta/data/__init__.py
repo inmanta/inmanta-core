@@ -3320,8 +3320,8 @@ class Compile(BaseDocument):
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
         to this one that actually got compiled.
-    :param partial: True if the the compile only contains the entities/resources for the resource sets that should be updated
-    :param removed_resource_sets:  indicates the resource set that should be removed from the model
+    :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
+    :param removed_resource_sets: indicates the resource sets that should be removed from the model
     """
 
     __primary_key__ = ("id",)
