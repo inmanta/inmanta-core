@@ -774,15 +774,25 @@ class ActiveEnv(PythonEnvironment):
         )
 
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        constraint_violations: Set[Tuple[Requirement, Optional[version.Version]]] = set(
-            (constraint, installed_versions.get(constraint.key, None))
+        constraint_violations: Set[VersionConflict] = set(
+            VersionConflict(constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
             if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
         )
 
-        all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
+        all_violations: Set[VersionConflict] = (
+            constraint_violations_non_strict | constraint_violations_strict | constraint_violations
+        )
+        violations_that_will_become_errors: Set[VersionConflict] = constraint_violations_strict - constraint_violations
+        upgrade_note = (
+            "This warning will become an error in inmanta-core>=7.0.0 unless the strict_deps_check feature "
+            "is explicitly disabled via the project.yml file or via the --no-strict-dep-check commandline option."
+        )
         for violation in all_violations:
-            LOGGER.warning("%s", violation)
+            if violation in violations_that_will_become_errors:
+                LOGGER.warning("%s. %s", violation, upgrade_note)
+            else:
+                LOGGER.warning("%s", violation)
 
         return len(constraint_violations) == 0
 
