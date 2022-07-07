@@ -551,7 +551,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=True, do_export=False, remote_id=remote_id1)
 
-    async def wait_for_report():
+    async def wait_for_report() -> bool:
         report = await client.get_report(compile_id)
         return report.code == 200
 
