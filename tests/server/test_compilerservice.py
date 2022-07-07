@@ -548,17 +548,27 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
     remote_id1 = uuid.uuid4()
 
-    # Do a compile
-    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
-
     async def wait_for_report() -> bool:
         report = await client.get_report(compile_id)
-        return report.code == 200
+        if report.code != 200:
+            return False
+        return report.result["report"]["completed"] is not None
+
+    def verify_command_report(report: dict, expected: str) -> bool:
+        """
+        verify that the expected string is present in the command field of the 'Recompiling configuration model' report
+        """
+        reports = report.result["report"]["reports"]
+        report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
+        return expected in report["command"]
+
+    # # Do a compile
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
-    assert not report.result["report"]["partial"]
-    assert report.result["report"]["removed_resource_sets"] == []
+    assert not verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
 
     # Do a partial compile
     compile_id, _ = await compilerslice.request_recompile(
@@ -567,8 +577,8 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
-    assert report.result["report"]["partial"]
-    assert report.result["report"]["removed_resource_sets"] == []
+    assert verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
 
     # Do a partial compile with removed resource_sets
     compile_id, _ = await compilerslice.request_recompile(
@@ -577,8 +587,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
-    assert report.result["report"]["partial"]
-    assert report.result["report"]["removed_resource_sets"] == ["a", "b", "c"]
+    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
 
 
 @pytest.mark.slowtest
