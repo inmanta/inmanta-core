@@ -2407,6 +2407,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             yield file_name
 
         for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
+            # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
             if "__pycache__" not in file_name:
                 yield file_name
 
