@@ -1,6 +1,6 @@
 description: Fix syntax error when calling "is defined" on dictionary lookup
 change-type: patch
-destination-branches: [master, iso5]
+destination-branches: [iso5]
 sections: {
   bugfix: "{{description}}"
 }
