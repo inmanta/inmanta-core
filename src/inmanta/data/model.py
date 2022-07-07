@@ -149,7 +149,7 @@ class CompileRunBase(BaseModel):
     environment_variables: Dict[str, str]
 
     partial: bool = False
-    removed_resource_sets: Optional[list[str]] = None
+    removed_resource_sets: list[str] = []
 
 
 class CompileRun(CompileRunBase):

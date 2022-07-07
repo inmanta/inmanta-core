@@ -3349,7 +3349,7 @@ class Compile(BaseDocument):
     compile_data: Optional[JsonType] = None
 
     partial: bool = False
-    removed_resource_sets: Optional[list[str]] = None
+    removed_resource_sets: list[str] = []
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
