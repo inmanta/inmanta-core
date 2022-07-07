@@ -549,7 +549,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     remote_id1 = uuid.uuid4()
 
     # Do a compile
-    compile_id, _ = await compilerslice.request_recompile(env, force_update=True, do_export=False, remote_id=remote_id1)
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
     async def wait_for_report() -> bool:
         report = await client.get_report(compile_id)
