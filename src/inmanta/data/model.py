@@ -148,6 +148,9 @@ class CompileRunBase(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
+    partial: bool = False
+    removed_resource_sets: list[str] = []
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]

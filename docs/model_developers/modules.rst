@@ -163,7 +163,7 @@ A complete module might contain the following files:
 The directory layout of the V1 module is similar to that of a V2 module. The following difference exist:
 
 * The metadata file of the module is called ``module.yml`` instead of ``setup.cfg``. The structure of the ``module.yml``
-  file also differs from the structure of the ``module.yml`` file. More information about this ``module.yml`` file is available
+  file also differs from the structure of the ``setup.cfg`` file. More information about this ``module.yml`` file is available
   in the next section.
 * The files contained in the ``inmanta_plugins/<module-name>/`` directory in the V2 format, are present in the ``plugins``
   directory in the V1 format.

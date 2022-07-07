@@ -3320,6 +3320,8 @@ class Compile(BaseDocument):
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
         to this one that actually got compiled.
+    :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
+    :param removed_resource_sets: indicates the resource sets that should be removed from the model
     """
 
     __primary_key__ = ("id",)
@@ -3345,6 +3347,9 @@ class Compile(BaseDocument):
     substitute_compile_id: Optional[uuid.UUID] = None
 
     compile_data: Optional[JsonType] = None
+
+    partial: bool = False
+    removed_resource_sets: list[str] = []
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3659,6 +3664,8 @@ class Compile(BaseDocument):
             metadata=self.metadata,
             environment_variables=self.environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
+            partial=self.partial,
+            removed_resource_sets=self.removed_resource_sets,
         )
 
 
