@@ -377,7 +377,7 @@ class CompileRun(object):
             ]
 
             if self.request.partial:
-                cmd.append("-p")
+                cmd.append("--partial")
 
             if self.request.removed_resource_sets is not None:
                 for resource_set in self.request.removed_resource_sets:
