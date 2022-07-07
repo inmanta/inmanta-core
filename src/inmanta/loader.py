@@ -260,8 +260,8 @@ class CodeLoader(object):
             source_file = os.path.join(module_dir, init_file)
 
             if os.path.exists(os.path.join(module_dir, "__init__.py")) and source_file[-4:] == ".pyc":
-                # we seem to have create an __init__.py before, we now have a pyc file so we should remove it before creating the pyc
-                # to keep the structure "clean"
+                # we seem to have create an __init__.py before, we now have a pyc file so we should remove it before
+                # creating the pyc to keep the structure clean
                 os.remove(os.path.join(module_dir, "__init__.py"))
 
             # write the new source
