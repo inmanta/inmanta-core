@@ -774,8 +774,8 @@ class ActiveEnv(PythonEnvironment):
         )
 
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        constraint_violations: Set[Tuple[Requirement, Optional[version.Version]]] = set(
-            (constraint, installed_versions.get(constraint.key, None))
+        constraint_violations: Set[VersionConflict] = set(
+            VersionConflict(constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
             if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
         )
