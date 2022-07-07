@@ -170,6 +170,14 @@ class ModuleSource:
     source: bytes
     hash_value: str
 
+    def is_bytecode(self) -> bool:
+        try:
+            # The magic number in the bytecode changes with python releases. This method is more future proof.
+            self.source.decode("utf-8")
+            return False
+        except Exception:
+            return True
+
 
 class CodeLoader(object):
     """
@@ -230,6 +238,11 @@ class CodeLoader(object):
                 os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
             )
 
+            if module_source.is_bytecode():
+                init_file = "__init__.pyc"
+            else:
+                init_file = "__init__.py"
+
             def touch_inits(directory: str) -> None:
                 """
                 Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
@@ -238,13 +251,13 @@ class CodeLoader(object):
                 normdir: str = os.path.normpath(directory)
                 if normdir == package_dir:
                     return
-                pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                pathlib.Path(os.path.join(normdir, init_file)).touch()
                 touch_inits(os.path.dirname(normdir))
 
             # ensure correct package structure
             os.makedirs(module_dir, exist_ok=True)
             touch_inits(os.path.dirname(module_dir))
-            source_file = os.path.join(module_dir, "__init__.py")
+            source_file = os.path.join(module_dir, init_file)
 
             # write the new source
             with open(source_file, "wb+") as fd:
