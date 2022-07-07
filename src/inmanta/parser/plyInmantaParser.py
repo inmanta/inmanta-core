@@ -26,8 +26,8 @@ from ply.yacc import YaccProduction
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import IsDefined, Not, Operator
-from inmanta.ast.statements import Literal, Statement
+from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
+from inmanta.ast.statements import ExpressionStatement, Literal, Statement
 from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
@@ -690,6 +690,26 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
+
+
+def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
+    """boolean_expression : map_lookup IS DEFINED"""
+
+    location = Location(file, p.lineno(2))
+    lexpos = p.lexpos(2)
+
+    def attach_lnr_to_statement(inp: ExpressionStatement) -> ExpressionStatement:
+        inp.location = location
+        inp.lexpos = lexpos
+        return inp
+
+    # syntactic sugar for `is defined` on dicts
+    key_in_dict = attach_lnr_to_statement(In(p[1].key, p[1].themap))
+    not_none = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(Literal(NoneValue()))))
+    not_empty_list = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(CreateList(list()))))
+
+    out = attach_lnr_to_statement(And(attach_lnr_to_statement(And(key_in_dict, not_none)), not_empty_list))
+    p[0] = out
 
 
 def p_operand(p: YaccProduction) -> None:
