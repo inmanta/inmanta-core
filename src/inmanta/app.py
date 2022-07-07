@@ -300,6 +300,7 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     )
     compiler_features.add_arguments(parser)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command(
@@ -341,7 +342,10 @@ def compile_project(options: argparse.Namespace) -> None:
 
     compiler_features.read_options_to_config(options)
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     if options.profile:
         import cProfile
@@ -506,6 +510,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         action="append",
     )
     compiler_features.add_arguments(parser)
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -558,7 +563,10 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     from inmanta.export import Exporter  # noqa: H307
 
