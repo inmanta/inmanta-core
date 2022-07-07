@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -685,7 +686,12 @@ async def test_batched_code_upload(
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
 
-            assert info.content.decode() == code[2]
+            # fetch the code from the server
+            response = await agent_multi._client.get_file(info.hash)
+            assert response.code == 200
+
+            source_code = base64.b64decode(response.result["content"])
+            assert info.content == source_code
             assert info.requires == code[3]
 
 

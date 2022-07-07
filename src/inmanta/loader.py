@@ -251,13 +251,18 @@ class CodeLoader(object):
                 normdir: str = os.path.normpath(directory)
                 if normdir == package_dir:
                     return
-                pathlib.Path(os.path.join(normdir, init_file)).touch()
+                pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
                 touch_inits(os.path.dirname(normdir))
 
             # ensure correct package structure
             os.makedirs(module_dir, exist_ok=True)
             touch_inits(os.path.dirname(module_dir))
             source_file = os.path.join(module_dir, init_file)
+
+            if os.path.exists(os.path.join(module_dir, "__init__.py")) and source_file[-4:] == ".pyc":
+                # we seem to have create an __init__.py before, we now have a pyc file so we should remove it before creating the pyc
+                # to keep the structure "clean"
+                os.remove(os.path.join(module_dir, "__init__.py"))
 
             # write the new source
             with open(source_file, "wb+") as fd:
