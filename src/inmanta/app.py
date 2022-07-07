@@ -342,7 +342,6 @@ def compile_project(options: argparse.Namespace) -> None:
 
     compiler_features.read_options_to_config(options)
 
-    module.Project.get(options.main_file)
     strict_deps_check = moduletool.get_strict_deps_check(
         no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
     )
