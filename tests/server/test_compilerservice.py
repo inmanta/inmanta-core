@@ -565,10 +565,6 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
     )
 
-    async def wait_for_report():
-        report = await client.get_report(compile_id)
-        return report.code == 200
-
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert report.result["report"]["partial"]
@@ -578,10 +574,6 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
     compile_id, _ = await compilerslice.request_recompile(
         env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
     )
-
-    async def wait_for_report():
-        report = await client.get_report(compile_id)
-        return report.code == 200
 
     await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
