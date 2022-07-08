@@ -288,12 +288,9 @@ class VariableReferenceHook(RawResumer):
             for k, v in requires.items():
                 try:
                     instance_requires[k] = v.get_value()
-                except tuple([OptionalValueException] if self.propagate_unset else []):
+                except OptionalValueException if self.propagate_unset else ():
                     unset = v
                     break
-                except Exception as e:
-                    print(f"Not caught with self.propagate_unset={self.propagate_unset}: {e}")
-                    raise
             if unset is not None:
                 # propagate unset variable up the attribute reference chain
                 variable = unset
