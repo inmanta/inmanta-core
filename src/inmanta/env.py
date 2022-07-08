@@ -82,11 +82,25 @@ class VersionConflict:
 
 
 class ConflictingRequirements(CompilerException):
+    """
+    Conflict reporting
+
+    Can be used in two ways:
+    - if we don't know the exact conflicts (detected by e.g. pip), the messages is used
+    - if we have detailed conflict info, the message is derived from it
+
+    """
+
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
+
         CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
     def get_message(self) -> str:
+        # The message has three potential parts
+        # First the advices, derived from the conflicts, if present
+        # Then the message, if present
+        # Then the individual conflicts, if present
         out = []
 
         advices = self.get_advice()
@@ -117,6 +131,9 @@ class ConflictingRequirements(CompilerException):
         return any(conflict.installed_version is None for conflict in self.conflicts)
 
     def get_advice(self) -> Optional[str]:
+        """
+        Derive an end-user centric message from the conflicts
+        """
         if self.conflicts is None:
             return None
         if self.has_missing():
