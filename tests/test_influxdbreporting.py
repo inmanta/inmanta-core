@@ -173,7 +173,7 @@ async def test_available_metrics(server):
     await server.stop()
     metrics = global_registry().dump_metrics()
 
-    assert metrics["db.max_pool"] == 0
+    assert metrics["db.max_pool"]["value"] == 0
     assert not metrics["db.connected"]
 
 
