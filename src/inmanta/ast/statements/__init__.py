@@ -273,18 +273,17 @@ class VariableReferenceHook(RawResumer):
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
-        RawUnit(
-            queue,
-            resolver,
-            (
+        if self.instance is None:
+            self.resume({}, resolver, queue)
+        else:
+            RawUnit(
+                queue,
+                resolver,
                 # no need for gradual execution here because this class represents an attribute reference on self.instance,
                 # which is not allowed on multi variables (the only kind of variables that would benefit from gradual execution)
-                self.instance.requires_emit(resolver, queue, propagate_unset=self.propagate_unset)
-                if self.instance is not None
-                else {}
-            ),
-            self,
-        )
+                self.instance.requires_emit(resolver, queue, propagate_unset=self.propagate_unset),
+                self,
+            )
 
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
