@@ -61,7 +61,7 @@ When using the agents built-in ssh capability, to perform actions over ssh on re
 * The Inmanta server should have passphraseless SSH access on the machine it maps to. More information on how to set up SSH
   connectivity can be found at :ref:`configure_server_step_6`
 * The remote machine should have a Python 2 or 3 interpreter installed. The binary executed by default is ``python``.
-* The user user to log into the remote machine should either be ``root`` or have the ability to do a passwordless sudo.
+* The user to log into the remote machine should either be ``root`` or have the ability to do a passwordless sudo.
   To enable passwordless sudo for the user ``username``, add a file to ``/etc/sudoers.d/`` containing ``username ALL=(ALL) NOPASSWD: ALL``.
   It is advisable to use a safe editor such as ``visudo`` or ``sudoedit`` for this. For more details, go `here <https://www.sudo.ws/man/sudoers.man.html>`_.
 
