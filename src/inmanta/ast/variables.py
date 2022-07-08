@@ -64,14 +64,14 @@ class Reference(ExpressionStatement):
     def requires(self) -> List[str]:
         return [self.full_name]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
         return requires
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector, *, propagate_unset: bool = False
     ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
@@ -79,7 +79,7 @@ class Reference(ExpressionStatement):
         requires[self.name] = var
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> object:
         super().execute(requires, resolver, queue)
         return requires[self.name]
 
@@ -155,17 +155,9 @@ class VariableReader(VariableResumer, Generic[T]):
         self.target: ResultVariableProxy[T] = target
         self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
-    # TODO: move this to the caller?
-    #try:
-    #    return variable.get_value()
-    #except OptionalValueException as e:
-    #    e.set_statement(self.owner)
-    #    e.location = self.owner.location
-    #    raise e
-
     def variable_resume(
         self,
-        variable: ResultVariable[T],
+        variable: VariableABC[T],
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
@@ -202,7 +194,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
 
     def variable_resume(
         self,
-        variable: ResultVariable[object],
+        variable: VariableABC[object],
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
@@ -217,7 +209,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         self.target.set_value(self._target_value(requires[self]), self.owner.location)
 
-    def _target_value(self, variable: ResultVariable[object]) -> bool:
+    def _target_value(self, variable: VariableABC[object]) -> bool:
         """
         Returns the target value based on the attribute variable's value or absence of a value.
         """
@@ -260,11 +252,11 @@ class AttributeReference(Reference):
     def requires(self) -> List[str]:
         return self.instance.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        return self.requires_emit_gradual(resolver, queue, None)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> Dict[object, VariableABC]:
+        return self.requires_emit_gradual(resolver, queue, None, propagate_unset=propagate_unset)
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector], *, propagate_unset: bool = False
     ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
@@ -278,6 +270,7 @@ class AttributeReference(Reference):
             self.instance,
             str(self.attribute),
             variable_resumer=reader,
+            propagate_unset=propagate_unset,
         )
         self.copy_location(hook)
         hook.schedule(resolver, queue)

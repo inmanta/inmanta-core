@@ -114,9 +114,24 @@ class VariableABC(Generic[T]):
 
     __slots__ = ()
 
+    def is_ready(self) -> bool:
+        """
+        Returns true iff this variable does not expect any more values.
+        """
+        raise NotImplementedError()
+
     def get_value(self) -> T:
         """
         Returns the value object for this variable
+
+        :raises OptionalValueException: This is an optional variable that has not received a value (or explicit `null`).
+        """
+        raise NotImplementedError()
+
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+        """
+        Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
+        assignments of `null` will not be reported.
         """
         raise NotImplementedError()
 
@@ -125,6 +140,22 @@ class VariableABC(Generic[T]):
         Informs this variable that a waiter waits on its value. Once the variable receives a value, it should inform the waiter.
         """
         raise NotImplementedError()
+
+    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
+        """
+        Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
+        promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
+        soon as it is known that no further progress will be made.
+
+        Returns None if this variable does not track progression promises.
+
+        e.g. a progression promise could be acquired by a conditional statement that might emit a new assignment statement for
+        this variable. As soon as the condition is evaluated this promise should be fulfilled.
+
+        This overpromising semantics allows for more strict promise tracking, providing more certainty on variable completeness
+        at the cost of disallowing circular logic.
+        """
+        return None
 
 
 class WrappedValueVariable(VariableABC[T]):
@@ -137,8 +168,15 @@ class WrappedValueVariable(VariableABC[T]):
     def __init__(self, value: T) -> None:
         self.value: T = value
 
+    def is_ready(self) -> bool:
+        return True
+
     def get_value(self) -> T:
         return self.value
+
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+        if not isinstance(self.value, NoneValue):
+            resultcollector.receive_result(self.value)
 
     def waitfor(self, waiter: "Waiter") -> None:
         waiter.ready(self)
@@ -177,22 +215,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         variable, set the value on the promise object.
         """
         return self
-
-    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
-        """
-        Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
-        promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
-        soon as it is known that no further progress will be made.
-
-        Returns None if this variable does not track progression promises.
-
-        e.g. a progression promise could be acquired by a conditional statement that might emit a new assignment statement for
-        this variable. As soon as the condition is evaluated this promise should be fulfilled.
-
-        This overpromising semantics allows for more strict promise tracking, providing more certainty on variable completeness
-        at the cost of disallowing circular logic.
-        """
-        return None
 
     def fulfill(self, promise: IPromise) -> None:
         """
@@ -248,7 +270,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def receive_result(self, value: T, location: Location) -> None:
         pass
 
-    def listener(self, resulcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         """
         Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
         """
@@ -267,17 +289,19 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
+# TODO: rename ResultVariableReadProxy
 class ResultVariableProxy(VariableABC[T]):
     """
-    A proxy for a ResultVariable that implements the VariableABC interface. Allows for assignment between variables without
-    resolving the right hand side at the time of assignment.
+    A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
+    variables without resolving the right hand side at the time of assignment.
     """
 
-    __slots__ = ("variable", "waiters")
+    __slots__ = ("variable", "_listeners", "_waiters")
 
     def __init__(self, variable: Optional[ResultVariable[T]] = None) -> None:
         self.variable: Optional[ResultVariable[T]] = variable
-        self.waiters: Optional[list["Waiter"]] = []
+        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
+        self._waiters: Optional[list["Waiter"]] = []
 
     def connect(self, variable: ResultVariable[T]) -> None:
         """
@@ -286,10 +310,17 @@ class ResultVariableProxy(VariableABC[T]):
         if self.variable is not None and self.variable != variable:
             raise Exception("Trying to connect a variable to a proxy that is already connected to another variable.")
         self.variable = variable
-        assert self.waiters is not None  # only set to None after a variable is connected to prevent data leaks
-        for waiter in self.waiters:
+        assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
+        assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
+        for listener in self._listeners:
+            self.variable.listener(*listener)
+        for waiter in self._waiters:
             self.variable.waitfor(waiter)
-        self.waiters = None
+        self._listeners = None
+        self._waiters = None
+
+    def is_ready(self) -> bool:
+        return self.variable is not None and self.variable.is_ready()
 
     def get_value(self) -> T:
         """
@@ -301,15 +332,22 @@ class ResultVariableProxy(VariableABC[T]):
             )
         return self.variable.get_value()
 
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+        if self.variable is None:
+            assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
+            self._listeners += resultcollector
+        else:
+            self.variable.listener(resultcollector, location)
+
     def waitfor(self, waiter: "Waiter") -> None:
         """
         Informs this variable that a waiter waits on its value. Once the variable receives a value, it should inform the waiter.
         """
-        if self.variable is not None:
-            self.variable.waitfor(waiter)
+        if self.variable is None:
+            assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
+            self._waiters.append(waiter)
         else:
-            assert self.waiters is not None  # only set to None after a variable is connected to prevent data leaks
-            self.waiters.append(waiter)
+            self.variable.waitfor(waiter)
 
 
 class RelationAttributeVariable:
