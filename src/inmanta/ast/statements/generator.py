@@ -81,8 +81,8 @@ class SubConstructor(ExpressionStatement):
     def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
         super().__init__()
         self.type = instance_type
-        self.location = instance_type.get_location()
         self.implements = implements
+        self.location = self.implements.get_location()
 
     def normalize(self) -> None:
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization

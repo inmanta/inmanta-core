@@ -337,3 +337,52 @@ def test_eager_promises_promise_cleanup(snippetcompiler, compiler_keep_promise_s
 
     assert all(promise in others1_var.done_promises for promise in progression_promises1)
     assert all(promise in others2_var.done_promises for promise in progression_promises2)
+
+
+def test_4498_eager_promises_nested_unset(snippetcompiler) -> None:
+    """
+    Verify that acquiring an eager promise on an unset (even nested) value (in a block that never gets executed) does not raise
+    an exception.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+A.other [0:1] -- A
+implement A using a
+
+a = A()
+a.other = null
+
+implementation a for A:
+    if self.other is defined:
+        self.other.name = "b"
+        self.other.deeply.nested.attribute.name = "b"
+    end
+end
+        """
+    )
+    compiler.do_compile()
+
+
+def test_4498_eager_promises_nonexistent(snippetcompiler) -> None:
+    """
+    Verify that attempting to acquire an eager promise on an attribute that really does not exist does raise an exception, in
+    contrast to an attribute with a null value.
+    """
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+implement A using a
+
+a = A()
+
+implementation a for A:
+    if false:
+        self.other = A()
+    end
+end
+        """,
+        shouldbe="could not find attribute with name: other in type __config__::A (reported in self.other ({dir}/main.cf:10))",
+    )
