@@ -136,7 +136,6 @@ def create_instance(cls: Type[T]) -> T:
     kwargs: dict[str, object] = {
         name: create_argument(parameter.annotation) for name, parameter in inspect.signature(cls).parameters.items()
     }
-    print(cls.__name__)
     return cls(**kwargs)
 
 

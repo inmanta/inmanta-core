@@ -338,7 +338,6 @@ class Scheduler(object):
                         # get_progress_potential fails when there is a value already
                         continue
                     if real_rv.get_waiting_providers() > 0 and real_rv.get_progress_potential() > 0:
-                        print("selected")
                         freeze_candidates.append(real_rv)
 
         if not freeze_candidates:
