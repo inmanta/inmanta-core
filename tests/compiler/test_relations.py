@@ -701,3 +701,45 @@ implement B using std::none
         """
     )
     compiler.do_compile()
+
+
+def test_optional_unset(snippetcompiler) -> None:
+    """
+    Verify the behavior of trying to access an optional relation attribute with no value.
+    """
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+A.other [0:1] -- A
+implement A using std::none
+
+a = A(other=null)
+other = a.other
+        """,
+        shouldbe=(
+            "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
+            " {dir}/main.cf:7)`) (reported in other = a.other ({dir}/main.cf:7))"
+        ),
+    )
+
+
+def test_optional_unset_nested(snippetcompiler) -> None:
+    """
+    Verify the behavior of trying to access an nested attribute of an optional relation attribute with no value.
+    """
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+A.other [0:1] -- A
+implement A using std::none
+
+a = A(other=null)
+other = a.other.other
+        """,
+        shouldbe=(
+            "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
+            " {dir}/main.cf:7)`) (reported in a.other.other ({dir}/main.cf:8))"
+        ),
+    )
