@@ -948,6 +948,7 @@ class ExecutionUnit(Waiter):
             self._unsafe_execute()
         except RuntimeException as e:
             e.set_statement(self.owner)
+            e.location = self.owner.location
             raise e
 
     def __repr__(self) -> str:

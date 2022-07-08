@@ -719,7 +719,7 @@ other = a.other
         """,
         shouldbe=(
             "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
-            " {dir}/main.cf:7)`) (reported in other = a.other ({dir}/main.cf:7))"
+            " {dir}/main.cf:7)`) (reported in other = a.other ({dir}/main.cf:8))"
         ),
     )
 

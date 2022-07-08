@@ -301,10 +301,6 @@ class VariableReferenceHook(RawResumer):
                 except (OptionalValueException,) if self.propagate_unset else ():
                     unset = v
                     break
-                except (RuntimeException,) if self.instance is not None else () as e:
-                    e.set_statement(self.instance)
-                    e.location = self.instance.location
-                    raise e
 
             if unset is not None:
                 # propagate unset variable up the attribute reference chain

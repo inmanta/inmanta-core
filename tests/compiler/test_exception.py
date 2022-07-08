@@ -106,8 +106,7 @@ Test()
         " self.n ({dir}/main.cf:8))"
         "\ncaused by:"
         "\n  Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at"
-        # TODO: final location is not the correct line
-        " {dir}/main.cf:13)`) (reported in __config__::Test (instantiated at {dir}/main.cf:13) ({dir}/main.cf:13))",
+        " {dir}/main.cf:13)`) (reported in self.m = self.n ({dir}/main.cf:8))",
     )
 
 
