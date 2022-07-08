@@ -17,6 +17,7 @@
 """
 import logging
 import os
+import py_compile
 import shutil
 import sys
 from typing import List, Optional, Set
@@ -25,7 +26,7 @@ import py
 import pytest
 from pkg_resources import Requirement
 
-from inmanta import plugins
+from inmanta import loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
