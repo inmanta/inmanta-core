@@ -322,6 +322,7 @@ class Scheduler(object):
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
+
         def resolve_proxies(variable: Optional[VariableABC]) -> Optional[VariableABC]:
             if variable is None or not isinstance(variable, ResultVariableProxy):
                 return variable

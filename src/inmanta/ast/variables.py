@@ -89,9 +89,7 @@ class Reference(ExpressionStatement):
         requires[self.name] = var
         return requires
 
-    def execute(
-        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
-    ) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
         return requires[self.name]
 
