@@ -19,7 +19,7 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import NotFoundException, RuntimeException
+from inmanta.ast import NotFoundException, OptionalValueException, RuntimeException
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import NoneValue
 
@@ -110,3 +110,24 @@ x = A()
         proxy.x
     with pytest.raises(NotFoundException):
         proxy.x
+
+
+def test_dynamic_proxy_optional_value_error(snippetcompiler):
+    """
+    Verify that accessing an unset optional value through a dynamic proxy results in an OptionalValueException.
+    """
+    proxy: object = proxy_object(
+        snippetcompiler,
+        """
+entity A:
+end
+A.other [0:1] -- A
+implement A using std::none
+
+x = A(other=null)
+        """,
+        "x",
+    )
+    assert isinstance(proxy, DynamicProxy)
+    with pytest.raises(OptionalValueException):
+        proxy.other

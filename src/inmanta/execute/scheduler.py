@@ -511,8 +511,6 @@ class Scheduler(object):
                     stmt = st
                     break
 
-            print(all_statements)
-            breakpoint()
             assert stmt is not None
 
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
