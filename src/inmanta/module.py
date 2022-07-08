@@ -2495,7 +2495,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param mod_name: The top-level name of this module.
         """
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-        return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
+        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))

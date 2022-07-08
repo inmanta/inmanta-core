@@ -68,6 +68,9 @@ def test():
     return 10
 def xx():
     pass
+
+import inmanta
+inmanta.test_agent_code_loading = 10
     """
 
     codec = """
@@ -142,6 +145,8 @@ inmanta.test_agent_code_loading = 15
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=5")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")
+
+    assert getattr(inmanta, "test_agent_code_loading") == 10
 
     # Loader loads byte code file
     await agent.ensure_code(environment=environment, version=7, resource_types=["test::Test4"])

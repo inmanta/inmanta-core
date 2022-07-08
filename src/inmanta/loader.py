@@ -26,6 +26,7 @@ import types
 from collections.abc import KeysView
 from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
+from importlib.machinery import SourcelessFileLoader
 from itertools import chain, starmap
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
@@ -230,7 +231,7 @@ class CodeLoader(object):
             LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
 
             all_modules_dir: str = os.path.join(self.__code_dir, MODULE_DIR)
-            relative_module_path: str = PluginModuleLoader.convert_module_to_relative_path(module_source.name)
+            relative_module_path: str = convert_module_to_relative_path(module_source.name)
             # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
             module_dir: str = os.path.join(all_modules_dir, relative_module_path)
 
@@ -302,7 +303,7 @@ class PluginModuleLoader(FileLoader):
         :param path_to_module: Path to the file on disk that belongs to the import `fullname`. This should be an empty
                                string when the top-level package inmanta_plugins is imported.
         """
-        super(PluginModuleLoader, self).__init__(fullname, path_to_module)
+        super().__init__(fullname, path_to_module)
         self.path: str
 
     def exec_module(self, module: types.ModuleType) -> None:
@@ -312,94 +313,104 @@ class PluginModuleLoader(FileLoader):
         # No __init__.py exists for top level package
         if self._loading_top_level_package():
             return "".encode("utf-8")
-        with open(self.path, "r", encoding="utf-8") as fd:
-            return fd.read().encode("utf-8")
+        with open(self.path, "rb") as fd:
+            return fd.read()
 
     def is_package(self, fullname: str) -> bool:
         if self._loading_top_level_package():
             return True
         return os.path.basename(self.path) == "__init__.py"
 
-    @classmethod
-    def convert_relative_path_to_module(cls, path: str) -> str:
-        """
-        Returns the fully qualified module name given a path, relative to the module directory.
-        For example
-            convert_relative_path_to_module("my_mod/plugins/my_submod")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
-            == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
-            == "inmanta_plugins.my_mod.my_submod".
-        """
-        if path.startswith("/"):
-            raise Exception("Error parsing module path: expected relative path, got %s" % path)
+    def _loading_top_level_package(self) -> bool:
+        return self.path == ""
 
-        def split(path: str) -> Iterator[str]:
-            """
-            Returns an iterator over path's parts.
-            """
-            if path == "":
-                return iter(())
-            init, last = os.path.split(path)
-            yield from split(init)
-            if last != "":
-                yield last
 
-        parts: List[str] = list(split(path))
-
-        if parts == []:
-            return const.PLUGINS_PACKAGE
-
-        if len(parts) == 1 or parts[1] != PLUGIN_DIR:
-            raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
-
-        def strip_py(module: List[str]) -> List[str]:
-            """
-            Strip __init__.py or .py file extension from module parts.
-            """
-            if module == []:
-                return []
-            init, last = module[:-1], module[-1]
-            if last == "__init__.py" or last == "__init__.pyc":
-                return init
-            if last.endswith(".py"):
-                return list(chain(init, [last[:-3]]))
-            if last.endswith(".pyc"):
-                return list(chain(init, [last[:-4]]))
-            return module
-
-        top_level_inmanta_module: str = parts[0]
-        inmanta_submodule: List[str] = parts[2:]
-
-        # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
-        return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
-
-    @classmethod
-    def convert_module_to_relative_path(cls, full_mod_name: str) -> str:
-        """
-        Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
-        For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
-        An empty string is returned when `full_mod_name` equals `inmanta_plugins`.
-        """
-        full_module_parts = full_mod_name.split(".")
-        if full_module_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception(
-                "PluginModuleLoader is a loader for the inmanta_plugins package."
-                " Module %s is not part of the inmanta_plugins package." % full_mod_name,
-            )
-        module_parts = full_module_parts[1:]
-        # No __init__.py exists for top level package
-        if len(module_parts) == 0:
-            return ""
-
-        module_parts.insert(1, PLUGIN_DIR)
-
-        if module_parts[-1] == "__init__":
-            module_parts = module_parts[:-1]
-
-        return os.path.join(*module_parts)
+class ByteCodePluginModuleLoader(SourcelessFileLoader):
+    def is_package(self, fullname: str) -> bool:
+        if self._loading_top_level_package():
+            return True
+        return os.path.basename(self.path) == "__init__.pyc"
 
     def _loading_top_level_package(self) -> bool:
         return self.path == ""
+
+
+def convert_relative_path_to_module(path: str) -> str:
+    """
+    Returns the fully qualified module name given a path, relative to the module directory.
+    For example
+        convert_relative_path_to_module("my_mod/plugins/my_submod")
+        == convert_relative_path_to_module("my_mod/plugins/my_submod.py")
+        == convert_relative_path_to_module("my_mod/plugins/my_submod/__init__.py")
+        == "inmanta_plugins.my_mod.my_submod".
+    """
+    if path.startswith("/"):
+        raise Exception("Error parsing module path: expected relative path, got %s" % path)
+
+    def split(path: str) -> Iterator[str]:
+        """
+        Returns an iterator over path's parts.
+        """
+        if path == "":
+            return iter(())
+        init, last = os.path.split(path)
+        yield from split(init)
+        if last != "":
+            yield last
+
+    parts: List[str] = list(split(path))
+
+    if parts == []:
+        return const.PLUGINS_PACKAGE
+
+    if len(parts) == 1 or parts[1] != PLUGIN_DIR:
+        raise Exception("Error parsing module path: expected 'some_module/%s/some_submodule', got %s" % (PLUGIN_DIR, path))
+
+    def strip_py(module: List[str]) -> List[str]:
+        """
+        Strip __init__.py or .py file extension from module parts.
+        """
+        if module == []:
+            return []
+        init, last = module[:-1], module[-1]
+        if last == "__init__.py" or last == "__init__.pyc":
+            return init
+        if last.endswith(".py"):
+            return list(chain(init, [last[:-3]]))
+        if last.endswith(".pyc"):
+            return list(chain(init, [last[:-4]]))
+        return module
+
+    top_level_inmanta_module: str = parts[0]
+    inmanta_submodule: List[str] = parts[2:]
+
+    # my_mod/plugins/tail -> inmanta_plugins.my_mod.tail
+    return ".".join(chain([const.PLUGINS_PACKAGE, top_level_inmanta_module], strip_py(inmanta_submodule)))
+
+
+def convert_module_to_relative_path(full_mod_name: str) -> str:
+    """
+    Returns path to the module, relative to the module directory. Does not differentiate between modules and packages.
+    For example convert_module_to_relative_path("inmanta_plugins.my_mod.my_submod") == "my_mod/plugins/my_submod".
+    An empty string is returned when `full_mod_name` equals `inmanta_plugins`.
+    """
+    full_module_parts = full_mod_name.split(".")
+    if full_module_parts[0] != const.PLUGINS_PACKAGE:
+        raise Exception(
+            "PluginModuleLoader is a loader for the inmanta_plugins package."
+            " Module %s is not part of the inmanta_plugins package." % full_mod_name,
+        )
+    module_parts = full_module_parts[1:]
+    # No __init__.py exists for top level package
+    if len(module_parts) == 0:
+        return ""
+
+    module_parts.insert(1, PLUGIN_DIR)
+
+    if module_parts[-1] == "__init__":
+        module_parts = module_parts[:-1]
+
+    return os.path.join(*module_parts)
 
 
 @stable_api
@@ -450,7 +461,7 @@ class PluginModuleFinder(Finder):
         sys.meta_path.append(module_finder)
         cls.MODULE_FINDER = module_finder
 
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[PluginModuleLoader]:
+    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[FileLoader]:
         """
         :param fullname: A fully qualified import path to the module or package to be imported.
         """
@@ -458,6 +469,8 @@ class PluginModuleFinder(Finder):
             LOGGER.debug("Loading module: %s", fullname)
             path_to_module = self._get_path_to_module(fullname)
             if path_to_module is not None:
+                if path_to_module[-4:] == ".pyc":
+                    return ByteCodePluginModuleLoader(fullname, path_to_module)
                 return PluginModuleLoader(fullname, path_to_module)
             else:
                 # The given module is not present in self.modulepath.
@@ -476,18 +489,32 @@ class PluginModuleFinder(Finder):
 
         :param fullname: A fully-qualified import path to a module.
         """
-        relative_path: str = PluginModuleLoader.convert_module_to_relative_path(fullname)
+
+        def find_module(module_path: str, extension: str = "py") -> Optional[str]:
+            path_to_module = os.path.join(module_path, relative_path)
+            if os.path.exists(f"{path_to_module}.{extension}"):
+                return f"{path_to_module}.{extension}"
+            if os.path.isdir(path_to_module):
+                path_to_module = os.path.join(path_to_module, f"__init__.{extension}")
+                if os.path.exists(path_to_module):
+                    return path_to_module
+
+            return None
+
+        relative_path: str = convert_module_to_relative_path(fullname)
         # special case: top-level package
         if relative_path == "":
             return ""
         for module_path in self._modulepaths:
-            path_to_module = os.path.join(module_path, relative_path)
-            if os.path.exists(f"{path_to_module}.py"):
-                return f"{path_to_module}.py"
-            if os.path.isdir(path_to_module):
-                path_to_module = os.path.join(path_to_module, "__init__.py")
-                if os.path.exists(path_to_module):
-                    return path_to_module
+            path_to_module = find_module(module_path, extension="py")
+
+            if path_to_module is not None:
+                return path_to_module
+
+            # try the byte code only version
+            path_to_module = find_module(module_path, extension="pyc")
+            if path_to_module is not None:
+                return path_to_module
 
         return None
 
