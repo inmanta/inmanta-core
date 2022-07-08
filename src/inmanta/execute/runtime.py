@@ -289,7 +289,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
-# TODO: rename ResultVariableReadProxy
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
@@ -947,7 +946,6 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            # TODO: try replace=True
             e.set_statement(self.owner)
             raise e
 

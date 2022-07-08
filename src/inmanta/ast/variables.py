@@ -139,13 +139,11 @@ class Reference(ExpressionStatement):
 T = TypeVar("T")
 
 
-# TODO: rename ResultVariableProxy -> ResultVariableReadProxy
 class VariableReader(VariableResumer, Generic[T]):
     """
-    Resumes execution on a variable when it becomes avaiable, then waits for its completeness and copies its value to a target
-    variable. Optionally subscribes a result collector to intermediate values.
+    Resumes execution on a variable when it becomes avaiable, then connects the target proxy variable to it.
+    Optionally subscribes a result collector to intermediate values.
     """
-    # TODO: docstring
 
     __slots__ = ("owner", "target", "resultcollector")
 
@@ -176,7 +174,6 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     """
     Fill target variable with is defined result as soon as it gets known.
     """
-    # TODO: docstring
 
     __slots__ = ("owner", "target")
 
