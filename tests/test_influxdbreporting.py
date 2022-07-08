@@ -163,7 +163,7 @@ async def test_timing():
 
 async def test_available_metrics(server):
     metrics = global_registry().dump_metrics()
-    assert metrics["db.connected"]
+    assert metrics["db.connected"]["value"]
     assert "db.max_pool" in metrics
     assert "db.open_connections" in metrics
     assert "db.free_connections" in metrics
@@ -174,7 +174,7 @@ async def test_available_metrics(server):
     metrics = global_registry().dump_metrics()
 
     assert metrics["db.max_pool"]["value"] == 0
-    assert not metrics["db.connected"]
+    assert not metrics["db.connected"]["value"]
 
 
 async def test_safeness_if_server_down():
