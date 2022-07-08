@@ -242,7 +242,8 @@ class RawResumer(ExpressionStatement):
 class VariableReferenceHook(RawResumer):
     """
     Generic helper class for adding a hook to a variable (ResultVariable) object. Supports both plain variables and instance
-    attributes. Calls variable resumer with the variable object as soon as it's available.
+    attributes. Calls variable resumer with the variable object as soon as it's available. Resolves to a variable object that is
+    as specific and representative as possible. May resolve to a proxy object only when propagating unset.
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
 
@@ -300,6 +301,11 @@ class VariableReferenceHook(RawResumer):
                 except (OptionalValueException,) if self.propagate_unset else ():
                     unset = v
                     break
+                except (RuntimeException,) if self.instance is not None else () as e:
+                    e.set_statement(self.instance)
+                    e.location = self.instance.location
+                    raise e
+
             if unset is not None:
                 # propagate unset variable up the attribute reference chain
                 variable = unset
