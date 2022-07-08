@@ -108,6 +108,10 @@ inmanta.test_agent_code_loading = 15
     res = await client.upload_code_batched(tid=environment, id=7, resources={"test::Test4": sources3})
     assert res.code == 200
 
+    # source version again
+    res = await client.upload_code_batched(tid=environment, id=8, resources={"test::Test4": sources2})
+    assert res.code == 200
+
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
@@ -156,4 +160,9 @@ inmanta.test_agent_code_loading = 15
     )
 
     assert getattr(inmanta, "test_agent_code_loading") == 15
+
+    # Now load the python only version again
+    await agent.ensure_code(environment=environment, version=8, resource_types=["test::Test4"])
+    assert getattr(inmanta, "test_agent_code_loading") == 10
+
     delattr(inmanta, "test_agent_code_loading")

@@ -161,7 +161,7 @@ def pytest_configure(config: "pytest.Config") -> None:
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--fast",
+        "--fast2",
         action="store_true",
         help="Don't run all test, but a representative set",
     )

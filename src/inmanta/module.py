@@ -2438,15 +2438,21 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
-    def _list_python_files(self, plugin_dir: str) -> Iterator[str]:
+    def _list_python_files(self, plugin_dir: str) -> list[str]:
         """Generate a list of all python files"""
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-            yield file_name
+        files: Dict[str, str] = {}
 
         for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
             # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
             if "__pycache__" not in file_name:
-                yield file_name
+                files[file_name[:-3]] = file_name
+
+        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
+            # store the python source file if we do not have a python file
+            if file_name[:-2] not in files:
+                files[file_name[:-2]] = file_name
+
+        return list(files.values())
 
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """

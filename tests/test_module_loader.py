@@ -784,3 +784,63 @@ def test_module_conflicting_dependencies_with_v1_module(
         assert "Incompatibility between constraint y" in e.value.args[0]
     else:
         assert "requirements conflicts were found" in e.value.args[0]
+
+
+async def test_loading_source_and_bytecode(
+    server,
+    environment,
+    snippetcompiler,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """The goal of this test is to verify that the exporter does not load both python and pyc files"""
+    python_code = """
+from inmanta.resources import Resource, resource
+
+@resource("modulev1::Test", agent="agent", id_attribute="name")
+class Test(Resource):
+    fields = ("name", "agent")
+    """
+
+    model_code = """
+    entity Test:
+        string name
+        string agent
+    end
+
+    implement Test using std::none
+    """
+
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_name="modulev1",
+        new_content_init_cf=model_code,
+        new_content_init_py=python_code,
+    )
+
+    plugins_dir: str = os.path.join(module_path, "plugins")
+    init_py_file: str = os.path.join(plugins_dir, "__init__.py")
+    py_compile.compile(file=init_py_file, cfile=init_py_file + "c", doraise=True)
+
+    snippetcompiler.setup_for_snippet(
+        "import modulev1\nmodulev1::Test(name='abc', agent='def')",
+        add_to_module_path=[str(tmpdir)],
+    )
+    await snippetcompiler.do_export_and_deploy(do_raise=False)
+
+    code_manager = loader.CodeManager()
+    for type_name, resource_definition in resources.resource.get_resources():
+        code_manager.register_code(type_name, resource_definition)
+
+    module_code = False
+    for name, source_info in code_manager.get_types():
+        for info in source_info:
+            if info.module_name == "inmanta_plugins.modulev1":
+                module_code = True
+                assert info.path[-4:] == ".pyc"
+
+    assert module_code
