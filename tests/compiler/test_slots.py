@@ -133,10 +133,11 @@ def create_instance(cls: Type[T]) -> T:
                 return create_instance(annotation)
         return DummyArgument()
 
-    args: Iterator[object] = (
-        create_argument(parameter.annotation) for name, parameter in inspect.signature(cls).parameters.items()
-    )
-    return cls(*args)
+    kwargs: dict[str, object] = {
+        name: create_argument(parameter.annotation) for name, parameter in inspect.signature(cls).parameters.items()
+    }
+    print(cls.__name__)
+    return cls(**kwargs)
 
 
 class DummyArgument:
