@@ -411,3 +411,25 @@ test = a.optional
     # (until #2793 has been implemented).
     # As a result this snippet is likely to fail without gradual execution for `is defined`.
     compiler.do_compile()
+
+
+def test_is_defined_below_null(snippetcompiler):
+    """
+    Verify behavior for `is defined` on a.b.c if a.b itself is not defined.
+    """
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+A.other [0:1] -- A
+implement A using std::none
+
+a = A(other=null)
+
+isdef = a.other.other is defined
+        """,
+        shouldbe=(
+            "Optional variable accessed that has no value (attribute `__config__::A.other` of `__config__::A (instantiated at"
+            " {dir}/main.cf:7)`) (reported in a.other.other ({dir}/main.cf:9))"
+        ),
+    )
