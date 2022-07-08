@@ -427,6 +427,8 @@ class ModuleSource(Generic[TModule]):
         module_name: str = self._get_module_name(module_spec)
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
         if installed is None and install:
+            source = f"from {project.downloadpath}" if self.GENERATION == "1" else ""
+            LOGGER.debug(f"Installing module {module_name} (v{self.GENERATION}) version {self.version} {source}.")
             return self.install(project, module_spec)
         return installed
 
