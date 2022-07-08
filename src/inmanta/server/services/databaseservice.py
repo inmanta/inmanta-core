@@ -121,4 +121,3 @@ class DatabaseService(protocol.ServerSlice):
     async def _purge_agent_processes(self) -> None:
         agent_processes_to_keep = opt.agent_processes_to_keep.get()
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
-
