@@ -289,7 +289,7 @@ class VariableReferenceHook(RawResumer):
         """
         Fetches the variable when it's available and calls variable resumer.
         """
-        variable: ResultVariable[object]
+        variable: VariableABC[object]
         if self.instance is not None:
             # get the Instance
             instance_requires: dict[object, object] = {}
@@ -297,7 +297,7 @@ class VariableReferenceHook(RawResumer):
             for k, v in requires.items():
                 try:
                     instance_requires[k] = v.get_value()
-                except OptionalValueException if self.propagate_unset else ():
+                except (OptionalValueException,) if self.propagate_unset else ():
                     unset = v
                     break
             if unset is not None:

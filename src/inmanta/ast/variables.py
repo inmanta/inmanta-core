@@ -90,7 +90,7 @@ class Reference(ExpressionStatement):
         return requires
 
     def execute(
-        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
     ) -> object:
         super().execute(requires, resolver, queue)
         return requires[self.name]
@@ -175,12 +175,6 @@ class VariableReader(VariableResumer, Generic[T]):
             variable.listener(self.resultcollector, self.owner.location)
         self.target.connect(variable)
 
-    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
-
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
-
 
 class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     """
@@ -231,6 +225,12 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
             return True
         except OptionalValueException:
             return False
+
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
 
 class AttributeReference(Reference):

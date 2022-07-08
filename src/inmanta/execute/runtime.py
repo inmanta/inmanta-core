@@ -176,7 +176,7 @@ class WrappedValueVariable(VariableABC[T]):
 
     def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         if not isinstance(self.value, NoneValue):
-            resultcollector.receive_result(self.value)
+            resultcollector.receive_result(self.value, location)
 
     def waitfor(self, waiter: "Waiter") -> None:
         waiter.ready(self)
@@ -297,12 +297,12 @@ class ResultVariableProxy(VariableABC[T]):
 
     __slots__ = ("variable", "_listeners", "_waiters")
 
-    def __init__(self, variable: Optional[ResultVariable[T]] = None) -> None:
-        self.variable: Optional[ResultVariable[T]] = variable
+    def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
+        self.variable: Optional[VariableABC[T]] = variable
         self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
         self._waiters: Optional[list["Waiter"]] = []
 
-    def connect(self, variable: ResultVariable[T]) -> None:
+    def connect(self, variable: VariableABC[T]) -> None:
         """
         Connect this proxy to a variable. A proxy can only be connected to a single variable.
         """
@@ -334,7 +334,7 @@ class ResultVariableProxy(VariableABC[T]):
     def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         if self.variable is None:
             assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
-            self._listeners += resultcollector
+            self._listeners.append((resultcollector, location))
         else:
             self.variable.listener(resultcollector, location)
 
