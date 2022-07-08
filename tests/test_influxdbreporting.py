@@ -20,7 +20,7 @@ import re
 
 import pytest
 import tornado
-from pyformance import gauge, timer
+from pyformance import gauge, global_registry, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
@@ -159,3 +159,24 @@ async def test_timing():
     await asyncio.sleep(0.01)
     assert mr.count == base + 1
     mr.stop()
+
+
+async def test_available_metrics(server):
+    metrics = global_registry().dump_metrics()
+    assert metrics["db.connected"]
+    assert "db.max_pool" in metrics
+    assert "db.open_connections" in metrics
+    assert "db.free_connections" in metrics
+    assert "self.spec.cpu" in metrics
+
+    # ensure it doesn't crash when the server is down
+    await server.stop()
+    metrics = global_registry().dump_metrics()
+
+    assert metrics["db.max_pool"] == 0
+    assert not metrics["db.connected"]
+
+
+async def test_safeness_if_server_down():
+    # ensure it works is there is no server
+    global_registry().dump_metrics()
