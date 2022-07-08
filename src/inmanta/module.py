@@ -2033,13 +2033,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if self.strict_deps_check:
             constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-            try:
-                env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
-            except env.ConflictingRequirements as e:
-                message: str = "Module dependency resolution conflict: a module dependency constraint \
-    was violated by another module. This most likely indicates an incompatibility between \
-    two or more of the installed modules."
-                raise env.ConflictingRequirements(message, e.conflicts)
+            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
                 raise CompilerException(

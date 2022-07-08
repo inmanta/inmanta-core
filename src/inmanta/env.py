@@ -82,17 +82,70 @@ class VersionConflict:
 
 
 class ConflictingRequirements(CompilerException):
+    """
+    Conflict reporting
+
+    Can be used in two ways:
+    - if we don't know the exact conflicts (detected by e.g. pip), the messages is used
+    - if we have detailed conflict info, the message is derived from it
+
+    """
+
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
-        CompilerException.__init__(self, msg=self.get_msg(message, conflicts))
+
+        CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
-    @classmethod
-    def get_msg(cls, message: str, conflicts: Optional[Set[VersionConflict]]) -> str:
-        msg: str = message
-        if conflicts is not None:
-            for current_conflict in sorted(conflicts, key=lambda x: x.requirement.key):
-                msg += f"\n\t* {current_conflict}"
+    def get_message(self) -> str:
+        # The message has three potential parts
+        # First the advices, derived from the conflicts, if present
+        # Then the message, if present
+        # Then the individual conflicts, if present
+        out = []
+
+        advices = self.get_advice()
+        if advices:
+            out.append(advices)
+
+        if self.msg:
+            out.append(self.msg)
+
+        conflicts = self.get_conflicts_string()
+        if conflicts:
+            out.append(conflicts)
+
+        return "\n".join(out)
+
+    def get_conflicts_string(self) -> Optional[str]:
+        if not self.conflicts:
+            return None
+        msg = ""
+        for current_conflict in sorted(self.conflicts, key=lambda x: x.requirement.key):
+            msg += f"\n\t* {current_conflict}"
         return msg
+
+    def has_missing(self) -> bool:
+        """Does the set of conflicts contain any missing dependency?"""
+        if not self.conflicts:
+            return False
+        return any(conflict.installed_version is None for conflict in self.conflicts)
+
+    def get_advice(self) -> Optional[str]:
+        """
+        Derive an end-user centric message from the conflicts
+        """
+        if self.conflicts is None:
+            return None
+        if self.has_missing():
+            return "Not all required python packages are installed run 'inmanta project install' to resolve this"
+        else:
+            return (
+                "A dependency conflict exists, this is either because some modules are stale, incompatible "
+                "or because pip can not find a correct combination of packages. To resolve this, "
+                "first try `inmanta project update` to ensure no modules are stale. "
+                "Second, try adding additional constraints to the requirements.txt file of "
+                "the inmanta project to help pip resolve this problem. After every change, run `inmanta project update`"
+            )
 
 
 class PythonWorkingSet:
@@ -738,8 +791,7 @@ class ActiveEnv(PythonEnvironment):
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements(
-                "The following conflicting requirements exist. Add additional constraints to the requirements.txt file of "
-                "the inmanta project to resolve this problem.",
+                "",  # The exception has a detailed list of constraint_violations, so it can make its own message
                 constraint_violations_strict,
             )
 
