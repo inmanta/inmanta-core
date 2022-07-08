@@ -97,7 +97,7 @@ class DatabaseService(protocol.ServerSlice):
 
         return status
 
-    def start_monitor(self):
+    def start_monitor(self) -> None:
         """Attach to monitoring system"""
         gauge(
             "db.connected",
