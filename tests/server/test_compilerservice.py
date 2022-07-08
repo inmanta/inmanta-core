@@ -526,6 +526,71 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
 
 
 @pytest.mark.slowtest
+async def test_server_partial_compile(server, client, environment, monkeypatch):
+    """
+    Test a partial_compile on the server
+    """
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write("")
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    remote_id1 = uuid.uuid4()
+
+    async def wait_for_report() -> bool:
+        report = await client.get_report(compile_id)
+        if report.code != 200:
+            return False
+        return report.result["report"]["completed"] is not None
+
+    def verify_command_report(report: dict, expected: str) -> bool:
+        """
+        verify that the expected string is present in the command field of the 'Recompiling configuration model' report
+        """
+        reports = report.result["report"]["reports"]
+        report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
+        return expected in report["command"]
+
+    # # Do a compile
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert not verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile with removed resource_sets
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
+
+
+@pytest.mark.slowtest
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
