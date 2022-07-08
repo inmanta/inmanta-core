@@ -20,7 +20,16 @@ from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import Anchor, DirectExecuteException, Location, Named, Namespace, Namespaced, OptionalValueException, RuntimeException
+from inmanta.ast import (
+    Anchor,
+    DirectExecuteException,
+    Location,
+    Named,
+    Namespace,
+    Namespaced,
+    OptionalValueException,
+    RuntimeException,
+)
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -30,7 +39,6 @@ from inmanta.execute.runtime import (
     RawUnit,
     Resolver,
     ResultCollector,
-    ResultVariable,
     ResultVariable,
     Typeorvalue,
     VariableABC,
@@ -296,9 +304,7 @@ class VariableReferenceHook(RawResumer):
                 variable = unset
             else:
                 # all requires are present, execute instance
-                instance: object = self.instance.execute(
-                    instance_requires, resolver, queue
-                )
+                instance: object = self.instance.execute(instance_requires, resolver, queue)
 
                 if isinstance(instance, list):
                     raise RuntimeException(
@@ -332,7 +338,11 @@ class VariableReferenceHook(RawResumer):
 
     def __repr__(self) -> str:
         return "%s(%r, %s, %r, propagate_unset=%r)" % (
-            self.__class__.__name__, self.instance, self.name, self.variable_resumer, self.propagate_unset
+            self.__class__.__name__,
+            self.instance,
+            self.name,
+            self.variable_resumer,
+            self.propagate_unset,
         )
 
 

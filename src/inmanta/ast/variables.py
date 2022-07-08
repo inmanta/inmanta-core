@@ -31,7 +31,15 @@ from inmanta.ast.statements import (
 )
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
-from inmanta.execute.runtime import QueueScheduler, RawUnit, Resolver, ResultCollector, ResultVariable, ResultVariableProxy, VariableABC
+from inmanta.execute.runtime import (
+    QueueScheduler,
+    RawUnit,
+    Resolver,
+    ResultCollector,
+    ResultVariable,
+    ResultVariableProxy,
+    VariableABC,
+)
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
@@ -64,7 +72,9 @@ class Reference(ExpressionStatement):
     def requires(self) -> List[str]:
         return [self.full_name]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> Dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
@@ -79,7 +89,9 @@ class Reference(ExpressionStatement):
         requires[self.name] = var
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> object:
+    def execute(
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> object:
         super().execute(requires, resolver, queue)
         return requires[self.name]
 
@@ -249,11 +261,18 @@ class AttributeReference(Reference):
     def requires(self) -> List[str]:
         return self.instance.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False) -> Dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> Dict[object, VariableABC]:
         return self.requires_emit_gradual(resolver, queue, None, propagate_unset=propagate_unset)
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector], *, propagate_unset: bool = False
+        self,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        resultcollector: Optional[ResultCollector],
+        *,
+        propagate_unset: bool = False,
     ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
