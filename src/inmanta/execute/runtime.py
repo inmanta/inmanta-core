@@ -293,6 +293,7 @@ class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
     variables without resolving the right hand side at the time of assignment.
+    This class does not support setting values or related operations such as acquiring progression promises.
     """
 
     __slots__ = ("variable", "_listeners", "_waiters")
