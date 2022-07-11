@@ -242,8 +242,9 @@ b1.a = a1
 b1.a = c1.a
 """
     )
-    with pytest.raises(OptionalValueException):
+    with pytest.raises(AttributeException) as exc_info:
         (_, scopes) = compiler.do_compile()
+    assert any(isinstance(cause, OptionalValueException) for cause in exc_info.value.get_causes())
 
 
 def test_608_opt_to_single(snippetcompiler):
@@ -282,8 +283,9 @@ b1.a = a1
 b1.a = c1.a
 """
     )
-    with pytest.raises(OptionalValueException):
+    with pytest.raises(AttributeException) as exc_info:
         (_, scopes) = compiler.do_compile()
+    assert any(isinstance(cause, OptionalValueException) for cause in exc_info.value.get_causes())
 
 
 def test_608_opt_to_single_2(snippetcompiler):
