@@ -1936,6 +1936,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:
                 module = self.module_source_v1.get_module(self, module_reqs, install=install_v1)
+            module.log_install_information(self, module_name)
         except InvalidModuleException:
             raise
         except env.ConflictingRequirements:
@@ -2279,6 +2280,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
         return reqs
+
+    def log_install_information(self, project: "Project", module_name: str) -> None:
+        """
+        Display information about this module's installation
+        :param project: The project associated with the module.
+        """
+        source = f"from {project.downloadpath}" if self.GENERATION == ModuleGeneration.V1 else ""
+        LOGGER.debug(f"Installing module {module_name} (v{self.GENERATION.value}) version {self.version} {source}.")
 
     @classmethod
     def get_module_dir(cls, module_subdirectory: str) -> str:
