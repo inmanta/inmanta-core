@@ -436,6 +436,7 @@ def test_project_install(
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names]
         + ["lorem"],
         install_project=False,
+        strict_deps_check=True,
     )
 
     with pytest.raises(
