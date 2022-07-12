@@ -609,7 +609,7 @@ implement std::Resource using std::none
 
 async def test_resource_removed_in_diff(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     """
-    Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
+    When a partial export is done on a set but the set is still present in the resources an exception should be raised.
     """
 
     async def export_model(
@@ -686,7 +686,7 @@ std::ResourceSet(name="resource_set_2", resources=[b])
     )
 
     with pytest.raises(Exception) as e:
-        # Partial compile
+        # Partial compile with error
         await export_model(
             model="""
         entity Res extends std::Resource:
@@ -703,4 +703,26 @@ std::ResourceSet(name="resource_set_2", resources=[b])
         )
     assert str(e.value).startswith(
         "Following resource sets are present in the removed resource sets and in the resources that are exported: {'resource_set_1'}"
+    )
+
+    # If the set does exist in the list but it is empty, there's no need to reject it.
+    await export_model(
+        model="""
+    entity Res extends std::Resource:
+        string name
+    end
+
+    implement Res using std::none
+
+    b = Res(name="the_resource_b")
+    std::ResourceSet(name="resource_set_1", resources=[])
+    std::ResourceSet(name="resource_set_2", resources=[b])
+    """,
+        partial_compile=True,
+        resource_sets_to_remove=["resource_set_1"],
+    )
+    await assert_resource_set_assignment(
+        assignment={
+            "the_resource_b": "resource_set_2",
+        }
     )
