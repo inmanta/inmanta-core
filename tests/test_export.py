@@ -31,61 +31,6 @@ from inmanta.export import DependencyCycleException
 from utils import LogSequence, v1_module_from_template
 
 
-async def export_model(
-    tmpdir,
-    modules_dir,
-    snippetcompiler,
-    model: str,
-    partial_compile: bool,
-    resource_sets_to_remove: Optional[List[str]] = None,
-) -> None:
-    init_py = """
-from inmanta.resources import (
-Resource,
-resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-fields = ("name",)
-"""
-
-    module_name: str = "minimalv1module"
-    module_path: str = str(tmpdir.join("modulev1"))
-    if os.path.exists(module_path):
-        shutil.rmtree(module_path)
-    v1_module_from_template(
-        os.path.join(modules_dir, module_name),
-        module_path,
-        new_content_init_cf=model,
-        new_content_init_py=init_py,
-        new_name="modulev1",
-    )
-
-    snippetcompiler.setup_for_snippet(
-        """
-import modulev1
-        """,
-        add_to_module_path=[str(tmpdir)],
-    )
-    await snippetcompiler.do_export_and_deploy(
-        partial_compile=partial_compile,
-        resource_sets_to_remove=resource_sets_to_remove,
-    )
-
-
-async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]], environment) -> None:
-    """
-    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
-
-    :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
-                       belong to.
-    """
-    resources = await Resource.get_resources_in_latest_version(environment=environment)
-    assert len(resources) == len(assignment)
-    actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
-    assert actual_assignment == assignment
-
-
 def test_id_mapping_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """import exp
@@ -479,11 +424,58 @@ async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environme
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
 
+    async def export_model(
+        model: str,
+        partial_compile: bool,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ) -> None:
+        init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+
+        module_name: str = "minimalv1module"
+        module_path: str = str(tmpdir.join("modulev1"))
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        v1_module_from_template(
+            os.path.join(modules_dir, module_name),
+            module_path,
+            new_content_init_cf=model,
+            new_content_init_py=init_py,
+            new_name="modulev1",
+        )
+
+        snippetcompiler.setup_for_snippet(
+            """
+    import modulev1
+            """,
+            add_to_module_path=[str(tmpdir)],
+        )
+        await snippetcompiler.do_export_and_deploy(
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
+
+    async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]]) -> None:
+        """
+        Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+
+        :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
+                           belong to.
+        """
+        resources = await Resource.get_resources_in_latest_version(environment=environment)
+        assert len(resources) == len(assignment)
+        actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+        assert actual_assignment == assignment
+
     # Full compile
     await export_model(
-        tmpdir,
-        modules_dir,
-        snippetcompiler,
         model="""
 entity Res extends std::Resource:
     string name
@@ -511,15 +503,11 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_z": None,
-        },
-        environment=environment,
+        }
     )
 
     # Partial compile
     await export_model(
-        tmpdir,
-        modules_dir,
-        snippetcompiler,
         model="""
     entity Res extends std::Resource:
         string name
@@ -544,8 +532,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_e": "resource_set_3",
             "the_resource_f": "resource_set_4",
             "the_resource_z": None,
-        },
-        environment=environment,
+        }
     )
 
 
@@ -626,11 +613,58 @@ async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmp
     that doesn't have any resources associated
     """
 
+    async def export_model(
+        model: str,
+        partial_compile: bool,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ) -> None:
+        init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+
+        module_name: str = "minimalv1module"
+        module_path: str = str(tmpdir.join("modulev1"))
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        v1_module_from_template(
+            os.path.join(modules_dir, module_name),
+            module_path,
+            new_content_init_cf=model,
+            new_content_init_py=init_py,
+            new_name="modulev1",
+        )
+
+        snippetcompiler.setup_for_snippet(
+            """
+    import modulev1
+            """,
+            add_to_module_path=[str(tmpdir)],
+        )
+        await snippetcompiler.do_export_and_deploy(
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
+
+    async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]]) -> None:
+        """
+        Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+
+        :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
+                           belong to.
+        """
+        resources = await Resource.get_resources_in_latest_version(environment=environment)
+        assert len(resources) == len(assignment)
+        actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+        assert actual_assignment == assignment
+
     # Full compile
     await export_model(
-        tmpdir,
-        modules_dir,
-        snippetcompiler,
         model="""
 entity Res extends std::Resource:
     string name
@@ -658,15 +692,11 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_z": None,
-        },
-        environment=environment,
+        }
     )
 
     # Partial compile
     await export_model(
-        tmpdir,
-        modules_dir,
-        snippetcompiler,
         model="""
     entity Res extends std::Resource:
         string name
@@ -690,6 +720,5 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_c2": "resource_set_1",
             "the_resource_f": "resource_set_4",
             "the_resource_z": None,
-        },
-        environment=environment,
+        }
     )
