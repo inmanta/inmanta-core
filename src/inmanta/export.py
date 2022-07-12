@@ -380,6 +380,13 @@ class Exporter(object):
             self.failed = True
             LOGGER.warning("Compilation of model failed.")
 
+        intersection: set[str] = set(self._resource_sets.values()).intersection(set(resource_sets_to_remove))
+        if intersection:
+            raise Exception(
+                "Following resource sets are present in the removed resource sets and in the resources that are exported: %s"
+                % intersection
+            )
+
         if not self.failed:
             if export_plugin is not None:
                 # Run export plugin specified on CLI
