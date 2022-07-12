@@ -685,18 +685,22 @@ std::ResourceSet(name="resource_set_2", resources=[b])
         }
     )
 
-    # Partial compile
-    await export_model(
-        model="""
-    entity Res extends std::Resource:
-        string name
-    end
+    with pytest.raises(Exception) as e:
+        # Partial compile
+        await export_model(
+            model="""
+        entity Res extends std::Resource:
+            string name
+        end
 
-    implement Res using std::none
+        implement Res using std::none
 
-    a = Res(name="the_resource_a")
-    std::ResourceSet(name="resource_set_1", resources=[a])
-            """,
-        partial_compile=True,
-        resource_sets_to_remove=["resource_set_1"],
+        a = Res(name="the_resource_a")
+        std::ResourceSet(name="resource_set_1", resources=[a])
+                """,
+            partial_compile=True,
+            resource_sets_to_remove=["resource_set_1"],
+        )
+    assert str(e.value).startswith(
+        "Following resource sets are present in the removed resource sets and in the resources that are exported: {'resource_set_1'}"
     )
