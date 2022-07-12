@@ -702,7 +702,8 @@ std::ResourceSet(name="resource_set_2", resources=[b])
             resource_sets_to_remove=["resource_set_1"],
         )
     assert str(e.value).startswith(
-        "Following resource sets are present in the removed resource sets and in the resources that are exported: {'resource_set_1'}"
+        "Following resource sets are present in the removed resource sets and in "
+        "the resources that are exported: {'resource_set_1'}"
     )
 
     # If the set does exist in the list but it is empty, there's no need to reject it.
