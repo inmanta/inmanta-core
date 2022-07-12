@@ -451,8 +451,9 @@ class PythonEnvironment:
         with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as process:
             out = cast(asyncio.StreamReader, process.stdout)
             LOGGER.debug(out.read())
+
         if process.returncode:
-            raise Exception(f"Command {cmd} failed: process exited with return code {process.returncode}")
+            raise CalledProcessError(f"Command {cmd} failed: process exited with return code {process.returncode}")
 
 
 @contextlib.contextmanager
