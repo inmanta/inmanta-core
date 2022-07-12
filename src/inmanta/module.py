@@ -2285,6 +2285,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Display information about this module's installation
         :param project: The project associated with the module.
+        :param module_name: The module's name.
         """
         source = f"from {project.downloadpath}" if self.GENERATION == ModuleGeneration.V1 else ""
         LOGGER.debug(f"Installing module {module_name} (v{self.GENERATION.value}) version {self.version} {source}.")
