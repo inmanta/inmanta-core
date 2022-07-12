@@ -1,0 +1,5 @@
+description: Fix failing test cases.
+change-type: patch
+destination-branches: [iso5]
+sections:
+  bugfix: "{{description}}"

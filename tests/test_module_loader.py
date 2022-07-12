@@ -716,7 +716,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
     if strict_deps_check:
         with pytest.raises(ConflictingRequirements) as e:
             project.install_modules()
-        assert msg in e.value.args[0]
+        assert msg in e.value.get_message()
     else:
         # The version conflict is present in a transitive dependency, so without strict_deps_check enabled,
         # only a warning message will be logged.
@@ -786,6 +786,6 @@ def test_module_conflicting_dependencies_with_v1_module(
         # The version conflict is present in a direct dependency, so this always results in an error.
         project.install_modules()
     if strict_deps_check:
-        assert "Incompatibility between constraint y" in e.value.args[0]
+        assert "Incompatibility between constraint y" in e.value.get_message()
     else:
-        assert "requirements conflicts were found" in e.value.args[0]
+        assert "requirements conflicts were found" in e.value.get_message()
