@@ -325,7 +325,7 @@ class PythonEnvironment:
                 constraints_files=constraints_files,
                 requirements_files=requirements_files,
             )
-            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
+            self._run_command_and_stream_output(cmd)
         except CalledProcessError as e:
             stderr: str = e.stderr.decode()
             not_found: List[str] = [
@@ -422,6 +422,7 @@ class PythonEnvironment:
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
 
+
     @classmethod
     def _run_command_and_log_output(
         cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
@@ -445,6 +446,14 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
+    @classmethod
+    def _run_command_and_stream_output(
+        cls, cmd: List[str], env: Optional[Dict[str, str]] = None
+    ) -> None:
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as process:
+            LOGGER.debug(process.stdout.read())
+        if process.returncode:
+            raise Exception(f"Command {cmd} failed: process exited with return code {process.returncode}")
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
