@@ -19,7 +19,8 @@ import logging
 from typing import Dict, List, cast
 
 from inmanta import data
-from inmanta.protocol import handle, methods
+from inmanta.data import model
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
@@ -109,3 +110,16 @@ class CodeService(protocol.ServerSlice):
                 sources[code_hash] = (file_name, module, "", req)
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
+
+    @handle(methods_v2.get_source_code, env="tid")
+    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> List[model.Source]:
+        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
+        if code is None:
+            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+
+        sources = []
+        if code.source_refs is not None:
+            for code_hash, (file_name, module, requires) in code.source_refs.items():
+                sources.append(model.Source(hash=code_hash, file_name=file_name, module_name=module, requirements=requires))
+
+        return sources

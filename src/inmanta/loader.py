@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import base64
 import hashlib
 import importlib
 import inspect
@@ -28,10 +29,13 @@ from dataclasses import dataclass
 from importlib.abc import FileLoader, Finder
 from importlib.machinery import SourcelessFileLoader
 from itertools import chain, starmap
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import const
 from inmanta.stable_api import stable_api
+
+if TYPE_CHECKING:
+    from inmanta import protocol
 
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
@@ -168,8 +172,9 @@ class CodeManager(object):
 @dataclass(frozen=True)
 class ModuleSource:
     name: str
-    source: bytes
     hash_value: str
+    source: Optional[bytes] = None
+    _client: Optional["protocol.SyncClient"] = None
 
     def is_bytecode(self) -> bool:
         try:
@@ -178,6 +183,17 @@ class ModuleSource:
             return False
         except Exception:
             return True
+
+    def fetch_source_code(self) -> bytes:
+        """Load the source code"""
+        if self._client is None:
+            raise Exception("_client should be set to use this method.")
+
+        response: protocol.Result = self._client.get_file(self.hash_value)
+        if response.code != 200 or response.result is None:
+            raise Exception(f"Failed to fetch code for {self.name} with hash {self.hash_value}.")
+
+        return base64.b64decode(response.result["content"])
 
 
 class CodeLoader(object):
@@ -265,9 +281,14 @@ class CodeLoader(object):
                 # creating the pyc to keep the structure clean
                 os.remove(os.path.join(module_dir, "__init__.py"))
 
+            if module_source.source is not None:
+                source_code = module_source.source
+            else:
+                source_code = module_source.fetch_source_code()
+
             # write the new source
             with open(source_file, "wb+") as fd:
-                fd.write(module_source.source)
+                fd.write(source_code)
             return True
         else:
             LOGGER.debug(
@@ -506,13 +527,14 @@ class PluginModuleFinder(Finder):
         if relative_path == "":
             return ""
         for module_path in self._modulepaths:
-            path_to_module = find_module(module_path, extension="py")
+            path_to_module = find_module(module_path, extension="pyc")
 
             if path_to_module is not None:
                 return path_to_module
 
             # try the byte code only version
-            path_to_module = find_module(module_path, extension="pyc")
+            path_to_module = find_module(module_path, extension="py")
+
             if path_to_module is not None:
                 return path_to_module
 

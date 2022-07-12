@@ -15,17 +15,19 @@
 
     Contact: code@inmanta.com
 """
+import concurrent
 import inspect
 import logging
 import socket
 import uuid
 from asyncio import CancelledError, sleep
 from collections import defaultdict
+from concurrent.futures import Future
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
 
-from tornado import ioloop
+from tornado import concurrent, ioloop
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -392,10 +394,50 @@ class SyncClient(object):
     A synchronous client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name: str, timeout: int = 120) -> None:
-        self.name = name
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        timeout: int = 120,
+        client: Optional[Client] = None,
+        ioloop: Optional[ioloop.IOLoop] = None,
+    ) -> None:
+        if name is None and client is None:
+            raise Exception("Either name or client needs to be provided.")
+
         self.timeout = timeout
-        self._client = Client(self.name, self.timeout)
+        self._ioloop = ioloop
+        if client is None:
+            self.name = name
+            self._client = Client(name, self.timeout)
+        else:
+            self.name = client.name
+            self._client = client
+
+    def run_sync(self, func):
+        """
+        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
+
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
+        """
+        f = Future()
+
+        # This function is not typed because of generics, the used methods and currying
+        def run() -> None:
+            try:
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+
+                    result = convert_yielded(result)
+                    concurrent.chain_future(result, f)
+            except Exception as e:
+                f.set_exception(e)
+
+        self._ioloop.add_callback(run)
+
+        return f.result()
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
@@ -405,7 +447,9 @@ class SyncClient(object):
                 return method(*args, **kwargs)
 
             try:
-                return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                if self._ioloop is None:
+                    return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                return self.run_sync(method_call)
             except TimeoutError:
                 raise ConnectionRefusedError()
 

@@ -41,9 +41,10 @@ from inmanta.agent.handler import ResourceHandler, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
+from inmanta.data import model
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
-from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future
@@ -1201,21 +1202,20 @@ class Agent(SessionEndpoint):
                 # clear cache, for retry on failure
                 self._last_loaded[rt] = -1
 
-                result: protocol.Result = await self._client.get_code(environment, version, rt)
+                result: protocol.Result = await self._client.get_source_code(environment, version, rt)
                 if result.code == 200 and result.result is not None:
                     try:
+                        sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
-                        modules = []
-                        for hash_value, (path, name, _, requires) in result.result["sources"].items():
-                            # We do not use the provided source because this might break any binary or non-utf8 content
-                            response: protocol.Result = await self._client.get_file(hash_value)
-                            if response.code != 200 or response.result is None:
-                                raise Exception(f"Failed to fetch code for {name}: {path}.")
-                            modules.append(
-                                (ModuleSource(name, base64.b64decode(response.result["content"]), hash_value), requires)
+                        requirements = set()
+                        sources = []
+                        for source in result.result["data"]:
+                            sources.append(
+                                ModuleSource(name=source["module_name"], hash_value=source["hash"], _client=sync_client)
                             )
+                            requirements.update(source["requirements"])
 
-                        await self._install(modules)
+                        await self._install(sources, list(requirements))
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
@@ -1224,15 +1224,14 @@ class Agent(SessionEndpoint):
 
         return failed_to_load
 
-    async def _install(self, modules: List[Tuple[ModuleSource, List[str]]]) -> None:
+    async def _install(self, sources: list[ModuleSource], requirements: Sequence[str]) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
             loop = asyncio.get_event_loop()
-            for module, module_requires in modules:
-                await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires)
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
+            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:
