@@ -36,7 +36,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, module_from_template
+from utils import PipIndex, module_from_template, log_contains
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -391,11 +391,14 @@ def test_project_install(
     snippetcompiler_clean,
     install_module_names: List[str],
     module_dependencies: List[str],
+    caplog
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
+    caplog.set_level(logging.DEBUG)
+
     fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
@@ -422,6 +425,13 @@ def test_project_install(
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
+
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.DEBUG,
+        "'Installing module minimalv2module (v2) version 1.2.3.'",
+    )
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
