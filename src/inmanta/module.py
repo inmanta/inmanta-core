@@ -428,7 +428,8 @@ class ModuleSource(Generic[TModule]):
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
         if installed is None and install:
             installed = self.install(project, module_spec)
-            installed.log_install_information(project, module_name)
+            if installed is not None:
+                installed.log_install_information(project, module_name)
 
         return installed
 

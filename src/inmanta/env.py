@@ -34,10 +34,11 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar, cast
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
+import asyncio
 
 from inmanta import const
 from inmanta.ast import CompilerException
@@ -451,7 +452,8 @@ class PythonEnvironment:
         cls, cmd: List[str], env: Optional[Dict[str, str]] = None
     ) -> None:
         with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as process:
-            LOGGER.debug(process.stdout.read())
+            out = cast(asyncio.StreamReader, process.stdout)
+            LOGGER.debug(out.read())
         if process.returncode:
             raise Exception(f"Command {cmd} failed: process exited with return code {process.returncode}")
 
