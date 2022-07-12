@@ -419,7 +419,7 @@ def test_active_env_check_basic(
             else:
                 with pytest.raises(env.ConflictingRequirements) as e:
                     env.ActiveEnv.check(in_scope)
-                assert expect[1] in e.value.msg
+                assert expect[1] in e.value.get_message()
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
