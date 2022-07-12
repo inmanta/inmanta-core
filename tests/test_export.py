@@ -31,6 +31,20 @@ from inmanta.export import DependencyCycleException
 from utils import LogSequence, v1_module_from_template
 
 
+async def assert_resource_set_assignment(environment, assignment: Dict[str, Optional[str]]) -> None:
+    """
+    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+
+    :param environment
+    :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
+                       belong to.
+    """
+    resources = await Resource.get_resources_in_latest_version(environment=environment)
+    assert len(resources) == len(assignment)
+    actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+    assert actual_assignment == assignment
+
+
 def test_id_mapping_export(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """import exp
@@ -462,18 +476,6 @@ class Res(Resource):
             resource_sets_to_remove=resource_sets_to_remove,
         )
 
-    async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]]) -> None:
-        """
-        Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
-
-        :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
-                           belong to.
-        """
-        resources = await Resource.get_resources_in_latest_version(environment=environment)
-        assert len(resources) == len(assignment)
-        actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
-        assert actual_assignment == assignment
-
     # Full compile
     await export_model(
         model="""
@@ -496,6 +498,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         partial_compile=False,
     )
     await assert_resource_set_assignment(
+        environment,
         assignment={
             "the_resource_a": "resource_set_1",
             "the_resource_b": "resource_set_2",
@@ -503,7 +506,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_z": None,
-        }
+        },
     )
 
     # Partial compile
@@ -525,6 +528,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         resource_sets_to_remove=["resource_set_2"],
     )
     await assert_resource_set_assignment(
+        environment,
         assignment={
             "the_resource_a": "resource_set_1",
             "the_resource_c2": "resource_set_1",
@@ -532,7 +536,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_e": "resource_set_3",
             "the_resource_f": "resource_set_4",
             "the_resource_z": None,
-        }
+        },
     )
 
 
@@ -651,18 +655,6 @@ class Res(Resource):
             resource_sets_to_remove=resource_sets_to_remove,
         )
 
-    async def assert_resource_set_assignment(assignment: Dict[str, Optional[str]]) -> None:
-        """
-        Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
-
-        :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
-                           belong to.
-        """
-        resources = await Resource.get_resources_in_latest_version(environment=environment)
-        assert len(resources) == len(assignment)
-        actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
-        assert actual_assignment == assignment
-
     # Full compile
     await export_model(
         model="""
@@ -685,6 +677,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         partial_compile=False,
     )
     await assert_resource_set_assignment(
+        environment,
         assignment={
             "the_resource_a": "resource_set_1",
             "the_resource_b": "resource_set_2",
@@ -692,7 +685,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_z": None,
-        }
+        },
     )
 
     # Partial compile
@@ -715,10 +708,11 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
         resource_sets_to_remove=["resource_set_2"],
     )
     await assert_resource_set_assignment(
+        environment,
         assignment={
             "the_resource_a": "resource_set_1",
             "the_resource_c2": "resource_set_1",
             "the_resource_f": "resource_set_4",
             "the_resource_z": None,
-        }
+        },
     )
