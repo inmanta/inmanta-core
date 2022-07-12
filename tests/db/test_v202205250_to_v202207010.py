@@ -49,4 +49,4 @@ async def test_added_resource_set_column(
         assert "partial" in c
         assert c["partial"] is False
         assert "removed_resource_sets" in c
-        assert c["removed_resource_sets"] is []
+        assert len(c["removed_resource_sets"]) == 0
