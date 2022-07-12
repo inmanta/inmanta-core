@@ -134,6 +134,7 @@ class Exporter(object):
 
         self._resources: ResourceDict = {}
         self._resource_sets: Dict[str, Optional[str]] = {}
+        self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -221,6 +222,8 @@ class Exporter(object):
                         str(resource_in_set),
                         str(resource_set_instance),
                     )
+            if name not in resource_sets.values():
+                self._empty_resource_sets.append(name)
         self._resource_sets: Dict[str, Optional[str]] = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
@@ -370,7 +373,7 @@ class Exporter(object):
             # then process the configuration model to submit it to the mgmt server
             # This is the actuel export : convert entities to resources.
             self._load_resources(types)
-
+            resource_sets_to_remove += self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
