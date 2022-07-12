@@ -1,5 +1,5 @@
 ---
-description: Removed resource sets are present in partial diff raises excpetion
+description: raises exception if removed resource sets are present in partial diff
 issue-nr: 4455
 issue-repo: inmanta-core
 change-type: minor
