@@ -457,6 +457,8 @@ class PythonEnvironment:
         conflicts: bool = False
         full_output: List[str] = []
 
+        assert process.stdout is not None  # Make mypy happy
+
         for line in process.stdout:
             output = line.decode()
             full_output.append(output)
