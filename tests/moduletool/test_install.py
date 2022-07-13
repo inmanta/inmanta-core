@@ -430,7 +430,7 @@ def test_project_install(
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "'Installing module minimalv2module (v2) version 1.2.3.'",
+        "Installing module minimalv2module (v2) version 1.2.3.",
     )
 
 
@@ -664,11 +664,14 @@ def test_project_install_incompatible_dependencies(
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
+    caplog
 ) -> None:
     """
     Verify that introducing version incompatibilities in the Python environment results in the appropriate exception and
     warnings.
     """
+    caplog.set_level(logging.DEBUG)
+
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
     # prepare v2 modules
