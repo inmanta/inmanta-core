@@ -339,8 +339,8 @@ class PythonEnvironment:
             if "versions have conflicting dependencies" in stderr:
                 raise ConflictingRequirements(stderr)
             raise e
-        except Exception:
-            raise
+        except Exception as e:
+            raise e
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -447,14 +447,41 @@ class PythonEnvironment:
             return output.decode()
 
     @classmethod
-    def _run_command_and_stream_output(cls, cmd: List[str], env: Optional[Dict[str, str]] = None) -> None:
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env) as process:
-            out = cast(asyncio.StreamReader, process.stdout)
-            LOGGER.debug(out.read())
+    def _run_command_and_stream_output(cls, cmd: List[str]) -> None:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
 
-        if process.returncode:
-            raise CalledProcessError(f"Command {cmd} failed: process exited with return code {process.returncode}")
+        not_found: List[str] = []
+        conflicts: bool = False
+        full_output: List[str] = []
 
+        for line in process.stdout:
+            output = line.decode()
+            full_output.append(output)
+            LOGGER.debug(output)
+
+            if "No matching distribution found for " in output:
+                # Add missing package name to not_found list
+                output.replace("No matching distribution found for ", "")
+                not_found.append(output.split(" ")[0])
+
+            if "versions have conflicting dependencies" in output:
+                conflicts = True
+
+        return_code = process.wait()
+        
+        if not_found:
+            raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+        if conflicts:
+            raise ConflictingRequirements("/n".join(full_output))
+
+
+        if return_code:
+            # TODO: not fully compatible with current implementation: i.e. exception handling in _run_pip_install_command
+            raise Exception(f"Process exited with return code {return_code}")
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
