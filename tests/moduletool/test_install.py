@@ -36,7 +36,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, module_from_template, log_contains
+from utils import PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -391,7 +391,7 @@ def test_project_install(
     snippetcompiler_clean,
     install_module_names: List[str],
     module_dependencies: List[str],
-    caplog
+    caplog,
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
@@ -664,13 +664,11 @@ def test_project_install_incompatible_dependencies(
     tmpdir: py.path.local,
     modules_dir: str,
     modules_v2_dir: str,
-    caplog
 ) -> None:
     """
     Verify that introducing version incompatibilities in the Python environment results in the appropriate exception and
     warnings.
     """
-    caplog.set_level(logging.DEBUG)
 
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
