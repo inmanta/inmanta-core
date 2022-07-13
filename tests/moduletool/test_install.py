@@ -669,7 +669,6 @@ def test_project_install_incompatible_dependencies(
     Verify that introducing version incompatibilities in the Python environment results in the appropriate exception and
     warnings.
     """
-
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
     # prepare v2 modules
