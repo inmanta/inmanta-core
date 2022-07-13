@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import asyncio
 import contextlib
 import enum
 import importlib.util
@@ -35,7 +34,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar, cast
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -472,16 +471,16 @@ class PythonEnvironment:
                 conflicts = True
 
         return_code = process.wait()
-        
+
         if not_found:
             raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
         if conflicts:
             raise ConflictingRequirements("/n".join(full_output))
 
-
         if return_code:
             # TODO: not fully compatible with current implementation: i.e. exception handling in _run_pip_install_command
             raise Exception(f"Process exited with return code {return_code}")
+
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
