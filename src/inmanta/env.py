@@ -480,8 +480,7 @@ class PythonEnvironment:
             raise ConflictingRequirements("/n".join(full_output))
 
         if return_code:
-            # TODO: not fully compatible with current implementation: i.e. exception handling in _run_pip_install_command
-            raise Exception(f"Process exited with return code {return_code}")
+            raise Exception(f"Process {cmd} exited with return code {return_code}")
 
 
 @contextlib.contextmanager
