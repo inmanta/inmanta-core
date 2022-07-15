@@ -25,7 +25,7 @@ import re
 import subprocess
 import traceback
 import uuid
-from asyncio import CancelledError, Task
+from asyncio import CancelledError, Task, shield
 from asyncio.subprocess import Process
 from collections.abc import Mapping
 from functools import partial
@@ -517,7 +517,9 @@ class CompilerService(ServerSlice):
         )
         LOGGER.info("Cleaning up compile reports that are older than %s", oldest_retained_date)
         try:
-            await data.Compile.delete_older_than(oldest_retained_date)
+            # Shield this task from cancellation to make sure locks will be released properly if the encasing task
+            # is cancelled in flight. https://github.com/inmanta/inmanta-core/issues/4384
+            await shield(data.Compile.delete_older_than(oldest_retained_date))
         except CancelledError:
             """Propagate Cancel"""
             raise
