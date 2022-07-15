@@ -18,6 +18,7 @@
 import argparse
 import logging
 import os
+import re
 import shutil
 import subprocess
 from importlib.abc import Loader
@@ -29,9 +30,10 @@ import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import const, env, loader, module
+from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
+from inmanta.env import ConflictingRequirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -432,6 +434,26 @@ def test_project_install(
         logging.DEBUG,
         "Installing module minimalv2module (v2) version 1.2.3.",
     )
+
+    # ensure we can compile
+    compiler.do_compile()
+
+    # add a dependency
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names]
+        + ["lorem"],
+        install_project=False,
+    )
+
+    with pytest.raises(
+        expected_exception=ConflictingRequirements,
+        match=re.escape("Not all required python packages are installed run 'inmanta project install' to resolve this"),
+    ):
+        # ensure we can compile
+        compiler.do_compile()
 
 
 @pytest.mark.parametrize_any("editable", [True, False])

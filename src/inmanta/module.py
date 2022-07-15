@@ -531,6 +531,13 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
+
+        # Get known requires and add them to prevent invalidating constraints through updates
+        # These could be constraints (-c) as well, but that requires additional sanitation
+        # Because for pip not every valid -r is a valid -c
+        current_requires = project.get_strict_python_requirements_as_list()
+        requirements += [Requirement.parse(r) for r in current_requires]
+
         if preinstalled is not None:
             # log warning if preinstalled version does not match constraints
             preinstalled_version: str = str(preinstalled.version)
@@ -2029,13 +2036,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         if self.strict_deps_check:
             constraints: List[Requirement] = [Requirement.parse(item) for item in self.collect_python_requirements()]
-            try:
-                env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
-            except env.ConflictingRequirements as e:
-                message: str = "Module dependency resolution conflict: a module dependency constraint \
-    was violated by another module. This most likely indicates an incompatibility between \
-    two or more of the installed modules."
-                raise env.ConflictingRequirements(message, e.conflicts)
+            env.ActiveEnv.check(strict_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*"), constraints=constraints)
         else:
             if not env.ActiveEnv.check_legacy(in_scope=re.compile(f"{ModuleV2.PKG_NAME_PREFIX}.*")):
                 raise CompilerException(

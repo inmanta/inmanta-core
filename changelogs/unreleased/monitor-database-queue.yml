@@ -1,0 +1,6 @@
+description: Add database connection metrics to the influxdb reporter
+change-type: patch
+destination-branches: [iso5, master]
+sections:
+  minor-improvement: "{{description}}"
+

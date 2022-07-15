@@ -32,6 +32,7 @@ from inmanta.ast import (
     KeyException,
     LocatableString,
     Location,
+    OptionalValueException,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
@@ -317,6 +318,11 @@ class SetAttributeHelper(ExecutionUnit):
         except AttributeException as e:
             e.set_statement(self.stmt, False)
             raise
+        except OptionalValueException as e:
+            # OptionalValueException has only its instance as statement, override with more accurate statement and location
+            e.set_statement(self.stmt, True)
+            e.location = self.stmt.location
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)

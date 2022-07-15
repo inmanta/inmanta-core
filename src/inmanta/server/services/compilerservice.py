@@ -376,6 +376,14 @@ class CompileRun(object):
                 compile_data_json_file.name,
             ]
 
+            if self.request.partial:
+                cmd.append("--partial")
+
+            if self.request.removed_resource_sets is not None:
+                for resource_set in self.request.removed_resource_sets:
+                    cmd.append("--delete-resource-set")
+                    cmd.append(resource_set)
+
             if not self.request.do_export:
                 f = NamedTemporaryFile()
                 cmd.append("-j")
@@ -547,12 +555,16 @@ class CompilerService(ServerSlice):
         remote_id: uuid.UUID,
         metadata: Optional[JsonType] = None,
         env_vars: Optional[Mapping[str, str]] = None,
+        partial: bool = False,
+        removed_resource_sets: Optional[List[str]] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :return: the compile id of the requested compile and any warnings produced during the request
         """
+        if removed_resource_sets is None:
+            removed_resource_sets = []
         if metadata is None:
             metadata = {}
         if env_vars is None:
@@ -573,6 +585,8 @@ class CompilerService(ServerSlice):
             force_update=force_update,
             metadata=metadata,
             environment_variables=env_vars,
+            partial=partial,
+            removed_resource_sets=removed_resource_sets,
         )
         await compile.insert()
         await self._queue(compile)
@@ -584,7 +598,9 @@ class CompilerService(ServerSlice):
         Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
-        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
+        return c.to_dto().json(
+            include={"environment", "started", "do_export", "environment_variables", "partial", "removed_resource_sets"}
+        )
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:
