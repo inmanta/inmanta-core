@@ -530,7 +530,7 @@ class PythonEnvironment:
         if not_found:
             raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
         if conflicts:
-            raise ConflictingRequirements("/n".join(full_output))
+            raise ConflictingRequirements("\n".join(full_output))
 
         if return_code:
             raise Exception(f"Process {cmd} exited with return code {return_code}")
