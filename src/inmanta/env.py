@@ -391,8 +391,8 @@ class PythonEnvironment:
             if "versions have conflicting dependencies" in stderr:
                 raise ConflictingRequirements(stderr)
             raise e
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
