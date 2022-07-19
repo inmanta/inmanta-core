@@ -364,7 +364,7 @@ class Exporter(object):
         """
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
-        resource_sets_to_remove: List[str] = resource_sets_to_remove if resource_sets_to_remove is not None else []
+        resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
 
         self.types = types
         self.scopes = scopes
@@ -374,7 +374,7 @@ class Exporter(object):
             # then process the configuration model to submit it to the mgmt server
             # This is the actuel export : convert entities to resources.
             self._load_resources(types)
-            resource_sets_to_remove.append(self._empty_resource_sets)
+            resource_sets_to_remove_all = resource_sets_to_remove_all + self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
@@ -414,7 +414,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove)
+            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
