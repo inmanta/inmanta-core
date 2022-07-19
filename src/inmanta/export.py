@@ -206,6 +206,7 @@ class Exporter(object):
         )
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
+            empty_set: bool = True
             resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
                 if resource_in_set in resource_mapping:
@@ -216,13 +217,14 @@ class Exporter(object):
                             f"{resource_sets[resource_id]} and {name}"
                         )
                     resource_sets[resource_id] = name
+                    empty_set = False
                 else:
                     LOGGER.warning(
                         "resource %s is part of ResourceSets %s but will not be exported.",
                         str(resource_in_set),
                         str(resource_set_instance),
                     )
-            if name not in resource_sets.values():
+            if empty_set:
                 self._empty_resource_sets.append(name)
         self._resource_sets = resource_sets
 
