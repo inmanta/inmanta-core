@@ -374,7 +374,7 @@ class Exporter(object):
             # then process the configuration model to submit it to the mgmt server
             # This is the actuel export : convert entities to resources.
             self._load_resources(types)
-            resource_sets_to_remove_all = resource_sets_to_remove_all + self._empty_resource_sets
+            resource_sets_to_remove_all += self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
