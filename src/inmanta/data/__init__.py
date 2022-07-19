@@ -103,11 +103,29 @@ class InvalidQueryType(Exception):
         self.message = message
 
 
+class TableLockMode(enum.Enum):
+    """
+    Table level locks as defined in the PostgreSQL docs:
+    https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
+    locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY. See relevant data classes'
+    docstrings for appropriate lock orderings.
+
+    Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
+    may be extended when a new lock mode is required.
+    """
+
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE: str = "SHARE"
+    SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+
+
 class RowLockMode(enum.Enum):
     """
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
     When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
     respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
+    See relevant data classes' docstrings for appropriate lock orderings.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -1268,6 +1286,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.execute(query, *values)
 
     @classmethod
+    async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
+        """
+        Acquire a table-level lock on a single environment. Callers should adhere to a consistent locking order accross
+        transactions.
+        Passing a connection object is mandatory. The connection is expected to be in a transaction.
+        """
+        await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
+
+    @classmethod
     async def insert_many(cls, documents: Sequence["BaseDocument"]) -> None:
         """
         Insert multiple objects at once
@@ -1431,6 +1458,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=None,
             **query,
@@ -1445,6 +1473,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         columns: Optional[List[str]] = None,
         **query: object,
@@ -5252,7 +5281,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self._execute_query(f"LOCK TABLE {ResourceAction.table_name()} IN SHARE MODE", connection=con)
+                await self.lock_table(TableLockMode.SHARE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
@@ -5328,7 +5357,7 @@ class ConfigurationModel(BaseDocument):
             async with con.transaction():
                 # SHARE UPDATE EXCLUSIVE is self-conflicting
                 # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
-                await cls._execute_query(f"LOCK TABLE {Resource.table_name()} IN SHARE UPDATE EXCLUSIVE MODE", connection=con)
+                await cls.lock_table(TableLockMode.SHARE_UPDATE_EXCLUSIVE, connection=con)
                 query = f"""UPDATE {ConfigurationModel.table_name()}
                                 SET deployed=True,
                                     result=(CASE WHEN (

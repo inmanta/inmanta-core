@@ -42,7 +42,6 @@ from .openapi.model import OpenAPI
 )
 def put_partial(
     tid: uuid.UUID,
-    version: int,
     resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
     unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[model.ModelVersionInfo] = None,
@@ -51,12 +50,16 @@ def put_partial(
     **kwargs: object,  # bypass the type checking for resources that result from the partial compile
 ) -> None:
     """
-    Store a new version of the configuration model after a partial recompile.
+    Store a new version of the configuration model after a partial recompile. Dynamically acquires a new version and serializes
+    concurrent calls.
 
-    The version number must be obtained through the reserve_version call
+    Serialization prevents race conditions between two or more put_partial calls. To prevent races between put_partial and
+    put_version, the caller must consider the reserve_version + put_version operation atomic with respect to put_partial. In
+    other words, put_partial must not be called in the window between reserve_version and put_version. If not respected, either
+    the full or the partial export might be immediately stale, and future exports will only be applied on top of the non-stale
+    one.
 
     :param tid: The id of the environment
-    :param version: The version of the configuration model
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Model version information

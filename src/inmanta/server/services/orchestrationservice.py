@@ -23,6 +23,7 @@ from collections import defaultdict
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
+import asyncpg.connection
 import pydantic
 
 from inmanta import const, data
@@ -166,14 +167,14 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_old_resources(
-        self,
-    ) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
+    async def _get_latest_resources(
+        self, *, connection: asyncpg.connection.Connection
+    ) -> dict[ResourceIdStr, ResourceWithResourceSet]:
         """
         Makes a call to the DB to get the latest resources in the environment and return a dict
-        where the keys are the Ids of the resources and the values are ResourceWithResourceSete
+        where the keys are the Ids of the resources and the values are ResourceWithResourceSet.
         """
-        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
+        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id, connection=connection)
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: ResourceMinimal = ResourceMinimal(id=res.resource_version_id, **res.attributes)
@@ -238,28 +239,20 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
-        old_resources = await self._get_old_resources()
+    async def apply_partial_on_latest(
+        # TODO
+        self, *, connection: asyncpg.connection.Connection
+    ) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
+        """
+        Applies the partial model's resources on the current latest version. The caller should acquire appropriate locks on the
+        database connection as defined in the put_partial method definition.
 
-        # TODO: check that resource versions are properly set when a version is reserved
-        # TODO: first acquire version, then in second transaction lock resources? Differs from ticket description but I think
-        #   the ticket was written on the assumption that we needed new_version - 1
-        #
-        #   => The above is not correct: we want the put_partial calls to be FIFO, so the one that fetches the lowest version
-        #   should finish the first. Make sure to document this! We could potentially do this only under the resource lock
-        #   though.
-        #
-        #   The lock taken here should conflict with itself in both directions, but only ensure that if put_version is busy,
-        #   put_partial waits, not necessarily the other way around. But there's no harm in doing so anyway and it's easier.
-        #
-        #   Should full compile's reserve_version block on the resource write by put_partial to ensure it does not start
-        #   compilation until this version is in? No, auto full compiles should be disabled when manually exporting partials.
-        #   Only when partials go through the compiler queue should it be enabled. Main concern is put_partials'
-        #   interoperability
-        #
-        #   conclusion: acquire resource lock -> get version through different connection (add comment) -> update lock order
-        #   docstrings in inmanta.data
-        version = await env.get_next_version()
+        :param connection: The database connection to use to determine the latest version. Appropriate locks are assumed to be
+            acquired.
+        :return: A tuple of the model version, the resources and the resource sets
+        """
+        # TODO: revise
+        old_resources = await self._get_latest_resources(connection=connection)
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
@@ -665,7 +658,6 @@ class OrchestrationService(protocol.ServerSlice):
     async def put_partial(
         self,
         env: data.Environment,
-        version: int,
         resources: object,
         resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
         unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
@@ -690,19 +682,51 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
-        # TODO: lock should really be acquired here because _put_version call should still be within lock
-        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
-        merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
-        version_info_dict = version_info.dict() if version_info else None
-        await self._put_version(
-            env,
-            version,
-            merged_resources,
-            resource_state,
-            unknowns,
-            version_info_dict,
-            merged_resource_sets,
-        )
+        # TODO: review structure: where is lock acquired, how are connections wired through, are method invariants sane, ...?
+        # TODO: check that resource versions are properly set when a version is reserved -> what did I mean by this...?
+        async with data.Resource.get_connection() as con:
+            async with con.transaction():
+                # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
+                # TODO: acquire lock in put_version
+                # TODO: update lock ordering docstrings in inmanta.data
+                await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
+
+                # Only request a new version once the resource lock has been acquired to prevent races between two
+                # put_partial calls: this way the requested version will never be made stale by another call by the time we
+                # store the resources.
+                # For this call, treat the lock as just a Python lock: request the new version outside of the transaction so
+                # as not to block new version requests on code paths other than this one. Being more strict does not
+                # provide stronger gaurantees because a specific type of race, where put_partial is called in
+                # the window between reserve_version and put_version, is unavoidable due to the two-part nature of
+                # put_version (see put_partial docstring and #4416).
+                version: int = await env.get_next_version()
+
+                for r in resources:
+                    resource = Id.parse_id(r["id"])
+                    if resource.get_version() != 0:
+                        raise BadRequest(
+                            "Resources for partial export should not contain version information"
+                        )
+                    resource.set_version(version)
+
+                # TODO: wire through version
+                merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
+
+                # TODO: below
+
+                merged_resources, merged_resource_sets = await merger.apply_partial_on_latest(connection=con)
+
+                version_info_dict = version_info.dict() if version_info else None
+                # TODO: wire connection
+                await self._put_version(
+                    env,
+                    version,
+                    merged_resources,
+                    resource_state,
+                    unknowns,
+                    version_info_dict,
+                    merged_resource_sets,
+                )
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
