@@ -748,7 +748,7 @@ class OrchestrationService(protocol.ServerSlice):
         await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
         if model.total == 0:
-            await model.mark_done()
+            await model.mark_done(connection=connection)
             return 200, {"model": model}
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)

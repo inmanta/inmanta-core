@@ -1254,8 +1254,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls.get_connection() as con:
+    async def _fetchval(
+        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> object:
+        async with cls.get_connection(connection) as con:
             return await con.fetchval(query, *values)
 
     @classmethod
@@ -5358,7 +5360,7 @@ class ConfigurationModel(BaseDocument):
         """
         return self.skipped_for_undeployable
 
-    async def mark_done(self) -> None:
+    async def mark_done(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """mark this deploy as done"""
         subquery = f"""(EXISTS(
                     SELECT 1
@@ -5378,7 +5380,7 @@ class ConfigurationModel(BaseDocument):
             self._get_value(const.VersionState.failed),
             self._get_value(const.VersionState.success),
         ]
-        result = await self._fetchval(query, *values)
+        result = await self._fetchval(query, *values, connection=connection)
         self.result = const.VersionState[result]
         self.deployed = True
 
