@@ -699,7 +699,6 @@ class OrchestrationService(protocol.ServerSlice):
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
-                # TODO: update lock ordering docstrings in inmanta.data -> Environment no longer relevant
                 await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to prevent races between two

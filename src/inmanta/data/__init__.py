@@ -2174,8 +2174,6 @@ class Setting(object):
 class Environment(BaseDocument):
     """
     A deployment environment of a project
-    Any transactions that update Environment should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
@@ -5121,7 +5119,7 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update Environment, ResourceAction, Resource, Parameter and/or ConfigurationModel
+    Any transactions that update ResourceAction, Resource, Parameter and/or ConfigurationModel
     should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
