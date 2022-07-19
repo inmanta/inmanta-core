@@ -116,6 +116,7 @@ class TableLockMode(enum.Enum):
     may be extended when a new lock mode is required.
     """
 
+    ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
     SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
@@ -1296,7 +1297,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents: Sequence["BaseDocument"]) -> None:
+    async def insert_many(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
         Insert multiple objects at once
         """
@@ -1312,7 +1315,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -4642,7 +4645,12 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_deleted_resources(
-        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceIdStr]
+        cls,
+        environment: uuid.UUID,
+        current_version: int,
+        current_resources: Sequence[m.ResourceIdStr],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
@@ -4663,7 +4671,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4685,7 +4693,7 @@ class Resource(BaseDocument):
             + str(len(values) + 1)
         )
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources_records = await cls._fetch_query(query, *values)
+        resources_records = await cls._fetch_query(query, *values, connection=connection)
         resources = [r["resource_id"] for r in resources_records]
 
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
@@ -4717,7 +4725,7 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls.get_connection() as con:
+            async with cls.get_connection(connection) as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
@@ -5072,10 +5080,12 @@ class Resource(BaseDocument):
         await super(Resource, self).insert(connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents: Sequence["Resource"]) -> None:
+    async def insert_many(
+        cls, documents: Sequence["Resource"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         for doc in documents:
             doc.make_hash()
-        await super(Resource, cls).insert_many(documents)
+        await super(Resource, cls).insert_many(documents, connection=connection)
 
     async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
@@ -5247,11 +5257,13 @@ class ConfigurationModel(BaseDocument):
         return True
 
     @classmethod
-    async def get_version(cls, environment: uuid.UUID, version: int) -> Optional["ConfigurationModel"]:
+    async def get_version(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
-        result = await cls.get_one(environment=environment, version=version)
+        result = await cls.get_one(environment=environment, version=version, connection=connection)
         return result
 
     @classmethod

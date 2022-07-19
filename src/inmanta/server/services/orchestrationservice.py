@@ -239,7 +239,6 @@ class PartialUpdateMerger:
         return {**unchanged_resource_sets, **self.resource_sets}
 
     async def apply_partial_on_latest(
-        # TODO
         self, *, connection: asyncpg.connection.Connection
     ) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
         """
@@ -250,7 +249,6 @@ class PartialUpdateMerger:
             acquired.
         :return: A tuple of the model version, the resources and the resource sets
         """
-        # TODO: revise
         old_resources = await self._get_latest_resources(connection=connection)
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
@@ -402,6 +400,8 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        *,
+        connection: asyncpg.connection.Connection
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -521,7 +521,9 @@ class OrchestrationService(protocol.ServerSlice):
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
             # search for deleted resources (purge_on_delete)
-            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, list(rv_dict.keys()))
+            resources_to_purge = await data.Resource.get_deleted_resources(
+                env.id, version, list(rv_dict.keys()), connection=connection
+            )
 
             previous_requires = {}
             for res in resources_to_purge:
@@ -577,12 +579,12 @@ class OrchestrationService(protocol.ServerSlice):
                 undeployable=undeployable_ids,
                 skipped_for_undeployable=skip_list,
             )
-            await cm.insert()
+            await cm.insert(connection=connection)
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError("The given version is already defined. Versions should be unique.")
 
-        await data.Resource.insert_many(resource_objects)
-        await cm.update_fields(total=cm.total + len(resources_to_purge))
+        await data.Resource.insert_many(resource_objects, connection=connection)
+        await cm.update_fields(total=cm.total + len(resources_to_purge), connection=connection)
 
         for uk in unknowns:
             if "resource" not in uk:
@@ -599,17 +601,19 @@ class OrchestrationService(protocol.ServerSlice):
                 version=version,
                 metadata=uk["metadata"],
             )
-            await up.insert()
+            await up.insert(connection=connection)
 
         for agent in agents:
-            await self.agentmanager_service.ensure_agent_registered(env, agent)
+            await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
         if resource_version_ids:
             now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-            self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
+            self.resource_service.log_resource_action(
+                env.id, resource_version_ids, logging.INFO, now, log_line.msg
+            )
             ra = data.ResourceAction(
                 environment=env.id,
                 version=version,
@@ -620,19 +624,23 @@ class OrchestrationService(protocol.ServerSlice):
                 finished=now,
                 messages=[log_line],
             )
-            await ra.insert()
+            await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
 
         self.resource_service.clear_env_cache(env)
 
-        auto_deploy = await env.get(data.AUTO_DEPLOY)
+        auto_deploy = await env.get(data.AUTO_DEPLOY, connection=connection)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
+            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY, connection=connection))
+            agent_trigger_method_on_autodeploy = cast(
+                str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, connection=connection)
+            )
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
+            await self.release_version(
+                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+            )
 
         return 200
 
@@ -651,7 +659,13 @@ class OrchestrationService(protocol.ServerSlice):
         if not compiler_version:
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
-        return await self._put_version(env, version, resources, resource_state, unknowns, version_info, resource_sets)
+        async with data.Resource.get_connection() as con:
+            async with con.transaction():
+                # Acquire a lock that conflicts with the lock acquired by put_partial.
+                await data.Resource.lock_table(data.TableLockMode.ROW_EXCLUSIVE, connection=con)
+                return await self._put_version(
+                    env, version, resources, resource_state, unknowns, version_info, resource_sets, connection=con
+                )
 
     @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
@@ -682,12 +696,10 @@ class OrchestrationService(protocol.ServerSlice):
             )
 
         # TODO: review structure: where is lock acquired, how are connections wired through, are method invariants sane, ...?
-        # TODO: check that resource versions are properly set when a version is reserved -> what did I mean by this...?
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
-                # TODO: acquire lock in put_version
-                # TODO: update lock ordering docstrings in inmanta.data
+                # TODO: update lock ordering docstrings in inmanta.data -> Environment no longer relevant
                 await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to prevent races between two
@@ -699,7 +711,6 @@ class OrchestrationService(protocol.ServerSlice):
                 # the window between reserve_version and put_version, is unavoidable due to the two-part nature of
                 # put_version (see put_partial docstring and #4416).
                 version: int = await env.get_next_version()
-
                 for r in resources:
                     resource = Id.parse_id(r["id"])
                     if resource.get_version() != 0:
@@ -708,14 +719,9 @@ class OrchestrationService(protocol.ServerSlice):
                         )
                     resource.set_version(version)
 
-                # TODO: wire through version
                 merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
-
-                # TODO: below
-
                 merged_resources, merged_resource_sets = await merger.apply_partial_on_latest(connection=con)
 
-                # TODO: wire connection
                 await self._put_version(
                     env,
                     version,
@@ -724,6 +730,7 @@ class OrchestrationService(protocol.ServerSlice):
                     unknowns,
                     version_info,
                     merged_resource_sets,
+                    connection=con,
                 )
 
     @handle(methods.release_version, version_id="id", env="tid")
@@ -733,12 +740,14 @@ class OrchestrationService(protocol.ServerSlice):
         version_id: int,
         push: bool,
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Apireturn:
-        model = await data.ConfigurationModel.get_version(env.id, version_id)
+        model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        await model.update_fields(released=True, result=const.VersionState.deploying)
+        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
         if model.total == 0:
             await model.mark_done()
@@ -763,6 +772,7 @@ class OrchestrationService(protocol.ServerSlice):
             messages=[],
             change=const.Change.nochange,
             send_events=False,
+            connection=connection,
         )
 
         skippable = await model.get_skipped_for_undeployable()
@@ -780,18 +790,19 @@ class OrchestrationService(protocol.ServerSlice):
             messages=[],
             change=const.Change.nochange,
             send_events=False,
+            connection=connection,
         )
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id)
+            agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
             await self.autostarted_agent_manager._ensure_agents(env, agents)
 
             for agent in agents:
                 client = self.agentmanager_service.get_agent_client(env.id, agent)
                 if client is not None:
                     if not agent_trigger_method:
-                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD)
+                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
                         incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
                     else:
                         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy

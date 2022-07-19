@@ -28,6 +28,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Un
 from uuid import UUID
 
 import asyncpg
+import asyncpg.connection
 
 from inmanta import const, data, util
 from inmanta.config import Config
@@ -636,18 +637,22 @@ class AgentManager(ServerSlice, SessionListener):
             await asyncio.gather(*[s.expire_and_abort(timeout=0) for s in self.sessions.values()])
 
     # Agent Management
-    async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> data.Agent:
+    async def ensure_agent_registered(
+        self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> data.Agent:
         """
         Make sure that an agent has been created in the database
         """
         async with self.session_lock:
-            agent = await data.Agent.get(env.id, nodename)
+            agent = await data.Agent.get(env.id, nodename, connection=connection)
             if agent:
                 return agent
             else:
-                return await self._create_default_agent(env, nodename)
+                return await self._create_default_agent(env, nodename, connection=connection)
 
-    async def _create_default_agent(self, env: data.Environment, nodename: str) -> data.Agent:
+    async def _create_default_agent(
+        self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> data.Agent:
         """
         This method creates a new agent (agent in the model) in the database.
         If an active agent instance exists for the given agent, it is marked as a the
@@ -656,12 +661,14 @@ class AgentManager(ServerSlice, SessionListener):
         Note: This method must be called under session lock
         """
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
-        await saved.insert()
+        await saved.insert(connection=connection)
 
         key = (env.id, nodename)
         session = self.tid_endpoint_to_session.get(key)
         if session:
-            await data.Agent.update_primary(env.id, [(nodename, session.id)], datetime.now().astimezone())
+            await data.Agent.update_primary(
+                env.id, [(nodename, session.id)], datetime.now().astimezone(), connection=connection
+            )
 
         return saved
 

@@ -527,6 +527,8 @@ class ResourceService(protocol.ServerSlice):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
+        *,
+        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # can update resource state
         is_resource_state_update = action in STATE_UPDATE
@@ -574,7 +576,7 @@ class ResourceService(protocol.ServerSlice):
                     )
 
         resources: List[data.Resource]
-        async with data.Resource.get_connection() as connection:
+        async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
                 resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
