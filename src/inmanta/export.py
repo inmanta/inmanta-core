@@ -498,6 +498,7 @@ class Exporter(object):
             raise Exception("The environment for this model should be set!")
 
         conn = protocol.SyncClient("compiler")
+        # TODO: partial export does not have a version yet -> how to upload code?
         self.deploy_code(conn, tid, version)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
