@@ -355,7 +355,7 @@ class Exporter(object):
         model_export: bool = False,
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[Sequence[str]] = None,
     ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
