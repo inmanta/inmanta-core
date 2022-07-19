@@ -1268,7 +1268,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchrow(
-        cls, query: str, *values: object, *, connection: Optional[asyncpg.connection.connection] = None
+        cls, query: str, *values: object, connection: Optional[asyncpg.connection.connection] = None
     ) -> Optional[Record]:
         async with cls.get_connection(connection) as con:
             return await con.fetchrow(query, *values)
