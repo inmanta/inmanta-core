@@ -695,16 +695,15 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
-        # TODO: review structure: where is lock acquired, how are connections wired through, are method invariants sane, ...?
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
                 await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to prevent races between two
-                # put_partial calls: this way the requested version will never be made stale by another call by the time we
-                # store the resources.
-                # For this call, treat the lock as just a Python lock: request the new version outside of the transaction so
+                # put_partial calls: this way the requested version will never be made stale by another call between now and
+                # when we store the resources.
+                # For this call, treat the lock as a plain Python lock: request the new version outside of the transaction so
                 # as not to block new version requests on code paths other than this one. Being more strict does not
                 # provide stronger gaurantees because a specific type of race, where put_partial is called in
                 # the window between reserve_version and put_version, is unavoidable due to the two-part nature of
