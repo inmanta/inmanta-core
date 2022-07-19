@@ -303,6 +303,7 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command(
@@ -345,7 +346,10 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     if options.profile:
         import cProfile
@@ -502,10 +506,29 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         action="store_false",
         default=True,
     )
+    parser.add_argument(
+        "--partial",
+        dest="partial_compile",
+        help="Execute a partial export",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--delete-resource-set",
+        dest="delete_resource_set",
+        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
+        "be used together with the --partial option.",
+        action="append",
+    )
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
+    if not options.partial_compile and options.delete_resource_set:
+        raise CLIException(
+            "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+        )
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -551,7 +574,10 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     from inmanta.export import Exporter  # noqa: H307
 
@@ -569,7 +595,13 @@ def export(options: argparse.Namespace) -> None:
 
     export = Exporter(options)
     results = export.run(
-        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+        types,
+        scopes,
+        metadata=metadata,
+        model_export=options.model_export,
+        export_plugin=options.export_plugin,
+        partial_compile=options.partial_compile,
+        resource_sets_to_remove=options.delete_resource_set,
     )
     version = results[0]
 

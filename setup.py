@@ -8,6 +8,7 @@ requires = [
     "click>=8.0,<8.2",
     "colorlog~=6.0",
     "cookiecutter>=1,<3",
+    "crontab~=0.23",
     "cryptography>=36,<38",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.15",
@@ -31,8 +32,6 @@ requires = [
     "tornado~=6.0",
     "typing_inspect~=0.7",
     "build~=0.7",
-    # This dependency can be removed when requests no longer defaults to chardet if it is installed, see https://github.com/psf/requests/issues/6177
-    "requests[use_chardet_on_py3]",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]

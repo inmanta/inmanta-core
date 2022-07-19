@@ -30,9 +30,10 @@ import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import const, env, loader, module
+from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
+from inmanta.env import ConflictingRequirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -424,6 +425,26 @@ def test_project_install(
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
 
+    # ensure we can compile
+    compiler.do_compile()
+
+    # add a dependency
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names]
+        + ["lorem"],
+        install_project=False,
+    )
+
+    with pytest.raises(
+        expected_exception=ConflictingRequirements,
+        match=re.escape("Not all required python packages are installed run 'inmanta project install' to resolve this"),
+    ):
+        # ensure we can compile
+        compiler.do_compile()
+
 
 @pytest.mark.parametrize_any("editable", [True, False])
 @pytest.mark.slowtest
@@ -651,7 +672,6 @@ Run `inmanta project update` to resolve this.
 
 @pytest.mark.slowtest
 def test_project_install_incompatible_dependencies(
-    caplog,
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_dir: str,
@@ -697,20 +717,9 @@ def test_project_install_incompatible_dependencies(
 
     # install project
     os.chdir(module.Project.get().path)
-    with pytest.raises(
-        CompilerException,
-        match=(
-            "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts before"
-            " attempting another compile. Run `pip check` to check for any incompatibilities."
-        ),
-    ):
+    with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-
-    assert any(
-        re.match("Incompatibility between constraint lorem~=(0.1.1|0.0.1) and installed version (0.1.1|0.0.1)", rec.message)
-        is not None
-        for rec in caplog.records
-    )
+    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
 
 
 def test_project_install_requirement_not_loaded(

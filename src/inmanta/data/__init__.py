@@ -59,6 +59,7 @@ import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+from crontab import CronTab
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -2060,6 +2061,16 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
+def validate_cron(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        CronTab(value)
+    except ValueError as e:
+        raise ValueError("'%s' is not a valid cron expression: %s" % (value, e))
+    return value
+
+
 TYPE_MAP = {
     "int": "integer",
     "bool": "boolean",
@@ -2083,6 +2094,7 @@ AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
@@ -2115,7 +2127,7 @@ class Setting(object):
                         is requested from the database, it will return the default value and also store
                         the default value in the database.
         :param doc: The documentation/help string for this setting
-        :param validator: A validation and casting function for input settings.
+        :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
@@ -2306,6 +2318,18 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
+        ),
+        AUTO_FULL_COMPILE: Setting(
+            name=AUTO_FULL_COMPILE,
+            default="",
+            typ="str",
+            validator=validate_cron,
+            doc=(
+                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
+                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
+                " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
+            ),
         ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
@@ -3365,6 +3389,8 @@ class Compile(BaseDocument):
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
         to this one that actually got compiled.
+    :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
+    :param removed_resource_sets: indicates the resource sets that should be removed from the model
     """
 
     __primary_key__ = ("id",)
@@ -3390,6 +3416,9 @@ class Compile(BaseDocument):
     substitute_compile_id: Optional[uuid.UUID] = None
 
     compile_data: Optional[JsonType] = None
+
+    partial: bool = False
+    removed_resource_sets: list[str] = []
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3704,6 +3733,8 @@ class Compile(BaseDocument):
             metadata=self.metadata,
             environment_variables=self.environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
+            partial=self.partial,
+            removed_resource_sets=self.removed_resource_sets,
         )
 
 

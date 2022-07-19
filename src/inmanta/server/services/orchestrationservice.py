@@ -36,7 +36,6 @@ from inmanta.data import (
     DesiredStateVersionOrder,
     InvalidSort,
     QueryType,
-    model,
 )
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -661,7 +660,7 @@ class OrchestrationService(protocol.ServerSlice):
         resources: object,
         resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
         unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
-        version_info: Optional[model.ModelVersionInfo] = None,
+        version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
     ) -> None:
@@ -716,7 +715,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 merged_resources, merged_resource_sets = await merger.apply_partial_on_latest(connection=con)
 
-                version_info_dict = version_info.dict() if version_info else None
                 # TODO: wire connection
                 await self._put_version(
                     env,
@@ -724,7 +722,7 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resources,
                     resource_state,
                     unknowns,
-                    version_info_dict,
+                    version_info,
                     merged_resource_sets,
                 )
 

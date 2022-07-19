@@ -20,7 +20,16 @@ from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.execute.dataflow as dataflow
-from inmanta.ast import Anchor, DirectExecuteException, Location, Named, Namespace, Namespaced, RuntimeException
+from inmanta.ast import (
+    Anchor,
+    DirectExecuteException,
+    Location,
+    Named,
+    Namespace,
+    Namespaced,
+    OptionalValueException,
+    RuntimeException,
+)
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -54,6 +63,7 @@ class Statement(Namespaced):
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
+        self.lexpos: Optional[int] = None
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
@@ -232,57 +242,85 @@ class RawResumer(ExpressionStatement):
 class VariableReferenceHook(RawResumer):
     """
     Generic helper class for adding a hook to a variable (ResultVariable) object. Supports both plain variables and instance
-    attributes. Calls variable resumer with the variable object as soon as it's available.
+    attributes. Calls variable resumer with the variable object as soon as it's available. Resolves to a variable object that is
+    as specific and representative as possible. May resolve to a proxy object only when propagating unset.
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
+
+    :param instance: The instance this variable is an attribute of, if any. Can be a reference to a nested relation instance.
+    :param name: The name of the variable or instance attribute.
+    :param variable_resumer: The resumer that should be called when a value becomes available.
+    :param propagate_unset: If True, propagate unset exceptions during instance execution to the resumer.
     """
 
-    __slots__ = ("instance", "name", "variable_resumer")
+    __slots__ = ("instance", "name", "variable_resumer", "propagate_unset")
 
     def __init__(
         self,
         instance: Optional["Reference"],
         name: str,
         variable_resumer: "VariableResumer",
+        *,
+        propagate_unset: bool = False,
     ) -> None:
         super().__init__()
         self.instance: Optional["Reference"] = instance
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
+        self.propagate_unset: bool = propagate_unset
 
     def schedule(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Schedules this instance for execution. Waits for the variable's requirements before resuming.
         """
-        RawUnit(
-            queue,
-            resolver,
-            # no need for gradual execution here because this class represents an attribute reference on self.instance,
-            # which is not allowed on multi variables (the only kind of variables that would benefit from gradual execution)
-            self.instance.requires_emit(resolver, queue) if self.instance is not None else {},
-            self,
-        )
+        if self.instance is None:
+            self.resume({}, resolver, queue)
+        else:
+            RawUnit(
+                queue,
+                resolver,
+                # no need for gradual execution here because this class represents an attribute reference on self.instance,
+                # which is not allowed on multi variables (the only kind of variables that would benefit from gradual execution)
+                self.instance.requires_emit(resolver, queue, propagate_unset=self.propagate_unset),
+                self,
+            )
 
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
-        variable: ResultVariable[object]
+        variable: VariableABC[object]
         if self.instance is not None:
             # get the Instance
-            instance: object = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+            instance_requires: dict[object, object] = {}
+            unset: Optional[VariableABC] = None
+            for k, v in requires.items():
+                try:
+                    instance_requires[k] = v.get_value()
+                except (OptionalValueException,) if self.propagate_unset else ():
+                    unset = v
+                    break
 
-            if isinstance(instance, list):
-                raise RuntimeException(self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance))
-            if not isinstance(instance, Instance):
-                raise RuntimeException(
-                    self,
-                    "can not get attribute %s, %s is not an entity but a %s with value '%s'"
-                    % (self.name, self.instance, type(instance).__name__, instance),
-                )
+            if unset is not None:
+                # propagate unset variable up the attribute reference chain
+                variable = unset
+            else:
+                # all requires are present, execute instance
+                instance: object = self.instance.execute(instance_requires, resolver, queue)
 
-            # get the attribute result variable
-            variable = instance.get_attribute(self.name)
+                if isinstance(instance, list):
+                    raise RuntimeException(
+                        self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance)
+                    )
+                if not isinstance(instance, Instance):
+                    raise RuntimeException(
+                        self,
+                        "can not get attribute %s, %s is not an entity but a %s with value '%s'"
+                        % (self.name, self.instance, type(instance).__name__, instance),
+                    )
+
+                # get the attribute result variable
+                variable = instance.get_attribute(self.name)
         else:
             obj: Typeorvalue = resolver.lookup(self.name)
             if not isinstance(obj, ResultVariable):
@@ -301,7 +339,13 @@ class VariableReferenceHook(RawResumer):
         return "%s.%s" % (self.instance, self.name)
 
     def __repr__(self) -> str:
-        return "%s(%r, %s, %r)" % (self.__class__.__name__, self.instance, self.name, self.variable_resumer)
+        return "%s(%r, %s, %r, propagate_unset=%r)" % (
+            self.__class__.__name__,
+            self.instance,
+            self.name,
+            self.variable_resumer,
+            self.propagate_unset,
+        )
 
 
 class VariableResumer:
@@ -313,7 +357,7 @@ class VariableResumer:
 
     def variable_resume(
         self,
-        variable: ResultVariable,
+        variable: VariableABC,
         resolver: Resolver,
         queue: QueueScheduler,
     ) -> None:
@@ -359,6 +403,7 @@ class StaticEagerPromise:
             self.instance,
             self.attribute,
             variable_resumer=dynamic,
+            propagate_unset=True,
         )
         self.statement.copy_location(hook)
         hook.schedule(resolver, queue)
@@ -379,7 +424,7 @@ class EagerPromise(VariableResumer):
         self._promise: Optional[ProgressionPromise] = None
         self._fulfilled: bool = False
 
-    def _acquire(self, variable: ResultVariable) -> None:
+    def _acquire(self, variable: VariableABC) -> None:
         """
         Entry point for the ResultVariable waiter: actually acquire the promise
         """
@@ -398,7 +443,7 @@ class EagerPromise(VariableResumer):
 
     def variable_resume(
         self,
-        variable: ResultVariable,
+        variable: VariableABC,
         resolver: Resolver,
         queue: QueueScheduler,
     ) -> None:

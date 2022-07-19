@@ -1,0 +1,6 @@
+---
+description: Resolve undefined labels in the documentation regarding operational procedures on LSM.
+issue-nr: 312
+issue-repo: inmanta-service-orchestrator
+change-type: patch
+destination-branches: [master, iso5]
