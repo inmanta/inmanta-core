@@ -224,7 +224,7 @@ class Exporter(object):
                     )
             if name not in resource_sets.values():
                 self._empty_resource_sets.append(name)
-        self._resource_sets: Dict[str, Optional[str]] = resource_sets
+        self._resource_sets = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
