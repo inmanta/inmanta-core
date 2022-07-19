@@ -5294,14 +5294,16 @@ class ConfigurationModel(BaseDocument):
         return int(result["version"])
 
     @classmethod
-    async def get_agents(cls, environment: uuid.UUID, version: int) -> List[str]:
+    async def get_agents(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> List[str]:
         """
         Returns a list of all agents that have resources defined in this configuration model
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
