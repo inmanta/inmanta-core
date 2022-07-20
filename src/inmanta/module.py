@@ -384,6 +384,11 @@ class CLIGitProvider(GitProvider):
     def pull(self, repo: str) -> str:
         return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
+    def get_remote(self, repo: str) -> str:
+        return subprocess.check_output(
+            ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
+        ).decode("utf-8")
+
     def push(self, repo: str) -> str:
         return subprocess.check_output(
             ["git", "push", "--follow-tags", "--porcelain"], cwd=repo, stderr=subprocess.DEVNULL
@@ -428,10 +433,28 @@ class ModuleSource(Generic[TModule]):
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
         if installed is None and install:
             installed = self.install(project, module_spec)
-            if installed is not None:
-                installed.log_install_information(project, module_name)
 
         return installed
+
+    @abstractmethod
+    def log_pre_install_information(self, project: "Project", module_name: str) -> None:
+        """
+        Display information about this module's installation before the actual installation.
+
+        :param project: The project associated with the module.
+        :param module_name: The module's name.
+        """
+        raise NotImplementedError("Abstract method")
+
+    @abstractmethod
+    def log_post_install_information(self, project: "Project", module_name: str) -> None:
+        """
+        Display information about this module's installation after the actual installation.
+
+        :param project: The project associated with the module.
+        :param module_name: The module's name.
+        """
+        raise NotImplementedError("Abstract method")
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
@@ -549,7 +572,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
         try:
+            self.log_pre_install_information(project, module_name)
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
+            self.log_post_install_information(project, module_name)
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -558,6 +583,13 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             namespace_package: str = self.get_namespace_package_name(module_name)
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
         return self.from_path(project, module_name, path)
+
+    def log_pre_install_information(self, project: "Project", module_name: str) -> None:
+        LOGGER.info(f"Installing module {module_name} (v2) version PLACEHOLDER.")
+
+    def log_post_install_information(self, project: "Project", module_name: str) -> None:
+        version: Optional[Version] = self.get_installed_version(module_name)
+        LOGGER.info(f"Successfully installed module {module_name} (v2) version {version}")
 
     def path_for(self, name: str) -> Optional[str]:
         """
@@ -614,6 +646,15 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
+    def log_pre_install_information(self, project: "Project", module_name: str) -> None:
+        local_repo = self.local_repo.path_for(module_name)
+        remote_repo = gitprovider.get_remote(local_repo).strip()
+        LOGGER.info(f"Installing module {module_name} (v1) from {remote_repo}.")
+
+    def log_post_install_information(self, project: "Project", module_name: str) -> None:
+        module = self.get_installed_module(project, module_name)
+        LOGGER.info(f"Successfully installed module {module_name} (v1) version {module.version}")
+
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
         preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
@@ -628,9 +669,12 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     preinstalled_version,
                     ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
-                return ModuleV1.update(
+                self.log_pre_install_information(project, module_name)
+                module = ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )
+                self.log_post_install_information(project, module_name)
+                return module
         else:
             if project.downloadpath is None:
                 raise CompilerException(
@@ -641,9 +685,13 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             if not result:
                 return None
 
-            return ModuleV1.update(
+            self.log_pre_install_information(project, module_name)
+            module = ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
             )
+            self.log_post_install_information(project, module_name)
+
+            return module
 
     def path_for(self, name: str) -> Optional[str]:
         return self.local_repo.path_for(name)
@@ -2281,15 +2329,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
         return reqs
-
-    def log_install_information(self, project: "Project", module_name: str) -> None:
-        """
-        Display information about this module's installation
-        :param project: The project associated with the module.
-        :param module_name: The module's name.
-        """
-        source = f" from {project.downloadpath}" if self.GENERATION == ModuleGeneration.V1 else ""
-        LOGGER.debug(f"Installing module {module_name} (v{self.GENERATION.value}) version {self.version}{source}.")
 
     @classmethod
     def get_module_dir(cls, module_subdirectory: str) -> str:
