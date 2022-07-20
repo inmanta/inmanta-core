@@ -378,19 +378,23 @@ class PythonEnvironment:
                 constraints_files=constraints_files,
                 requirements_files=requirements_files,
             )
-            self._run_command_and_stream_output(cmd)
-        except CalledProcessError as e:
-            stderr: str = e.stderr.decode()
-            not_found: List[str] = [
-                requirement.project_name
-                for requirement in requirements
-                if f"No matching distribution found for {requirement.project_name}" in stderr
-            ]
-            if not_found:
-                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-            if "versions have conflicting dependencies" in stderr:
-                raise ConflictingRequirements(stderr)
-            raise e
+            return_code, full_output = self._run_command_and_stream_output(cmd)
+
+            if return_code:
+                not_found: List[str] = []
+                conflicts: bool = False
+                for line in full_output:
+                    if "No matching distribution found for " in line:
+                        # Add missing package name to not_found list
+                        not_found.append(line.replace("No matching distribution found for ", "").split(" ")[0])
+
+                    if "versions have conflicting dependencies" in line:
+                        conflicts = True
+                if not_found:
+                    raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+                if conflicts:
+                    raise ConflictingRequirements("\n".join(full_output))
+                raise Exception(f"Process {cmd} exited with return code {return_code}")
         except Exception:
             raise
 
@@ -499,41 +503,31 @@ class PythonEnvironment:
             return output.decode()
 
     @classmethod
-    def _run_command_and_stream_output(cls, cmd: List[str]) -> None:
+    def _run_command_and_stream_output(cls, cmd: List[str], shell: bool = False) -> Tuple[int, List[str]]:
+        """
+        Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
+        of the sub-process.
+        """
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            shell=shell,
         )
 
-        not_found: List[str] = []
-        conflicts: bool = False
         full_output: List[str] = []
 
         assert process.stdout is not None  # Make mypy happy
 
         for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
             output = line.decode()
             full_output.append(output)
             LOGGER.debug(output)
 
-            if "No matching distribution found for " in output:
-                # Add missing package name to not_found list
-                output.replace("No matching distribution found for ", "")
-                not_found.append(output.split(" ")[0])
-
-            if "versions have conflicting dependencies" in output:
-                conflicts = True
-
         return_code = process.wait()
 
-        if not_found:
-            raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-        if conflicts:
-            raise ConflictingRequirements("\n".join(full_output))
-
-        if return_code:
-            raise Exception(f"Process {cmd} exited with return code {return_code}")
+        return return_code, full_output
 
 
 @contextlib.contextmanager
