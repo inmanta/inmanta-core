@@ -421,6 +421,7 @@ class PythonEnvironment:
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
+        print(requirements)
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
@@ -553,6 +554,7 @@ class ActiveEnv(PythonEnvironment):
             if r.marker and not r.marker.evaluate():
                 # The marker of the requirement doesn't apply on this environment
                 continue
+            # TODO: this does not take extras into account, but how could we do so?
             if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
                 return False
         return True

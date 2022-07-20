@@ -18,11 +18,13 @@
 import logging
 import os
 import shutil
+import subprocess
 import sys
 from typing import List, Optional, Set
 
 import py
 import pytest
+from collections import abc
 from pkg_resources import Requirement
 
 from inmanta import plugins
@@ -784,3 +786,107 @@ def test_module_conflicting_dependencies_with_v1_module(
         assert "Incompatibility between constraint y" in e.value.get_message()
     else:
         assert "requirements conflicts were found" in e.value.get_message()
+
+
+@pytest.mark.slowtest
+def test_module_install_extras(
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    # TODO: docstring
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("mymod")),
+        new_name="mymod",
+        new_requirements=[],
+        new_extras={
+            # TODO: make this a v2 mod instead of a plain Python package
+            "myfeature": [Requirement.parse("lorem")],
+        },
+        publish_index=index,
+    )
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("mymod")
+    )
+    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("mymod[myfeature]")
+    )
+    package_name: str = str(package_without_extra)
+
+    def assert_installed(*, module: bool = True, lorem: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module
+        assert ("lorem" in installed) == lorem
+
+    def clean_slate() -> None:
+        """
+        Uninstalls mymod and lorem packages.
+        """
+        subprocess.check_call([process_env.python_path, "-m", "pip", "uninstall", "--yes", package_name, "lorem"])
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert_installed(module=False, lorem=False)
+
+    # project with dependency on mymod without extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url],
+        python_requires=[package_without_extra],
+        autostd=False,
+    )
+    assert_installed(lorem=False)
+
+    # project with dependency on mymod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url],
+        python_requires=[package_with_extra],
+        autostd=False,
+    )
+    assert_installed(lorem=True)
+
+    clean_slate()
+
+    # v1 module with dependency on mymod without extra
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        str(tmpdir.join("myv1mod")),
+        new_name="myv1mod",
+        new_requirements=[package_without_extra],
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        python_package_sources=[index.url],
+        python_requires=[],
+        add_to_module_path=[str(tmpdir)],
+        autostd=False,
+    )
+    assert_installed(lorem=False)
+
+    # v1 module with dependency on mymod with extra
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        str(tmpdir.join("myv1mod")),
+        new_name="myv1mod",
+        new_requirements=[package_with_extra],
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        python_package_sources=[index.url],
+        python_requires=[],
+        add_to_module_path=[str(tmpdir)],
+        autostd=False,
+    )
+    assert_installed(lorem=True)
+
+    clean_slate()
+
+    # TODO: v2 mod
