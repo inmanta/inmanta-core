@@ -813,7 +813,7 @@ version: 0.0.1dev0"""
             try:
                 env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
             except env.ConflictingRequirements as e:
-                raise InvalidModuleException(e)
+                raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
