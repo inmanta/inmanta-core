@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -33,7 +34,7 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements
+from inmanta.env import ConflictingRequirements, PythonEnvironment
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -393,13 +394,11 @@ def test_project_install(
     snippetcompiler_clean,
     install_module_names: List[str],
     module_dependencies: List[str],
-    caplog,
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
-    caplog.set_level(logging.DEBUG)
 
     fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
@@ -427,13 +426,6 @@ def test_project_install(
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
-
-    log_contains(
-        caplog,
-        "inmanta.module",
-        logging.DEBUG,
-        "Installing module minimalv2module (v2) version 1.2.3.",
-    )
 
     # ensure we can compile
     compiler.do_compile()
@@ -914,3 +906,86 @@ The release type of the project is set to 'master'. Set it to a value that is ap
     """.strip() in str(
         excinfo.value
     )
+
+
+@pytest.mark.parametrize_any(
+    "install_module_name, expected_logs, v1_or_v2",
+    [
+        (
+            "minimalv2module",
+            [
+                ("Installing module minimalv2module (v2)", logging.INFO),
+                ("Successfully installed module minimalv2module (v2) version", logging.INFO),
+            ],
+            "v2",
+        ),
+        (
+            "minimalv1module",
+            [("Installing module std (v1)", logging.INFO), ("Successfully installed module std (v1) version", logging.INFO)],
+            "v1",
+        ),
+    ],
+)
+def test_module_install_logging(
+    local_module_package_index: str, expected_logs: str, v1_or_v2: str, snippetcompiler_clean, install_module_name: str, caplog
+) -> None:
+    """
+    Make sure the module's informations are displayed when it is being installed.
+    """
+
+    caplog.set_level(logging.INFO)
+
+    v2_requirements = None
+    if v1_or_v2 == "v2":
+        v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(install_module_name))]
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", install_module_name]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=v2_requirements,
+        install_project=False,
+    )
+
+    os.chdir(project.path)
+
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+
+    # ensure we can compile
+    compiler.do_compile()
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            level,
+            message,
+        )
+
+
+def test_real_time_logging(caplog):
+    """
+    Make sure the logging in _run_command_and_stream_output happens in real time
+    """
+    caplog.set_level(logging.DEBUG)
+
+    cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    return_code: int
+    output: List[str]
+    return_code, output = PythonEnvironment._run_command_and_stream_output(cmd, shell=True)
+    assert return_code == 0
+
+    assert "one" in caplog.records[0].message
+    assert "one" in output[0]
+    first_log_line_time: datetime = datetime.fromtimestamp(caplog.records[0].created)
+
+    assert "two" in caplog.records[-1].message
+    assert "two" in output[-1]
+    last_log_line_time: datetime = datetime.fromtimestamp(caplog.records[-1].created)
+
+    # "two" should be logged at least one second after "one"
+    delta: float = (last_log_line_time - first_log_line_time).total_seconds()
+    assert delta >= 1
