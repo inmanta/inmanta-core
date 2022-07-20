@@ -385,6 +385,9 @@ class CLIGitProvider(GitProvider):
         return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
     def get_remote(self, repo: str) -> str:
+        """
+        Returns the remote tracking repo given a local repo
+        """
         return subprocess.check_output(
             ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
         ).decode("utf-8")
@@ -648,11 +651,15 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
         local_repo = self.local_repo.path_for(module_name)
+
+        assert local_repo is not None, f"Failed to install module {module_name} because its local repository is not defined."
         remote_repo = gitprovider.get_remote(local_repo).strip()
         LOGGER.info(f"Installing module {module_name} (v1) from {remote_repo}.")
 
     def log_post_install_information(self, project: "Project", module_name: str) -> None:
         module = self.get_installed_module(project, module_name)
+
+        assert module is not None
         LOGGER.info(f"Successfully installed module {module_name} (v1) version {module.version}")
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
