@@ -1,0 +1,5 @@
+description: Tempararily disabled put_partial method to exclude it from the upcoming release while it is not yet in a stable state (#4412)
+change-type: patch
+destination-branches:
+  - master
+  - iso5

@@ -32,14 +32,14 @@ from .decorators import typedmethod
 from .openapi.model import OpenAPI
 
 
-@typedmethod(
-    path="/version/partial",
-    operation="PUT",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.compiler],
-    api_version=2,
-    varkw=True,
-)
+# @typedmethod(
+#     path="/version/partial",
+#     operation="PUT",
+#     arg_options=methods.ENV_OPTS,
+#     client_types=[ClientType.compiler],
+#     api_version=2,
+#     varkw=True,
+# )
 def put_partial(
     tid: uuid.UUID,
     version: int,
