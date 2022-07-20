@@ -227,7 +227,9 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
 
 @pytest.mark.slowtest
 def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
-    # TODO: docstring
+    """
+    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
 
