@@ -225,6 +225,43 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
         assert is_installed(python_module_name, False)
 
 
+@pytest.mark.slowtest
+def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+    """
+    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    """
+    # activate snippetcompiler's venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modone"),
+        new_name="modone",
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        install=True,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modtwo"),
+        new_name="modtwo",
+        new_requirements=[Requirement.parse("lorem~=0.1.0")],
+        install=True,
+    )
+
+    module_path: str = os.path.join(str(tmpdir), "conflictingdeps")
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_path,
+        new_name="conflictingdeps",
+        new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
+    )
+
+    with pytest.raises(module.InvalidModuleException) as exc_info:
+        run_module_install(module_path, False, True)
+    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
+    assert "caused by:" in exc_info.value.format_trace()
+
+
 @pytest.mark.parametrize_any("dev", [True, False])
 def test_module_install_version(
     tmpdir: py.path.local,
