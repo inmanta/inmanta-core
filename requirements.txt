@@ -29,5 +29,5 @@ build==0.8.0
 ruamel.yaml==0.17.21
 
 # Optional import in code
-graphviz==0.20
+graphviz==0.20.1
 rpdb==0.1.6
