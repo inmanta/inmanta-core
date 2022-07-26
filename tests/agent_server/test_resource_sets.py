@@ -1057,7 +1057,9 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
 
     assert result.code == 500
     assert result.result["message"] == (
-        "An unexpected error occurred in the server while processing the request: (\"Following resource sets are present in the removed resource sets and in the resources that are exported: {'set-b'}\",)"
+        "An unexpected error occurred in the server while processing the request: "
+        '("Following resource sets are present in the removed resource sets and in the '
+        "resources that are exported: {'set-b'}\",)"
     )
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}

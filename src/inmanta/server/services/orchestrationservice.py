@@ -671,8 +671,8 @@ class OrchestrationService(protocol.ServerSlice):
         intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
         if intersection:
             raise Exception(
-                "Following resource sets are present in the removed resource sets and in the resources that are exported: %s"
-                % intersection
+                "Following resource sets are present in the removed resource sets and in the resources that are exported: "
+                f"{intersection}"
             )
 
         merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
