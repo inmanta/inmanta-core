@@ -588,11 +588,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return self.from_path(project, module_name, path)
 
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
-        LOGGER.info(f"Installing module {module_name} (v2) version PLACEHOLDER.")
+        LOGGER.info(f"Installing module %s (v2).", module_name)
 
     def log_post_install_information(self, project: "Project", module_name: str) -> None:
         version: Optional[Version] = self.get_installed_version(module_name)
-        LOGGER.info(f"Successfully installed module {module_name} (v2) version {version}")
+        LOGGER.info(f"Successfully installed module %s (v2) version %s", module_name, version)
 
     def path_for(self, name: str) -> Optional[str]:
         """
@@ -650,17 +650,17 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.remote_repo: ModuleRepo = remote_repo
 
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
+        LOGGER.info(f"Installing module %s (v1).", module_name)
+
+    def log_post_install_information(self, project: "Project", module_name: str) -> None:
         local_repo = self.local_repo.path_for(module_name)
 
         assert local_repo is not None, f"Failed to install module {module_name} because its local repository is not defined."
         remote_repo = gitprovider.get_remote(local_repo).strip()
-        LOGGER.info(f"Installing module {module_name} (v1) from {remote_repo}.")
-
-    def log_post_install_information(self, project: "Project", module_name: str) -> None:
         module = self.get_installed_module(project, module_name)
 
         assert module is not None
-        LOGGER.info(f"Successfully installed module {module_name} (v1) version {module.version}")
+        LOGGER.info(f"Successfully installed module %s (v1) version %s from %s", module_name, module.version, remote_repo)
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)

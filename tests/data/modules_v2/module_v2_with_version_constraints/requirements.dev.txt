@@ -1,0 +1,1 @@
+inmanta-dev-dependencies[module]

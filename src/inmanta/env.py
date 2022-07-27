@@ -386,7 +386,9 @@ class PythonEnvironment:
                 for line in full_output:
                     if "No matching distribution found for " in line:
                         # Add missing package name to not_found list
-                        not_found.append(line.replace("No matching distribution found for ", "").split(" ")[0])
+                        not_found.append(
+                            line.replace("No matching distribution found for ", "").split(" ", maxsplit=1)[1].strip()
+                        )
 
                     if "versions have conflicting dependencies" in line:
                         conflicts = True

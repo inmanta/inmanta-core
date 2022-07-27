@@ -34,8 +34,8 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PythonEnvironment
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
+from inmanta.env import ConflictingRequirements, PackageNotFound, PythonEnvironment
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
@@ -908,40 +908,21 @@ The release type of the project is set to 'master'. Set it to a value that is ap
     )
 
 
-@pytest.mark.parametrize_any(
-    "install_module_name, expected_logs, v1_or_v2",
-    [
-        (
-            "minimalv2module",
-            [
-                ("Installing module minimalv2module (v2)", logging.INFO),
-                ("Successfully installed module minimalv2module (v2) version", logging.INFO),
-            ],
-            "v2",
-        ),
-        (
-            "minimalv1module",
-            [("Installing module std (v1)", logging.INFO), ("Successfully installed module std (v1) version", logging.INFO)],
-            "v1",
-        ),
-    ],
-)
-def test_module_install_logging(
-    local_module_package_index: str, expected_logs: str, v1_or_v2: str, snippetcompiler_clean, install_module_name: str, caplog
-) -> None:
+def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
     """
-    Make sure the module's informations are displayed when it is being installed.
+    Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
     """
 
     caplog.set_level(logging.INFO)
 
-    v2_requirements = None
-    if v1_or_v2 == "v2":
-        v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(install_module_name))]
+    v1_module = "minimalv1module"
+    v2_module = "minimalv2module"
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", install_module_name]),
+        "\n".join(f"import {mod}" for mod in ["std", v1_module, v2_module]),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
@@ -956,6 +937,13 @@ def test_module_install_logging(
 
     # ensure we can compile
     compiler.do_compile()
+
+    expected_logs = [
+        ("Installing module minimalv2module (v2)", logging.INFO),
+        ("Successfully installed module minimalv2module (v2) version", logging.INFO),
+        ("Installing module std (v1)", logging.INFO),
+        ("Successfully installed module std (v1) version", logging.INFO),
+    ]
 
     for message, level in expected_logs:
         log_contains(
@@ -989,3 +977,58 @@ def test_real_time_logging(caplog):
     # "two" should be logged at least one second after "one"
     delta: float = (last_log_line_time - first_log_line_time).total_seconds()
     assert delta >= 1
+
+
+def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog):
+    """ """
+    caplog.set_level(logging.DEBUG)
+
+    v2_module = "no_matching_dependency"
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=v2_requirements,
+        install_project=False,
+    )
+
+    os.chdir(project.path)
+
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    # module.Project.get().autostd = False
+    with pytest.raises(ModuleNotFoundException):
+        ProjectTool().execute("install", [])
+
+    expected_logs = [
+        ("No matching distribution found for inmanta-module-v2-module==1234567.1234567.1234567", logging.DEBUG),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.env",
+            level,
+            message,
+        )
+
+
+def test_constraints_sandbox(local_module_package_index: str, snippetcompiler_clean, caplog):
+    """ """
+    caplog.set_level(logging.DEBUG)
+
+    v2_module = "module_v2_with_version_constraints"
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in [v2_module, "elaboratev2module"]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=v2_requirements,
+        install_project=True,
+    )
