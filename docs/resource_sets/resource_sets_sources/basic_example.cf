@@ -1,0 +1,9 @@
+
+entity Res extends std::Resource:
+end
+
+implement Res using parents
+
+# Instance a is assigned to the resource set "test"
+a = Res()
+std::ResourceSet(name="test", resources=[a])
