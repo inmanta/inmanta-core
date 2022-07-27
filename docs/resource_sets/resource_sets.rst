@@ -1,10 +1,10 @@
 **********************************
 Resource sets and partial compile
 **********************************
-To support constant scalability resource sets can be used. Without the use of those, each time a  service is added,
+To support constant scalability resource sets can be used. Without the use of those, each time a resource is added,
 updated or removed, the entire model is recompiled.
-By using resource sets, the resources managed by the inmanta server will be aware about the service they belong to.
-This allows to perform a certain action (e.g. dry-run, repair run) only on the resources of a specific service.
+By using resource sets, the resources managed by the inmanta server can be grouped in resource sets.
+This allows to perform a certain action (e.g. dry-run, repair run) only on the resources of a specific resource sets.
 Compiling only some resource sets and not all the resources is called a partial compile.
 
 Resource sets
@@ -38,7 +38,7 @@ To ensure partial compiles work correctly some constraints and rules where put i
 * When a partial compile contains a resource that belongs to a certain resource set, the partial compile should contain all the resources for that specific resource set that should be present in the new version of the model.
 * A partial compile can never update/remove resources that were not assigned to a specific resource set (adding resources is allowed).
 * The new version of the model that results from a partial compile, should have a dependency graph that is closed (i.e. doesn't have any dangling dependencies). This constraint is check by the server.
-* A partial compile can update multiple resource sets at the same time. This is required to support partial compiles for services with inter-service relationships.
+* A partial compile can update multiple resource sets at the same time.
 
 Exporting a partial model to the server
 ******************************************************
@@ -52,5 +52,5 @@ combination with the previous one.
 Limitations
 *************
 With partial compiles the compiler cannot verify all constraints that would be checked when a full compile is ran.
-For example, not all index constraints can be verified. It's the responsibility of the service modeller to make sure
+For example, not all index constraints can be verified. It's the responsibility of the model developer to make sure
 that these constraints are satisfied.
