@@ -1,5 +1,0 @@
-inmanta_plugins/**/__pycache__
-tests/**/__pycache__
-*.orig
-.vscode
-.pytest_cache

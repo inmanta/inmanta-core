@@ -1,4 +1,4 @@
-name: many_dependencies
+name: no_matching_dependency
 description: A module with all different types of dependencies (python dependencies + inmanta dependencies)
 license: Apache 2.0
 version: 1.2.1
