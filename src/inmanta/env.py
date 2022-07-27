@@ -301,6 +301,8 @@ class PipCommandBuilder:
             "-m",
             "pip",
             "list",
+            "--disable-pip-version-check",
+            "--no-python-version-warning",
             *(["--format", format.value] if format else []),
             *(["--editable"] if only_editable else []),
         ]
