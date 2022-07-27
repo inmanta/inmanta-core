@@ -426,7 +426,7 @@ class ModuleSource(Generic[TModule]):
         """
         module_name: str = self._get_module_name(module_spec)
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
-        if installed is None and install:
+        if (installed is None or any(spec._requirement.extras for spec in module_spec)) and install:
             return self.install(project, module_spec)
         return installed
 
@@ -516,15 +516,15 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+        module_name: str = self._get_module_name(module_spec)
         if not self.urls:
             raise Exception(
-                "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
-                ' "package" to the project config file. e.g. to add PyPi as a module source, add the following to the `repo`'
-                " section of the project's `project.yml`:"
+                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
+                'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
+                "the `repo` section of the project's `project.yml`:"
                 "\n\t- type: package"
                 "\n\t  url: https://pypi.org/simple"
             )
-        module_name: str = self._get_module_name(module_spec)
         requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)

@@ -789,13 +789,17 @@ def test_module_conflicting_dependencies_with_v1_module(
 
 
 @pytest.mark.slowtest
-def test_module_install_extras(
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_project_level_v2_dep(
     snippetcompiler_clean,
-    modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
 ) -> None:
-    # TODO: docstring
+    """
+    Verify that module installation works correctly when a project has a V2 module dependency with an extra.
+    """
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # create module with optional dependency
@@ -805,8 +809,7 @@ def test_module_install_extras(
         new_name="mymod",
         new_requirements=[],
         new_extras={
-            # TODO: make this a v2 mod instead of a plain Python package
-            "myfeature": [Requirement.parse("lorem")],
+            "myfeature": [Requirement.parse(package_name_extra)],
         },
         publish_index=index,
     )
@@ -818,75 +821,174 @@ def test_module_install_extras(
     )
     package_name: str = str(package_without_extra)
 
-    def assert_installed(*, module: bool = True, lorem: bool) -> None:
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
         installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
-        assert (package_name in installed) == module
-        assert ("lorem" in installed) == lorem
-
-    def clean_slate() -> None:
-        """
-        Uninstalls mymod and lorem packages.
-        """
-        subprocess.check_call([process_env.python_path, "-m", "pip", "uninstall", "--yes", package_name, "lorem"])
-        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
-        assert_installed(module=False, lorem=False)
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
 
     # project with dependency on mymod without extra
     snippetcompiler_clean.setup_for_snippet(
         "import mymod",
         install_project=True,
-        python_package_sources=[index.url],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_without_extra],
         autostd=False,
     )
-    assert_installed(lorem=False)
+    assert_installed(extra_installed=False)
 
     # project with dependency on mymod with extra
     snippetcompiler_clean.setup_for_snippet(
         "import mymod",
         install_project=True,
-        python_package_sources=[index.url],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_with_extra],
         autostd=False,
     )
-    assert_installed(lorem=True)
+    assert_installed(extra_installed=True)
 
-    clean_slate()
 
-    # v1 module with dependency on mymod without extra
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v2_module(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    # TODO:
+    """
+    Verify that module installation works correctly when a V2 module defines a dependency with an extra.
+
+    Dependency tree:
+
+        myv2mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("mymod")
+    )
+    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("mymod[myfeature]")
+    )
+    package_name: str = str(package_without_extra)
+
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
+
+    # project with dependency on mymod without extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_without_extra],
+        autostd=False,
+    )
+    assert_installed(extra_installed=False)
+
+    # project with dependency on mymod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_with_extra],
+        autostd=False,
+    )
+    assert_installed(extra_installed=True)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v1_module(
+    tmpdir,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correct when a V1 module has a dependency that defines an extra.
+
+    Dependency tree:
+
+        myv1mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Publish dependency of V1 module (depmod) to python package repo
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("depmod")
+    )
+    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("depmod[myfeature]")
+    )
+    package_name: str = str(package_without_extra)
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
+
+    # v1 module with dependency on myv1mod without extra
+    path_myv1mod = str(tmpdir.join("myv1mod"))
     v1_module_from_template(
         os.path.join(modules_dir, "minimalv1module"),
-        str(tmpdir.join("myv1mod")),
+        path_myv1mod,
         new_name="myv1mod",
         new_requirements=[package_without_extra],
     )
     snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
         install_project=True,
-        python_package_sources=[index.url],
-        python_requires=[],
         add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
-    assert_installed(lorem=False)
+    assert_installed(extra_installed=False)
 
-    # v1 module with dependency on mymod with extra
+    # v1 module with dependency on myv1mod with extra
+    shutil.rmtree(path_myv1mod)
     v1_module_from_template(
         os.path.join(modules_dir, "minimalv1module"),
-        str(tmpdir.join("myv1mod")),
+        path_myv1mod,
         new_name="myv1mod",
         new_requirements=[package_with_extra],
     )
     snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
         install_project=True,
-        python_package_sources=[index.url],
-        python_requires=[],
         add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
-    assert_installed(lorem=True)
-
-    clean_slate()
-
-    # TODO: v2 mod
+    assert_installed(extra_installed=True)

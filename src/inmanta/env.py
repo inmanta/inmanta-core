@@ -557,6 +557,9 @@ class ActiveEnv(PythonEnvironment):
             # TODO: this does not take extras into account, but how could we do so?
             if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
                 return False
+            if r.extras:
+                # Install to be sure
+                return False
         return True
 
     def install_from_index(
