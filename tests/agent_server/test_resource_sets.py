@@ -993,7 +993,7 @@ async def test_put_partial_version(server, client, environment, clienthelper):
 
 async def test_put_partial_removed_rs_in_rs(server, client, environment, clienthelper):
     """
-    A test that throws and exception if a removed resource set is still present int the resourcesets
+    Test that an exception is thrown when a resource being exported belongs to a resource set that is being deleted.
     """
     version = await clienthelper.get_version()
     resources = [
