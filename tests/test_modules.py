@@ -206,7 +206,7 @@ def test_get_requirements(
     """
     Test the different methods to get the requirements of a module.
     """
-    module_name = "no_matching_dependency"
+    module_name = "many_dependencies"
 
     if v1_module:
         module_dir = os.path.join(modules_dir, module_name)
