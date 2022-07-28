@@ -1053,47 +1053,53 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         )
 
 
-def test_constraints_sandbox(local_module_package_index: str, snippetcompiler_clean, caplog):
-    """ """
+def test_pip_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    This test checks that pip's output is correctly logged on module install.
+    """
     caplog.set_level(logging.DEBUG)
 
-    # v2_modules = ["many_dependencies", "v2_module"]
+    snippetcompiler_clean.setup_for_snippet("")
 
-    v2_modules = ["minimalv2module"]
+    modone: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modone"),
+        new_version=version.Version("3.1.2"),
+        new_name="modone",
+        install=True,
+    )
+    modtwo: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modtwo"),
+        new_version=version.Version("2.2.2"),
+        new_name="modtwo",
+        new_requirements=[InmantaModuleRequirement.parse("modone")],
+        install=True,
+    )
 
-    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in v2_modules]
-    # v2_requirements = []
+    modules = ["modone", "modtwo"]
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in modules]
 
-    # set up project and modules
     snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in v2_modules),
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(modone)}
+        import {module.ModuleV2.get_name_from_metadata(modtwo)}
+        """,
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
         install_project=True,
     )
 
-    assert caplog is not None
+    expected_logs = [
+        ("Successfully installed inmanta-module-modone-3.1.2", logging.DEBUG),
+        ("Successfully installed inmanta-module-modtwo-2.2.2", logging.DEBUG),
+    ]
 
-
-def test_constraints_sandbox_complex_case(local_module_package_index: str, snippetcompiler_clean, caplog):
-    """ """
-    caplog.set_level(logging.DEBUG)
-
-    v2_modules = ["many_dependencies", "v2_module"]
-    #
-    # v2_modules = ["many_dependencies"]
-
-    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in v2_modules]
-    # v2_requirements = []
-
-    # set up project and modules
-    snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in v2_modules),
-        autostd=False,
-        python_package_sources=[local_module_package_index],
-        python_requires=v2_requirements,
-        install_project=True,
-    )
-
-    assert caplog is not None
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.env",
+            level,
+            message,
+        )
