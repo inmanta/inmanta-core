@@ -1057,15 +1057,43 @@ def test_constraints_sandbox(local_module_package_index: str, snippetcompiler_cl
     """ """
     caplog.set_level(logging.DEBUG)
 
-    v2_module = "module_v2_with_version_constraints"
+    # v2_modules = ["many_dependencies", "v2_module"]
 
-    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+    v2_modules = ["minimalv2module"]
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in v2_modules]
+    # v2_requirements = []
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in [v2_module, "minimalv2module"]),
+        "\n".join(f"import {mod}" for mod in v2_modules),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
         install_project=True,
     )
+
+    assert caplog is not None
+
+
+def test_constraints_sandbox_complex_case(local_module_package_index: str, snippetcompiler_clean, caplog):
+    """ """
+    caplog.set_level(logging.DEBUG)
+
+    v2_modules = ["many_dependencies", "v2_module"]
+    #
+    # v2_modules = ["many_dependencies"]
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in v2_modules]
+    # v2_requirements = []
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in v2_modules),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=v2_requirements,
+        install_project=True,
+    )
+
+    assert caplog is not None
