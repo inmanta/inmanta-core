@@ -34,7 +34,7 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PackageNotFound, PythonEnvironment
+from inmanta.env import ConflictingRequirements, PythonEnvironment
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -1065,7 +1065,7 @@ def test_constraints_sandbox(local_module_package_index: str, snippetcompiler_cl
     # v2_requirements = []
 
     # set up project and modules
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+    snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in v2_modules),
         autostd=False,
         python_package_sources=[local_module_package_index],
@@ -1088,7 +1088,7 @@ def test_constraints_sandbox_complex_case(local_module_package_index: str, snipp
     # v2_requirements = []
 
     # set up project and modules
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+    snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in v2_modules),
         autostd=False,
         python_package_sources=[local_module_package_index],
