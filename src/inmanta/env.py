@@ -158,7 +158,11 @@ class PythonWorkingSet:
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
         if inmanta_modules_only:
-            return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set if dist_info.key.startswith(ModuleV2.PKG_NAME_PREFIX)}
+            return {
+                dist_info.key: version.Version(dist_info.version)
+                for dist_info in pkg_resources.working_set
+                if dist_info.key.startswith(ModuleV2.PKG_NAME_PREFIX)
+            }
         else:
             return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
 
