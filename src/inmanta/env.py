@@ -41,6 +41,7 @@ from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException
+from inmanta.module import ModuleV2
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
@@ -150,11 +151,16 @@ class ConflictingRequirements(CompilerException):
 
 class PythonWorkingSet:
     @classmethod
-    def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
+    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> Dict[str, version.Version]:
         """
         Return all packages present in `pkg_resources.working_set` together with the version of the package.
+
+        :param inmanta_modules_only: Only return inmanta modules from the working set
         """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+        if inmanta_modules_only:
+            return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set if dist_info.key.startswith(ModuleV2.PKG_NAME_PREFIX)}
+        else:
+            return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
 
     @classmethod
     def rebuild_working_set(cls) -> None:
