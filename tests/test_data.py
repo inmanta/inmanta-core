@@ -29,7 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import QueryType
+from inmanta.data import QueryType, Setting, convert_boolean
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
@@ -345,6 +345,27 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
         await env.get("get_non_existing_parameter")
     with pytest.raises(AttributeError):
         await env.set(data.AUTO_DEPLOY, 5)
+
+
+async def test_environment_add_new_setting_parameter(init_dataclasses_and_load_schema):
+    project = data.Project(name="proj")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    new_setting: Setting = Setting(
+        name="a new boolean setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+
+    await env.add_new_setting(new_setting)
+    assert (await env.get("a new boolean setting")) is False
+    await env.set("a new boolean setting", True)
+    assert (await env.get(data.AUTO_DEPLOY)) is True
 
 
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):

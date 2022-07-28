@@ -2427,6 +2427,17 @@ RETURNING last_version;
         self.last_version = version
         return version
 
+    async def add_new_setting(self, setting: Setting) -> None:
+        """
+        Adds a new setting in this environment.
+
+        :param setting: the setting that should be added to the existing settings
+        """
+        assert isinstance(setting, Setting)
+        if setting.name in self._settings:
+            raise KeyError()
+        self._settings[setting.name] = setting
+
     @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
