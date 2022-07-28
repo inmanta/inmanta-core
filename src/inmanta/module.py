@@ -605,7 +605,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         version: Optional[Version] = self.get_installed_version(module_name)
         LOGGER.info("Successfully installed module %s (v2) version %s", module_name, version)
 
-        version_snapshot = {name: mod.version for name, mod in project.modules.items()}
+        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
             LOGGER.debug("Snapshot of modules versions post-install:")
             LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
@@ -689,7 +689,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         assert module is not None
         LOGGER.info("Successfully installed module %s (v1) version %s from %s", module_name, module.version, remote_repo)
 
-        version_snapshot = {name: mod.version for name, mod in project.modules.items()}
+        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
             LOGGER.debug("Snapshot of modules versions post-install:")
             LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
