@@ -30,7 +30,6 @@ from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
 import py
-import pydantic
 import pytest
 from pkg_resources import Requirement
 
@@ -246,7 +245,6 @@ def test_process_env_install_from_index_conflicting_reqs(
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_process_env_install_from_source(
-    tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     editable: bool,
@@ -254,20 +252,13 @@ def test_process_env_install_from_source(
     """
     Install a package from source into the process_env. Make sure the editable option actually results in an editable install.
     """
-    venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.process_env.get_installed_packages()
     env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
     assert package_name in env.process_env.get_installed_packages()
     if editable:
-        assert any(
-            package["name"] == package_name
-            for package in pydantic.parse_raw_as(
-                List[Dict[str, str]],
-                subprocess.check_output([python_path, "-m", "pip", "list", "--editable", "--format", "json"]).decode(),
-            )
-        )
+        assert package_name in env.process_env.get_installed_packages(only_editable=True)
 
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
@@ -503,7 +494,11 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
 
     pip_binary = os.path.join(os.path.dirname(venv.python_path), "pip")
     # Ensure that the pip command doesn't raise an exception
-    result = subprocess.check_output([pip_binary, "list", "--format", "json"], timeout=10, encoding="utf-8")
+    result = subprocess.check_output(
+        [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
+        timeout=10,
+        encoding="utf-8",
+    )
     parsed_output = json.loads(result)
     # Ensure inheritance works correctly
     assert "inmanta-core" in [elem["name"] for elem in parsed_output]
