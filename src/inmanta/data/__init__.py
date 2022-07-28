@@ -2427,7 +2427,7 @@ RETURNING last_version;
         self.last_version = version
         return version
 
-    async def add_new_setting(self, setting: Setting) -> None:
+    async def register_setting(self, setting: Setting) -> None:
         """
         Adds a new setting in this environment.
 

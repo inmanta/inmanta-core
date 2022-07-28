@@ -362,7 +362,7 @@ async def test_environment_add_new_setting_parameter(init_dataclasses_and_load_s
         doc="a new setting",
     )
 
-    await env.add_new_setting(new_setting)
+    await env.register_setting(new_setting)
     assert (await env.get("a new boolean setting")) is False
     await env.set("a new boolean setting", True)
     assert (await env.get(data.AUTO_DEPLOY)) is True
@@ -375,7 +375,7 @@ async def test_environment_add_new_setting_parameter(init_dataclasses_and_load_s
         doc="a new setting",
     )
     with pytest.raises(KeyError):
-        await env.add_new_setting(existing_setting)
+        await env.register_setting(existing_setting)
 
 
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
