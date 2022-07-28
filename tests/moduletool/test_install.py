@@ -1026,7 +1026,7 @@ def test_constraints_sandbox(local_module_package_index: str, snippetcompiler_cl
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in [v2_module, "elaboratev2module"]),
+        "\n".join(f"import {mod}" for mod in [v2_module, "minimalv2module"]),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
