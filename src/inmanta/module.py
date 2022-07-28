@@ -440,7 +440,7 @@ class ModuleSource(Generic[TModule]):
         return installed
 
     @abstractmethod
-    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Module"]:
+    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Version"]:
         """
         Display information about this module's installation before the actual installation.
 
@@ -451,7 +451,7 @@ class ModuleSource(Generic[TModule]):
 
     @abstractmethod
     def log_post_install_information(
-        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Module"]
+        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Version"]
     ) -> None:
         """
         Display information about this module's installation after the actual installation.
@@ -589,18 +589,18 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
         return self.from_path(project, module_name, path)
 
-    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Module"]:
+    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Version"]:
 
         LOGGER.info("Installing module %s (v2).", module_name)
 
-        version_snapshot = {name: mod.version for name, mod in project.modules.items()}
+        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
             LOGGER.debug("Snapshot of modules versions pre-install:")
             LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
         return version_snapshot
 
     def log_post_install_information(
-        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Module"]
+        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Version"]
     ) -> None:
         version: Optional[Version] = self.get_installed_version(module_name)
         LOGGER.info("Successfully installed module %s (v2) version %s", module_name, version)
@@ -667,18 +667,18 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
-    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Module"]:
+    def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Version"]:
 
         LOGGER.info("Installing module %s (v1).", module_name)
 
-        version_snapshot = {name: mod.version for name, mod in project.modules.items()}
+        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
             LOGGER.debug("Snapshot of modules versions pre-install:")
             LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
         return version_snapshot
 
     def log_post_install_information(
-        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Module"]
+        self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Version"]
     ) -> None:
         local_repo = self.local_repo.path_for(module_name)
 
