@@ -367,6 +367,16 @@ async def test_environment_add_new_setting_parameter(init_dataclasses_and_load_s
     await env.set("a new boolean setting", True)
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
+    existing_setting: Setting = Setting(
+        name=data.AUTO_DEPLOY,
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+    with pytest.raises(KeyError):
+        await env.add_new_setting(existing_setting)
+
 
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
     project = data.Project(name="proj")
