@@ -1,0 +1,5 @@
+description: Add support for resource sets
+issue-nr: 927
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master, iso5]
