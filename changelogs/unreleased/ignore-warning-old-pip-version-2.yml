@@ -1,0 +1,4 @@
+---
+description: Fix issue where test cases fail when the tests are not executed using the latest version of pip.
+change-type: patch
+destination-branches: [master, iso5]
