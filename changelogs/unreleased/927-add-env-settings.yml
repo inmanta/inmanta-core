@@ -1,4 +1,4 @@
-description: Add support for resource sets
+description: add the possibility to add extra settings to the env from outside of inmanta-core
 issue-nr: 927
 issue-repo: inmanta-lsm
 change-type: minor
