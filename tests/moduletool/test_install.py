@@ -34,12 +34,12 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PythonEnvironment
+from inmanta.env import ConflictingRequirements, PythonEnvironment, PackageNotFound
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template, log_doesnt_contain
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -1015,41 +1015,96 @@ def test_real_time_logging(caplog):
     assert delta >= 1
 
 
-def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog):
-    """ """
+def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    Make sure the logs contain the correct message when no matching distribution is found during install.
+    """
     caplog.set_level(logging.DEBUG)
 
-    v2_module = "no_matching_dependency"
+    # set up venv
+    snippetcompiler_clean.setup_for_snippet("", autostd=False)
 
-    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+    # Scenario 1
+    # parent_module requires child_module v3.3.3
+    # child_module is not installed
+    with pytest.raises(PackageNotFound):
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            os.path.join(str(tmpdir), "parent_module"),
+            new_version=version.Version("1.2.3"),
+            new_name="parent_module",
+            install=True,
+            new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+        )
 
-    # set up project and modules
-    project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
-        autostd=False,
-        python_package_sources=[local_module_package_index],
-        python_requires=v2_requirements,
-        install_project=False,
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
 
-    os.chdir(project.path)
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"), ignore_errors=True)
+    # Scenario 2
+    # parent_module requires child_module v3.3.3
+    # child_module is installed with v1.1.1
 
-    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
-    # module.Project.get().autostd = False
-    with pytest.raises(ModuleNotFoundException):
-        ProjectTool().execute("install", [])
+    # Install the required module with a low version:
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("1.1.1"),
+        new_name="child_module",
+        install=True,
+    )
 
-    expected_logs = [
-        ("No matching distribution found for inmanta-module-v2-module==1234567.1234567.1234567", logging.DEBUG),
-    ]
-
-    for message, level in expected_logs:
-        log_contains(
-            caplog,
-            "inmanta.env",
-            level,
-            message,
+    with pytest.raises(PackageNotFound):
+        module_from_template(
+            os.path.join(modules_v2_dir, "minimalv2module"),
+            os.path.join(str(tmpdir), "parent_module"),
+            new_version=version.Version("1.2.3"),
+            new_name="parent_module",
+            install=True,
+            new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
         )
+
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
+    )
+
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"), ignore_errors=True)
+    shutil.rmtree(os.path.join(str(tmpdir), "child_module"), ignore_errors=True)
+    # Scenario 3
+    # parent_module requires child_module v3.3.3
+    # child_module is installed with v3.3.3
+
+    # Install the required module with the correct version:
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("3.3.3"),
+        new_name="child_module",
+        install=True,
+    )
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "parent_module"),
+        new_version=version.Version("1.2.3"),
+        new_name="parent_module",
+        install=True,
+        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "Successfully installed inmanta-module-parent-module-1.2.3",
+    )
 
 
 def test_pip_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
