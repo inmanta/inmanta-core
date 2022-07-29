@@ -602,7 +602,7 @@ class EnvironmentService(protocol.ServerSlice):
             except Exception:
                 LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)
 
-    async def register_setting(self, env: data.Environment, setting: Setting) -> None:
+    async def register_setting(self, setting: Setting) -> None:
         """
         Should only be called during pre-start
         Adds a new setting to this environment from outside inmanta-core.
@@ -613,6 +613,6 @@ class EnvironmentService(protocol.ServerSlice):
         :param setting: the setting that should be added to the existing settings
         """
         try:
-            await env.register_setting(setting)
+            await data.Environment.register_setting(setting)
         except KeyError:
             raise

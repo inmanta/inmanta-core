@@ -328,8 +328,8 @@ async def test_environment_add_new_setting_parameter(server, client, environment
         validator=convert_boolean,
         doc="a new setting",
     )
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.register_setting(new_setting)
+
+    await data.Environment.register_setting(new_setting)
 
     result = await client.get_setting(tid=environment, id="a new boolean setting")
     assert result.code == 200
@@ -354,7 +354,7 @@ async def test_environment_add_new_setting_parameter(server, client, environment
         doc="a new setting",
     )
     with pytest.raises(KeyError):
-        await env.register_setting(existing_setting)
+        await data.Environment.register_setting(existing_setting)
 
     result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200

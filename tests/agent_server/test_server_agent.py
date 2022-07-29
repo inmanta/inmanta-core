@@ -729,7 +729,7 @@ async def test_get_set_param(resource_container, environment, client, server):
 
 async def test_register_setting(resource_container, environment, client, server):
     """
-    Test getting and setting params
+    Test registering a new setting
     """
     resource_container.Provider.reset()
     new_setting: Setting = Setting(
@@ -739,9 +739,8 @@ async def test_register_setting(resource_container, environment, client, server)
         validator=convert_boolean,
         doc="a new setting",
     )
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
     env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
-    await env_slice.register_setting(env, new_setting)
+    await env_slice.register_setting(new_setting)
     result = await client.get_setting(tid=environment, id="a new boolean setting")
     assert result.code == 200
     assert result.result["value"] is False
