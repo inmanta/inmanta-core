@@ -727,11 +727,10 @@ async def test_get_set_param(resource_container, environment, client, server):
     assert result.code == 200
 
 
-async def test_register_setting(resource_container, environment, client, server):
+async def test_register_setting(environment, client, server):
     """
-    Test getting and setting params
+    Test registering a new setting.
     """
-    resource_container.Provider.reset()
     new_setting: Setting = Setting(
         name="a new boolean setting",
         default=False,
