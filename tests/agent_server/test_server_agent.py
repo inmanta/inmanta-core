@@ -34,9 +34,17 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_ENVIRONMENT,
+    SLICE_PARAM,
+    SLICE_SESSION_MANAGER,
+)
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.compilerservice import CompilerService
+from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
@@ -717,6 +725,26 @@ async def test_get_set_param(resource_container, environment, client, server):
 
     result = await client.delete_param(tid=environment, id="key10")
     assert result.code == 200
+
+
+async def test_register_setting(resource_container, environment, client, server):
+    """
+    Test getting and setting params
+    """
+    resource_container.Provider.reset()
+    new_setting: Setting = Setting(
+        name="a new boolean setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
+    await env_slice.register_setting(env, new_setting)
+    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    assert result.code == 200
+    assert result.result["value"] is False
 
 
 async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
