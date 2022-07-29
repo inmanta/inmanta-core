@@ -606,7 +606,7 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Should only be called during pre-start
         Adds a new setting to this environment from outside inmanta-core.
-        As example, inmanta-lsm can use this methode to add settings that are only
+        As example, inmanta-lsm can use this method to add settings that are only
         relevant for inmanta-lsm but that are needed in the environment.
 
         :param env: the environment in which the setting will be registered
