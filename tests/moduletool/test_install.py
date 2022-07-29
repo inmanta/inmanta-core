@@ -34,12 +34,12 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PythonEnvironment, PackageNotFound
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
+from inmanta.env import ConflictingRequirements, PackageNotFound, PythonEnvironment
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template, log_doesnt_contain
+from utils import PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:

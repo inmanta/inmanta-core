@@ -477,7 +477,7 @@ class ModuleSource(Generic[TModule]):
 
         LOGGER.debug(
             "The following modules were updated or added:\n"
-            "\n".join( f"{module}: {version} " for module, version in updates_and_additions)
+            "\n".join(f"{module}: {version} " for module, version in updates_and_additions)
         )
 
     @abstractmethod
@@ -626,8 +626,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         ModuleSource.log_snapshot_difference(modules_pre_install)
 
-
-
     def path_for(self, name: str) -> Optional[str]:
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
@@ -706,7 +704,6 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         LOGGER.info("Successfully installed module %s (v1) version %s from %s", module_name, module.version, remote_repo)
 
         ModuleSource.log_snapshot_difference(modules_pre_install)
-
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)

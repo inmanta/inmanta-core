@@ -39,9 +39,9 @@ from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
+import inmanta.module
 from inmanta import const
 from inmanta.ast import CompilerException
-import inmanta.module
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
