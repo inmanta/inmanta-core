@@ -605,7 +605,7 @@ class EnvironmentService(protocol.ServerSlice):
     async def register_setting(self, setting: Setting) -> None:
         """
         Should only be called during pre-start
-        Adds a new setting to this environment from outside inmanta-core.
+        Adds a new setting to the environments from outside inmanta-core.
         As example, inmanta-lsm can use this method to add settings that are only
         relevant for inmanta-lsm but that are needed in the environment.
         :param setting: the setting that should be added to the existing settings
