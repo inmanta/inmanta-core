@@ -2433,7 +2433,6 @@ RETURNING last_version;
 
         :param setting: the setting that should be added to the existing settings
         """
-        assert isinstance(setting, Setting)
         if setting.name in self._settings:
             raise KeyError()
         self._settings[setting.name] = setting
