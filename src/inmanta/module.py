@@ -461,6 +461,25 @@ class ModuleSource(Generic[TModule]):
         """
         raise NotImplementedError("Abstract method")
 
+    @staticmethod
+    def log_snapshot_difference(modules_pre_install: Dict[str, "Version"]) -> None:
+        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
+        if version_snapshot:
+            LOGGER.debug(
+                "Snapshot of modules versions post-install:\n"
+                "\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items())
+            )
+
+        set_pre_install = set(modules_pre_install.items())
+        set_post_install = set(version_snapshot.items())
+
+        updates_and_additions = set_post_install - set_pre_install
+
+        LOGGER.debug(
+            "The following modules were updated or added:\n"
+            "\n".join( f"{module}: {version} " for module, version in updates_and_additions)
+        )
+
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
         """
@@ -605,12 +624,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         version: Optional[Version] = self.get_installed_version(module_name)
         LOGGER.info("Successfully installed module %s (v2) version %s", module_name, version)
 
-        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
-        if version_snapshot:
-            LOGGER.debug("Snapshot of modules versions post-install:")
-            LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
+        ModuleSource.log_snapshot_difference(modules_pre_install)
 
-        LOGGER.debug(f"Snapshot difference:\n{set(modules_pre_install.items()) ^ set(version_snapshot.items())}")
+
 
     def path_for(self, name: str) -> Optional[str]:
         """
@@ -689,12 +705,8 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         assert module is not None
         LOGGER.info("Successfully installed module %s (v1) version %s from %s", module_name, module.version, remote_repo)
 
-        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
-        if version_snapshot:
-            LOGGER.debug("Snapshot of modules versions post-install:")
-            LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
+        ModuleSource.log_snapshot_difference(modules_pre_install)
 
-        LOGGER.debug(f"Snapshot difference:\n{set(modules_pre_install.items()) ^ set(version_snapshot.items())}")
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
