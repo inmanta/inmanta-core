@@ -29,7 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import QueryType, Setting, convert_boolean
+from inmanta.data import QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
