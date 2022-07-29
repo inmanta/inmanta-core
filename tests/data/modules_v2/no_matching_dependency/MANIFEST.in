@@ -1,4 +1,0 @@
-include inmanta_plugins/no_matching_dependency/setup.cfg
-recursive-include inmanta_plugins/no_matching_dependency/model *.cf
-graft inmanta_plugins/no_matching_dependency/files
-graft inmanta_plugins/no_matching_dependency/templates
