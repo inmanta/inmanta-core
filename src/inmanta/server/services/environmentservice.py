@@ -612,7 +612,4 @@ class EnvironmentService(protocol.ServerSlice):
         :param env: the environment in which the setting will be registered
         :param setting: the setting that should be added to the existing settings
         """
-        try:
-            await env.register_setting(setting)
-        except KeyError:
-            raise
+        await env.register_setting(setting)
