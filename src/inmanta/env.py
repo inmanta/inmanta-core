@@ -41,7 +41,7 @@ from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException
-from inmanta.module import ModuleV2
+import inmanta.module
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
@@ -161,7 +161,7 @@ class PythonWorkingSet:
             return {
                 dist_info.key: version.Version(dist_info.version)
                 for dist_info in pkg_resources.working_set
-                if dist_info.key.startswith(ModuleV2.PKG_NAME_PREFIX)
+                if dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
             }
         else:
             return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
