@@ -43,7 +43,6 @@ from inmanta.server import (
     SLICE_SESSION_MANAGER,
 )
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.services.compilerservice import CompilerService
 from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (

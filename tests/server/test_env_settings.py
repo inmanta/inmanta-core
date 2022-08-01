@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import uuid
 from typing import Dict
 
 import pytest
@@ -322,7 +321,7 @@ async def test_default_value_purge_on_delete_setting(server, client):
 
 async def test_environment_add_new_setting_parameter(server, client, environment):
     new_setting: Setting = Setting(
-        name="a new boolean setting",
+        name="a new setting",
         default=False,
         typ="bool",
         validator=convert_boolean,
@@ -331,14 +330,14 @@ async def test_environment_add_new_setting_parameter(server, client, environment
 
     await data.Environment.register_setting(new_setting)
 
-    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    result = await client.get_setting(tid=environment, id="a new setting")
     assert result.code == 200
     assert result.result["value"] is False
 
-    result = await client.set_setting(tid=environment, id="a new boolean setting", value=True)
+    result = await client.set_setting(tid=environment, id="a new setting", value=True)
     assert result.code == 200
 
-    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    result = await client.get_setting(tid=environment, id="a new setting")
     assert result.code == 200
     assert result.result["value"] is True
 
