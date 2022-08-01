@@ -464,21 +464,24 @@ class ModuleSource(Generic[TModule]):
     @staticmethod
     def log_snapshot_difference(modules_pre_install: Dict[str, "Version"]) -> None:
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
-        if version_snapshot:
-            LOGGER.debug(
-                "Snapshot of modules versions post-install:\n"
-                "\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items())
-            )
-
         set_pre_install = set(modules_pre_install.items())
         set_post_install = set(version_snapshot.items())
-
         updates_and_additions = set_post_install - set_pre_install
 
-        LOGGER.debug(
-            "The following modules were updated or added:\n"
-            "\n".join(f"{module}: {version} " for module, version in updates_and_additions)
-        )
+        if version_snapshot:
+            LOGGER.debug("Snapshot of modules versions post-install:\n")
+            for package_name, package_version in sorted(version_snapshot.items()):
+                prefix = " "
+                suffix = ""
+                if package_name not in modules_pre_install.keys():
+                    prefix = "+"
+                elif package_name in [elmt[0] for elmt in updates_and_additions]:
+                    prefix = "~"
+                    suffix = f" (was previously {modules_pre_install[package_name]})"
+
+                out = prefix + package_name + ": " + package_version + suffix
+                LOGGER.debug(out)
+
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
