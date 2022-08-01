@@ -1040,7 +1040,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
 
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"), ignore_errors=True)
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
     # Scenario 2
     # parent_module requires child_module v3.3.3
     # child_module is installed with v1.1.1
@@ -1071,8 +1071,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
 
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"), ignore_errors=True)
-    shutil.rmtree(os.path.join(str(tmpdir), "child_module"), ignore_errors=True)
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
+    shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
     # Scenario 3
     # parent_module requires child_module v3.3.3
     # child_module is installed with v3.3.3
@@ -1138,7 +1138,7 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
-        install_project=True,
+        install_project=False,
     )
 
     expected_logs = [
