@@ -482,7 +482,6 @@ class ModuleSource(Generic[TModule]):
                 out = prefix + package_name + ": " + package_version + suffix
                 LOGGER.debug(out)
 
-
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
         """
