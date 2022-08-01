@@ -951,14 +951,13 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
 
     caplog.set_level(logging.INFO)
 
-    v1_module = "minimalv1module"
     v2_module = "minimalv2module"
 
     v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", v1_module, v2_module]),
+        "\n".join(f"import {mod}" for mod in ["std", "minimalv1module", v2_module]),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
@@ -970,9 +969,6 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
-
-    # ensure we can compile
-    compiler.do_compile()
 
     expected_logs = [
         ("Installing module minimalv2module (v2)", logging.INFO),

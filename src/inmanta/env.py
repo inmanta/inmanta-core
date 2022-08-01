@@ -161,10 +161,8 @@ class PythonWorkingSet:
             return {
                 dist_info.key: version.Version(dist_info.version)
                 for dist_info in pkg_resources.working_set
-                if dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
+                if not inmanta_modules_only or dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
             }
-        else:
-            return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
 
     @classmethod
     def rebuild_working_set(cls) -> None:
@@ -378,39 +376,35 @@ class PythonEnvironment:
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
     ) -> None:
-        try:
-            cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=python_path,
-                requirements=requirements,
-                paths=paths,
-                index_urls=index_urls,
-                upgrade=upgrade,
-                upgrade_strategy=upgrade_strategy,
-                allow_pre_releases=allow_pre_releases,
-                constraints_files=constraints_files,
-                requirements_files=requirements_files,
-            )
-            return_code, full_output = self._run_command_and_stream_output(cmd)
+        cmd: List[str] = PipCommandBuilder.compose_install_command(
+            python_path=python_path,
+            requirements=requirements,
+            paths=paths,
+            index_urls=index_urls,
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            allow_pre_releases=allow_pre_releases,
+            constraints_files=constraints_files,
+            requirements_files=requirements_files,
+        )
+        return_code, full_output = self._run_command_and_stream_output(cmd)
 
-            if return_code:
-                not_found: List[str] = []
-                conflicts: bool = False
-                for line in full_output:
-                    if "No matching distribution found for " in line:
-                        # Add missing package name to not_found list
-                        not_found.append(
-                            line.replace("No matching distribution found for ", "").split(" ", maxsplit=1)[1].strip()
-                        )
+        if return_code != 0:
+            not_found: List[str] = []
+            conflicts: bool = False
+            for line in full_output:
+                m = re.search(r"No matching distribution found for ([\S]+)", line)
+                if m:
+                    # Add missing package name to not_found list
+                    not_found.append(m.group(1))
 
-                    if "versions have conflicting dependencies" in line:
-                        conflicts = True
-                if not_found:
-                    raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-                if conflicts:
-                    raise ConflictingRequirements("\n".join(full_output))
-                raise Exception(f"Process {cmd} exited with return code {return_code}")
-        except Exception:
-            raise
+                if "versions have conflicting dependencies" in line:
+                    conflicts = True
+            if not_found:
+                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+            if conflicts:
+                raise ConflictingRequirements("\n".join(full_output))
+            raise Exception(f"Process {cmd} exited with return code {return_code}")
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -539,7 +533,7 @@ class PythonEnvironment:
             full_output.append(output)
             LOGGER.debug(output)
 
-        return_code = process.wait()
+        return_code = process.wait(timeout=10)
 
         return return_code, full_output
 
