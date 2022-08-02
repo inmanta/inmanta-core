@@ -5,7 +5,7 @@ To support constant scalability resource sets can be used. Without the use of th
 updated or removed, the entire model is recompiled.
 By using resource sets, the resources that are usually updated together can be grouped in resource sets.
 This allows to perform a certain action (e.g. dry-run, repair run) only on the resources of a specific resource sets.
-Compiling only some resource sets and not all the resources is called a partial compile.
+Compiling only some resource sets and not the entire model is called a partial compile.
 
 Resource sets
 ###########################
