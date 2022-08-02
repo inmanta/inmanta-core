@@ -34,12 +34,12 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PackageNotFound, PythonEnvironment
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
+from inmanta.env import ConflictingRequirements, PythonEnvironment
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template, v1_module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -947,6 +947,8 @@ The release type of the project is set to 'master'. Set it to a value that is ap
 def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
     """
     Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
+    The check for v1 module is performed on the std module as it gets downloaded and installed, unlike other
+    v1 modules in tests/data/modules which are already on disk.
     """
 
     caplog.set_level(logging.DEBUG)
@@ -957,11 +959,14 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
-        "\n".join(f"import {mod}" for mod in ["std", "minimalv1module", v2_module]),
+        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
         autostd=False,
         python_package_sources=[local_module_package_index],
         python_requires=v2_requirements,
         install_project=False,
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std==3.0.0"),
+        ],
     )
 
     os.chdir(project.path)
@@ -972,9 +977,13 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
 
     expected_logs = [
         ("Installing module minimalv2module (v2)", logging.DEBUG),
-        ("Successfully installed module minimalv2module (v2) version", logging.DEBUG),
+        ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
         ("Installing module std (v1)", logging.DEBUG),
-        ("Successfully installed module std (v1) version", logging.DEBUG),
+        (
+            """Successfully installed module std (v1) version 3.0.0 in %s from %s"""
+            % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
+            logging.DEBUG,
+        ),
     ]
 
     for message, level in expected_logs:
@@ -1009,98 +1018,6 @@ def test_real_time_logging(caplog):
     # "two" should be logged at least one second after "one"
     delta: float = (last_log_line_time - first_log_line_time).total_seconds()
     assert delta >= 1
-
-
-def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
-    """
-    Make sure the logs contain the correct message when no matching distribution is found during install.
-    """
-    caplog.set_level(logging.DEBUG)
-
-    # set up venv
-    snippetcompiler_clean.setup_for_snippet("", autostd=False)
-
-    # Scenario 1
-    # parent_module requires child_module v3.3.3
-    # child_module is not installed
-    with pytest.raises(PackageNotFound):
-        module_from_template(
-            os.path.join(modules_v2_dir, "minimalv2module"),
-            os.path.join(str(tmpdir), "parent_module"),
-            new_version=version.Version("1.2.3"),
-            new_name="parent_module",
-            install=True,
-            new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
-        )
-
-    log_contains(
-        caplog,
-        "inmanta.env",
-        logging.DEBUG,
-        "No matching distribution found for inmanta-module-child-module==3.3.3",
-    )
-
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
-    # Scenario 2
-    # parent_module requires child_module v3.3.3
-    # child_module is installed with v1.1.1
-
-    # Install the required module with a low version:
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "child_module"),
-        new_version=version.Version("1.1.1"),
-        new_name="child_module",
-        install=True,
-    )
-
-    with pytest.raises(PackageNotFound):
-        module_from_template(
-            os.path.join(modules_v2_dir, "minimalv2module"),
-            os.path.join(str(tmpdir), "parent_module"),
-            new_version=version.Version("1.2.3"),
-            new_name="parent_module",
-            install=True,
-            new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
-        )
-
-    log_contains(
-        caplog,
-        "inmanta.env",
-        logging.DEBUG,
-        "No matching distribution found for inmanta-module-child-module==3.3.3",
-    )
-
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
-    shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
-    # Scenario 3
-    # parent_module requires child_module v3.3.3
-    # child_module is installed with v3.3.3
-
-    # Install the required module with the correct version:
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "child_module"),
-        new_version=version.Version("3.3.3"),
-        new_name="child_module",
-        install=True,
-    )
-
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "parent_module"),
-        new_version=version.Version("1.2.3"),
-        new_name="parent_module",
-        install=True,
-        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
-    )
-
-    log_contains(
-        caplog,
-        "inmanta.env",
-        logging.DEBUG,
-        "Successfully installed inmanta-module-parent-module-1.2.3",
-    )
 
 
 def test_pip_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
@@ -1153,3 +1070,282 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
             level,
             message,
         )
+
+
+def test_git_clone_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    This test checks that git clone output is correctly logged on module install.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    project = snippetcompiler_clean.setup_for_snippet(
+        """
+        import std
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        install_project=True,
+    )
+
+    expected_logs = [
+        (f"Cloning into '{os.path.join(project.downloadpath, 'std')}'...", logging.DEBUG),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            level,
+            message,
+        )
+
+
+def test_module_install_logging_module_v1(
+    local_module_package_index: str, snippetcompiler_clean, caplog, tmpdir, modules_dir, modules_v2_dir
+) -> None:
+    """ """
+
+    caplog.set_level(logging.DEBUG)
+
+    v1_module = "minimalv1module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    modone = v1_module_from_template(
+        os.path.join(modules_dir, v1_module),
+        os.path.join(libs_dir, "modone"),
+        new_version=version.Version("1.1.1"),
+        new_name="modone",
+    )
+
+    # set up project and modules
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+    import {module.ModuleV1.get_name_from_metadata(modone)}
+    """,
+        autostd=False,
+        # python_package_sources=[index.url, local_module_package_index],
+        # python_requires=v2_requirements,
+        install_project=True,
+        # add_to_module_path=[libs_dir]
+    )
+
+    expected_logs = [
+        # ("Installing module modtwo (v2)", logging.DEBUG),
+        # ("Successfully installed module modtwo (v2) version 2.2.2", logging.DEBUG),
+        ("Installing module std (v1)", logging.INFO),
+        ("Successfully installed module std (v1) version 3.0.2", logging.INFO),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            level,
+            message,
+        )
+
+
+def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    Make sure the logs contain the correct message when no matching distribution is found during install.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # Scenario 1
+    # parent_module requires child_module v3.3.3 which is not installed yet.
+
+    parent_module: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "parent_module"),
+        new_version=version.Version("1.2.3"),
+        new_name="parent_module",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+        publish_index=index,
+    )
+
+    with pytest.raises(ModuleNotFoundException):
+        snippetcompiler_clean.setup_for_snippet(
+            f"""
+            import {module.ModuleV2.get_name_from_metadata(parent_module)}
+            """,
+            autostd=False,
+            python_package_sources=[local_module_package_index, index.url],
+            python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+            install_project=True,
+        )
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
+    )
+
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
+
+    # Scenario 2
+    # parent_module requires child_module v3.3.3 which is installed with v1.1.1
+
+    # Prepare the required module with a low version:
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("1.1.1"),
+        new_name="child_module",
+        install=False,
+        publish_index=index,
+    )
+    parent_module = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "parent_module"),
+        new_version=version.Version("1.2.3"),
+        new_name="parent_module",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+        publish_index=index,
+    )
+
+    with pytest.raises(ModuleNotFoundException):
+        snippetcompiler_clean.setup_for_snippet(
+            f"""
+            import {module.ModuleV2.get_name_from_metadata(parent_module)}
+            """,
+            autostd=False,
+            python_package_sources=[local_module_package_index, index.url],
+            python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+            install_project=True,
+        )
+
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
+    )
+
+    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
+    shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
+
+    # Scenario 3
+    # parent_module requires child_module v3.3.3 which is installed with v3.3.3
+
+    # Prepare the required module with the correct version:
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("3.3.3"),
+        new_name="child_module",
+        install=False,
+        publish_index=index,
+    )
+
+    parent_module = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "parent_module"),
+        new_version=version.Version("1.2.3"),
+        new_name="parent_module",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+        publish_index=index,
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(parent_module)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+        install_project=True,
+    )
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "Successfully installed inmanta-module-child-module-3.3.3 inmanta-module-parent-module-1.2.3",
+    )
+
+
+def test_version_snapshot(local_module_package_index: str, snippetcompiler, caplog, modules_v2_dir, tmpdir):
+    """
+    Make sure the logs contain the correct version snapshot after each module installation.
+    """
+    caplog.set_level(logging.INFO)
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a"),
+        new_version=version.Version("1.0.0"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a_hi"),
+        new_version=version.Version("5.0.0"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+    module_b: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_b"),
+        new_version=version.Version("1.2.3"),
+        new_name="module_b",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("module_a>=1.0.0")],
+        publish_index=index,
+    )
+    module_c: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_c"),
+        new_version=version.Version("8.8.8"),
+        new_name="module_c",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("module_a==1.0.0")],
+        publish_index=index,
+    )
+
+    snippetcompiler.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(module_b)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_b"))],
+        install_project=True,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.INFO,
+        ("Snapshot of modules versions post-install:\n" "+inmanta-module-module-a: 5.0.0\n" "+inmanta-module-module-b: 1.2.3"),
+    )
+
+    snippetcompiler.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(module_c)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_c"))],
+        install_project=True,
+    )
+
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.INFO,
+        (
+            "Snapshot of modules versions post-install:\n"
+            "~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)\n"
+            " inmanta-module-module-b: 1.2.3\n"
+            "+inmanta-module-module-c: 8.8.8"
+        ),
+    )

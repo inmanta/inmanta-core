@@ -343,7 +343,7 @@ class CLIGitProvider(GitProvider):
     def clone(self, src: str, dest: str, shell: bool = False) -> int:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
-        cmd = ["git", "clone", src, dest]
+        cmd = ["git", "clone", "--progress", src, dest]
 
         process = subprocess.Popen(
             cmd,
@@ -482,7 +482,7 @@ class ModuleSource(Generic[TModule]):
     @staticmethod
     def log_snapshot_difference(modules_pre_install: Dict[str, "Version"]) -> None:
         """
-        Logs all inmanta modules currently installed and their version.
+        Logs all inmanta modules currently installed (in alphabetical order) and their version.
         For each module, the prefix gives some context:
             - "+" means this module is newly installed
             - "~" means this module was previously installed but a new version has been installed
