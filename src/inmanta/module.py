@@ -314,7 +314,7 @@ class PluginModuleLoadException(Exception):
 
 
 class GitProvider(object):
-    def clone(self, src: str, dest: str, shell: bool) -> int:
+    def clone(self, src: str, dest: str) -> int:
         pass
 
     def fetch(self, repo: str) -> None:
@@ -340,7 +340,7 @@ class GitProvider(object):
 
 
 class CLIGitProvider(GitProvider):
-    def clone(self, src: str, dest: str, shell: bool = False) -> int:
+    def clone(self, src: str, dest: str) -> int:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", "--progress", src, dest]
@@ -349,7 +349,6 @@ class CLIGitProvider(GitProvider):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            shell=shell,
         )
 
         assert process.stdout is not None  # Make mypy happy
