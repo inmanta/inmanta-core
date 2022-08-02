@@ -3,7 +3,7 @@ Resource sets and partial compile
 **********************************
 To support constant scalability resource sets can be used. Without the use of those, each time a resource is added,
 updated or removed, the entire model is recompiled.
-By using resource sets, the resources managed by the inmanta server can be grouped in resource sets.
+By using resource sets, the resources that are usually updated together can be grouped in resource sets.
 This allows to perform a certain action (e.g. dry-run, repair run) only on the resources of a specific resource sets.
 Compiling only some resource sets and not all the resources is called a partial compile.
 
