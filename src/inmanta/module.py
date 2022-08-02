@@ -340,7 +340,7 @@ class GitProvider(object):
 
 
 class CLIGitProvider(GitProvider):
-    def clone(self, src: str, dest: str, shell: bool=False) -> int:
+    def clone(self, src: str, dest: str, shell: bool = False) -> int:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", src, dest]
@@ -728,7 +728,13 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         module = self.get_installed_module(project, module_name)
 
         assert module is not None
-        LOGGER.debug("Successfully installed module %s (v1) version %s in %s from %s", module_name, module.version, module.path, remote_repo)
+        LOGGER.debug(
+            "Successfully installed module %s (v1) version %s in %s from %s",
+            module_name,
+            module.version,
+            module.path,
+            remote_repo,
+        )
 
         ModuleSource.log_snapshot_difference(modules_pre_install)
 
