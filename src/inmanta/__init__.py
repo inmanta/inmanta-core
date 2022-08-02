@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2020.7.1"
+COMPILER_VERSION = "2020.7.2"
 RUNNING_TESTS = False
 """
     This is enabled/disabled by the test suite when tests are run.
