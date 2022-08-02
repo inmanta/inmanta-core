@@ -949,7 +949,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
     """
 
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
 
     v2_module = "minimalv2module"
 
@@ -971,10 +971,10 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     ProjectTool().execute("install", [])
 
     expected_logs = [
-        ("Installing module minimalv2module (v2)", logging.INFO),
-        ("Successfully installed module minimalv2module (v2) version", logging.INFO),
-        ("Installing module std (v1)", logging.INFO),
-        ("Successfully installed module std (v1) version", logging.INFO),
+        ("Installing module minimalv2module (v2)", logging.DEBUG),
+        ("Successfully installed module minimalv2module (v2) version", logging.DEBUG),
+        ("Installing module std (v1)", logging.DEBUG),
+        ("Successfully installed module std (v1) version", logging.DEBUG),
     ]
 
     for message, level in expected_logs:
