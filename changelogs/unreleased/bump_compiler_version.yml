@@ -1,0 +1,5 @@
+description: Bump compiler version to 2020.7.2
+change-type: patch
+destination-branches: [iso4]
+sections:
+  minor-improvement: "{{description}}"
