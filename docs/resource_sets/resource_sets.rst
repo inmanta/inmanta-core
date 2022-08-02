@@ -37,7 +37,7 @@ To ensure partial compiles work correctly some constraints and rules where put i
 * Resources cannot migrate to a different resource set using a partial compile. This operation requires a full compile.
 * When a partial compile contains a resource that belongs to a certain resource set, the partial compile should contain all the resources for that specific resource set that should be present in the new version of the model.
 * A partial compile can never update/remove resources that were not assigned to a specific resource set (adding resources is allowed).
-* The new version of the model that results from a partial compile, should have a dependency graph that is closed (i.e. doesn't have any dangling dependencies). This constraint is check by the server.
+* The new version of the model that results from a partial compile, should have a dependency graph that is closed (i.e. doesn't have any dangling dependencies).
 * A partial compile can update multiple resource sets at the same time.
 
 Exporting a partial model to the server
