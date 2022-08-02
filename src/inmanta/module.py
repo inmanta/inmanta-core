@@ -340,10 +340,28 @@ class GitProvider(object):
 
 
 class CLIGitProvider(GitProvider):
-    def clone(self, src: str, dest: str) -> None:
+    def clone(self, src: str, dest: str, shell: bool=False) -> int:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
-        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+        cmd = ["git", "clone", src, dest]
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=shell,
+        )
+
+        assert process.stdout is not None  # Make mypy happy
+
+        for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+            output = line.decode()
+            LOGGER.debug(output)
+
+        return_code = process.wait(timeout=10)
+
+        return return_code
 
     def fetch(self, repo: str) -> None:
         env = os.environ.copy()
@@ -463,13 +481,20 @@ class ModuleSource(Generic[TModule]):
 
     @staticmethod
     def log_snapshot_difference(modules_pre_install: Dict[str, "Version"]) -> None:
+        """
+        Logs all inmanta modules currently installed and their version.
+        For each module, the prefix gives some context:
+            - "+" means this module is newly installed
+            - "~" means this module was previously installed but a new version has been installed
+            - " " means this module was already installed and left untouched
+        """
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         set_pre_install = set(modules_pre_install.items())
         set_post_install = set(version_snapshot.items())
         updates_and_additions = set_post_install - set_pre_install
 
         if version_snapshot:
-            LOGGER.debug("Snapshot of modules versions post-install:\n")
+            out = ["Snapshot of modules versions post-install:"]
             for package_name, package_version in sorted(version_snapshot.items()):
                 prefix = " "
                 suffix = ""
@@ -479,8 +504,8 @@ class ModuleSource(Generic[TModule]):
                     prefix = "~"
                     suffix = f" (was previously {modules_pre_install[package_name]})"
 
-                out = prefix + package_name + ": " + package_version + suffix
-                LOGGER.debug(out)
+                out.append(prefix + package_name + ": " + str(package_version) + suffix)
+            LOGGER.info("\n".join(out))
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
@@ -612,7 +637,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Version"]:
 
-        LOGGER.info("Installing module %s (v2).", module_name)
+        LOGGER.debug("Installing module %s (v2).", module_name)
 
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
@@ -624,7 +649,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         self, project: "Project", module_name: str, modules_pre_install: Dict[str, "Version"]
     ) -> None:
         version: Optional[Version] = self.get_installed_version(module_name)
-        LOGGER.info("Successfully installed module %s (v2) version %s", module_name, version)
+        LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, version)
 
         ModuleSource.log_snapshot_difference(modules_pre_install)
 
@@ -685,7 +710,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
     def log_pre_install_information(self, project: "Project", module_name: str) -> Dict[str, "Version"]:
 
-        LOGGER.info("Installing module %s (v1).", module_name)
+        LOGGER.debug("Installing module %s (v1).", module_name)
 
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
@@ -703,7 +728,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         module = self.get_installed_module(project, module_name)
 
         assert module is not None
-        LOGGER.info("Successfully installed module %s (v1) version %s from %s", module_name, module.version, remote_repo)
+        LOGGER.debug("Successfully installed module %s (v1) version %s in %s from %s", module_name, module.version, module.path, remote_repo)
 
         ModuleSource.log_snapshot_difference(modules_pre_install)
 
@@ -789,7 +814,9 @@ class LocalFileRepo(ModuleRepo):
 
     def clone(self, name: str, dest: str) -> bool:
         try:
-            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
+            return_code = gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
+            if return_code != 0:
+                raise Exception()
             return True
         except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
@@ -813,7 +840,9 @@ class RemoteRepo(ModuleRepo):
         elif nbr_substitutions == 0:
             url = self.baseurl + name
         try:
-            gitprovider.clone(url, os.path.join(dest, name))
+            return_code = gitprovider.clone(url, os.path.join(dest, name))
+            if return_code != 0:
+                raise Exception()
             return True
         except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
