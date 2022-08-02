@@ -39,7 +39,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template, v1_module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -1089,51 +1089,6 @@ def test_git_clone_output(local_module_package_index: str, snippetcompiler_clean
 
     expected_logs = [
         (f"Cloning into '{os.path.join(project.downloadpath, 'std')}'...", logging.DEBUG),
-    ]
-
-    for message, level in expected_logs:
-        log_contains(
-            caplog,
-            "inmanta.module",
-            level,
-            message,
-        )
-
-
-def test_module_install_logging_module_v1(
-    local_module_package_index: str, snippetcompiler_clean, caplog, tmpdir, modules_dir, modules_v2_dir
-) -> None:
-    """ """
-
-    caplog.set_level(logging.DEBUG)
-
-    v1_module = "minimalv1module"
-    libs_dir: str = os.path.join(str(tmpdir), "libs")
-
-    modone = v1_module_from_template(
-        os.path.join(modules_dir, v1_module),
-        os.path.join(libs_dir, "modone"),
-        new_version=version.Version("1.1.1"),
-        new_name="modone",
-    )
-
-    # set up project and modules
-    snippetcompiler_clean.setup_for_snippet(
-        f"""
-    import {module.ModuleV1.get_name_from_metadata(modone)}
-    """,
-        autostd=False,
-        # python_package_sources=[index.url, local_module_package_index],
-        # python_requires=v2_requirements,
-        install_project=True,
-        # add_to_module_path=[libs_dir]
-    )
-
-    expected_logs = [
-        # ("Installing module modtwo (v2)", logging.DEBUG),
-        # ("Successfully installed module modtwo (v2) version 2.2.2", logging.DEBUG),
-        ("Installing module std (v1)", logging.INFO),
-        ("Successfully installed module std (v1) version 3.0.2", logging.INFO),
     ]
 
     for message, level in expected_logs:
