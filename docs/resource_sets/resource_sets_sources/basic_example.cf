@@ -2,7 +2,7 @@
 entity Res extends std::Resource:
 end
 
-implement Res using parents
+implement Res using std::none
 
 # Instance a is assigned to the resource set "test"
 a = Res()
