@@ -1271,7 +1271,6 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         publish_index=index,
     )
 
-
     # Scenario 1
     # Installing module b
     snippetcompiler.setup_for_snippet(
@@ -1289,10 +1288,12 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         caplog,
         "inmanta.module",
         logging.INFO,
-        ("""
+        (
+            """
 Snapshot of modules versions post-install:\n
 +inmanta-module-module-a: 5.0.0\n
-+inmanta-module-module-b: 1.2.3"""),
++inmanta-module-module-b: 1.2.3"""
+        ),
     )
 
     # Scenario 2
@@ -1312,12 +1313,12 @@ Snapshot of modules versions post-install:\n
     # - b to remain unchanged
     # - c to be installed with the latest version
 
-
     log_contains(
         caplog,
         "inmanta.module",
         logging.INFO,
-        ("""
+        (
+            """
 Snapshot of modules versions post-install:\n
 ~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)\n
  inmanta-module-module-b: 1.2.3\n
