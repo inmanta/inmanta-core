@@ -314,7 +314,7 @@ class PluginModuleLoadException(Exception):
 
 
 class GitProvider(object):
-    def clone(self, src: str, dest: str) -> None:
+    def clone(self, src: str, dest: str, shell: bool) -> int:
         pass
 
     def fetch(self, repo: str) -> None:
