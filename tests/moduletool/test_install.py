@@ -1088,7 +1088,7 @@ def test_git_clone_output(local_module_package_index: str, snippetcompiler_clean
     )
 
     expected_logs = [
-        (f"Cloning into '{os.path.join(project.downloadpath, 'std')}'...", logging.DEBUG),
+        ("Cloning into %s..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
     ]
 
     for message, level in expected_logs:
