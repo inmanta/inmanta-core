@@ -210,6 +210,10 @@ html_show_copyright = True
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'InmantaDoc'
 
+html_css_files = [
+    'css/custom.css',
+]
+
 
 # -- Options for LaTeX output --------------------------------------------------
 

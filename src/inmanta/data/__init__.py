@@ -884,8 +884,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except asyncio.TimeoutError:
             cls._connection_pool.terminate()
+            # Don't propagate this exception but just write a log message. This way:
+            #   * A timeout here still makes sure that the other server slices get stopped
+            #   * The tests don't fail when this timeout occurs
+            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        except asyncio.CancelledError:
+            cls._connection_pool.terminate()
+            # Propagate cancel
+            raise
+        except Exception:
+            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+            raise
         finally:
             cls._connection_pool = None
 
@@ -2621,13 +2632,14 @@ class Agent(BaseDocument):
     def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ai.name as process_name, ai.process as process_id,
+                                    ap.hostname as process_name, ai.process as process_id,
                                     (CASE WHEN paused THEN 'paused'
                                         WHEN id_primary IS NOT NULL THEN 'up'
                                         ELSE 'down'
                                     END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
-            filter_statements=[" environment = $1 "],
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
             values=[cls._get_value(environment)],
         )
         return query_builder.build()
@@ -3037,7 +3049,7 @@ class Compile(BaseDocument):
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
-        ) SELECT * FROM compiledetails;
+        ) SELECT * FROM compiledetails ORDER BY report_started ASC;
         """
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
@@ -3454,12 +3466,11 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
     ) -> List["ResourceAction"]:
-
         query = f"""SELECT DISTINCT ra.*
                         FROM {cls.table_name()} ra
                         INNER JOIN
                         {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1
+                        WHERE r.environment=$1 AND ra.environment=$1
                      """
         values = [cls._get_value(environment)]
 
@@ -3638,9 +3649,9 @@ class Resource(BaseDocument):
         query = f"""
             SELECT *
             FROM {Resource.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(r2.model)
-                                                  FROM {Resource.table_name()} AS r2
-                                                  WHERE r2.environment=$1)
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
+                                                  FROM {ConfigurationModel.table_name()} AS cm
+                                                  WHERE cm.environment=$1)
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
@@ -5087,7 +5098,12 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+    # or until the gather itself is cancelled.
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+    if exceptions:
+        raise exceptions[0]
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions

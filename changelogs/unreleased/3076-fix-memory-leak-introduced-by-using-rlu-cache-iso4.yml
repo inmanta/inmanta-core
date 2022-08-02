@@ -1,0 +1,6 @@
+description: Fix memory leak caused by lru-cache keeping strong references to cached items
+change-type: patch
+destination-branches: [iso4]
+sections: {
+  bugfix: "{{description}}"
+}

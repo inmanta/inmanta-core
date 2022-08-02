@@ -1,17 +1,16 @@
 include LICENSE
-graft docs
 include tox.ini
 include setup.py
 include setup.cfg
 include src/inmanta/py.typed
 include src/inmanta/parser/parser.out
 
+# explainers for compiler exceptions
 recursive-include src *.j2
-recursive-include docs *
-recursive-include misc *
-recursive-include tests *
+
+# data for RPM build
+graft misc
 
 global-exclude *.pyc
 global-exclude */__pycache__/*
 global-exclude **/.env/**
-exclude docs/build/**

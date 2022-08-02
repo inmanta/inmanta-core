@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Pattern, Set, cast
 
 from asyncpg import StringDataRightTruncationError
 
-from inmanta import data
+from inmanta import config, data
 from inmanta.data import model
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -276,7 +276,7 @@ class EnvironmentService(protocol.ServerSlice):
         except KeyError:
             raise NotFound()
         except ValueError as e:
-            raise ServerError(f"Invalid value. {e}")
+            raise BadRequest(f"Invalid value. {e}")
 
     @handle(methods.get_setting, env="tid", key="id")
     async def get_setting(self, env: data.Environment, key: str) -> Apireturn:
@@ -472,6 +472,8 @@ class EnvironmentService(protocol.ServerSlice):
         """
         Create a new auth token for this environment
         """
+        if not config.Config.getboolean("server", "auth", False):
+            raise BadRequest("Authentication is disabled, generating a token is not allowed")
         return encode_token(client_types, str(env.id), idempotent)
 
     @handle(methods_v2.environment_settings_list, env="tid")

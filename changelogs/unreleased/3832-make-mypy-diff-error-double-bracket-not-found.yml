@@ -1,0 +1,6 @@
+description: Explicitly use bash instead of assuming sh symlinking to it to
+    prevent errors for shells where the [[ keyword is not supported
+change-type: patch
+destination-branches: [master, iso4, iso5]
+issue-nr: 3832
+sections: {}

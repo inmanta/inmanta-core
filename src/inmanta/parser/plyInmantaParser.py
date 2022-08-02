@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import logging
 import re
 from typing import List, Optional, Tuple, Union
@@ -306,6 +305,16 @@ def p_attribute_type(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
+def p_attr_err(p: YaccProduction) -> None:
+    """attr : attr_type CID empty
+    | attr_type CID '=' constant
+    | attr_type CID '=' constant_list
+    | attr_type CID '=' UNDEF"""
+    raise ParserException(
+        p[2].location, str(p[2]), "Invalid identifier: attribute names must start with a lower case character"
+    )
+
+
 def p_attr(p: YaccProduction) -> None:
     "attr : attr_type ID"
     p[0] = DefineAttribute(p[1], p[2], None)
@@ -323,6 +332,18 @@ def p_attr_undef(p: YaccProduction) -> None:
     "attr : attr_type ID '=' UNDEF"
     p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
     attach_from_string(p, 2)
+
+
+def p_attr_dict_err(p: YaccProduction) -> None:
+    """attr : DICT empty CID empty
+    | DICT empty CID '=' map_def
+    | DICT empty CID '=' NULL
+    | DICT '?' CID empty
+    | DICT '?'  CID '=' map_def
+    | DICT '?'  CID '=' NULL"""
+    raise ParserException(
+        p[3].location, str(p[3]), "Invalid identifier: attribute names must start with a lower case character"
+    )
 
 
 def p_attr_dict(p: YaccProduction) -> None:
@@ -1060,5 +1081,5 @@ def parse(namespace: Namespace, filename: str, content: Optional[str] = None) ->
     if statements is not None:
         return statements
     statements = base_parse(namespace, filename, content)
-    cache_manager.cache(filename, statements)
+    cache_manager.cache(namespace, filename, statements)
     return statements
