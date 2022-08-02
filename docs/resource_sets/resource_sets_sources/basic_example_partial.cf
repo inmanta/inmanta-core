@@ -1,0 +1,11 @@
+
+entity Router extends std::Resource:
+    string id
+end
+
+implement Router using std::none
+
+a = Router(id="router_a")
+b = Router(id="router_b2")
+z = Router(id="router_z")
+std::ResourceSet(name="subset_a", resources=[a,b,z])
