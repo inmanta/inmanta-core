@@ -1231,6 +1231,11 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
 
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
+    # Prepare the modules:
+    # module a with version 1.0.0 and 5.0.0
+    # module b that depends on module a>=1.0.0
+    # module c that depends on module a==1.0.0
+
     module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "module_a"),
@@ -1266,6 +1271,9 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         publish_index=index,
     )
 
+
+    # Scenario 1
+    # Installing module b
     snippetcompiler.setup_for_snippet(
         f"""
         import {module.ModuleV2.get_name_from_metadata(module_b)}
@@ -1276,13 +1284,19 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         install_project=True,
     )
 
+    # We expect the latest version for a and b to be newly added
     log_contains(
         caplog,
         "inmanta.module",
         logging.INFO,
-        ("Snapshot of modules versions post-install:\n" "+inmanta-module-module-a: 5.0.0\n" "+inmanta-module-module-b: 1.2.3"),
+        ("""
+Snapshot of modules versions post-install:\n
++inmanta-module-module-a: 5.0.0\n
++inmanta-module-module-b: 1.2.3"""),
     )
 
+    # Scenario 2
+    # Installing module c in the same environment
     snippetcompiler.setup_for_snippet(
         f"""
         import {module.ModuleV2.get_name_from_metadata(module_c)}
@@ -1293,14 +1307,20 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         install_project=True,
     )
 
+    # We expect :
+    # - a to be downgraded to a compatible version
+    # - b to remain unchanged
+    # - c to be installed with the latest version
+
+
     log_contains(
         caplog,
         "inmanta.module",
         logging.INFO,
-        (
-            "Snapshot of modules versions post-install:\n"
-            "~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)\n"
-            " inmanta-module-module-b: 1.2.3\n"
-            "+inmanta-module-module-c: 8.8.8"
+        ("""
+Snapshot of modules versions post-install:\n
+~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)\n
+ inmanta-module-module-b: 1.2.3\n
++inmanta-module-module-c: 8.8.8"""
         ),
     )
