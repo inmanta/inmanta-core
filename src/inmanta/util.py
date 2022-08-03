@@ -236,6 +236,8 @@ class Scheduler(object):
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
         self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        # Keep track of tasks that should be awaited before the scheduler is stopped
+        self._await_tasks: Set[Task] = set()
 
     def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
         """
@@ -260,12 +262,14 @@ class Scheduler(object):
         self,
         action: TaskMethod,
         schedule: TaskSchedule,
+        cancel_on_stop: bool = True,
     ) -> ScheduledTask:
         """
         Add a new action
 
         :param action: A function to call periodically
         :param schedule: The schedule for this action
+        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine is awaited.
         """
         assert is_coroutine(action)
 
@@ -317,6 +321,7 @@ class Scheduler(object):
         Stop the scheduler
         """
         self._stopped = True
+        await gather(*self._await_tasks)
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:

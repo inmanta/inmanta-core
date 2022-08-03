@@ -34,7 +34,7 @@ from inmanta.server.services import (
 )
 
 
-def setup(application: ApplicationContext) -> None:
+def seup(application: ApplicationContext) -> None:
     application.register_slice(server.Server())
     application.register_slice(agentmanager.AgentManager())
     application.register_slice(agentmanager.AutostartedAgentManager())
