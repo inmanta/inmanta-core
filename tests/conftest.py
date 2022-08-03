@@ -1519,7 +1519,8 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Cache is dirty
         return any(
             os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
-            for root, _, files in os.walk(modules_v2_dir) for f in files
+            for root, _, files in os.walk(modules_v2_dir)
+            for f in files
         )
 
     if _should_rebuild_cache():
