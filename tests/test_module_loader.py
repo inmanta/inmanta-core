@@ -856,7 +856,6 @@ def test_module_install_extra_on_dep_of_v2_module(
     local_module_package_index: str,
     package_name_extra: str,
 ) -> None:
-    # TODO:
     """
     Verify that module installation works correctly when a V2 module defines a dependency with an extra.
 
@@ -880,10 +879,10 @@ def test_module_install_extra_on_dep_of_v2_module(
         publish_index=index,
     )
     package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("mymod")
+        InmantaModuleRequirement.parse("depmod")
     )
     package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("mymod[myfeature]")
+        InmantaModuleRequirement.parse("depmod[myfeature]")
     )
     package_name: str = str(package_without_extra)
 
@@ -892,22 +891,43 @@ def test_module_install_extra_on_dep_of_v2_module(
         assert (package_name in installed) == module_installed
         assert (package_name_extra in installed) == extra_installed
 
-    # project with dependency on mymod without extra
+    # Create myv2mod
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_content_init_cf="import depmod",
+        new_requirements=[package_without_extra],
+        publish_index=index,
+    )
+    # project with dependency on myv2mod without extra
     snippetcompiler_clean.setup_for_snippet(
-        "import mymod",
+        "import myv2mod",
         install_project=True,
         python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
-        python_requires=[package_without_extra],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
         autostd=False,
     )
     assert_installed(extra_installed=False)
 
+    # Create myv2mod with extra
+    shutil.rmtree(tmpdir.join("myv2mod"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("2.0.0"),
+        new_content_init_cf="import depmod",
+        new_requirements=[package_with_extra],
+        publish_index=index,
+    )
     # project with dependency on mymod with extra
     snippetcompiler_clean.setup_for_snippet(
-        "import mymod",
+        "import myv2mod",
         install_project=True,
         python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
-        python_requires=[package_with_extra],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
         autostd=False,
     )
     assert_installed(extra_installed=True)
