@@ -1026,14 +1026,15 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
     """
     caplog.set_level(logging.DEBUG)
 
-    snippetcompiler_clean.setup_for_snippet("")
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
     modone: module.ModuleV2Metadata = module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "modone"),
         new_version=version.Version("3.1.2"),
         new_name="modone",
-        install=True,
+        install=False,
+        publish_index=index,
     )
     modtwo: module.ModuleV2Metadata = module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1041,7 +1042,8 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         new_version=version.Version("2.2.2"),
         new_name="modtwo",
         new_requirements=[InmantaModuleRequirement.parse("modone")],
-        install=True,
+        install=False,
+        publish_index=index,
     )
 
     modules = ["modone", "modtwo"]
@@ -1053,9 +1055,9 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         import {module.ModuleV2.get_name_from_metadata(modtwo)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        python_package_sources=[local_module_package_index, index.url],
         python_requires=v2_requirements,
-        install_project=False,
+        install_project=True,
     )
 
     expected_logs = [
@@ -1072,7 +1074,7 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         )
 
 
-def test_git_clone_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
     """
     This test checks that git clone output is correctly logged on module install.
     """
@@ -1083,12 +1085,11 @@ def test_git_clone_output(local_module_package_index: str, snippetcompiler_clean
         import std
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index],
         install_project=True,
     )
 
     expected_logs = [
-        ("Cloning into %s..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
+        ("Cloning into '%s'..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
     ]
 
     for message, level in expected_logs:
@@ -1138,8 +1139,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
 
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
-
     # Scenario 2
     # parent_module requires child_module v3.3.3 which is installed with v1.1.1
 
@@ -1151,15 +1150,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         new_version=version.Version("1.1.1"),
         new_name="child_module",
         install=False,
-        publish_index=index,
-    )
-    parent_module = module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "parent_module"),
-        new_version=version.Version("1.2.3"),
-        new_name="parent_module",
-        install=False,
-        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
         publish_index=index,
     )
 
@@ -1181,7 +1171,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
 
-    shutil.rmtree(os.path.join(str(tmpdir), "parent_module"))
     shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
 
     # Scenario 3
@@ -1197,15 +1186,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         publish_index=index,
     )
 
-    parent_module = module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "parent_module"),
-        new_version=version.Version("1.2.3"),
-        new_name="parent_module",
-        install=False,
-        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
-        publish_index=index,
-    )
     snippetcompiler_clean.setup_for_snippet(
         f"""
         import {module.ModuleV2.get_name_from_metadata(parent_module)}
@@ -1227,7 +1207,7 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
     """
     Make sure the logs contain the correct version snapshot after each module installation.
     """
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
 
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
@@ -1287,11 +1267,10 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
     log_contains(
         caplog,
         "inmanta.module",
-        logging.INFO,
+        logging.DEBUG,
         (
-            """
-Snapshot of modules versions post-install:\n
-+inmanta-module-module-a: 5.0.0\n
+            """Snapshot of modules versions post-install:
++inmanta-module-module-a: 5.0.0
 +inmanta-module-module-b: 1.2.3"""
         ),
     )
@@ -1316,12 +1295,11 @@ Snapshot of modules versions post-install:\n
     log_contains(
         caplog,
         "inmanta.module",
-        logging.INFO,
+        logging.DEBUG,
         (
-            """
-Snapshot of modules versions post-install:\n
-~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)\n
- inmanta-module-module-b: 1.2.3\n
+            """Snapshot of modules versions post-install:
+~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)
+ inmanta-module-module-b: 1.2.3
 +inmanta-module-module-c: 8.8.8"""
         ),
     )

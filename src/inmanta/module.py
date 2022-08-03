@@ -314,7 +314,7 @@ class PluginModuleLoadException(Exception):
 
 
 class GitProvider(object):
-    def clone(self, src: str, dest: str) -> int:
+    def clone(self, src: str, dest: str) -> None:
         pass
 
     def fetch(self, repo: str) -> None:
@@ -340,7 +340,7 @@ class GitProvider(object):
 
 
 class CLIGitProvider(GitProvider):
-    def clone(self, src: str, dest: str) -> int:
+    def clone(self, src: str, dest: str) -> None:
         env = os.environ.copy()
         env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", "--progress", src, dest]
@@ -360,7 +360,8 @@ class CLIGitProvider(GitProvider):
 
         return_code = process.wait(timeout=10)
 
-        return return_code
+        if return_code != 0:
+            raise Exception()
 
     def fetch(self, repo: str) -> None:
         env = os.environ.copy()
@@ -504,7 +505,7 @@ class ModuleSource(Generic[TModule]):
                     suffix = f" (was previously {modules_pre_install[package_name]})"
 
                 out.append(prefix + package_name + ": " + str(package_version) + suffix)
-            LOGGER.info("\n".join(out))
+            LOGGER.debug("\n".join(out))
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
@@ -640,8 +641,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
-            LOGGER.debug("Snapshot of modules versions pre-install:")
-            LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
+            out = ["Snapshot of modules versions pre-install:"]
+            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
+            LOGGER.debug("\n".join(out))
         return version_snapshot
 
     def log_post_install_information(
@@ -713,8 +715,9 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
         version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         if version_snapshot:
-            LOGGER.debug("Snapshot of modules versions pre-install:")
-            LOGGER.debug("\n".join(f"{mod}: {version}" for mod, version in version_snapshot.items()))
+            out = ["Snapshot of modules versions pre-install:"]
+            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
+            LOGGER.debug("\n".join(out))
         return version_snapshot
 
     def log_post_install_information(
@@ -819,9 +822,7 @@ class LocalFileRepo(ModuleRepo):
 
     def clone(self, name: str, dest: str) -> bool:
         try:
-            return_code = gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
-            if return_code != 0:
-                raise Exception()
+            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
             return True
         except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
@@ -845,9 +846,7 @@ class RemoteRepo(ModuleRepo):
         elif nbr_substitutions == 0:
             url = self.baseurl + name
         try:
-            return_code = gitprovider.clone(url, os.path.join(dest, name))
-            if return_code != 0:
-                raise Exception()
+            gitprovider.clone(url, os.path.join(dest, name))
             return True
         except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
