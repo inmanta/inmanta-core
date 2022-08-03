@@ -386,7 +386,7 @@ class PythonEnvironment:
             constraints_files=constraints_files,
             requirements_files=requirements_files,
         )
-        return_code, full_output = self._run_command_and_stream_output(cmd)
+        return_code, full_output = self.run_command_and_stream_output(cmd)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -509,8 +509,8 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
-    @classmethod
-    def _run_command_and_stream_output(cls, cmd: List[str], shell: bool = False) -> Tuple[int, List[str]]:
+    @staticmethod
+    def run_command_and_stream_output(cmd: List[str], shell: bool = False, timeout: float = 10) -> Tuple[int, List[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
@@ -532,7 +532,7 @@ class PythonEnvironment:
             full_output.append(output)
             LOGGER.debug(output)
 
-        return_code = process.wait(timeout=10)
+        return_code = process.wait(timeout=timeout)
 
         return return_code, full_output
 

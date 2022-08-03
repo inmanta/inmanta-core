@@ -341,24 +341,11 @@ class GitProvider(object):
 
 class CLIGitProvider(GitProvider):
     def clone(self, src: str, dest: str) -> None:
-        env = os.environ.copy()
-        env["GIT_ASKPASS"] = "true"
+        process_env = os.environ.copy()
+        process_env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", "--progress", src, dest]
 
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-
-        assert process.stdout is not None  # Make mypy happy
-
-        for line in process.stdout:
-            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
-            output = line.decode()
-            LOGGER.debug(output)
-
-        return_code = process.wait(timeout=10)
+        return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd)
 
         if return_code != 0:
             raise Exception()
@@ -480,7 +467,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     @staticmethod
-    def log_snapshot_difference(modules_pre_install: Dict[str, "Version"]) -> None:
+    def log_snapshot_difference_v2_modules(modules_pre_install: Dict[str, "Version"]) -> None:
         """
         Logs all inmanta modules currently installed (in alphabetical order) and their version.
         For each module, the prefix gives some context:
@@ -652,7 +639,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         version: Optional[Version] = self.get_installed_version(module_name)
         LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, version)
 
-        ModuleSource.log_snapshot_difference(modules_pre_install)
+        ModuleSource.log_snapshot_difference_v2_modules(modules_pre_install)
 
     def path_for(self, name: str) -> Optional[str]:
         """
@@ -738,7 +725,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             remote_repo,
         )
 
-        ModuleSource.log_snapshot_difference(modules_pre_install)
+        ModuleSource.log_snapshot_difference_v2_modules(modules_pre_install)
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)

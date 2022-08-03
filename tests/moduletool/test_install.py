@@ -944,6 +944,7 @@ The release type of the project is set to 'master'. Set it to a value that is ap
     )
 
 
+@pytest.mark.slowtest
 def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
     """
     Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
@@ -995,16 +996,17 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
         )
 
 
+@pytest.mark.slowtest
 def test_real_time_logging(caplog):
     """
-    Make sure the logging in _run_command_and_stream_output happens in real time
+    Make sure the logging in run_command_and_stream_output happens in real time
     """
     caplog.set_level(logging.DEBUG)
 
     cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
     return_code: int
     output: List[str]
-    return_code, output = PythonEnvironment._run_command_and_stream_output(cmd, shell=True)
+    return_code, output = PythonEnvironment.run_command_and_stream_output(cmd, shell=True)
     assert return_code == 0
 
     assert "one" in caplog.records[0].message
@@ -1020,6 +1022,7 @@ def test_real_time_logging(caplog):
     assert delta >= 1
 
 
+@pytest.mark.slowtest
 def test_pip_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
     """
     This test checks that pip's output is correctly logged on module install.
@@ -1074,6 +1077,7 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         )
 
 
+@pytest.mark.slowtest
 def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
     """
     This test checks that git clone output is correctly logged on module install.
@@ -1101,6 +1105,7 @@ def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
         )
 
 
+@pytest.mark.slowtest
 def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
     """
     Make sure the logs contain the correct message when no matching distribution is found during install.
@@ -1203,6 +1208,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     )
 
 
+@pytest.mark.slowtest
 def test_version_snapshot(local_module_package_index: str, snippetcompiler, caplog, modules_v2_dir, tmpdir):
     """
     Make sure the logs contain the correct version snapshot after each module installation.
@@ -1269,7 +1275,8 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         "inmanta.module",
         logging.DEBUG,
         (
-            """Snapshot of modules versions post-install:
+            """\
+Snapshot of modules versions post-install:
 +inmanta-module-module-a: 5.0.0
 +inmanta-module-module-b: 1.2.3"""
         ),
@@ -1297,7 +1304,8 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         "inmanta.module",
         logging.DEBUG,
         (
-            """Snapshot of modules versions post-install:
+            """\
+Snapshot of modules versions post-install:
 ~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)
  inmanta-module-module-b: 1.2.3
 +inmanta-module-module-c: 8.8.8"""
