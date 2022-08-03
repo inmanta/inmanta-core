@@ -1,0 +1,19 @@
+
+entity Router extends std::Resource:
+    string id
+end
+
+implement Router using router
+
+implementation router for Router:
+    std::AgentConfig(autostart=true, agentname="router_agent")
+end
+
+a = Router(id="router_a")
+b = Router(id="router_b2")
+z = Router(id="router_z")
+std::ResourceSet(name="subset_a", resources=[a,b,z])
+
+d = Router(id="router_d")
+e = Router(id="router_e")
+std::ResourceSet(name="subset_b", resources=[d,e])
