@@ -3,9 +3,14 @@ entity Router extends std::Resource:
     string id
 end
 
-implement Router using std::none
+implement Router using router
 
-# Router a and b are assigned to the resource set "subset_a"
+implementation router for Router:
+    # Resource that doesn't belong to any resource set and is shared
+    std::AgentConfig(autostart=true, agentname="router_agent")
+end
+
+# Router a, b and c are assigned to the resource set "subset_a"
 a = Router(id="router_a")
 b = Router(id="router_b")
 c = Router(id="router_c")
@@ -15,6 +20,3 @@ std::ResourceSet(name="subset_a", resources=[a,b,c])
 d = Router(id="router_d")
 e = Router(id="router_e")
 std::ResourceSet(name="subset_b", resources=[d,e])
-
-# Router f doesn't belong to any resource set and is shared"
-f = Router(id="router_f")

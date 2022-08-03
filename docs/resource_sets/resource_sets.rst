@@ -5,7 +5,7 @@ To reduce the time of a compile action, resource sets can be used. Without the u
 updated or removed, the entire model is recompiled.
 By using resource sets, the resources that are usually updated together can be grouped in resource sets.
 This way, the time to compile will depend on the size of the targeted resource set where not using resource sets,
-the time to compile will depend on the entire model.
+the time to compile will depend on the size of the entire model.
 This allows to perform certain actions only on the resources of a specific resource sets.
 Compiling only some resource sets and not the entire model is called a partial compile.
 
@@ -15,7 +15,7 @@ Resource sets are represented in the model by instances of the ``std::ResourceSe
 of the resource set and a list of resources that belong to the resource set.
 The default exporter discovers these ResourceSet instances to determine which resources are part of which resource set.
 
-The example shown below defines an entity/resource Router and assign tree of those to one resource set ``subset_a``, two to ``subset_b`` and one Router doesn't belong any resource set.
+The example shown below defines an entity/resource Router and assigns three of those to one resource set ``subset_a``, two to ``subset_b`` and one Router doesn't belong any resource set.
 
 .. literalinclude:: resource_sets_sources/basic_example_full.cf
     :language: inmanta
