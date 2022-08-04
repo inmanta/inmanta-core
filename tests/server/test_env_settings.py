@@ -16,8 +16,12 @@
     Contact: code@inmanta.com
 """
 from typing import Dict
+from uuid import UUID
+
+import pytest
 
 from inmanta import data
+from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
 
 
@@ -311,3 +315,85 @@ async def test_default_value_purge_on_delete_setting(server, client):
     result = await client.get_setting(tid=env_id, id=data.PURGE_ON_DELETE)
     assert result.code == 200
     assert result.result["value"] is False
+
+
+async def test_environment_add_new_setting_parameter(server, client, environment):
+    new_setting: Setting = Setting(
+        name="a new setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+
+    await data.Environment.register_setting(new_setting)
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 200
+    assert result.result["value"] is False
+
+    result = await client.set_setting(tid=environment, id="a new setting", value=True)
+    assert result.code == 200
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 200
+    assert result.result["value"] is True
+
+    result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    assert result.result["value"] is False
+
+    existing_setting: Setting = Setting(
+        name=data.AUTO_DEPLOY,
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="an existing setting",
+    )
+    with pytest.raises(KeyError):
+        await data.Environment.register_setting(existing_setting)
+
+    result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    assert result.result["value"] is False
+
+
+async def test_get_setting_no_longer_exist(server, client, environment):
+    """
+    Test what happens when a setting exists in the database for which the definition no longer exists
+    """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    project_id = env.project
+    setting_db_query = (
+        "UPDATE environment SET settings=jsonb_set(settings, $1::text[], "
+        "to_jsonb($2::boolean), TRUE) WHERE name=$3 AND project=$4"
+    )
+    values = [["new_setting"], True, "dev", project_id]
+    await Environment._execute_query(setting_db_query, *values)
+
+    result = await client.get_setting(tid=environment, id="a setting")
+    assert result.code == 404
+    assert result.result["message"] == "Request or referenced resource does not exist"
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "new_setting" not in result.result["settings"].keys()
+
+    new_setting: Setting = Setting(
+        name="new_setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="new_setting",
+    )
+
+    await data.Environment.register_setting(new_setting)
+
+    result = await client.get_setting(tid=environment, id="new_setting")
+    assert result.code == 200
+    assert result.result["value"] is True
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "new_setting" in result.result["settings"].keys()
