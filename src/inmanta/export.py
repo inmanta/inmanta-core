@@ -134,6 +134,7 @@ class Exporter(object):
 
         self._resources: ResourceDict = {}
         self._resource_sets: Dict[str, Optional[str]] = {}
+        self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -205,6 +206,7 @@ class Exporter(object):
         )
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
+            empty_set: bool = True
             resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
                 if resource_in_set in resource_mapping:
@@ -215,13 +217,16 @@ class Exporter(object):
                             f"{resource_sets[resource_id]} and {name}"
                         )
                     resource_sets[resource_id] = name
+                    empty_set = False
                 else:
                     LOGGER.warning(
                         "resource %s is part of ResourceSets %s but will not be exported.",
                         str(resource_in_set),
                         str(resource_set_instance),
                     )
-        self._resource_sets: Dict[str, Optional[str]] = resource_sets
+            if empty_set:
+                self._empty_resource_sets.append(name)
+        self._resource_sets = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
@@ -352,15 +357,14 @@ class Exporter(object):
         model_export: bool = False,
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[Sequence[str]] = None,
     ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
         """
-        if resource_sets_to_remove is None:
-            resource_sets_to_remove = []
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
+        resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
 
         self.types = types
         self.scopes = scopes
@@ -372,7 +376,7 @@ class Exporter(object):
             # then process the configuration model to submit it to the mgmt server
             # This is the actuel export : convert entities to resources.
             self._load_resources(types)
-
+            resource_sets_to_remove_all += self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
@@ -412,7 +416,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove)
+            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:

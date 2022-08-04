@@ -686,13 +686,19 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets = {}
         if removed_resource_sets is None:
             removed_resource_sets = []
-
         try:
             resources = pydantic.parse_obj_as(List[ResourceMinimal], resources)
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
+            )
+
+        intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
+        if intersection:
+            raise BadRequest(
+                "Following resource sets are present in the removed resource sets and in the resources that are exported: "
+                f"{intersection}"
             )
 
         async with data.Resource.get_connection() as con:

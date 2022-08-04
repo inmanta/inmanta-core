@@ -589,7 +589,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     with pytest.raises(InvalidModuleException) as e:
         ModuleTool().install(editable=False, path=module_path)
 
-    assert ("these package versions have conflicting dependencies.") in str(e.value.msg)
+    assert ("Module installation failed due to conflicting dependencies") in str(e.value.msg)
 
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
