@@ -163,8 +163,13 @@ class InmantaModuleRequirement:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(Requirement.parse(spec))
 
-    def get_requirement(self) -> Requirement:
-        return self._requirement
+    def get_pip_requirement(self) -> Requirement:
+        """
+        Return the requirement as it would be passed to pip. Only relevant for V2 modules.
+        """
+        req_as_str = str(self._requirement)
+        req_as_str = req_as_str.replace(self._requirement.key, ModuleV2Source.get_package_name_for(self._requirement.key))
+        return Requirement.parse(req_as_str.replace("_", "-"))
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -441,10 +446,11 @@ class ModuleSource(Generic[TModule]):
             if installed is None:
                 # Package is not installed
                 return True
-            requirements = [r.get_requirement() for r in module_spec]
-            if not project.virtualenv.are_installed(requirements):
-                # Package could define an extra that is not installed yet
-                return True
+            if isinstance(installed, ModuleV2):
+                pip_requirements = [r.get_pip_requirement() for r in module_spec]
+                if not project.virtualenv.are_installed(pip_requirements):
+                    # Package could define an extra that is not installed yet
+                    return True
             # Already installed
             return False
 

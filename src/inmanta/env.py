@@ -570,6 +570,12 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
+    def are_installed(self, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this environment.
+        """
+        return PythonWorkingSet.are_installed(requirements)
+
     def install_from_index(
         self,
         requirements: List[Requirement],
@@ -1096,12 +1102,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
         # Also set the python path environment variable for any subprocess
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-
-    def are_installed(self, requirements: req_list) -> bool:
-        """
-        Return True iff the given requirements are installed in this environment.
-        """
-        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,
