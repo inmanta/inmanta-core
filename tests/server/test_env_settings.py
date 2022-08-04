@@ -21,7 +21,7 @@ from uuid import UUID
 import pytest
 
 from inmanta import data
-from inmanta.data import BaseDocument, Environment, Setting, convert_boolean
+from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
 
 
