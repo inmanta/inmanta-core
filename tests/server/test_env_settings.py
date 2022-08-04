@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 from typing import Dict
+from uuid import UUID
 
 import pytest
 
 from inmanta import data
-from inmanta.data import Setting, convert_boolean
+from inmanta.data import BaseDocument, Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
 
 
@@ -358,3 +359,19 @@ async def test_environment_add_new_setting_parameter(server, client, environment
     result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200
     assert result.result["value"] is False
+
+
+async def test_setting_get_setting_no_longer_exist(server, client, environment):
+    """
+    Test what happens when a setting exists in the database for which the definition no longer exists
+    """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    project_id = env.project
+    setting_db_query = "UPDATE environment SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::boolean), TRUE) WHERE name=$3 AND project=$4"
+    values = [["a new setting"], True, "dev", project_id]
+    await Environment._execute_query(setting_db_query, *values)
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 404
+    assert result.result["message"] == "Request or referenced resource does not exist"
