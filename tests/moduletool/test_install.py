@@ -1099,7 +1099,7 @@ def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
     for message, level in expected_logs:
         log_contains(
             caplog,
-            "inmanta.module",
+            "inmanta.env",
             level,
             message,
         )

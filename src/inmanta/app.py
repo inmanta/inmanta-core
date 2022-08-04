@@ -363,6 +363,8 @@ def compile_project(options: argparse.Namespace) -> None:
         do_compile()
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
+    module.Project.log_installed_modules()
+
 
 @command("list-commands", help_msg="Print out an overview of all commands")
 def list_commands(options: argparse.Namespace) -> None:
@@ -620,6 +622,8 @@ def export(options: argparse.Namespace) -> None:
         tid = cfg_env.get()
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
         conn.release_version(tid, version, True, agent_trigger_method)
+
+    module.Project.log_installed_modules()
 
 
 log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
