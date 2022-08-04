@@ -2230,7 +2230,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Log the name, version and generation (v1 or v2) of all installed modules.
         """
-        out = ["The following modules are currently installed:"]
+        LOGGER.info("The following modules are currently installed:")
 
         sorted_modules = self.sorted_modules()
 
@@ -2240,12 +2240,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         v1_modules = get_modules_with_gen(ModuleGeneration.V1)
         v2_modules = get_modules_with_gen(ModuleGeneration.V2)
 
-        out.extend(["V1 modules:"])
-        out.extend([f"{mod.name}: {mod.version}" for mod in v1_modules])
-        out.extend("V2 modules:")
-        out.extend([f"{mod.name}: {mod.version}" for mod in v2_modules])
-
-        LOGGER.info("\n".join(out))
+        if v1_modules:
+            LOGGER.info("V1 modules:")
+            for mod in v1_modules:
+                LOGGER.info(f"  {mod.name}: {mod.version}")
+        if v2_modules:
+            LOGGER.info("V2 modules:")
+            for mod in v2_modules:
+                LOGGER.info(f"  {mod.name}: {mod.version}")
 
     def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
         # Add requirement to metadata file
