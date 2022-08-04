@@ -20,6 +20,7 @@ import configparser
 import enum
 import glob
 import importlib
+import itertools
 import logging
 import os
 import re
@@ -161,6 +162,9 @@ class InmantaModuleRequirement:
         if "-" in spec:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(Requirement.parse(spec))
+
+    def get_requirement(self) -> Requirement:
+        return self._requirement
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -426,7 +430,25 @@ class ModuleSource(Generic[TModule]):
         """
         module_name: str = self._get_module_name(module_spec)
         installed: Optional[TModule] = self.get_installed_module(project, module_name)
-        if (installed is None or any(spec._requirement.extras for spec in module_spec)) and install:
+
+        def _should_install_module() -> bool:
+            """
+            Return True iff the given module should get installed
+            """
+            if not install:
+                # No install was requested
+                return False
+            if installed is None:
+                # Package is not installed
+                return True
+            requirements = [r.get_requirement() for r in module_spec]
+            if not project.virtualenv.are_installed(requirements):
+                # Package could define an extra that is not installed yet
+                return True
+            # Already installed
+            return False
+
+        if _should_install_module():
             return self.install(project, module_spec)
         return installed
 

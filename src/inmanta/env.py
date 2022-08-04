@@ -35,6 +35,7 @@ from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+import itertools
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -148,7 +149,46 @@ class ConflictingRequirements(CompilerException):
             )
 
 
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
+
+
 class PythonWorkingSet:
+
+    @classmethod
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+        """
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
+    @classmethod
+    def are_installed(cls, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this workingset.
+        """
+        if not requirements:
+            return True
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
+        for r in reqs_as_requirements:
+            if r.marker and not r.marker.evaluate():
+                # The marker of the requirement doesn't apply on this environment
+                continue
+            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                return False
+            # TODO: Make recursive
+            if r.extras:
+                distribution: Distribution = pkg_resources.working_set.find(r)
+                pkgs_required_by_extras: Set[Requirement] = (
+                    set(distribution.requires(extras=r.extras)) - set(distribution.requires(extras=()))
+                )
+                if any(pkg.key not in installed_packages for pkg in pkgs_required_by_extras):
+                    return False
+        return True
+
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
         """
@@ -423,7 +463,6 @@ class PythonEnvironment:
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        print(requirements)
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
@@ -510,9 +549,6 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         yield fd.name
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
-
-
 class ActiveEnv(PythonEnvironment):
     """
     The active Python environment. Method implementations assume this environment is active when they're called.
@@ -534,36 +570,6 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
-    @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
-        """
-        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
-        """
-        if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
-        else:
-            return requirements
-
-    def are_installed(self, requirements: req_list) -> bool:
-        """
-        Return True iff the given requirements are installed in this venv.
-        """
-        if not requirements:
-            return True
-        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            # TODO: this does not take extras into account, but how could we do so?
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-            if r.extras:
-                # Install to be sure
-                return False
-        return True
-
     def install_from_index(
         self,
         requirements: List[Requirement],
@@ -573,7 +579,7 @@ class ActiveEnv(PythonEnvironment):
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not upgrade and self.are_installed(requirements):
+        if not upgrade and PythonWorkingSet.are_installed(requirements):
             return
         try:
             super(ActiveEnv, self).install_from_index(
@@ -693,7 +699,7 @@ class ActiveEnv(PythonEnvironment):
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         """
-        if not upgrade and self.are_installed(requirements_list):
+        if not upgrade and PythonWorkingSet.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
             return
         try:
@@ -1090,6 +1096,12 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
         # Also set the python path environment variable for any subprocess
         os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
+
+    def are_installed(self, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this environment.
+        """
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,

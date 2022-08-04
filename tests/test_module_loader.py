@@ -42,7 +42,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter, ModuleTool
+from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
 from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
 
@@ -813,6 +813,165 @@ def test_module_install_extra_on_project_level_v2_dep(
         },
         publish_index=index,
     )
+    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
+        InmantaModuleRequirement.parse("mymod[myfeature]")
+    )
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}mymod"
+
+    # project with dependency on mymod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_with_extra],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v2_module(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correctly when a V2 module defines a dependency with an extra.
+
+    Dependency tree:
+
+        myv2mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    # Create myv2mod with extra
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_content_init_cf="import depmod",
+        new_requirements=[ModuleV2Source.get_python_package_requirement(
+            InmantaModuleRequirement.parse("depmod[myfeature]")
+        )],
+        publish_index=index,
+    )
+    # project with dependency on mymod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod")],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v1_module(
+    tmpdir,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correct when a V1 module has a dependency that defines an extra.
+
+    Dependency tree:
+
+        myv1mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    # v1 module with dependency on myv1mod with extra
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        str(tmpdir.join("myv1mod")),
+        new_name="myv1mod",
+        new_requirements=[ModuleV2Source.get_python_package_requirement(
+            InmantaModuleRequirement.parse("depmod[myfeature]")
+        )],
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_project_level_v2_dep_update_scenario(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+    do_project_update: bool,
+) -> None:
+    """
+    Verify that module installation works correctly when a project is updated with a V2 module dependency with an extra.
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("mymod")),
+        new_name="mymod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
     package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
         InmantaModuleRequirement.parse("mymod")
     )
@@ -837,27 +996,33 @@ def test_module_install_extra_on_project_level_v2_dep(
     assert_installed(extra_installed=False)
 
     # project with dependency on mymod with extra
-    snippetcompiler_clean.setup_for_snippet(
+    project: Project = snippetcompiler_clean.setup_for_snippet(
         "import mymod",
-        install_project=True,
+        install_project=not do_project_update,
         python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_with_extra],
         autostd=False,
     )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
     assert_installed(extra_installed=True)
 
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
-def test_module_install_extra_on_dep_of_v2_module(
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_dep_of_v2_module_update_scenario(
     snippetcompiler_clean,
     modules_v2_dir: str,
     tmpdir: py.path.local,
     local_module_package_index: str,
     package_name_extra: str,
+    do_project_update: bool,
 ) -> None:
     """
-    Verify that module installation works correctly when a V2 module defines a dependency with an extra.
+    Verify that module installation works correctly when a new version of a module defines a dependency with an extra.
 
     Dependency tree:
 
@@ -923,28 +1088,34 @@ def test_module_install_extra_on_dep_of_v2_module(
         publish_index=index,
     )
     # project with dependency on mymod with extra
-    snippetcompiler_clean.setup_for_snippet(
+    project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
-        install_project=True,
+        install_project=not do_project_update,
         python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
         autostd=False,
     )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
     assert_installed(extra_installed=True)
 
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
-def test_module_install_extra_on_dep_of_v1_module(
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     tmpdir,
     snippetcompiler_clean,
     modules_dir: str,
     modules_v2_dir: str,
     local_module_package_index: str,
     package_name_extra: str,
+    do_project_update: bool,
 ) -> None:
     """
-    Verify that module installation works correct when a V1 module has a dependency that defines an extra.
+    Verify that module installation works correct when a V1 module is updated with a dependency that defines an extra.
 
     Dependency tree:
 
@@ -1004,11 +1175,15 @@ def test_module_install_extra_on_dep_of_v1_module(
         new_name="myv1mod",
         new_requirements=[package_with_extra],
     )
-    snippetcompiler_clean.setup_for_snippet(
+    project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
-        install_project=True,
+        install_project=not do_project_update,
         add_to_module_path=[str(tmpdir)],
         python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
     assert_installed(extra_installed=True)
