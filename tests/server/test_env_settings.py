@@ -361,7 +361,7 @@ async def test_environment_add_new_setting_parameter(server, client, environment
     assert result.result["value"] is False
 
 
-async def test_setting_get_setting_no_longer_exist(server, client, environment):
+async def test_get_setting_no_longer_exist(server, client, environment):
     """
     Test what happens when a setting exists in the database for which the definition no longer exists
     """
