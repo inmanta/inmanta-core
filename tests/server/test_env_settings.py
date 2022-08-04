@@ -375,3 +375,25 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     result = await client.get_setting(tid=environment, id="a new setting")
     assert result.code == 404
     assert result.result["message"] == "Request or referenced resource does not exist"
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "a new setting" not in result.result["settings"].keys()
+
+    new_setting: Setting = Setting(
+        name="a new setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+
+    await data.Environment.register_setting(new_setting)
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 200
+    assert result.result["value"] is True
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "a new setting" in result.result["settings"].keys()

@@ -305,7 +305,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
-        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+        settings = {k: env.settings[k] for k in env.settings.keys() if k in data.Environment._settings.keys()}
+        return 200, {"settings": settings, "metadata": data.Environment._settings}
 
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
