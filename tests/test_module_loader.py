@@ -17,10 +17,10 @@
 """
 import logging
 import os
-import shutil
-import subprocess
+import tempfile
 import sys
 from typing import List, Optional, Set
+import shutil
 
 import py
 import pytest
@@ -1187,3 +1187,126 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         project_tool.update(project=project)
 
     assert_installed(extra_installed=True)
+
+
+@pytest.fixture(scope="session")
+def index_with_pkgs_containing_optional_deps() -> str:
+    """
+    This fixture creates a python package repository containing packages with optional dependencies.
+    These packages are NOT inmanta modules but regular python packages. This fixture returns the URL
+    to the created python package repository.
+    """
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        pip_index = PipIndex(artifact_dir=tmpdirname)
+        create_python_package(
+            name="pkg",
+            pkg_version=Version("1.0.0"),
+            path=os.path.join(tmpdirname, "pkg"),
+            publish_index=pip_index,
+            optional_dependencies={
+                "optional-a": [Requirement.parse("dep-a")],
+                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+            }
+        )
+        for pkg_name in ["dep-a", "dep-b", "dep-c"]:
+            create_python_package(
+                name=pkg_name,
+                pkg_version=Version("1.0.0"),
+                path=os.path.join(tmpdirname, pkg_name),
+                publish_index=pip_index,
+            )
+        yield pip_index.url
+
+
+@pytest.mark.slowtest
+async def test_v1_module_depends_on_third_party_dep_with_extra(
+    tmpdir, snippetcompiler_clean, modules_dir: str, index_with_pkgs_containing_optional_deps: str
+) -> None:
+    """
+    Test whether extras on third party python dependencies are correctly handled on V1 modules.
+    """
+    # Add dependency pkg[optional-a] to module
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(tmpdir, "myv1mod"),
+        new_name="myv1mod",
+        new_content_init_cf="",
+        new_requirements=[Requirement.parse("pkg[optional-a]")]
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a"])
+    assert not project.virtualenv.are_installed(["dep-b"])
+    assert not project.virtualenv.are_installed(["dep-c"])
+
+    # Add dependency pkg[optional-a,optional-b] to module
+    shutil.rmtree(os.path.join(tmpdir, "myv1mod"))
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(tmpdir, "myv1mod"),
+        new_name="myv1mod",
+        new_content_init_cf="",
+        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")]
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
+
+
+@pytest.mark.slowtest
+async def test_v2_module_depends_on_third_party_dep_with_extra(
+    tmpdir, snippetcompiler_clean, modules_v2_dir: str, index_with_pkgs_containing_optional_deps: str
+) -> None:
+    """
+    Test whether extras on third party python dependencies are correctly handled on V2 modules.
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Add dependency pkg[optional-a] to module
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_requirements=[Requirement.parse("pkg[optional-a]")],
+        publish_index=index,
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
+        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a"])
+    assert not project.virtualenv.are_installed(["dep-b"])
+    assert not project.virtualenv.are_installed(["dep-c"])
+
+    # Add dependency pkg[optional-a,optional-b] to module
+    shutil.rmtree(tmpdir.join("myv2mod"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("2.0.0"),
+        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
+        publish_index=index,
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
+        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])

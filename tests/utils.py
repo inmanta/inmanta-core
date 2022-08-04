@@ -363,6 +363,7 @@ def create_python_package(
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
+    optional_dependencies: Optional[Dict[str, Sequence[Requirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -392,6 +393,8 @@ build-backend = "setuptools.build_meta"
 requires = ["setuptools"]
             """.strip()
         )
+
+    install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
     with open(os.path.join(path, "setup.cfg"), "w") as fd:
         egg_info: str = (
             f"""
@@ -412,11 +415,17 @@ author = Inmanta <code@inmanta.com>
 
 {egg_info}
 
-[options]
-install_requires =%s
-            """.strip()
-            % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+""".strip()
         )
+
+        fd.write("\n[options]")
+        fd.write(f"install_requires ={install_requires_content}")
+
+        if optional_dependencies:
+            fd.write("\n[options.extras_require]")
+            for option_name, requirements in optional_dependencies.items():
+                requirements_as_string = "".join(f"\n  {req}" for req in requirements)
+                fd.write(f"\n{option_name} ={requirements_as_string}")
 
     if install:
         env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
