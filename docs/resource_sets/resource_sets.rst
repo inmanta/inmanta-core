@@ -66,5 +66,5 @@ Limitations
 * With partial compiles the compiler cannot verify all constraints that would be checked when a full compile is ran. For example, not all index constraints can be verified. It's the responsibility of the model developer to make sure that these constraints are satisfied.
 * By only doing partial compile it can happen that a shared resource becomes obsolete: several resources that belong to a different resource set can depend on a specific shared resource (not associated with a specific resource set).
   When a partial compile deletes the last resource that was depending on the shared resource, the shared resource will become obsolete, but it is kept as a resource managed by the server because partial compiles cannot delete shared resources.
-  To delete shared resources a full compile is needed as shared resources can not be removed by partial compiles. A solution to this is to perform scheduled full compiles to garbage-collect these shared resources.
+  To delete shared resources a full compile is needed. A solution to this is to perform scheduled full compiles to garbage-collect these shared resources.
   To schedule full compiles, the :inmanta.environment-settings:setting:`auto_full_compile` environment setting should be used.
