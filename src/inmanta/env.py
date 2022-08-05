@@ -528,7 +528,7 @@ class PythonEnvironment:
 
         for line in process.stdout:
             # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
-            output = line.decode()
+            output = line.decode().strip()
             full_output.append(output)
             LOGGER.debug(output)
 
