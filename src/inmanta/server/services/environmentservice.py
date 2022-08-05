@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Pattern, cast
 from asyncpg import StringDataRightTruncationError
 
 from inmanta import config, data
-from inmanta.data import model
+from inmanta.data import Setting, model
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ServerError
@@ -305,7 +305,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
-        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+        settings = {k: env.settings[k] for k in env.settings.keys() if k in data.Environment._settings.keys()}
+        return 200, {"settings": settings, "metadata": data.Environment._settings}
 
     @handle(methods.set_setting, env="tid", key="id")
     async def set_setting(self, env: data.Environment, key: str, value: model.EnvSettingType) -> Apireturn:
@@ -601,3 +602,13 @@ class EnvironmentService(protocol.ServerSlice):
                     await listener.environment_action_updated(updated_env, original_env)
             except Exception:
                 LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)
+
+    async def register_setting(self, setting: Setting) -> None:
+        """
+        Should only be called during pre-start
+        Adds a new setting to the environments from outside inmanta-core.
+        As example, inmanta-lsm can use this method to add settings that are only
+        relevant for inmanta-lsm but that are needed in the environment.
+        :param setting: the setting that should be added to the existing settings
+        """
+        await data.Environment.register_setting(setting)
