@@ -199,7 +199,9 @@ class PythonWorkingSet:
                     return False
                 if r.extras:
                     for extra in r.extras:
-                        distribution: Distribution = pkg_resources.working_set.find(r)
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        if distribution is None:
+                            return False
                         pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
                             distribution.requires(extras=())
                         )
