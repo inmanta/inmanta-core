@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump docstring-parser from 0.13 to 0.14
+destination-branches:
+- iso5
+sections: {}

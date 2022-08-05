@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 57.4.15 to 57.4.17
+destination-branches:
+- iso5
+sections: {}

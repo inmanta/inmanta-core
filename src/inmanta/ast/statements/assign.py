@@ -19,7 +19,9 @@
 # pylint: disable-msg=W0613
 
 import typing
+from collections.abc import Iterator
 from itertools import chain
+from typing import Dict, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 import inmanta.warnings as inmanta_warnings
@@ -30,12 +32,20 @@ from inmanta.ast import (
     KeyException,
     LocatableString,
     Location,
+    OptionalValueException,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Resumer, Statement
+from inmanta.ast.statements import (
+    AssignStatement,
+    ExpressionStatement,
+    RequiresEmitStatement,
+    Resumer,
+    Statement,
+    StaticEagerPromise,
+)
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionUnit,
@@ -46,13 +56,14 @@ from inmanta.execute.runtime import (
     Resolver,
     ResultCollector,
     ResultVariable,
+    VariableABC,
 )
 from inmanta.execute.util import Unknown
 
 from . import ReferenceStatement
 
 try:
-    from typing import TYPE_CHECKING, Dict, Optional, TypeVar
+    from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
 
@@ -69,16 +80,19 @@ class CreateList(ReferenceStatement):
     Represents a list literal statement which might contain any type of value (constants and/or instances).
     """
 
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> typing.Dict[object, ResultVariable]:
-
+    ) -> typing.Dict[object, VariableABC]:
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
+
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
@@ -101,12 +115,14 @@ class CreateList(ReferenceStatement):
             temp.freeze()
 
         # pass temp
-        return {self: temp}
+        requires[self] = temp
+        return requires
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
+        super().execute(requires, resolver, queue)
 
         # gradual case, everything is in placeholder
         if self in requires:
@@ -146,6 +162,8 @@ class CreateList(ReferenceStatement):
 
 
 class CreateDict(ReferenceStatement):
+    __slots__ = ("items",)
+
     def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
@@ -168,6 +186,7 @@ class CreateDict(ReferenceStatement):
         """
         Create this list
         """
+        super().execute(requires, resolver, queue)
         qlist = {}
 
         for i in range(len(self.items)):
@@ -191,12 +210,19 @@ class SetAttribute(AssignStatement, Resumer):
     Set an attribute of a given instance to a given value
     """
 
+    __slots__ = ("instance", "attribute_name", "value", "list_only", "_assignment_promise")
+
     def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
+        self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
+
+    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+        # propagate this attribute assignment's promise to parent blocks
+        return chain(super().get_all_eager_promises(), [self._assignment_promise])
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
@@ -207,6 +233,7 @@ class SetAttribute(AssignStatement, Resumer):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
         reqs = self.instance.requires_emit(resolver, queue)
+        # This class still implements custom attribute resolution, rather than using the new VariableReferenceHook mechanism
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(
@@ -291,6 +318,11 @@ class SetAttributeHelper(ExecutionUnit):
         except AttributeException as e:
             e.set_statement(self.stmt, False)
             raise
+        except OptionalValueException as e:
+            # OptionalValueException has only its instance as statement, override with more accurate statement and location
+            e.set_statement(self.stmt, True)
+            e.location = self.stmt.location
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
@@ -348,6 +380,8 @@ class MapLookup(ReferenceStatement):
     Lookup a value in a dict
     """
 
+    __slots__ = ("themap", "key", "location")
+
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
         super(MapLookup, self).__init__([themap, key])
         self.themap = themap
@@ -355,11 +389,16 @@ class MapLookup(ReferenceStatement):
         self.location = themap.get_location().merge(key.location)
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         mapv = self.themap.execute(requires, resolver, queue)
+        if isinstance(mapv, Unknown):
+            return Unknown(self)
         if not isinstance(mapv, dict):
             raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
 
         keyv = self.key.execute(requires, resolver, queue)
+        if isinstance(keyv, Unknown):
+            return Unknown(self)
         if not isinstance(keyv, str):
             raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
 
@@ -380,6 +419,8 @@ class IndexLookup(ReferenceStatement, Resumer):
     Lookup a value in a dictionary
     """
 
+    __slots__ = ("index_type", "query", "wrapped_query", "type")
+
     def __init__(
         self,
         index_type: LocatableString,
@@ -396,13 +437,14 @@ class IndexLookup(ReferenceStatement, Resumer):
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
-        temp.set_provider(self)
         HangUnit(queue, resolver, sub, temp, self)
-        return {self: temp}
+        requires[self] = temp
+        return requires
 
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
@@ -419,6 +461,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         )
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -438,6 +481,8 @@ class ShortIndexLookup(IndexLookup):
 
     vm.files[path="/etc/motd"]
     """
+
+    __slots__ = ("rootobject", "relation", "querypart", "wrapped_querypart")
 
     def __init__(
         self,
@@ -506,12 +551,15 @@ class StringFormat(ReferenceStatement):
     Create a new string by doing a string interpolation
     """
 
+    __slots__ = ("_format_string", "_variables")
+
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         ReferenceStatement.__init__(self, [k for (k, _) in variables])
         self._format_string = format_string
         self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)

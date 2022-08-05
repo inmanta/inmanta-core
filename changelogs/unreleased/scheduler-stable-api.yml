@@ -1,0 +1,4 @@
+description: Added some missing stable api markers
+change-type: patch
+destination-branches:
+  - iso5

@@ -125,7 +125,22 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number``, ``int`` or ``bool``.
+The basic primitive types are ``string``, ``number``, ``int`` or ``bool``. These basic types also support type casts:
+
+.. code-block:: inmanta
+
+    assert = true
+    assert = int("1") == 1
+    assert = number("1.2") == 1.2
+    assert = number(true) == 1
+    assert = bool(1.2) == true
+    assert = bool(0) == false
+    assert = bool(null) == false
+    assert = bool("x") == true
+    # like in Python, only empty strings are considered false
+    assert = bool("false") == true
+    assert = bool("") == false
+    assert = string(true) == "true"
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
 Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical
@@ -134,6 +149,8 @@ type in the same lexical scope.
 
 A regex matches a given string when zero or more characters at the beginning of that string match the regular expression. A
 dollar sign should be used at the end of the regex if a full string match is required.
+
+.. _language_reference_typedef:
 
 .. code-block:: antlr
 

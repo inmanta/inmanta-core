@@ -1,0 +1,6 @@
+---
+description: Support implicit removal of resource sets
+issue-nr: 4529
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso5]

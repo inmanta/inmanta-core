@@ -1,0 +1,4 @@
+description: Validate resource sets argument of the put_version endpoint
+issue-nr: 4328
+change-type: minor
+destination-branches: [master, iso5]

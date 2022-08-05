@@ -17,6 +17,7 @@
 """
 import argparse
 import configparser
+import datetime
 import inspect
 import logging
 import os
@@ -28,7 +29,6 @@ import tempfile
 import time
 import zipfile
 from argparse import ArgumentParser
-from collections import OrderedDict
 from configparser import ConfigParser
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
 
@@ -39,10 +39,11 @@ from pkg_resources import parse_version
 
 import build
 import build.env
+import toml
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
-from inmanta.const import MAX_UPDATE_ATTEMPT
+from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -74,31 +75,47 @@ else:
 LOGGER = logging.getLogger(__name__)
 
 
-def set_yaml_order_preserving() -> None:
-    """
-    Set yaml modules to be order preserving.
-
-    !!! Big Side-effect !!!
-
-    Library is not OO, unavoidable
-
-    Will no longer be needed in python3.7
-    """
-    _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
-
-    def dict_representer(dumper, data):
-        return dumper.represent_dict(data.items())
-
-    def dict_constructor(loader, node):
-        return OrderedDict(loader.construct_pairs(node))
-
-    yaml.add_representer(OrderedDict, dict_representer)
-    yaml.add_constructor(_mapping_tag, dict_constructor)
-
-
 class ModuleVersionException(CLIException):
     def __init__(self, msg: str) -> None:
         super().__init__(msg, exitcode=5)
+
+
+def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add the --no-strict-deps-check and --strict-deps-check options to the given parser.
+    """
+    parser.add_argument(
+        "--no-strict-deps-check",
+        dest="no_strict_deps_check",
+        action="store_true",
+        default=False,
+        help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
+        "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+        "--strict-deps-check option.",
+    )
+    parser.add_argument(
+        "--strict-deps-check",
+        dest="strict_deps_check",
+        action="store_true",
+        default=False,
+        help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+        "This option is mutually exclusive with the --no-strict-deps-check option.",
+    )
+
+
+def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> Optional[bool]:
+    """
+    Perform input validation on the --no-strict-deps-check and --strict-deps-check options and
+    return True iff strict dependency checking should be used.
+    """
+    if no_strict_deps_check and strict_deps_check:
+        raise Exception("Options --no-strict-deps-check and --strict-deps-check cannot be set together")
+    if not no_strict_deps_check and not strict_deps_check:
+        # If none of the *strict_deps_check options are provided, use the value set in the project.yml file
+        return None
+    if no_strict_deps_check:
+        return False
+    return strict_deps_check
 
 
 class ModuleLikeTool(object):
@@ -121,8 +138,8 @@ class ModuleLikeTool(object):
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load: bool = False) -> Project:
-        project = Project.get()
+    def get_project(self, load: bool = False, strict_deps_check: Optional[bool] = None) -> Project:
+        project = Project.get(strict_deps_check=strict_deps_check)
         if load:
             project.load()
         return project
@@ -215,22 +232,23 @@ class ProjectTool(ModuleLikeTool):
         init.add_argument(
             "--default", help="Use default parameters for the project generation", action="store_true", default=False
         )
-        subparser.add_parser(
+        install = subparser.add_parser(
             "install",
             help="Install all modules required for this project.",
             description="""
 Install all modules required for this project.
 
 This command installs missing modules in the development venv, but doesn't update already installed modules if that's not
-required to satisfy the module version constraints. Use `inmanta modules update` instead if the already installed modules need
+required to satisfy the module version constraints. Use `inmanta project update` instead if the already installed modules need
 to be updated to the latest compatible version.
 
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
         )
+        add_deps_check_arguments(install)
 
-        subparser.add_parser(
+        update = subparser.add_parser(
             "update",
             help=(
                 "Update all modules to the latest version compatible with the module version constraints and install missing "
@@ -243,15 +261,13 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
+        add_deps_check_arguments(update)
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
-        try:
-            project = self.get_project(load=True)
-        except Exception:
-            raise CLIException("Could not load project", exitcode=1)
+        project = self.get_project(load=True)
 
         if recursive is None:
             recursive = project.freeze_recursive
@@ -260,8 +276,6 @@ compatible with the dependencies specified by the updated modules.
             operator = project.freeze_operator
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
-
-        set_yaml_order_preserving()
 
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
@@ -298,21 +312,28 @@ compatible with the dependencies specified by the updated modules.
             no_input=default,
         )
 
-    def install(self) -> None:
+    def install(self, no_strict_deps_check: bool = False, strict_deps_check: bool = False) -> None:
         """
         Install all modules the project requires.
         """
-        project: Project = self.get_project(load=False)
+        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
+        project: Project = self.get_project(load=False, strict_deps_check=strict)
         project.install_modules()
 
-    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+    def update(
+        self,
+        module: Optional[str] = None,
+        project: Optional[Project] = None,
+        no_strict_deps_check: bool = False,
+        strict_deps_check: bool = False,
+    ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-
+        strict = get_strict_deps_check(no_strict_deps_check, strict_deps_check)
         if project is None:
             # rename var to make mypy happy
-            my_project = self.get_project(load=False)
+            my_project = self.get_project(load=False, strict_deps_check=strict)
         else:
             my_project = project
 
@@ -326,8 +347,12 @@ compatible with the dependencies specified by the updated modules.
                 if module in v2_modules
             ]
             if v2_python_specs:
+                # Get known requires and add them to prevent invalidating constraints through updates
+                # These could be constraints (-c) as well, but that requires additional sanitation
+                # Because for pip not every valid -r is a valid -c
+                current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_from_index(
-                    v2_python_specs,
+                    v2_python_specs + [Requirement.parse(r) for r in current_requires],
                     my_project.module_source.urls,
                     upgrade=True,
                     allow_pre_releases=my_project.install_mode != InstallMode.release,
@@ -345,7 +370,7 @@ compatible with the dependencies specified by the updated modules.
 
         attempt = 0
         done = False
-        last_failure = None
+        last_failure: Optional[CompilerException] = None
 
         while not done and attempt < MAX_UPDATE_ATTEMPT:
             LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
@@ -373,9 +398,7 @@ compatible with the dependencies specified by the updated modules.
             except CompilerException as e:
                 last_failure = e
                 # model is corrupt
-                LOGGER.info(
-                    "The model is not currently in an executable state, performing intermediate updates", stack_info=True
-                )
+                LOGGER.info("The model is not currently in an executable state, performing intermediate updates")
                 # get all specs from all already loaded modules
                 specs = my_project.collect_requirements()
 
@@ -437,7 +460,7 @@ class ModuleTool(ModuleLikeTool):
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar="command", help="the command to  execute")
 
-        subparser.add_parser(
+        update = subparser.add_parser(
             "update",
             help=(
                 "(deprecated: use `inmanta project update` instead) Update all modules to the latest version compatible with"
@@ -450,6 +473,7 @@ This command might reinstall Python packages in the development venv if the curr
 compatible with the dependencies specified by the updated modules.
             """.strip(),
         )
+        add_deps_check_arguments(update)
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -536,6 +560,14 @@ mode.
             default=None,
             dest="output_dir",
         )
+        build.add_argument(
+            "--dev",
+            dest="dev_build",
+            help="Perform a development build of the module. This adds the build tag `.dev<timestamp>` to the "
+            "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
+            default=False,
+            action="store_true",
+        )
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
 
@@ -586,7 +618,7 @@ mode.
             raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
         ModuleConverter(module).convert_in_place()
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None) -> str:
+    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False) -> str:
         """
         Build a v2 module and return the path to the build artifact.
         """
@@ -603,9 +635,9 @@ mode.
         if isinstance(module, ModuleV1):
             with tempfile.TemporaryDirectory() as tmpdir:
                 ModuleConverter(module).convert(tmpdir)
-                return V2ModuleBuilder(tmpdir).build(output_dir)
+                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build)
         else:
-            return V2ModuleBuilder(path).build(output_dir)
+            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build)
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -778,7 +810,10 @@ version: 0.0.1dev0"""
         """
 
         def install(install_path: str) -> None:
-            env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            try:
+                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+            except env.ConflictingRequirements as e:
+                raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
 
         module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
         module: Module = self.construct_module(None, module_path)
@@ -793,13 +828,18 @@ version: 0.0.1dev0"""
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
 
-    def update(self, module: Optional[str] = None, project: Optional[Project] = None) -> None:
+    def update(
+        self,
+        module: Optional[str] = None,
+        project: Optional[Project] = None,
+        no_strict_deps_check: bool = False,
+        strict_deps_check: bool = False,
+    ) -> None:
         """
         Update all modules to the latest version compatible with the given module version constraints.
         """
-
         LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
-        ProjectTool().update(module, project)
+        ProjectTool().update(module, project, no_strict_deps_check, strict_deps_check)
 
     def status(self, module: Optional[str] = None) -> None:
         """
@@ -883,8 +923,6 @@ version: 0.0.1dev0"""
         for submodule in module_obj.get_all_submodules():
             freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
-        set_yaml_order_preserving()
-
         with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
@@ -918,7 +956,7 @@ class ModuleBuildFailedError(Exception):
         return self.msg
 
 
-BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc")))
+BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
 class V2ModuleBuilder:
@@ -929,7 +967,7 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str) -> str:
+    def build(self, output_directory: str, dev_build: bool = False) -> str:
         """
         Build the module and return the path to the build artifact.
         """
@@ -940,11 +978,31 @@ class V2ModuleBuilder:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
             shutil.copytree(self._module.path, build_path)
+            if dev_build:
+                self._add_dev_build_tag_to_setup_cfg(build_path)
             self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
             return path_to_wheel
+
+    def _add_dev_build_tag_to_setup_cfg(self, build_path: str) -> None:
+        """
+        Add a build_tag of the format `.dev<timestamp>` to the setup.cfg file. The timestamp has the form %Y%m%d%H%M%S.
+        """
+        path_setup_cfg = os.path.join(build_path, "setup.cfg")
+        # Read setup.cfg file
+        config_in = ConfigParser()
+        config_in.read(path_setup_cfg)
+        # Set build_tag
+        if not config_in.has_section("egg_info"):
+            config_in.add_section("egg_info")
+        timestamp_uct = datetime.datetime.now(datetime.timezone.utc)
+        timestamp_uct_str = timestamp_uct.strftime("%Y%m%d%H%M%S")
+        config_in.set("egg_info", "tag_build", f".dev{timestamp_uct_str}")
+        # Write file back
+        with open(path_setup_cfg, "w") as fh:
+            config_in.write(fh)
 
     def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
         """
@@ -1044,25 +1102,16 @@ class ModuleConverter:
 
         output_directory = os.path.abspath(output_directory)
 
-        # convert meta-data (also preforms validation, so we do it first to fail fast)
-        setup_cfg = self.get_setup_cfg()
+        # convert meta-data (also performs validation, so we do it first to fail fast)
+        setup_cfg = self.get_setup_cfg(self._module.path, warn_on_merge=False)
 
         # copy all files
         shutil.copytree(self._module.path, output_directory)
 
-        self._do_update(output_directory, setup_cfg)
+        self._do_update(output_directory, setup_cfg, warn_on_merge=False)
 
     def convert_in_place(self) -> None:
         output_directory = os.path.abspath(self._module.path)
-
-        setup_cfg = ConfigParser()
-
-        if os.path.exists(os.path.join(output_directory, "setup.cfg")):
-            LOGGER.warning("setup.cfg file already exists, merging. This will remove all comments from the file")
-            setup_cfg.read(os.path.join(output_directory, "setup.cfg"))
-
-        if os.path.exists(os.path.join(output_directory, "pyproject.toml")):
-            raise CLIException("pyproject.toml already exists, aborting. Please remove/rename this file", exitcode=1)
 
         if os.path.exists(os.path.join(output_directory, "MANIFEST.in")):
             raise CLIException("MANIFEST.in already exists, aborting. Please remove/rename this file", exitcode=1)
@@ -1070,10 +1119,10 @@ class ModuleConverter:
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
             raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
-        setup_cfg = self.get_setup_cfg(setup_cfg)
-        self._do_update(output_directory, setup_cfg)
+        setup_cfg = self.get_setup_cfg(output_directory, warn_on_merge=True)
+        self._do_update(output_directory, setup_cfg, warn_on_merge=True)
 
-    def _do_update(self, output_directory: str, setup_cfg: ConfigParser) -> None:
+    def _do_update(self, output_directory: str, setup_cfg: ConfigParser, warn_on_merge: bool = False) -> None:
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
         # remove requirements.txt
@@ -1091,8 +1140,10 @@ class ModuleConverter:
                 pass
 
         # write out pyproject.toml
+        # read before erasing
+        pyproject = self.get_pyproject(output_directory, warn_on_merge=warn_on_merge)
         with open(os.path.join(output_directory, "pyproject.toml"), "w") as fh:
-            fh.write(self.get_pyproject())
+            fh.write(pyproject)
         # write out setup.cfg
         with open(os.path.join(output_directory, "setup.cfg"), "w") as fh:
             setup_cfg.write(fh)
@@ -1101,6 +1152,7 @@ class ModuleConverter:
             fh.write(
                 f"""
 include inmanta_plugins/{self._module.name}/setup.cfg
+include inmanta_plugins/{self._module.name}/py.typed
 recursive-include inmanta_plugins/{self._module.name}/model *.cf
 graft inmanta_plugins/{self._module.name}/files
 graft inmanta_plugins/{self._module.name}/templates
@@ -1108,20 +1160,70 @@ graft inmanta_plugins/{self._module.name}/templates
                 + "\n"
             )
 
-    def get_pyproject(self) -> str:
-        return """[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-"""
+    def get_pyproject(self, in_folder: str, warn_on_merge: bool = False) -> str:
+        """
+        Adds this to the existing config
 
-    def get_setup_cfg(self, config_in: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
+        [build-system]
+        requires = ["setuptools", "wheel"]
+        build-backend = "setuptools.build_meta"
+        """
+        config_in = {}
+        if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
+            with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
+                loglevel = logging.WARNING if warn_on_merge else logging.INFO
+                LOGGER.log(
+                    level=loglevel,
+                    msg="pyproject.toml file already exists, merging. This will remove all comments from the file",
+                )
+                config_in = toml.load(fh)
+
+        # Simple schema validation on relevant part
+        build_system = config_in.setdefault("build-system", {})
+        if not isinstance(build_system, dict):
+            raise CLIException(
+                f"Invalid pyproject.toml: 'build-system' should be of type dict but is of type '{type(build_system)}'",
+                exitcode=1,
+            )
+
+        requires = build_system.setdefault("requires", [])
+        if not isinstance(requires, list):
+            if isinstance(requires, str):
+                # is it a single string, convert to list
+                build_system["requires"] = [requires]
+                requires = build_system["requires"]
+            else:
+                raise CLIException(
+                    f"Invalid pyproject.toml: 'build-system.requires' should be of type list but is of type '{type(requires)}'",
+                    exitcode=1,
+                )
+
+        for req in ["setuptools", "wheel"]:
+            if req not in requires:
+                requires.append(req)
+        build_system["build-backend"] = "setuptools.build_meta"
+
+        return toml.dumps(config_in)
+
+    def get_setup_cfg(self, in_folder: str, warn_on_merge: bool = False) -> configparser.ConfigParser:
+        config_in = ConfigParser()
+        if os.path.exists(os.path.join(in_folder, "setup.cfg")):
+            loglevel = logging.WARNING if warn_on_merge else logging.INFO
+            LOGGER.log(
+                level=loglevel, msg="setup.cfg file already exists, merging. This will remove all comments from the file"
+            )
+            config_in.read(os.path.join(in_folder, "setup.cfg"))
+
         # convert main config
         config = self._module.metadata.to_v2().to_config(config_in)
 
         config.add_section("options")
+        config.add_section("options.packages.find")
 
         # add requirements
-        module_requirements: List[InmantaModuleRequirement] = self._module.get_all_requires()
+        module_requirements: List[InmantaModuleRequirement] = [
+            req for req in self._module.get_all_requires() if req.project_name != self._module.name
+        ]
         python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
             requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
@@ -1132,5 +1234,6 @@ build-backend = "setuptools.build_meta"
         config["options"]["zip_safe"] = "False"
         config["options"]["include_package_data"] = "True"
         config["options"]["packages"] = "find_namespace:"
+        config["options.packages.find"]["include"] = "inmanta_plugins*"
 
         return config

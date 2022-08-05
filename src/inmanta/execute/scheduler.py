@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Op
 from inmanta import plugins
 from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
 from inmanta.ast.attribute import RelationAttribute
-from inmanta.ast.entity import Entity
+from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from inmanta.ast.statements.define import (
     DefineEntity,
@@ -46,6 +46,8 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     RelationAttributeVariable,
     Resolver,
+    ResultVariableProxy,
+    VariableABC,
     Waiter,
 )
 from inmanta.execute.tracking import ModuleTracker
@@ -263,7 +265,8 @@ class Scheduler(object):
             p.normalize()
 
         # give type info to all types, to normalize blocks inside them
-        for t in types.values():
+        # normalize implementations last because they have subblocks that might depend on other type information
+        for t in sorted(types.values(), key=lambda t: isinstance(t, Implementation)):
             t.normalize()
 
         # normalize root blocks
@@ -319,16 +322,23 @@ class Scheduler(object):
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
+
+        def resolve_proxies(variable: Optional[VariableABC]) -> Optional[VariableABC]:
+            if variable is None or not isinstance(variable, ResultVariableProxy):
+                return variable
+            return resolve_proxies(variable.variable)
+
         # Determine drvs that should be frozen to break the cycle
         freeze_candidates: List[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                if isinstance(rv, DelayedResultVariable):
-                    if rv.hasValue:
+                real_rv: Optional[VariableABC] = resolve_proxies(rv)
+                if isinstance(real_rv, DelayedResultVariable):
+                    if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
                         continue
-                    if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
-                        freeze_candidates.append(rv)
+                    if real_rv.get_waiting_providers() > 0 and real_rv.get_progress_potential() > 0:
+                        freeze_candidates.append(real_rv)
 
         if not freeze_candidates:
             return False

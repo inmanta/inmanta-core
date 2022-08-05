@@ -133,6 +133,8 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
+        self._resource_sets: Dict[str, Optional[str]] = {}
+        self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
         self._version = 0
@@ -154,7 +156,7 @@ class Exporter(object):
 
     def _load_resources(self, types: Dict[str, Entity]) -> None:
         """
-        Load all registered resources
+        Load all registered resources and resource_sets
         """
         resource.validate()
         entities = resource.get_entity_resources()
@@ -189,7 +191,42 @@ class Exporter(object):
                             instance.location,
                         )
 
+        self._load_resource_sets(types, resource_mapping)
         Resource.convert_requires(resource_mapping, ignored_set)
+
+    def _load_resource_sets(self, types: Dict[str, Entity], resource_mapping: Dict["Instance", "Resource"]) -> None:
+        """
+        load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
+        the resource belongs to.
+        This method should only be called after all resources have been extracted from the model.
+        """
+        resource_sets: Dict[str, Optional[str]] = {}
+        resource_set_instances: List["Instance"] = (
+            types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
+        )
+        for resource_set_instance in resource_set_instances:
+            name: str = resource_set_instance.get_attribute("name").get_value()
+            empty_set: bool = True
+            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
+            for resource_in_set in resources_in_set:
+                if resource_in_set in resource_mapping:
+                    resource_id: str = resource_mapping[resource_in_set].id.resource_str()
+                    if resource_id in resource_sets and resource_sets[resource_id] != name:
+                        raise CompilerException(
+                            f"resource '{resource_id}' can not be part of multiple ResourceSets: "
+                            f"{resource_sets[resource_id]} and {name}"
+                        )
+                    resource_sets[resource_id] = name
+                    empty_set = False
+                else:
+                    LOGGER.warning(
+                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        str(resource_in_set),
+                        str(resource_set_instance),
+                    )
+            if empty_set:
+                self._empty_resource_sets.append(name)
+        self._resource_sets = resource_sets
 
     def _run_export_plugins_specified_in_config_file(self) -> None:
         """
@@ -319,18 +356,25 @@ class Exporter(object):
         include_status: bool = False,
         model_export: bool = False,
         export_plugin: Optional[str] = None,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[Sequence[str]] = None,
     ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
         Run the export functions
         """
+        if not partial_compile and resource_sets_to_remove:
+            raise Exception("Cannot remove resource sets when a full compile was done")
+        resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
+
         self.types = types
         self.scopes = scopes
         self._version = self.get_version(no_commit)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
+            # This is the actuel export : convert entities to resources.
             self._load_resources(types)
-
+            resource_sets_to_remove_all += self._empty_resource_sets
             # call dependency managers
             self._call_dep_manager(types)
             metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success
@@ -370,7 +414,7 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model)
+            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -438,9 +482,17 @@ class Exporter(object):
 
         upload_code(conn, tid, version, code_manager)
 
-    def commit_resources(self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict) -> None:
+    def commit_resources(
+        self,
+        version: int,
+        resources: List[Dict[str, str]],
+        metadata: Dict[str, str],
+        model: Dict,
+        partial_compile: bool,
+        resource_sets_to_remove: List[str],
+    ) -> None:
         """
-        Commit the entire list of resource to the configurations server.
+        Commit the entire list of resources to the configuration server.
         """
         tid = cfg_env.get()
         if tid is None:
@@ -482,15 +534,28 @@ class Exporter(object):
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        result = conn.put_version(
-            tid=tid,
-            version=version,
-            resources=resources,
-            unknowns=unknown_parameters,
-            resource_state=self._resource_state,
-            version_info=version_info,
-            compiler_version=get_compiler_version(),
-        )
+        if partial_compile:
+            result = conn.put_partial(
+                tid=tid,
+                version=version,
+                resources=resources,
+                resource_sets=self._resource_sets,
+                unknowns=unknown_parameters,
+                resource_state=self._resource_state,
+                version_info=version_info,
+                removed_resource_sets=resource_sets_to_remove,
+            )
+        else:
+            result = conn.put_version(
+                tid=tid,
+                version=version,
+                resources=resources,
+                resource_sets=self._resource_sets,
+                unknowns=unknown_parameters,
+                resource_state=self._resource_state,
+                version_info=version_info,
+                compiler_version=get_compiler_version(),
+            )
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])

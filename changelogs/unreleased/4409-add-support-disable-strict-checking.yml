@@ -1,0 +1,8 @@
+---
+description: Add support to enable/disable strict dependency checking in the compiler and in the module tools using the --strict-deps-check and --no-strict-deps-check options. Strict dependency checking is disabled by default.
+issue-nr: 4516
+change-type: minor
+destination-branches: [iso5]
+sections:
+  minor-improvement: "{{description}}"
+  deprecation-note: "The next major release will raise errors instead of warnings when the virtual environment being used contains version conflicts or has missing dependencies. This new behavior can be enabled already by setting the `--strict-deps-check` commandline option"

@@ -120,7 +120,7 @@ class CodeService(protocol.ServerSlice):
     async def get_code(self, env: data.Environment, code_id: int, resource: str) -> Apireturn:
         code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is None:
-            raise NotFound("The version of the code does not exist.")
+            raise NotFound(f"The version of the code does not exist. {resource}, {code_id}")
 
         sources = {}
         if code.source_refs is not None:

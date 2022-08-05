@@ -16,14 +16,33 @@
     Contact: code@inmanta.com
 """
 import json
+import logging
 import os
+import shutil
+from typing import Dict, List, Optional
 
 import pytest
 
 from inmanta import config, const
-from inmanta.ast import ExternalException
+from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
+from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
+from utils import LogSequence, v1_module_from_template
+
+
+async def assert_resource_set_assignment(environment, assignment: Dict[str, Optional[str]]) -> None:
+    """
+    Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
+
+    :param environment
+    :param assignment: Map the value of name attribute of resource Res to the resource set that resource is expected to
+                       belong to.
+    """
+    resources = await Resource.get_resources_in_latest_version(environment=environment)
+    assert len(resources) == len(assignment)
+    actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+    assert actual_assignment == assignment
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -411,4 +430,289 @@ exp::Test3(
     assert (
         e.value.format_trace()
         == "Failed to get attribute 'real_name' for export on 'exp::Test3'\ncaused by:\nKeyError: 'tom'\n"
+    )
+
+
+async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
+    """
+
+    async def export_model(
+        model: str,
+        partial_compile: bool,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ) -> None:
+        init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+
+        module_name: str = "minimalv1module"
+        module_path: str = str(tmpdir.join("modulev1"))
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        v1_module_from_template(
+            os.path.join(modules_dir, module_name),
+            module_path,
+            new_content_init_cf=model,
+            new_content_init_py=init_py,
+            new_name="modulev1",
+        )
+
+        snippetcompiler.setup_for_snippet(
+            """
+    import modulev1
+            """,
+            add_to_module_path=[str(tmpdir)],
+        )
+        await snippetcompiler.do_export_and_deploy(
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
+
+    # Full compile
+    await export_model(
+        model="""
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+b = Res(name="the_resource_b")
+c = Res(name="the_resource_c")
+d = Res(name="the_resource_d")
+e = Res(name="the_resource_e")
+z = Res(name="the_resource_z")
+std::ResourceSet(name="resource_set_1", resources=[a,c])
+std::ResourceSet(name="resource_set_2", resources=[b])
+std::ResourceSet(name="resource_set_3", resources=[d, e])
+        """,
+        partial_compile=False,
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_b": "resource_set_2",
+            "the_resource_c": "resource_set_1",
+            "the_resource_d": "resource_set_3",
+            "the_resource_e": "resource_set_3",
+            "the_resource_z": None,
+        },
+    )
+
+    # Partial compile
+    await export_model(
+        model="""
+    entity Res extends std::Resource:
+        string name
+    end
+
+    implement Res using std::none
+
+    a = Res(name="the_resource_a")
+    c2 = Res(name="the_resource_c2")
+    f = Res(name="the_resource_f")
+    std::ResourceSet(name="resource_set_1", resources=[a,c2])
+    std::ResourceSet(name="resource_set_4", resources=[f])
+            """,
+        partial_compile=True,
+        resource_sets_to_remove=["resource_set_2"],
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_c2": "resource_set_1",
+            "the_resource_d": "resource_set_3",
+            "the_resource_e": "resource_set_3",
+            "the_resource_f": "resource_set_4",
+            "the_resource_z": None,
+        },
+    )
+
+
+async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    test that an error is raised if a resource is in multiple
+    resource_sets
+    """
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+std::ResourceSet(name="resource_set_1", resources=[a])
+std::ResourceSet(name="resource_set_2", resources=[a])
+"""
+    init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+        new_name="modulev1",
+    )
+    snippetcompiler.setup_for_snippet(
+        """
+import modulev1
+        """,
+        add_to_module_path=[str(tmpdir)],
+    )
+    with pytest.raises(CompilerException) as e:
+        await snippetcompiler.do_export_and_deploy()
+    assert str(e.value).startswith(
+        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple " "ResourceSets:"
+    )
+
+
+async def test_resource_not_exported(snippetcompiler, caplog, environment) -> None:
+    """
+    test that a warning is logged if a resource that is not exported is in a resource_set
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+std::ResourceSet(name="resource_set_1", resources=[std::Resource()])
+implement std::Resource using std::none
+"""
+    )
+    caplog.clear()
+    caplog.set_level(logging.WARNING)
+    await snippetcompiler.do_export_and_deploy()
+    cwd = snippetcompiler.project_dir
+
+    msg: str = (
+        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSets std::ResourceSet "
+        f"(instantiated at {cwd}/main.cf:2) but will not be exported."
+    )
+
+    log_sequence = LogSequence(caplog)
+    log_sequence.contains("inmanta.export", logging.WARNING, msg)
+
+
+async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    """
+    When a partial compile is ran, the exporter should trigger a deletion of each ResourceSet, defined in the partial model,
+    that doesn't have any resources associated
+    """
+
+    async def export_model(
+        model: str,
+        partial_compile: bool,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ) -> None:
+        init_py = """
+from inmanta.resources import (
+    Resource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(Resource):
+    fields = ("name",)
+"""
+
+        module_name: str = "minimalv1module"
+        module_path: str = str(tmpdir.join("modulev1"))
+        if os.path.exists(module_path):
+            shutil.rmtree(module_path)
+        v1_module_from_template(
+            os.path.join(modules_dir, module_name),
+            module_path,
+            new_content_init_cf=model,
+            new_content_init_py=init_py,
+            new_name="modulev1",
+        )
+
+        snippetcompiler.setup_for_snippet(
+            """
+    import modulev1
+            """,
+            add_to_module_path=[str(tmpdir)],
+        )
+        await snippetcompiler.do_export_and_deploy(
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
+
+    # Full compile
+    await export_model(
+        model="""
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+a = Res(name="the_resource_a")
+b = Res(name="the_resource_b")
+c = Res(name="the_resource_c")
+d = Res(name="the_resource_d")
+e = Res(name="the_resource_e")
+z = Res(name="the_resource_z")
+std::ResourceSet(name="resource_set_1", resources=[a,c])
+std::ResourceSet(name="resource_set_2", resources=[b])
+std::ResourceSet(name="resource_set_3", resources=[d, e])
+        """,
+        partial_compile=False,
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_b": "resource_set_2",
+            "the_resource_c": "resource_set_1",
+            "the_resource_d": "resource_set_3",
+            "the_resource_e": "resource_set_3",
+            "the_resource_z": None,
+        },
+    )
+
+    # Partial compile
+    await export_model(
+        model="""
+    entity Res extends std::Resource:
+        string name
+    end
+
+    implement Res using std::none
+
+    a = Res(name="the_resource_a")
+    c2 = Res(name="the_resource_c2")
+    f = Res(name="the_resource_f")
+    std::ResourceSet(name="resource_set_1", resources=[a,c2])
+    std::ResourceSet(name="resource_set_4", resources=[f])
+    std::ResourceSet(name="resource_set_3", resources=[])
+            """,
+        partial_compile=True,
+        resource_sets_to_remove=["resource_set_2"],
+    )
+    await assert_resource_set_assignment(
+        environment,
+        assignment={
+            "the_resource_a": "resource_set_1",
+            "the_resource_c2": "resource_set_1",
+            "the_resource_f": "resource_set_4",
+            "the_resource_z": None,
+        },
     )

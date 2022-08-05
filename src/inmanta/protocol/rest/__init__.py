@@ -231,6 +231,11 @@ class CallArguments(object):
         if self._properties.agent_server and "sid" in all_fields:
             all_fields.remove("sid")
 
+        if self._properties.varkw:
+            # add all other arguments to the call args as well
+            for field in all_fields:
+                self._call_args[field] = self._message[field]
+
         if len(all_fields) > 0 and self._argspec.varkw is None:
             raise exceptions.BadRequest(
                 "request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields

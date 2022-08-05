@@ -18,6 +18,7 @@
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,14 +31,17 @@ import pytest
 from pytest import MonkeyPatch
 
 from inmanta import moduletool
+from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
 
 
-def run_module_build_soft(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
+def run_module_build_soft(
+    module_path: str, set_path_argument: bool, output_dir: Optional[str] = None, dev_build: bool = False
+) -> str:
     if not set_path_argument:
         module_path = None
-    moduletool.ModuleTool().build(module_path, output_dir)
+    return moduletool.ModuleTool().build(module_path, output_dir, dev_build=dev_build)
 
 
 def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
@@ -111,6 +115,7 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "files", "test.txt"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
 
@@ -163,11 +168,14 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
         )
     )
 
-    # write some garbage cfcache and pyc files to verify those are ignored as well
+    # write some garbage .cfc and pyc files to verify those are ignored as well
     open(os.path.join(source_dir, "test.pyc"), "w").close()
     cfcache_dir: str = os.path.join(module_copy_dir, "model", "__cfcache__")
     os.makedirs(cfcache_dir, exist_ok=True)
     open(os.path.join(cfcache_dir, "test.cfc"), "w").close()
+    dot_cfcache_dir: str = os.path.join(module_copy_dir, CF_CACHE_DIR)
+    os.makedirs(dot_cfcache_dir, exist_ok=True)
+    open(os.path.join(dot_cfcache_dir, "test2.cfc"), "w").close()
 
     with caplog.at_level(logging.WARNING):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
@@ -192,3 +200,15 @@ def test_build_invalid_module(tmpdir, modules_v2_dir: str):
 
     with pytest.raises(ModuleMetadataFileNotFound, match=f"Metadata file {setup_cfg_file} does not exist"):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
+
+
+def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
+    """
+    Test whether the functionality to create a development build of a module, works correctly.
+    """
+    module_name = "minimalv2module"
+    module_dir = os.path.join(modules_v2_dir, module_name)
+    module_copy_dir = os.path.join(tmpdir, module_name)
+    shutil.copytree(module_dir, module_copy_dir)
+    path_to_wheel = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True)
+    assert re.search(r"\.dev[0-9]{14}", path_to_wheel)

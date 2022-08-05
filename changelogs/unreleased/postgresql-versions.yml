@@ -1,0 +1,3 @@
+description: Specify which postgresql versions to test against
+change-type: patch
+destination-branches: [iso5]

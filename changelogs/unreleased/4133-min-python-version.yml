@@ -1,0 +1,4 @@
+description: Bump minimal python version to 3.9
+issue-nr: 4133
+change-type: patch
+destination-branches: [master, iso5]

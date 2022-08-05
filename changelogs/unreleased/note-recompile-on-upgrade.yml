@@ -1,0 +1,6 @@
+---
+description: Each project present on the Inmanta server should be recompiled after an upgrade of the server.
+change-type: patch
+destination-branches: [iso5]
+sections:
+  upgrade-note: "{{description}}"

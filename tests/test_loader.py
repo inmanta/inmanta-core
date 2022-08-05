@@ -20,6 +20,7 @@ import inspect
 import os
 import shutil
 import sys
+from logging import INFO
 from typing import List, Set
 
 import py
@@ -88,8 +89,10 @@ def test_code_manager(tmpdir: py.path.local):
         mgr.register_code("test2", str)
 
 
-def test_code_loader(tmp_path):
+def test_code_loader(tmp_path, caplog):
     """Test loading a new module"""
+    caplog.set_level(INFO)
+
     cl = loader.CodeLoader(tmp_path)
 
     def deploy(code: str) -> None:
@@ -107,6 +110,8 @@ def test():
     return 10
         """
     )
+    assert any("Deploying code " in message for message in caplog.messages)
+    caplog.clear()
 
     import inmanta_plugins.inmanta_unit_test  # NOQA
 
@@ -121,6 +126,20 @@ def test():
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 20
+
+    assert any("Deploying code " in message for message in caplog.messages)
+    caplog.clear()
+
+    # deploy same version
+    deploy(
+        """
+def test():
+    return 20
+        """
+    )
+
+    assert inmanta_plugins.inmanta_unit_test.test() == 20
+    assert not any("Deploying code " in message for message in caplog.messages)
 
 
 def test_code_loader_dependency(tmp_path, caplog):

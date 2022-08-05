@@ -1,0 +1,3 @@
+from . import exceptions as exceptions
+
+class ConnectionResource: ...

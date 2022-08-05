@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump setuptools-rust from 1.2.0 to 1.3.0
+destination-branches:
+- iso5
+sections: {}
