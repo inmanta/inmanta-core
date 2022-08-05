@@ -35,7 +35,6 @@ from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
-import itertools
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -153,7 +152,6 @@ req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class PythonWorkingSet:
-
     @classmethod
     def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
         """
@@ -202,8 +200,8 @@ class PythonWorkingSet:
                 if r.extras:
                     for extra in r.extras:
                         distribution: Distribution = pkg_resources.working_set.find(r)
-                        pkgs_required_by_extra: Set[Requirement] = (
-                            set(distribution.requires(extras=(extra,))) - set(distribution.requires(extras=()))
+                        pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=())
                         )
                         if not _are_installed_recursive(
                             reqs=list(pkgs_required_by_extra),

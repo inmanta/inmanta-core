@@ -20,7 +20,6 @@ import configparser
 import enum
 import glob
 import importlib
-import itertools
 import logging
 import os
 import re

@@ -35,7 +35,7 @@ from pkg_resources import Requirement
 
 from inmanta import env, loader, module
 from packaging import version
-from utils import LogSequence, create_python_package, PipIndex
+from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     pytest.skip(
@@ -574,7 +574,7 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         publish_index=pip_index,
         optional_dependencies={
             "optional-pkg": [Requirement.parse("dep[optional-dep]")],
-        }
+        },
     )
     create_python_package(
         name="dep",
@@ -583,11 +583,9 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         publish_index=pip_index,
         optional_dependencies={
             "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
-        }
+        },
     )
 
     requirements = [Requirement.parse("pkg[optional-pkg]")]
     tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
-
-

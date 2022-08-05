@@ -18,11 +18,12 @@
 import hashlib
 from asyncio import gather
 from logging import DEBUG, INFO
+from typing import Dict, List, Optional
+
 import pytest
 
 from inmanta.agent import Agent
 from utils import LogSequence
-from typing import List, Optional, Dict
 
 
 def make_source_structure(into: Dict, file: str, module: str, source: str, dependencies: Optional[List[str]] = None) -> str:

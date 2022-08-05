@@ -94,7 +94,6 @@ from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-from packaging.version import Version
 
 import build.env
 import inmanta
@@ -120,8 +119,7 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
-
-
+from packaging.version import Version
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -1622,7 +1620,7 @@ def index_with_pkgs_containing_optional_deps() -> str:
             optional_dependencies={
                 "optional-a": [Requirement.parse("dep-a")],
                 "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
-            }
+            },
         )
         for pkg_name in ["dep-a", "dep-b", "dep-c"]:
             utils.create_python_package(

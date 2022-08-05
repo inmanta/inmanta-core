@@ -17,13 +17,13 @@
 """
 import logging
 import os
-import sys
-from typing import List, Optional, Set
 import shutil
+import sys
+from collections import abc
+from typing import List, Optional, Set
 
 import py
 import pytest
-from collections import abc
 from pkg_resources import Requirement
 
 from inmanta import plugins
@@ -869,9 +869,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         str(tmpdir.join("myv2mod")),
         new_name="myv2mod",
         new_content_init_cf="import depmod",
-        new_requirements=[ModuleV2Source.get_python_package_requirement(
-            InmantaModuleRequirement.parse("depmod[myfeature]")
-        )],
+        new_requirements=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod[myfeature]"))],
         publish_index=index,
     )
     # project with dependency on mymod with extra
@@ -926,9 +924,7 @@ def test_module_install_extra_on_dep_of_v1_module(
         os.path.join(modules_dir, "minimalv1module"),
         str(tmpdir.join("myv1mod")),
         new_name="myv1mod",
-        new_requirements=[ModuleV2Source.get_python_package_requirement(
-            InmantaModuleRequirement.parse("depmod[myfeature]")
-        )],
+        new_requirements=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod[myfeature]"))],
     )
     snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
@@ -971,9 +967,7 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("mymod")
-    )
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("mymod"))
     package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
         InmantaModuleRequirement.parse("mymod[myfeature]")
     )
@@ -1042,9 +1036,7 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("depmod")
-    )
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod"))
     package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
         InmantaModuleRequirement.parse("depmod[myfeature]")
     )
@@ -1125,9 +1117,7 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # Publish dependency of V1 module (depmod) to python package repo
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("depmod")
-    )
+    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod"))
     package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
         InmantaModuleRequirement.parse("depmod[myfeature]")
     )
@@ -1201,7 +1191,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         os.path.join(tmpdir, "myv1mod"),
         new_name="myv1mod",
         new_content_init_cf="",
-        new_requirements=[Requirement.parse("pkg[optional-a]")]
+        new_requirements=[Requirement.parse("pkg[optional-a]")],
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
@@ -1221,7 +1211,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         os.path.join(tmpdir, "myv1mod"),
         new_name="myv1mod",
         new_content_init_cf="",
-        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")]
+        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
     )
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
