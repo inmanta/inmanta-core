@@ -18,9 +18,24 @@
 import hashlib
 from asyncio import gather
 from logging import DEBUG, INFO
+import pytest
 
 from inmanta.agent import Agent
 from utils import LogSequence
+from typing import List, Optional, Dict
+
+
+def make_source_structure(into: Dict, file: str, module: str, source: str, dependencies: Optional[List[str]] = None) -> str:
+    """
+    Build up the content of the sources argument of the upload_code() API endpoint.
+    """
+    if dependencies is None:
+        dependencies = []
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(source.encode())
+    hv: str = sha1sum.hexdigest()
+    into[hv] = [file, module, source, dependencies]
+    return hv
 
 
 async def test_agent_code_loading(caplog, server, agent_factory, client, environment):
@@ -33,13 +48,6 @@ async def test_agent_code_loading(caplog, server, agent_factory, client, environ
     """
 
     caplog.set_level(DEBUG)
-
-    def make_source_structure(into, file, module, source):
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(source.encode())
-        hv: str = sha1sum.hexdigest()
-        into[hv] = [file, module, source, []]
-        return hv
 
     codea = """
 def test():
@@ -113,3 +121,39 @@ def xx():
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=5")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")
+
+
+@pytest.mark.slowtest
+async def test_agent_installs_dependency_containing_extras(
+    server, client, environment, agent_factory, monkeypatch, index_with_pkgs_containing_optional_deps: str
+) -> None:
+    """
+    Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
+    """
+    code = """
+def test():
+    return 10
+    """
+
+    sources = {}
+    make_source_structure(
+        sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", code, dependencies=["pkg[optional-a]"]
+    )
+
+    res = await client.upload_code(tid=environment, id=5, resource="test::Test", sources=sources)
+    assert res.code == 200
+
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
+    )
+
+    # Set the PIP_INDEX_URL, because the agent doesn't have support for custom indexes yet
+    monkeypatch.setenv("PIP_INDEX_URL", index_with_pkgs_containing_optional_deps)
+    await agent.ensure_code(
+        environment=environment,
+        version=5,
+        resource_types=["test::Test"],
+    )
+
+    assert agent._env.are_installed(["pkg", "dep-a"])
+    assert not agent._env.are_installed(["dep-b", "dep-c"])

@@ -17,7 +17,6 @@
 """
 import logging
 import os
-import tempfile
 import sys
 from typing import List, Optional, Set
 import shutil
@@ -1187,35 +1186,6 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         project_tool.update(project=project)
 
     assert_installed(extra_installed=True)
-
-
-@pytest.fixture(scope="session")
-def index_with_pkgs_containing_optional_deps() -> str:
-    """
-    This fixture creates a python package repository containing packages with optional dependencies.
-    These packages are NOT inmanta modules but regular python packages. This fixture returns the URL
-    to the created python package repository.
-    """
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        pip_index = PipIndex(artifact_dir=tmpdirname)
-        create_python_package(
-            name="pkg",
-            pkg_version=Version("1.0.0"),
-            path=os.path.join(tmpdirname, "pkg"),
-            publish_index=pip_index,
-            optional_dependencies={
-                "optional-a": [Requirement.parse("dep-a")],
-                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
-            }
-        )
-        for pkg_name in ["dep-a", "dep-b", "dep-c"]:
-            create_python_package(
-                name=pkg_name,
-                pkg_version=Version("1.0.0"),
-                path=os.path.join(tmpdirname, pkg_name),
-                publish_index=pip_index,
-            )
-        yield pip_index.url
 
 
 @pytest.mark.slowtest
