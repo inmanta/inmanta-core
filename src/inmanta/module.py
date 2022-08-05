@@ -397,7 +397,7 @@ class CLIGitProvider(GitProvider):
             remote = subprocess.check_output(
                 ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
             ).decode("utf-8")
-        except CalledProcessError as e:
+        except CalledProcessError:
             remote = None
         return remote
 
@@ -452,16 +452,6 @@ class ModuleSource(Generic[TModule]):
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
         """
         Display information about this module's installation before the actual installation.
-
-        :param project: The project associated with the module.
-        :param module_name: The module's name.
-        """
-        raise NotImplementedError("Abstract method")
-
-    @abstractmethod
-    def log_post_install_information(self, project: "Project", module_name: str) -> None:
-        """
-        Display information about this module's installation after the actual installation.
 
         :param project: The project associated with the module.
         :param module_name: The module's name.
@@ -654,6 +644,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             LOGGER.debug("\n".join(out))
 
     def log_post_install_information(self, project: "Project", module_name: str) -> None:
+        """
+        Display information about this module's installation after the actual installation.
+
+        :param project: The project associated with the module.
+        :param module_name: The module's name.
+        """
         version: Optional[Version] = self.get_installed_version(module_name)
         LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, version)
 
@@ -716,11 +712,18 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         LOGGER.debug("Installing module %s (v1).", module_name)
 
     def log_post_install_information(self, project: "Project", module: TModule) -> None:
+        """
+        Display information about this module's installation after the actual installation.
+
+        :param project: The project associated with the module.
+        :param module: The module.
+        """
         local_repo = module.path
-        remote_repo = gitprovider.get_remote(local_repo).strip()
+        remote_repo = gitprovider.get_remote(local_repo)
+        remote_repo = f"from {remote_repo.strip()}" if remote_repo is not None else ""
 
         LOGGER.debug(
-            "Successfully installed module %s (v1) version %s in %s from %s",
+            "Successfully installed module %s (v1) version %s in %s%s.",
             module.name,
             module.version,
             module.path,

@@ -1334,7 +1334,7 @@ def test_logging_v1_module(
     low_level_v2_module_name: str = "low_level_v2_module"
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
-    low_level_v2_module: module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), low_level_v2_module_name),
         new_name=low_level_v2_module_name,
@@ -1347,7 +1347,7 @@ def test_logging_v1_module(
     requirements: List[InmantaModuleRequirement] = [InmantaModuleRequirement.parse(low_level_v2_module_name)]
 
     intermediate_v1_module_name = "intermediate_v1"
-    intermediate_v1_module = v1_module_from_template(
+    v1_module_from_template(
         os.path.join(modules_dir, "minimalv1module"),
         os.path.join(libs_dir, intermediate_v1_module_name),
         new_name=intermediate_v1_module_name,
@@ -1360,7 +1360,7 @@ def test_logging_v1_module(
     requirements: List[InmantaModuleRequirement] = [InmantaModuleRequirement.parse(intermediate_v1_module_name)]
 
     top_v1_module_name: str = "top_v1_module"
-    top_v1_module = v1_module_from_template(
+    v1_module_from_template(
         os.path.join(modules_dir, "minimalv1module"),
         os.path.join(libs_dir, top_v1_module_name),
         new_name=top_v1_module_name,
