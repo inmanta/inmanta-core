@@ -348,7 +348,7 @@ class CLIGitProvider(GitProvider):
         return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd)
 
         if return_code != 0:
-            raise Exception()
+            raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")
 
     def fetch(self, repo: str) -> None:
         env = os.environ.copy()
@@ -389,13 +389,17 @@ class CLIGitProvider(GitProvider):
     def pull(self, repo: str) -> str:
         return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
-    def get_remote(self, repo: str) -> str:
+    def get_remote(self, repo: str) -> Optional[str]:
         """
-        Returns the remote tracking repo given a local repo
+        Returns the remote tracking repo given a local repo or None if the remote is not yet configured
         """
-        return subprocess.check_output(
-            ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
-        ).decode("utf-8")
+        try:
+            remote = subprocess.check_output(
+                ["git", "config", "--get", "remote.origin.url"], cwd=repo, stderr=subprocess.DEVNULL
+            ).decode("utf-8")
+        except CalledProcessError as e:
+            remote = None
+        return remote
 
     def push(self, repo: str) -> str:
         return subprocess.check_output(
@@ -581,12 +585,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 )
         try:
             self.log_pre_install_information(project, module_name)
-            modules_pre_install = self.take_v2_modules_snapshot()
+            modules_pre_install = self.take_v2_modules_snapshot(header="Snapshot of modules versions before installation:")
 
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
 
             self.log_post_install_information(project, module_name)
-            self.log_snapshot_difference_v2_modules(modules_pre_install)
+            self.log_snapshot_difference_v2_modules(modules_pre_install, header="Snapshot of modules versions after installation:")
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -599,44 +603,50 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
         LOGGER.debug("Installing module %s (v2).", module_name)
 
-    @staticmethod
-    def take_v2_modules_snapshot() -> Dict[str, "Version"]:
+    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> Dict[str, "Version"]:
         """
-        Log and return a dictionary containing currently installed v2 modules and their versions
+        Log and return a dictionary containing currently installed v2 modules and their versions.
+
+        :param header: Optional text to be displayed before logging the modules and their versions
         """
-        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
+        packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
+        version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
         if version_snapshot:
-            out = ["Snapshot of modules versions pre-install:"]
+            out = [header] if header is not None else []
             out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
             LOGGER.debug("\n".join(out))
         return version_snapshot
 
-    @staticmethod
-    def log_snapshot_difference_v2_modules(modules_pre_install: Dict[str, "Version"]) -> None:
+    def log_snapshot_difference_v2_modules(self, modules_pre_install: Dict[str, "Version"], header: Optional[str] = None) -> None:
         """
         Logs all v2 inmanta modules currently installed (in alphabetical order) and their version.
         For each module, the prefix gives some context:
             - "+" means this module is newly installed
             - "~" means this module was previously installed but a new version has been installed
             - " " means this module was already installed and left untouched
+
+        :param modules_pre_install: Mapping of inmanta module names to their respective versions. This is the baseline against
+        which the currently installed versions will be compared.
+        :param header: Optional text to be displayed before logging the diff view
         """
-        version_snapshot = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
+        packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
+        version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
         set_pre_install = set(modules_pre_install.items())
         set_post_install = set(version_snapshot.items())
         updates_and_additions = set_post_install - set_pre_install
 
         if version_snapshot:
-            out = ["Snapshot of modules versions post-install:"]
-            for package_name, package_version in sorted(version_snapshot.items()):
+            out = [header] if header is not None else []
+            for inmanta_module_name, package_version in sorted(version_snapshot.items()):
                 prefix = " "
                 suffix = ""
-                if package_name not in modules_pre_install.keys():
+                if inmanta_module_name not in modules_pre_install.keys():
                     prefix = "+"
-                elif package_name in [elmt[0] for elmt in updates_and_additions]:
+                elif inmanta_module_name in [elmt[0] for elmt in updates_and_additions]:
                     prefix = "~"
-                    suffix = f" (was previously {modules_pre_install[package_name]})"
+                    suffix = f" (was previously {modules_pre_install[inmanta_module_name]})"
 
-                out.append(prefix + package_name + ": " + str(package_version) + suffix)
+                out.append(prefix + inmanta_module_name + ": " + str(package_version) + suffix)
             LOGGER.debug("\n".join(out))
 
     def log_post_install_information(self, project: "Project", module_name: str) -> None:
@@ -701,17 +711,13 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     def log_pre_install_information(self, project: "Project", module_name: str) -> None:
         LOGGER.debug("Installing module %s (v1).", module_name)
 
-    def log_post_install_information(self, project: "Project", module_name: str) -> None:
-        local_repo = self.local_repo.path_for(module_name)
-
-        assert local_repo is not None, f"Failed to install module {module_name} because its local repository is not defined."
+    def log_post_install_information(self, project: "Project", module: TModule) -> None:
+        local_repo = module.path
         remote_repo = gitprovider.get_remote(local_repo).strip()
-        module = self.get_installed_module(project, module_name)
 
-        assert module is not None
         LOGGER.debug(
             "Successfully installed module %s (v1) version %s in %s from %s",
-            module_name,
+            module.name,
             module.version,
             module.path,
             remote_repo,
@@ -735,7 +741,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                 module = ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )
-                self.log_post_install_information(project, module_name)
+                self.log_post_install_information(project, module)
                 return module
         else:
             if project.downloadpath is None:
@@ -751,7 +757,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             module = ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
             )
-            self.log_post_install_information(project, module_name)
+            self.log_post_install_information(project, module)
 
             return module
 
