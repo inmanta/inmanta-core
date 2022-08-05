@@ -39,7 +39,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template, v1_module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -1311,3 +1311,76 @@ Snapshot of modules versions post-install:
 +inmanta-module-module-c: 8.8.8"""
         ),
     )
+
+
+def test_logging_v1_module(
+    local_module_package_index: str,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    tmpdir,
+    caplog,
+    snippetcompiler
+) -> None:
+    """
+    A module needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
+    allowed.
+    """
+    caplog.set_level(logging.INFO)
+
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+    os.makedirs(libs_dir)
+
+
+    low_level_v2_module_name: str = "low_level_v2_module"
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+
+    low_level_v2_module: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), low_level_v2_module_name),
+        new_name=low_level_v2_module_name,
+        install=False,
+        new_requirements=[],
+        publish_index=index,
+        new_version=version.Version("1.1.1")
+    )
+    model: str = f"import {low_level_v2_module_name}"
+    requirements: List[InmantaModuleRequirement] = ([InmantaModuleRequirement.parse(low_level_v2_module_name)])
+
+    intermediate_v1_module_name="intermediate_v1"
+    intermediate_v1_module = v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(libs_dir, intermediate_v1_module_name),
+        new_name=intermediate_v1_module_name,
+        new_content_init_cf=model,
+        new_requirements=requirements,
+        new_version=version.Version("2.2.2")
+    )
+
+
+    model: str = f"import {intermediate_v1_module_name}"
+    requirements: List[InmantaModuleRequirement] = ([InmantaModuleRequirement.parse(intermediate_v1_module_name)])
+
+    top_v1_module_name: str = "top_v1_module"
+    top_v1_module = v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(libs_dir, top_v1_module_name),
+        new_name=top_v1_module_name,
+        new_content_init_cf=model,
+        new_requirements=requirements,
+        new_version=version.Version("3.3.3")
+    )
+
+    snippetcompiler.setup_for_snippet(
+        f"""
+        import {intermediate_v1_module_name}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        add_to_module_path=[libs_dir],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(low_level_v2_module_name))],
+        install_project=True,
+    )
+
+    assert caplog is not None
