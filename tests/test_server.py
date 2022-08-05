@@ -22,6 +22,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
+from functools import partial
 
 import pytest
 from dateutil import parser
@@ -50,7 +51,6 @@ from utils import log_contains, log_doesnt_contain, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart(server, client, environment, caplog):
     """
@@ -103,7 +103,6 @@ async def test_autostart(server, client, environment, caplog):
     log_doesnt_contain(caplog, "inmanta.server.agentmanager", logging.WARNING, "Agent processes did not close in time")
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_dual_env(client, server):
     """
@@ -143,7 +142,6 @@ async def test_autostart_dual_env(client, server):
     assert len(sessionendpoint._sessions) == 2
 
 
-@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_batched(client, server, environment):
     """
@@ -183,33 +181,125 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
 
-@pytest.mark.asyncio(timeout=10)
-async def test_version_removal(client, server):
+@pytest.mark.parametrize(
+    "n_versions_to_keep, n_versions_to_create",
+    [
+        (2, 4),
+        (4, 2),
+        (2, 2),
+    ],
+)
+async def test_create_too_many_versions(client, server, n_versions_to_keep, n_versions_to_create):
     """
-    Test auto removal of older deploy model versions
+    - set AVAILABLE_VERSIONS_TO_KEEP environment setting to <n_versions_to_keep>
+    - create <n_versions_to_create> versions
+    - check the actual number of versions before and after cleanup
     """
+
+    # Create project
     result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
+    # Create environment
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_1_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
+    assert result.code == 200
 
-    for _i in range(20):
-        version = (await client.reserve_version(env_id)).result["data"]
+    # Check value was set
+    result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
+    assert result.code == 200
+    assert result.result["value"] == n_versions_to_keep
 
-        await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+    for _ in range(n_versions_to_create):
+        version = (await client.reserve_version(env_1_id)).result["data"]
+
         res = await client.put_version(
-            tid=env_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
         )
         assert res.code == 200
-        result = await client.get_project(id=project_id)
 
-        versions = await client.list_versions(tid=env_id)
-        assert versions.result["count"] <= opt.server_version_to_keep.get() + 1
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_create
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
 
 
-@pytest.mark.asyncio(timeout=30)
+async def test_n_versions_env_setting_scope(client, server):
+    """
+    The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
+    This test checks that a specific environment setting can be set for each environment
+    """
+
+    n_versions_to_keep_env1 = 5
+    n_versions_to_keep_env2 = 2
+
+    n_many_versions = n_versions_to_keep_env1 + n_versions_to_keep_env2
+
+    # Create project
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    # Create environments
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_1_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
+    assert result.code == 200
+
+    result = await client.create_environment(project_id=project_id, name="env_2")
+    env_2_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
+
+    # Create a lot of versions in both environments
+    for _ in range(n_many_versions):
+
+        env1_version = (await client.reserve_version(env_1_id)).result["data"]
+        env2_version = (await client.reserve_version(env_2_id)).result["data"]
+
+        res = await client.put_version(
+            tid=env_1_id,
+            version=env1_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+        res = await client.put_version(
+            tid=env_2_id,
+            version=env2_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+    # Before cleanup we have too many versions in both envs
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_many_versions
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_many_versions
+
+    # Cleanup
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # After cleanup each env should have its specific number of version
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_keep_env1
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_versions_to_keep_env2
+
+
 @pytest.mark.slowtest
 async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
     """
@@ -294,9 +384,15 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
-    assert result.code == 200
-    assert len(result.result["resources"]) == 3
+    async def wait_for_session() -> bool:
+        result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
+        return result.code == 200 and len(result.result["resources"]) == 3
+
+    """
+    This retry_limited is required to prevent 409 errors in case the agent didn't obtain
+    a session yet by the time the get_resources_for_agent API call is made.
+    """
+    await retry_limited(wait_for_session, 10)
 
     action_id = uuid.uuid4()
     now = datetime.now()
@@ -339,7 +435,6 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=10)
 async def test_get_environment(client, clienthelper, server, environment):
     for i in range(10):
         version = await clienthelper.get_version()
@@ -377,7 +472,6 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-@pytest.mark.asyncio
 async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
     """
     Test updating resources and logging
@@ -434,9 +528,9 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     logs = {x["action"]: x for x in result.result["logs"]}
 
     assert "deploy" in logs
-    assert "finished" not in logs["deploy"]
-    assert "messages" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["messages"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Send some logs
     result = await aclient.resource_action_update(
@@ -458,8 +552,8 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     assert "messages" in logs["deploy"]
     assert len(logs["deploy"]["messages"]) == 1
     assert logs["deploy"]["messages"][0]["msg"] == "Test log a b"
-    assert "finished" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Finish the deploy
     now = datetime.now()
@@ -478,7 +572,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
@@ -523,9 +616,14 @@ async def test_clear_environment(client, server, clienthelper, environment):
     assert len(result.result["environment"]["versions"]) == 0
 
 
-@pytest.mark.asyncio
-async def test_tokens(server_multi, client_multi, environment_multi):
+async def test_tokens(server_multi, client_multi, environment_multi, request):
     # Test using API tokens
+
+    # Check the parameters of the 'server_multi' fixture
+    if request.node.callspec.id in ["SSL", "Normal"]:
+        # Generating tokens is not allowed if auth is not enabled
+        return
+
     test_token = client_multi._transport_instance.token
     token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
     jot = token.result["token"]
@@ -549,13 +647,18 @@ async def test_tokens(server_multi, client_multi, environment_multi):
     assert result.code == 401
 
 
+async def test_token_without_auth(server, client, environment):
+    """Generating a token when auth is not enabled is not allowed"""
+    token = await client.create_token(environment, ["api"], idempotent=True)
+    assert token.code == 400
+
+
 def make_source(collector, filename, module, source, req):
     myhash = hash_file(source.encode())
     collector[myhash] = [filename, module, source, req]
     return collector
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_code_upload(server, client, agent, environment):
     """Test upload of a single code definition"""
     version = (await client.reserve_version(environment)).result["data"]
@@ -596,7 +699,6 @@ async def test_code_upload(server, client, agent, environment):
     assert res.result["sources"] == sources
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
@@ -633,7 +735,6 @@ async def test_batched_code_upload(
             assert info.requires == code[3]
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server, client, environment):
     version = (await client.reserve_version(environment)).result["data"]
     resources = [
@@ -670,7 +771,6 @@ async def test_resource_action_log(server, client, environment):
         parser.parse(f"{parts[0]} {parts[1]}")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_invalid_sid(server, client, environment):
     """
     Test the server to manage the updates on a model during agent deploy
@@ -681,7 +781,6 @@ async def test_invalid_sid(server, client, environment):
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_get_param(server, client, environment):
     metadata = {"key1": "val1", "key2": "val2"}
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
@@ -703,10 +802,10 @@ async def test_get_param(server, client, environment):
     assert len(parameters) == 2
 
 
-@pytest.mark.asyncio(timeout=30)
-async def test_server_logs_address(server_config, caplog):
+async def test_server_logs_address(server_config, caplog, async_finalizer):
     with caplog.at_level(logging.INFO):
         ibl = InmantaBootloader()
+        async_finalizer.add(partial(ibl.stop, timeout=15))
         await ibl.start()
 
         client = Client("client")
@@ -714,11 +813,9 @@ async def test_server_logs_address(server_config, caplog):
         assert result.code == 200
         address = "127.0.0.1"
 
-        await ibl.stop()
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
-@pytest.mark.asyncio
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
     Test querying resource actions via the API
@@ -796,7 +893,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert len(result.result["data"]) == 2
 
 
-@pytest.mark.asyncio
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
     """Test querying resource actions via the API, including the pagination links."""
     project = data.Project(name="test")
@@ -926,7 +1022,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
 
 
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_start", "resource_action_update"])
-@pytest.mark.asyncio
 async def test_resource_deploy_start(server, client, environment, agent, endpoint_to_use: str):
     """
     Ensure that API endpoint `resource_deploy_start()` does the same as the `resource_action_update()`
@@ -952,18 +1047,21 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
+        last_non_deploying_status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -999,13 +1097,11 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_start_error_handling(server, client, environment, agent):
     """
     Test the error handling of the `resource_deploy_start` API endpoint.
@@ -1026,7 +1122,6 @@ async def test_resource_deploy_start_error_handling(server, client, environment,
     assert f"Environment {environment} doesn't contain a resource with id {resource_id}" in result.result["message"]
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_start_action_id_conflict(server, client, environment, agent):
     """
     Ensure proper error handling when the same action_id is provided twice to the `resource_deploy_start` API endpoint.
@@ -1068,7 +1163,6 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
 
 
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
-@pytest.mark.asyncio
 async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
     """
     Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
@@ -1121,14 +1215,13 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert "last_deploy" not in result.result["resource"]
+    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
@@ -1234,7 +1327,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert result.code == 409, result.result
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_done_invalid_state(server, client, environment, agent, caplog):
     """
     Ensure proper error handling when a transient state is passed to the `resource_deploy_done` endpoint.
@@ -1276,7 +1368,6 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
     assert "No transient state can be used to mark a deployment as done" in result.result["message"]
 
 
-@pytest.mark.asyncio
 async def test_resource_deploy_done_error_handling(server, client, environment, agent):
     env_id = uuid.UUID(environment)
 
@@ -1325,7 +1416,6 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
     assert result.code == 404, result.result
 
 
-@pytest.mark.asyncio
 async def test_start_location_no_redirect(server):
     """
     Ensure that there is no redirection for the "start" location. (issue #3497)

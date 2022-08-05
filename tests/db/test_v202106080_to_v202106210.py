@@ -41,10 +41,9 @@ async def migrate_v202106080_to_v202106210(
 
     # When the bootloader is started, it also executes the migration to v202105170
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_add_value_to_resource_table(
     migrate_v202106080_to_v202106210: Callable[[], Awaitable[None]],
     postgresql_client: Connection,

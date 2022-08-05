@@ -40,6 +40,7 @@ tests/.coverage
 .tox
 junit*.xml
 .pytest_cache
+coverage.xml
 
 # Generated
 src/*/parser/parser.out
@@ -63,6 +64,7 @@ types
 mypy.xml
 coverage
 .mypy-baseline
+.mypy-tmp
 
 # Duplicate Files for text_common package, copied by tests_common/copy_files_from_core.py
 tests_common/src/inmanta_tests/conftest.py
@@ -80,3 +82,6 @@ _build
 logs
 
 docs/reference/openapi.json
+
+# Ignore modules_v2 python package repo cache
+tests/data/modules_v2.cache

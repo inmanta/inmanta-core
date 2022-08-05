@@ -206,21 +206,37 @@ class AgentManager(ServerSlice, SessionListener):
 
     @handle(methods_v2.all_agents_action, env="tid")
     async def all_agents_action(self, env: data.Environment, action: AgentAction) -> None:
-        if env.halted:
+        if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
+        if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
+            raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env)
-        else:
+        elif action is AgentAction.unpause:
             await self._unpause_agent(env)
+        elif action is AgentAction.keep_paused_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False)
+        elif action is AgentAction.unpause_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True)
+        else:
+            raise BadRequest(f"Unknown agent action: {action.name}")
 
     @handle(methods_v2.agent_action, env="tid")
     async def agent_action(self, env: data.Environment, name: str, action: AgentAction) -> None:
-        if env.halted:
+        if env.halted and action in {AgentAction.pause, AgentAction.unpause}:
             raise Forbidden("Can not pause or unpause agents when the environment has been halted.")
+        if not env.halted and action in {AgentAction.keep_paused_on_resume, AgentAction.unpause_on_resume}:
+            raise Forbidden("Cannot set on_resume state of agents when the environment is not halted.")
         if action is AgentAction.pause:
             await self._pause_agent(env, name)
-        else:
+        elif action is AgentAction.unpause:
             await self._unpause_agent(env, name)
+        elif action is AgentAction.keep_paused_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=False, endpoint=name)
+        elif action is AgentAction.unpause_on_resume:
+            await self._set_unpause_on_resume(env, should_be_unpaused_on_resume=True, endpoint=name)
+        else:
+            raise BadRequest(f"Unknown agent action: {action.name}")
 
     async def _pause_agent(
         self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
@@ -263,6 +279,21 @@ class AgentManager(ServerSlice, SessionListener):
             await data.Agent.update_primary(
                 env.id, endpoints_with_new_primary, now=datetime.now().astimezone(), connection=connection
             )
+
+    async def _set_unpause_on_resume(
+        self,
+        env: data.Environment,
+        should_be_unpaused_on_resume: bool,
+        endpoint: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ):
+        """
+        Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
+        so that the agent is paused or unpaused after the environment is resumed
+        """
+        await data.Agent.set_unpause_on_resume(
+            env=env.id, endpoint=endpoint, should_be_unpaused_on_resume=should_be_unpaused_on_resume, connection=connection
+        )
 
     async def _process_session_listener_actions(self) -> None:
         """
@@ -350,7 +381,7 @@ class AgentManager(ServerSlice, SessionListener):
             endpoints_to_add = endpoints_in_session - endpoints_in_agent_manager
             LOGGER.debug("Adding endpoints %s to session %s on %s", endpoints_to_add, session.id, session.nodename)
             endpoints_to_remove = endpoints_in_agent_manager - endpoints_in_session
-            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_add, session.id, session.nodename)
+            LOGGER.debug("Removing endpoints %s from session %s on %s", endpoints_to_remove, session.id, session.nodename)
 
             endpoints_with_new_primary += await self._failover_endpoints(session, endpoints_to_remove)
             endpoints_with_new_primary += await self._ensure_primary_if_not_exists(session, endpoints_to_add)
@@ -1053,7 +1084,19 @@ class AutostartedAgentManager(ServerSlice):
         proc: Optional[subprocess.Process] = None
         try:
             proc = await self._fork_inmanta(
-                ["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"], out, err
+                [
+                    "-vvvv",
+                    "--timed-logs",
+                    "--config",
+                    config_path,
+                    "--config-dir",
+                    Config._config_dir if Config._config_dir is not None else "",
+                    "--log-file",
+                    agent_log,
+                    "agent",
+                ],
+                out,
+                err,
             )
 
             if env.id in self._agent_procs and self._agent_procs[env.id] is not None:

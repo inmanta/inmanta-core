@@ -37,14 +37,17 @@ from typing import (
 )
 
 import inmanta.util
+from inmanta import plugins
+from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
-from inmanta.execute import proxy, runtime, util
+from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
 
 if TYPE_CHECKING:
     from inmanta import export
     from inmanta.data import ResourceAction
+    from inmanta.execute import runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -223,7 +226,7 @@ class Resource(metaclass=ResourceMeta):
         """
         for res in resources.values():
             final_requires: Set["Resource"] = set()
-            initial_requires: List[runtime.Instance] = [x for x in res.model.requires]
+            initial_requires: List["runtime.Instance"] = [x for x in res.model.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -295,24 +298,30 @@ class Resource(metaclass=ResourceMeta):
         cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: "proxy.DynamicProxy"
     ) -> str:
         try:
-            try:
-                if hasattr(cls, "get_" + field_name):
-                    mthd = getattr(cls, "get_" + field_name)
-                    value = mthd(exporter, model_object)
-                elif hasattr(cls, "map") and field_name in cls.map:
-                    value = cls.map[field_name](exporter, model_object)
-                else:
-                    value = getattr(model_object, field_name)
-                # serialize to weed out all unknowns
-                # not very efficient, but the tree has to be traversed anyways
-                # passing along the serialized version would break the resource apis
-                json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
-                return value
-            except proxy.UnknownException as e:
-                return e.unknown
-
-        except AttributeError:
-            raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
+            if hasattr(cls, "get_" + field_name):
+                mthd = getattr(cls, "get_" + field_name)
+                value = mthd(exporter, model_object)
+            elif hasattr(cls, "map") and field_name in cls.map:
+                value = cls.map[field_name](exporter, model_object)
+            else:
+                value = getattr(model_object, field_name)
+            # serialize to weed out all unknowns
+            # not very efficient, but the tree has to be traversed anyways
+            # passing along the serialized version would break the resource apis
+            json.dumps(value, default=inmanta.util.api_boundary_json_encoder)
+            return value
+        except IgnoreResourceException:
+            raise  # will be handled in _load_resources of export.py
+        except proxy.UnknownException as e:
+            return e.unknown
+        except plugins.PluginException as e:
+            raise ExplicitPluginException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
+        except CompilerException:
+            # Internal exceptions (like UnsetException) should be propagated without being wrapped
+            # as they are used later on and wrapping them would break the compiler
+            raise
+        except Exception as e:
+            raise ExternalException(None, f"Failed to get attribute '{field_name}' for export on '{entity_name}'", e)
 
     @classmethod
     def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy") -> "Resource":

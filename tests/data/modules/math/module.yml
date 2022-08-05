@@ -1,0 +1,8 @@
+author: Inmanta
+author_email: code@inmanta.com
+description:
+license: ASL 2.0
+copyright: 2022 Inmanta
+name: math
+version: 0.0.1
+compiler_version: 2019.3

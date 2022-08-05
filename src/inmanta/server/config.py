@@ -179,7 +179,7 @@ server_autrecompile_wait = Option(
     "server",
     "auto-recompile-wait",
     10,
-    """The number of seconds to wait before the server may attempt to do a new recompile.
+    """DEPRECATED: The number of seconds to wait before the server may attempt to do a new recompile.
                                      Recompiles are triggered after facts updates for example.""",
     is_time,
 )
@@ -197,8 +197,9 @@ server_version_to_keep = Option(
     "server",
     "available-versions-to-keep",
     10,
-    """On boot and at regular intervals the server will purge older versions.
-                                   This is the number of most recent versions to keep available.""",
+    """[DEPRECATED: use AVAILABLE_VERSIONS_TO_KEEP environment setting]
+                                On boot and at regular intervals the server will purge older versions.
+                                This is the number of most recent versions to keep available.""",
     is_int,
 )
 

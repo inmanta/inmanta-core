@@ -1,0 +1,6 @@
+description: An exception is now raised when trying to interpolate a string in a dictionary key
+change-type: major
+destination-branches: [master]
+sections: {
+  deprecation-note: "{{description}}"
+}

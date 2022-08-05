@@ -1,0 +1,5 @@
+description: Bump stylesheet version to 4.11.1
+change-type: patch
+destination-branches: [master, iso4, iso5]
+issue-nr: 3770
+sections: {}

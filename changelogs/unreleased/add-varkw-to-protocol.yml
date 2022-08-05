@@ -1,0 +1,3 @@
+description: Add varkw support to the protocol layer
+change-type: minor
+destination-branches: [master, iso5]

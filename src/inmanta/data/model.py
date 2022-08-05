@@ -23,10 +23,12 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
+from pydantic import Extra, validator
 from pydantic.fields import ModelField
 
+import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const
+from inmanta import const, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -146,6 +148,9 @@ class CompileRunBase(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
+    partial: bool = False
+    removed_resource_sets: list[str] = []
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]
@@ -197,8 +202,25 @@ class AttributeStateChange(BaseModel):
     current: Optional[Any] = None
     desired: Optional[Any] = None
 
+    @validator("current", "desired")
+    @classmethod
+    def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
+        """
+        Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
+        """
+        try:
+            protocol.common.json_encode(v)
+        except TypeError:
+            if inmanta.RUNNING_TESTS:
+                # Fail the test when the value is not serializable
+                raise Exception(f"Failed to serialize attribute {v}")
+            else:
+                # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                return str(v)
+        return v
 
-EnvSettingType = Union[StrictNonIntBool, int, str, Dict[str, Union[str, int, StrictNonIntBool]]]
+
+EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
 
 
 class Environment(BaseModel):
@@ -282,10 +304,40 @@ class ModelVersionInfo(BaseModel):
     model: Optional[JsonType]
 
 
+class ResourceMinimal(BaseModel):
+    """
+    Represents a resource object as it comes in over the API. Provides strictly required validation only.
+    """
+
+    id: ResourceVersionIdStr
+
+    @classmethod
+    @validator("id")
+    def id_is_resource_version_id(cls, v):
+        if resources.Id.is_resource_version_id(v):
+            return v
+        raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+
+    class Config:
+        extra = Extra.allow
+
+    def incremented_resource_version(self: "ResourceMinimal") -> "ResourceMinimal":
+        """
+        takes a resource and return the same resource with it version incremented
+        (the input resource is modified)
+        """
+        old_res = resources.Id.parse_id(self.id)
+        new_res = resources.Id(
+            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
+        )
+        self.id = new_res.resource_version_str()
+        return self
+
+
 class Resource(BaseModel):
     environment: uuid.UUID
     model: int
-    resource_id: ResourceVersionIdStr
+    resource_id: ResourceIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
@@ -293,6 +345,7 @@ class Resource(BaseModel):
     last_deploy: Optional[datetime.datetime]
     attributes: JsonType
     status: const.ResourceState
+    resource_set: Optional[str]
 
 
 class ResourceAction(BaseModel):
@@ -471,6 +524,9 @@ class ResourceDiffStatus(str, Enum):
     modified = "modified"
     deleted = "deleted"
     unmodified = "unmodified"
+    agent_down = "agent_down"
+    undefined = "undefined"
+    skipped_for_undefined = "skipped_for_undefined"
 
 
 class AttributeDiff(BaseModel):
@@ -579,3 +635,29 @@ class DryRun(BaseModel):
 class DryRunReport(BaseModel):
     summary: DryRun
     diff: List[ResourceDiff]
+
+
+class Notification(BaseModel):
+    """
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    id: uuid.UUID
+    environment: uuid.UUID
+    created: datetime.datetime
+    title: str
+    message: str
+    severity: const.NotificationSeverity
+    uri: str
+    read: bool
+    cleared: bool

@@ -1,0 +1,7 @@
+description: Improved tracking of potential future relation assignments within conditional statements.
+sections:
+  feature: "{{description}}"
+change-type: minor
+destination-branches:
+  - iso5
+  - master

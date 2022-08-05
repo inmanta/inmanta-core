@@ -17,6 +17,7 @@
 """
 import asyncio
 import configparser
+import datetime
 import inspect
 import json
 import logging
@@ -206,7 +207,7 @@ class LogSequence(object):
             # first error is later
             idxe = self._find("", logging.ERROR, "", self.index)
             assert idxe == -1 or idxe >= index
-        assert index >= 0
+        assert index >= 0, "could not find " + msg
         return LogSequence(self.caplog, index + 1, self.allow_errors, self.ignore)
 
     def assert_not(self, loggerpart, level, msg):
@@ -255,7 +256,7 @@ async def wait_for_version(client, environment, cnt):
         code = compiling.code
         return code == 204
 
-    await retry_limited(compile_done, 10)
+    await retry_limited(compile_done, 30)
 
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
@@ -566,3 +567,7 @@ def v1_module_from_template(
             )
     with open(config_file, "r") as fd:
         return module.ModuleV1Metadata.parse(fd)
+
+
+def parse_datetime_to_utc(time: str) -> datetime.datetime:
+    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)

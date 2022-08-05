@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 """
 import collections
 import os
+import subprocess
+import sys
 
 import pytest
 from tornado import process
@@ -40,9 +42,12 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
     Options = collections.namedtuple("Options", ["dryrun", "dashboard"])
     options = Options(dryrun=False, dashboard=False)
 
+    assert not file_name.exists()
+
     run = deploy.Deploy(options, postgresport=postgres_db.port)
     try:
-        run.setup()
+        if not run.setup():
+            raise Exception("Failed to setup server")
         run.run()
     finally:
         run.stop()
@@ -50,7 +55,43 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db):
     assert file_name.exists()
 
 
-@pytest.mark.asyncio(timeout=10)
+@pytest.mark.slowtest
+def test_deploy_with_non_default_config(snippetcompiler, tmpdir) -> None:
+    """
+    Ensure that configuration options set in one of the inmanta configuration
+    files cannot make the `inmanta deploy` fail.
+    """
+    file_name = tmpdir.join("test_file")
+    snippetcompiler.setup_for_snippet(
+        """
+    host = std::Host(name="internal", os=std::linux)
+    file = std::Symlink(host=host, source="/dev/null", target="%s")
+    """
+        % file_name
+    )
+
+    path_dot_inmanta_file = os.path.join(snippetcompiler.project_dir, ".inmanta")
+    with open(path_dot_inmanta_file, "w") as fh:
+        fh.write(
+            """
+[database]
+name=non-default-username
+host=non-default-value
+port=9999
+username=non-default-value
+password=non-default-value
+
+[server]
+bind-port=7777
+bind-address=192.168.100.100
+        """
+        )
+
+    assert not file_name.exists()
+    subprocess.check_call([sys.executable, "-m", "inmanta.app", "deploy"], cwd=snippetcompiler.project_dir)
+    assert file_name.exists()
+
+
 async def test_fork(server):
     """
     This test should not fail. Some Subprocess'es can make the ioloop hang, this tests fails when that happens.

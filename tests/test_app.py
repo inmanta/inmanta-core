@@ -342,7 +342,6 @@ def test_check_bad_shutdown():
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
     assert "SHUTDOWN COMPLETE" not in out
-    assert not err
 
 
 def test_startup_failure(tmpdir, postgres_db, database_name):
@@ -367,7 +366,13 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     assert code == 4
 
 
-def test_compiler_exception_output(snippetcompiler):
+@pytest.mark.parametrize("cache_cf_files", [True, False])
+def test_compiler_exception_output(snippetcompiler, cache_cf_files):
+    """
+    This test case is also used to test the caching (issue 3838)
+    Since this is a basic smoke test for argument parsing, no assertion
+    about the caching is done here.
+    """
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
@@ -379,23 +384,28 @@ implement Test using std::none
 o = Test(attr="1234")
         """
     )
+    cwd = snippetcompiler.project_dir if cache_cf_files else "."
 
     output = (
-        """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """
-        """(reported in Construct(Test) (./main.cf:8))
+        f"""Could not set attribute `attr` on instance `__config__::Test (instantiated at {cwd}/main.cf:8)` """
+        f"""(reported in Construct(Test) ({cwd}/main.cf:8))
 caused by:
-  Invalid value '1234', expected Number (reported in Construct(Test) (./main.cf:8))
+  Invalid value '1234', expected Number (reported in Construct(Test) ({cwd}/main.cf:8))
 """
     )
 
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
-        out, err = process.communicate(timeout=30)
-        assert out.decode() == ""
-        assert err.decode() == output
+        _, err = process.communicate(timeout=30)
+        assert output in err.decode()
 
-    exec("compile")
-    exec("export", "-J", "out.json")
+    no_cache_option = [] if cache_cf_files else ["--no-cache"]
+
+    cl_compile = ["compile"] + no_cache_option
+    cl_export = ["export", "-J", "out.json"] + no_cache_option
+
+    exec(*cl_compile)
+    exec(*cl_export)
 
 
 @pytest.mark.timeout(15)
@@ -413,7 +423,6 @@ end
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=30)
-    assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:
@@ -484,5 +493,4 @@ def test_init_project(tmpdir):
     assert os.path.exists(test_project_path)
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
-    assert len(stderr) == 1
-    assert "already exists" in stderr[0]
+    assert any("already exists" in error for error in stderr)

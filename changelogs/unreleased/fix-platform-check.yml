@@ -1,0 +1,5 @@
+---
+description: explicitly check for linux distribution instead of checking for "non-windows"
+change-type: patch
+destination-branches : [master, iso5]
+sections: {}

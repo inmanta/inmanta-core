@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump inmanta-dev-dependencies[async,core,pytest,sphinx] from 2.28.0 to
+    2.29.0
+destination-branches:
+- master
+sections: {}

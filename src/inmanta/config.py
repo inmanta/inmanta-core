@@ -55,6 +55,7 @@ class LenientConfigParser(ConfigParser):
 
 class Config(object):
     __instance: Optional[ConfigParser] = None
+    _config_dir: Optional[str] = None  # The directory this config was loaded from
     __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
     @classmethod
@@ -92,6 +93,7 @@ class Config(object):
         config = LenientConfigParser(interpolation=Interpolation())
         config.read(files)
         cls.__instance = config
+        cls._config_dir = config_dir
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
@@ -103,6 +105,7 @@ class Config(object):
     @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
+        cls._config_dir = None
 
     @overload
     @classmethod
@@ -584,9 +587,9 @@ class AuthJWTConfig(object):
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-
+        jwks_timeout = self._config.getfloat("jwks_request_timeout", 30.0)
         try:
-            with request.urlopen(self.jwks_uri, context=ctx) as response:
+            with request.urlopen(self.jwks_uri, timeout=jwks_timeout, context=ctx) as response:
                 key_data = json.loads(response.read().decode("utf-8"))
         except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response

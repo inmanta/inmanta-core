@@ -1,0 +1,6 @@
+---
+description: Make `python -m inmanta` work
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"

@@ -1,0 +1,5 @@
+---
+description: Don't set the auto-recompile-wait setting in the test suite, but use the recompile_backoff environment setting instead.
+issue-nr: 4332
+change-type: patch
+destination-branches: [master]

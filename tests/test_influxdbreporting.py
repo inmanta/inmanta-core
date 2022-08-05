@@ -20,7 +20,7 @@ import re
 
 import pytest
 import tornado
-from pyformance import gauge, timer
+from pyformance import gauge, global_registry, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
@@ -100,7 +100,6 @@ def influxdb(event_loop, free_socket):
     ifl.server.stop()
 
 
-@pytest.mark.asyncio
 async def test_influxdb(influxdb):
     rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
     with timer("test").time():
@@ -126,7 +125,6 @@ async def test_influxdb(influxdb):
         assert "mark=X" in line
 
 
-@pytest.mark.asyncio
 async def test_timing():
     # Attempt to deploy every 0.01 seconds,
     # Deploy hangs on a semaphore, so test case can control progress
@@ -161,3 +159,24 @@ async def test_timing():
     await asyncio.sleep(0.01)
     assert mr.count == base + 1
     mr.stop()
+
+
+async def test_available_metrics(server):
+    metrics = global_registry().dump_metrics()
+    assert metrics["db.connected"]["value"]
+    assert "db.max_pool" in metrics
+    assert "db.open_connections" in metrics
+    assert "db.free_connections" in metrics
+    assert "self.spec.cpu" in metrics
+
+    # ensure it doesn't crash when the server is down
+    await server.stop()
+    metrics = global_registry().dump_metrics()
+
+    assert metrics["db.max_pool"]["value"] == 0
+    assert not metrics["db.connected"]["value"]
+
+
+async def test_safeness_if_server_down():
+    # ensure it works is there is no server
+    global_registry().dump_metrics()

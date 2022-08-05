@@ -20,11 +20,10 @@
 
 import datetime
 import uuid
-from typing import Any, List, Union
+from typing import Any, Dict, List, Optional, Union
 
-from inmanta import const, data
+from inmanta import const, data, resources
 from inmanta.data import model
-from inmanta.resources import Id
 from inmanta.types import JsonType, PrimitiveTypes
 
 from . import exceptions
@@ -32,7 +31,7 @@ from .common import ArgOption
 from .decorators import method, typedmethod
 
 
-async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = await data.Environment.get_by_id(env)
     if env is None:
@@ -53,14 +52,16 @@ async def ignore_env(obj: Any, metadata: dict) -> Any:
     return obj
 
 
-async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> Id:
+async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata: dict) -> "resources.Id":
     try:
-        return Id.parse_resource_version_id(rvid)
+        return resources.Id.parse_resource_version_id(rvid)
     except Exception:
         raise exceptions.BadRequest(f"Invalid resource version id: {rvid}")
 
 
-ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
+ENV_OPTS: Dict[str, ArgOption] = {
+    "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
+}
 AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
 RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
@@ -525,6 +526,7 @@ def put_version(
     unknowns: list = None,
     version_info: dict = None,
     compiler_version: str = None,
+    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
 ):
     """
     Store a new version of the configuration model
@@ -538,6 +540,7 @@ def put_version(
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
+    :param resource_sets: a dictionary describing which resource belongs to which resource set
     """
 
 

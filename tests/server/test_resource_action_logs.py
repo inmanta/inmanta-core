@@ -27,6 +27,9 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from inmanta import const, data
 from inmanta.server.config import get_bind_port
 
+# This resource ID has some garbage characters, to make sure the queries are good
+resource_id_a = r"std::File[agent1,path=/tmp/%%/\_file1.txt]"
+
 
 @pytest.fixture
 async def env_with_logs(client, server, environment):
@@ -59,7 +62,7 @@ async def env_with_logs(client, server, environment):
             environment=uuid.UUID(environment),
             version=i,
             resource_version_ids=[
-                f"std::File[agent1,path=/tmp/file1.txt],v={i}",
+                f"{resource_id_a},v={i}",
                 f"std::Directory[agent1,path=/tmp/dir2],v={i}",
             ],
             action_id=action_id,
@@ -99,60 +102,47 @@ async def env_with_logs(client, server, environment):
     yield environment, msg_timings
 
 
-@pytest.mark.asyncio
 async def test_resource_action_logs_filtering(client, server, env_with_logs):
     """Test the filters for the resource action logs"""
     environment, msg_timings = env_with_logs
 
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
+    result = await client.resource_logs(environment, resource_id_a)
     assert result.code == 200
     assert len(result.result["data"]) == 13
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"action": const.ResourceAction.pull}
-    )
+    result = await client.resource_logs(environment, resource_id_a, filter={"action": const.ResourceAction.pull})
     assert result.code == 200
     assert len(result.result["data"]) == 8
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"minimal_log_level": "TRACE"}
-    )
+    result = await client.resource_logs(environment, resource_id_a, filter={"minimal_log_level": "TRACE"})
     assert result.code == 200
     assert len(result.result["data"]) == 13
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"minimal_log_level": "INFO"}
-    )
+    result = await client.resource_logs(environment, resource_id_a, filter={"minimal_log_level": "INFO"})
     assert result.code == 200
     assert len(result.result["data"]) == 9
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, filter={"minimal_log_level": "ERROR"}
-    )
+    result = await client.resource_logs(environment, resource_id_a, limit=2, filter={"minimal_log_level": "ERROR"})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
     result = await client.resource_logs(
         environment,
-        "std::File[agent1,path=/tmp/file1.txt]",
+        resource_id_a,
         filter={"timestamp": [f"lt:{msg_timings[5]}", f"ge:{msg_timings[2]}"]},
     )
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"message": ["successful"]}
-    )
+    result = await client.resource_logs(environment, resource_id_a, filter={"message": ["successful"]})
     assert result.code == 200
     assert len(result.result["data"]) == 5
 
-    result = await client.resource_logs(
-        environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"message": ["successful", "good"]}
-    )
+    result = await client.resource_logs(environment, resource_id_a, filter={"message": ["successful", "good"]})
     assert result.code == 200
     assert len(result.result["data"]) == 9
 
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", filter={"message": ["error"]})
+    result = await client.resource_logs(environment, resource_id_a, filter={"message": ["error"]})
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
@@ -168,14 +158,13 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
     result = await client.resource_logs(
         environment,
-        "std::File[agent1,path=/tmp/file1.txt]",
+        resource_id_a,
         filter={"minimal_log_level": "INFO", "timestamp": [f"ge:{msg_timings[2]}"]},
     )
     assert result.code == 200
@@ -185,7 +174,7 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
 
     result = await client.resource_logs(
         environment,
-        "std::File[agent1,path=/tmp/file1.txt]",
+        resource_id_a,
         limit=2,
         sort=f"{order_by_column}.{order}",
         filter={"minimal_log_level": "INFO", "timestamp": [f"ge:{msg_timings[2]}"]},
@@ -266,10 +255,9 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
         ("Dates.ASC", 400),
     ],
 )
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, sort, expected_status, env_with_logs):
     environment, _ = env_with_logs
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, sort=sort)
+    result = await client.resource_logs(environment, resource_id_a, limit=2, sort=sort)
     assert result.code == expected_status
 
 
@@ -286,14 +274,12 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
         ({"message": ["deployed to", "setting"]}, 200),
     ],
 )
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, filter, expected_status, env_with_logs):
     environment, _ = env_with_logs
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]", limit=2, filter=filter)
-    assert result.code == expected_status
+    result = await client.resource_logs(environment, resource_id_a, limit=2, filter=filter)
+    assert result.code == expected_status, result.result
 
 
-@pytest.mark.asyncio
 async def test_log_without_kwargs(server, client, environment):
 
     await data.ConfigurationModel(
@@ -309,7 +295,7 @@ async def test_log_without_kwargs(server, client, environment):
         environment=uuid.UUID(environment),
         version=1,
         resource_version_ids=[
-            "std::File[agent1,path=/tmp/file1.txt],v=1",
+            f"{resource_id_a},v=1",
             "std::Directory[agent1,path=/tmp/dir2],v=1",
         ],
         action_id=uuid.uuid4(),
@@ -329,11 +315,10 @@ async def test_log_without_kwargs(server, client, environment):
         ]
     )
     await resource_action.save()
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
+    result = await client.resource_logs(environment, resource_id_a)
     assert result.code == 200
 
 
-@pytest.mark.asyncio
 async def test_log_nested_kwargs(server, client, environment):
 
     await data.ConfigurationModel(
@@ -349,7 +334,7 @@ async def test_log_nested_kwargs(server, client, environment):
         environment=uuid.UUID(environment),
         version=1,
         resource_version_ids=[
-            "std::File[agent1,path=/tmp/file1.txt],v=1",
+            f"{resource_id_a},v=1",
             "std::Directory[agent1,path=/tmp/dir2],v=1",
         ],
         action_id=uuid.uuid4(),
@@ -369,7 +354,7 @@ async def test_log_nested_kwargs(server, client, environment):
         ]
     )
     await resource_action.save()
-    result = await client.resource_logs(environment, "std::File[agent1,path=/tmp/file1.txt]")
+    result = await client.resource_logs(environment, resource_id_a)
     assert result.code == 200
     assert result.result["data"][0]["kwargs"]["changes"]["characteristics"] == {
         "current": {"Status": "Planned"},

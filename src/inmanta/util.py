@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
-
 import asyncio
+import contextlib
+import dataclasses
 import datetime
 import enum
 import functools
@@ -30,13 +31,17 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Task, ensure_future, gather, sleep
+from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
+from collections import defaultdict
+from dataclasses import dataclass
 from logging import Logger
-from typing import Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+from types import TracebackType
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
 
+from crontab import CronTab
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
@@ -47,18 +52,6 @@ HASH_ROUNDS = 100000
 
 T = TypeVar("T")
 S = TypeVar("S")
-
-
-def memoize(obj):
-    cache = obj.cache = {}
-
-    @functools.wraps(obj)
-    def memoizer(*args, **kwargs):
-        if args not in cache:
-            cache[args] = obj(*args, **kwargs)
-        return cache[args]
-
-    return memoizer
 
 
 def get_compiler_version() -> str:
@@ -103,7 +96,9 @@ def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
     return code == 200
 
 
-def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[Coroutine]) -> None:
+def ensure_future_and_handle_exception(
+    logger: Logger, msg: str, action: Awaitable[T], notify_done_callback: Callable[[asyncio.Task[T]], None]
+) -> asyncio.Task[T]:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
@@ -114,67 +109,209 @@ def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[C
                 logger.exception(msg, exc_info=exc)
         except CancelledError:
             pass
+        finally:
+            notify_done_callback(future)
 
     future.add_done_callback(handler)
+    return future
 
 
+TaskMethod = Callable[[], Awaitable[object]]
+
+
+@stable_api
+class TaskSchedule(ABC):
+    """
+    Abstract base class for a task schedule specification. Offers methods to inspect when the task should be scheduled, relative
+    to the current time. Stateless.
+    """
+
+    @abstractmethod
+    def get_initial_delay(self) -> float:
+        """
+        Returns the number of seconds from now until this task should be scheduled for the first time.
+        """
+
+    @abstractmethod
+    def get_next_delay(self) -> float:
+        """
+        Returns the number of seconds from now until this task should be scheduled again. Uses the current time as reference,
+        i.e. assumes the task has already run at least once and a negligible amount of time has passed since the last run
+        completed.
+        """
+
+    @abstractmethod
+    def log(self, action: TaskMethod) -> None:
+        """
+        Log a message about the action being scheduled according to this schedule.
+        """
+
+
+@stable_api
+@dataclass(frozen=True)
+class ScheduledTask:
+    action: TaskMethod
+    schedule: TaskSchedule
+
+
+@stable_api
+@dataclass(frozen=True)
+class IntervalSchedule(TaskSchedule):
+    """
+    Simple interval schedule for tasks.
+
+    :param interval: The interval in seconds between execution of actions.
+    :param initial_delay: Delay in seconds to the first execution. If not set, interval is used.
+    """
+
+    interval: float
+    initial_delay: Optional[float] = None
+
+    def get_initial_delay(self) -> float:
+        return self.initial_delay if self.initial_delay is not None else self.interval
+
+    def get_next_delay(self) -> float:
+        return self.interval
+
+    def log(self, action: TaskMethod) -> None:
+        LOGGER.debug(
+            "Scheduling action %s every %d seconds with initial delay %d", action, self.interval, self.get_initial_delay()
+        )
+
+
+@stable_api
+@dataclass(frozen=True)
+class CronSchedule(TaskSchedule):
+    """
+    Current-time based scheduler: interval is calculated dynamically based on cron specifier and current time. Cron schedule is
+    always interpreted as UTC.
+    """
+
+    cron: str
+    _crontab: CronTab = dataclasses.field(init=False, compare=False)
+
+    def __post_init__(self) -> None:
+        crontab: CronTab
+        try:
+            crontab = CronTab(self.cron)
+        except ValueError as e:
+            raise ValueError("'%s' is not a valid cron expression: %s" % (self.cron, e))
+        # can not assign directly on frozen dataclass, see dataclass docs
+        object.__setattr__(self, "_crontab", crontab)
+
+    def get_initial_delay(self) -> float:
+        # no special treatment for first execution
+        return self.get_next_delay()
+
+    def get_next_delay(self) -> float:
+        # always interpret cron schedules as UTC
+        now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
+        return self._crontab.next(now=now)
+
+    def log(self, action: TaskMethod) -> None:
+        LOGGER.debug("Scheduling action %s according to cron specifier '%s'", action, self.cron)
+
+
+def is_coroutine(function: object) -> bool:
+    return (
+        inspect.iscoroutinefunction(function)
+        or gen.is_coroutine_function(function)
+        or isinstance(function, functools.partial)
+        and is_coroutine(function.func)
+    )
+
+
+@stable_api
 class Scheduler(object):
     """
-    An event scheduler class
+    An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
+    same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
+    `call` functions.
     """
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[Callable, object] = {}
+        self._scheduled: Dict[ScheduledTask, object] = {}
         self._stopped = False
+        # Keep track of all tasks that are currently executing to be
+        # able to cancel them when the scheduler is stopped.
+        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
 
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
+        """
+        Add task that is currently executing to `self._executing_tasks`.
+        """
+        if action in self._executing_tasks and self._executing_tasks[action]:
+            LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
+        self._executing_tasks[action].append(task)
+
+    def _notify_done(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
+        """
+        Called by the callback function of executing task when the task has finished executing.
+        """
+        if action in self._executing_tasks:
+            try:
+                self._executing_tasks[action].remove(task)
+            except ValueError:
+                pass
+
+    @stable_api
     def add_action(
         self,
-        action: Union[Callable[[], None], Coroutine[None, None, None]],
-        interval: float,
-        initial_delay: Optional[float] = None,
-    ) -> None:
+        action: TaskMethod,
+        schedule: TaskSchedule,
+    ) -> ScheduledTask:
         """
         Add a new action
 
         :param action: A function to call periodically
-        :param interval: The interval between execution of actions
-        :param initial_delay: Delay to the first execution, defaults to interval
+        :param schedule: The schedule for this action
         """
-        assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
+        assert is_coroutine(action)
 
         if self._stopped:
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
             return
 
-        if initial_delay is None:
-            initial_delay = interval
+        schedule.log(action)
 
-        LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
+        task_spec: ScheduledTask = ScheduledTask(action, schedule)
+        if task_spec in self._scheduled:
+            # start fresh to respect initial delay, if set
+            self.remove(task_spec)
 
         def action_function() -> None:
             LOGGER.info("Calling %s" % action)
-            if action in self._scheduled:
+            if task_spec in self._scheduled:
                 try:
-                    ensure_future_and_handle_exception(LOGGER, "Uncaught exception while executing scheduled action", action())
+                    task = ensure_future_and_handle_exception(
+                        logger=LOGGER,
+                        msg="Uncaught exception while executing scheduled action",
+                        action=action(),
+                        notify_done_callback=functools.partial(self._notify_done, action),
+                    )
+                    self._add_to_executing_tasks(action, task)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(interval, action_function)
-                    self._scheduled[action] = ihandle
+                    ihandle = IOLoop.current().call_later(schedule.get_next_delay(), action_function)
+                    self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(initial_delay, action_function)
-        self._scheduled[action] = handle
+        handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
+        self._scheduled[task_spec] = handle
+        return task_spec
 
-    def remove(self, action: Callable) -> None:
+    @stable_api
+    def remove(self, task: ScheduledTask) -> None:
         """
         Remove a scheduled action
         """
-        if action in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[action])
-            del self._scheduled[action]
+        if task in self._scheduled:
+            IOLoop.current().remove_timeout(self._scheduled[task])
+            del self._scheduled[task]
 
+    @stable_api
     def stop(self) -> None:
         """
         Stop the scheduler
@@ -183,10 +320,15 @@ class Scheduler(object):
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
-                action, handle = self._scheduled.popitem()
+                _, handle = self._scheduled.popitem()
                 IOLoop.current().remove_timeout(handle)
         except KeyError:
             pass
+
+        # Cancel all tasks that are already executing
+        for action, tasks in self._executing_tasks.items():
+            for task in tasks:
+                task.cancel()
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
@@ -425,3 +567,62 @@ def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[st
         dfs(nodes.pop(0))
 
     return out
+
+
+class NamedSubLock:
+    def __init__(self, parent: "NamedLock", name: str) -> None:
+        self.parent = parent
+        self.name = name
+
+    async def __aenter__(self) -> None:
+        await self.parent.acquire(self.name)
+
+    async def __aexit__(
+        self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
+    ) -> None:
+        await self.parent.release(self.name)
+
+
+class NamedLock:
+    """Create fine grained locks"""
+
+    def __init__(self) -> None:
+        self._master_lock: Lock = Lock()
+        self._named_locks: Dict[str, Lock] = {}
+        self._named_locks_counters: Dict[str, int] = {}
+
+    def get(self, name: str) -> NamedSubLock:
+        return NamedSubLock(self, name)
+
+    async def acquire(self, name: str) -> None:
+        async with self._master_lock:
+            if name in self._named_locks:
+                lock = self._named_locks[name]
+                self._named_locks_counters[name] += 1
+            else:
+                lock = Lock()
+                self._named_locks[name] = lock
+                self._named_locks_counters[name] = 1
+        await lock.acquire()
+
+    async def release(self, name: str) -> None:
+        async with self._master_lock:
+            lock = self._named_locks[name]
+            lock.release()
+            self._named_locks_counters[name] -= 1
+            # This relies on the internal mechanics of the lock
+            if self._named_locks_counters[name] <= 0:
+                del self._named_locks[name]
+                del self._named_locks_counters[name]
+
+
+class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextManager[T]):
+    """
+    nullcontext ported from Python 3.10 to support async
+    """
+
+    async def __aenter__(self) -> T:
+        return self.enter_result
+
+    async def __aexit__(self, *excinfo: object) -> None:
+        pass
