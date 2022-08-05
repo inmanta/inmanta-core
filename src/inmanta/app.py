@@ -365,6 +365,7 @@ def compile_project(options: argparse.Namespace) -> None:
 
     project_instance.log_installed_modules()
 
+
 @command("list-commands", help_msg="Print out an overview of all commands")
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
@@ -623,6 +624,7 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
     project_instance.log_installed_modules()
+
 
 log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
 

@@ -590,7 +590,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
 
             self.log_post_install_information(project, module_name)
-            self.log_snapshot_difference_v2_modules(modules_pre_install, header="Snapshot of modules versions after installation:")
+            self.log_snapshot_difference_v2_modules(
+                modules_pre_install, header="Snapshot of modules versions after installation:"
+            )
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -617,7 +619,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             LOGGER.debug("\n".join(out))
         return version_snapshot
 
-    def log_snapshot_difference_v2_modules(self, modules_pre_install: Dict[str, "Version"], header: Optional[str] = None) -> None:
+    def log_snapshot_difference_v2_modules(
+        self, modules_pre_install: Dict[str, "Version"], header: Optional[str] = None
+    ) -> None:
         """
         Logs all v2 inmanta modules currently installed (in alphabetical order) and their version.
         For each module, the prefix gives some context:

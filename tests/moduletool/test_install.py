@@ -1312,6 +1312,7 @@ Snapshot of modules versions after installation:
         ),
     )
 
+
 def test_logging_v1_module(
     local_module_package_index: str,
     snippetcompiler_clean,
@@ -1319,7 +1320,7 @@ def test_logging_v1_module(
     modules_v2_dir: str,
     tmpdir,
     caplog,
-    snippetcompiler
+    snippetcompiler,
 ) -> None:
     """
     A module needs to explicitly list its v2 dependencies in order to be able to load them. Import-based loading is not
@@ -1330,10 +1331,8 @@ def test_logging_v1_module(
     libs_dir: str = os.path.join(str(tmpdir), "libs")
     os.makedirs(libs_dir)
 
-
     low_level_v2_module_name: str = "low_level_v2_module"
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-
 
     low_level_v2_module: module.ModuleV2Metadata = module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
@@ -1342,24 +1341,23 @@ def test_logging_v1_module(
         install=False,
         new_requirements=[],
         publish_index=index,
-        new_version=version.Version("1.1.1")
+        new_version=version.Version("1.1.1"),
     )
     model: str = f"import {low_level_v2_module_name}"
-    requirements: List[InmantaModuleRequirement] = ([InmantaModuleRequirement.parse(low_level_v2_module_name)])
+    requirements: List[InmantaModuleRequirement] = [InmantaModuleRequirement.parse(low_level_v2_module_name)]
 
-    intermediate_v1_module_name="intermediate_v1"
+    intermediate_v1_module_name = "intermediate_v1"
     intermediate_v1_module = v1_module_from_template(
         os.path.join(modules_dir, "minimalv1module"),
         os.path.join(libs_dir, intermediate_v1_module_name),
         new_name=intermediate_v1_module_name,
         new_content_init_cf=model,
         new_requirements=requirements,
-        new_version=version.Version("2.2.2")
+        new_version=version.Version("2.2.2"),
     )
 
-
     model: str = f"import {intermediate_v1_module_name}"
-    requirements: List[InmantaModuleRequirement] = ([InmantaModuleRequirement.parse(intermediate_v1_module_name)])
+    requirements: List[InmantaModuleRequirement] = [InmantaModuleRequirement.parse(intermediate_v1_module_name)]
 
     top_v1_module_name: str = "top_v1_module"
     top_v1_module = v1_module_from_template(
@@ -1368,7 +1366,7 @@ def test_logging_v1_module(
         new_name=top_v1_module_name,
         new_content_init_cf=model,
         new_requirements=requirements,
-        new_version=version.Version("3.3.3")
+        new_version=version.Version("3.3.3"),
     )
 
     snippetcompiler.setup_for_snippet(
