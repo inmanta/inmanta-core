@@ -2839,7 +2839,6 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return self.path
 
     def get_all_python_requirements_as_list(self) -> List[str]:
-        # TODO: this does not include extras
         return list(self.metadata.install_requires)
 
     def get_module_requirements(self) -> List[str]:
