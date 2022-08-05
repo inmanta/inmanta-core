@@ -1145,7 +1145,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     )
 
     # Scenario 2
-    # parent_module requires child_module v3.3.3 which is installed with v1.1.1
+    # parent_module requires child_module v3.3.3 but the index only has v1.1.1
 
     # Prepare the required module with a low version:
 
@@ -1179,7 +1179,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
 
     # Scenario 3
-    # parent_module requires child_module v3.3.3 which is installed with v3.3.3
+    # parent_module requires child_module v3.3.3 which is present in the index.
 
     # Prepare the required module with the correct version:
     module_from_template(
