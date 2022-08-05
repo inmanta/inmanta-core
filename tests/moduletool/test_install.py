@@ -1276,9 +1276,9 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
         logging.DEBUG,
         (
             """\
-Snapshot of modules versions post-install:
-+inmanta-module-module-a: 5.0.0
-+inmanta-module-module-b: 1.2.3"""
+Snapshot of modules versions after installation:
++module_a: 5.0.0
++module_b: 1.2.3"""
         ),
     )
 
@@ -1305,13 +1305,12 @@ Snapshot of modules versions post-install:
         logging.DEBUG,
         (
             """\
-Snapshot of modules versions post-install:
-~inmanta-module-module-a: 1.0.0 (was previously 5.0.0)
- inmanta-module-module-b: 1.2.3
-+inmanta-module-module-c: 8.8.8"""
+Snapshot of modules versions after installation:
+~module_a: 1.0.0 (was previously 5.0.0)
+ module_b: 1.2.3
++module_c: 8.8.8"""
         ),
     )
-
 
 def test_logging_v1_module(
     local_module_package_index: str,
