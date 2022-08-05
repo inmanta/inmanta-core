@@ -171,23 +171,50 @@ class PythonWorkingSet:
         """
         if not requirements:
             return True
-        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
         installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-            # TODO: Make recursive
-            if r.extras:
-                distribution: Distribution = pkg_resources.working_set.find(r)
-                pkgs_required_by_extras: Set[Requirement] = (
-                    set(distribution.requires(extras=r.extras)) - set(distribution.requires(extras=()))
-                )
-                if any(pkg.key not in installed_packages for pkg in pkgs_required_by_extras):
+
+        def _are_installed_recursive(
+            reqs: Sequence[Requirement],
+            seen_requirements: Sequence[Requirement],
+            contained_in_extra: Optional[str] = None,
+        ) -> bool:
+            """
+            Recursively check the given reqs are installed in this working set
+
+            :param reqs: The requirements that should be checked.
+            :param seen_requirements: An accumulator that contains all the requirements that were check in
+                                      previous iterators. It prevents infinite loops when the dependency
+                                      graph contains circular dependencies.
+            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
+                                       iteration of this method this value is None.
+            """
+            for r in reqs:
+                if r in seen_requirements:
+                    continue
+                # Requirements created by the `Distribution.requires() method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches.
+                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                    # The marker of the requirement doesn't apply on this environment
+                    continue
+                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
                     return False
-        return True
+                if r.extras:
+                    for extra in r.extras:
+                        distribution: Distribution = pkg_resources.working_set.find(r)
+                        pkgs_required_by_extra: Set[Requirement] = (
+                            set(distribution.requires(extras=(extra,))) - set(distribution.requires(extras=()))
+                        )
+                        if not _are_installed_recursive(
+                            reqs=list(pkgs_required_by_extra),
+                            seen_requirements=list(seen_requirements) + list(reqs),
+                            contained_in_extra=extra,
+                        ):
+                            return False
+            return True
+
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:

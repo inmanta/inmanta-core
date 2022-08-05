@@ -419,7 +419,7 @@ author = Inmanta <code@inmanta.com>
         )
 
         fd.write("\n[options]")
-        fd.write(f"install_requires ={install_requires_content}")
+        fd.write(f"\ninstall_requires ={install_requires_content}")
 
         if optional_dependencies:
             fd.write("\n[options.extras_require]")
