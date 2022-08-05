@@ -81,6 +81,10 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
       cookiecutter~=1.7.0
       cryptography>1.0,<3.5
 
+    [options.extras_require]
+    feature-x =
+        inmanta-modules-mod2
+
     zip_safe=False
     include_package_data=True
     packages=find_namespace:
@@ -99,6 +103,10 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   module on other Inmanta modules and external Python libraries. These version specs use
   `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_. Adding a new module dependency to the module
   should be done using the ``inmanta module add`` command instead of altering the ``setup.cfg`` file by hand.
+  Dependencies with extras can be defined in this section using the ``dependency[extra-a,extra-b]`` syntax.
+
+* The ``options.extras_require`` config option can be used to define optional dependencies, only required by a specific
+  feature of the inmanta module.
 
 A full list of all available options can be found in :ref:`here<modules_v2_setup_cfg>`.
 
@@ -169,7 +177,8 @@ The directory layout of the V1 module is similar to that of a V2 module. The fol
   directory in the V1 format.
 * The ``requirements.txt`` file defines the dependencies of this module to other V2 modules and the dependencies to external
   libraries used by the code in the ``plugins`` directory. This file is not present in the V2 module format, since V2 modules
-  defined their dependencies in the ``setup.cfg`` file.
+  defined their dependencies in the ``setup.cfg`` file. Dependencies with extras are supported by in the
+  ``requirements.txt`` file using the ``dependency[extra-a,extra-b]`` syntax.
 * The ``pyproject.toml`` file doesn't exist in a V1 module, because V1 modules cannot be packaged into a Python package.
 
 Module metadata
