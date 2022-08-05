@@ -722,7 +722,6 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             LOGGER.debug("\n".join(out))
         return version_snapshot
 
-
     def log_snapshot_difference_v1_modules(
         self, project: "Project", modules_pre_install: Dict[str, "Version"], header: Optional[str] = None
     ) -> None:
@@ -790,7 +789,9 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
                 self.log_pre_install_information(module_name)
-                modules_pre_install = self.take_modules_snapshot(project, header="Snapshot of modules versions before installation:")
+                modules_pre_install = self.take_modules_snapshot(
+                    project, header="Snapshot of modules versions before installation:"
+                )
                 module = ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )
@@ -810,7 +811,9 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                 return None
 
             self.log_pre_install_information(module_name)
-            modules_pre_install = self.take_modules_snapshot(project, header="Snapshot of modules versions before installation:")
+            modules_pre_install = self.take_modules_snapshot(
+                project, header="Snapshot of modules versions before installation:"
+            )
             module = ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
             )

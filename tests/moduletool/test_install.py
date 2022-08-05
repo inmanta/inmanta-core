@@ -39,7 +39,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template, v1_module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
