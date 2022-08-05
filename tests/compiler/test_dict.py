@@ -366,3 +366,116 @@ z = c.tests[n = 42, **dct]
     x: Instance = scope.lookup("x").get_value()
     z: Instance = scope.lookup("z").get_value()
     assert x is z
+
+
+def test_string_interpolation_in_key(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+v = "key"
+dict_1 = {'{{v}}':0}
+        """,
+        "Syntax error: String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets ({dir}/main.cf:3:11)",  # NOQA E501
+    )
+
+
+def test_interpolation_in_dict_keys(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+dict_0 = {'itpl':'0'}
+dict_1 = {'{itpl}}':"1"}
+dict_2 = {'{{itpl}':2}
+
+dict_3 = {"§": 3}
+dict_3_bis = {"\\u00A7":3}
+
+dict_4 = {"ə": 4}
+dict_4_bis = {"\\u0259":41}
+
+value = "itp"
+dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
+dict_6 = {r'{{value}}': "not interpolation"}
+    """  # NOQA W605
+    )
+
+    (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
+
+    def lookup(str):
+        return scope.lookup(str).get_value()
+
+    vars_to_lookup = [
+        "dict_0",
+        "dict_1",
+        "dict_2",
+        "dict_3",
+        "dict_3_bis",
+        "dict_4",
+        "dict_4_bis",
+        "dict_5",
+        "dict_6",
+    ]
+    expected_values = [
+        {"itpl": "0"},
+        {"{itpl}}": "1"},
+        {"{{itpl}": 2},
+        {"Â§": 3},
+        {"§": 3},
+        {"É\x99": 4},
+        {"ə": 41},
+        {r"\{\{not interpolation\}\}": "interpolation itp"},
+        {"{{value}}": "not interpolation"},
+    ]
+
+    for var, exp_val in zip(vars_to_lookup, expected_values):
+        assert lookup(var) == exp_val
+
+
+@pytest.mark.parametrize(
+    "lookup_path, expectation",
+    [
+        ('a["A"]["1"]', True),
+        ('a["A"]["2"]', False),
+        ('a["A"]["3"]', False),
+        ('a["A"]["4"]', False),
+        ('a["A"]', True),
+        ('a["B"]', False),
+        ('a["C"]', False),
+        ('a["D"]', True),
+        ('a["E"]', True),
+        ('a["K"]', False),
+        ('t.a["a"]', True),
+        ('t.a["b"]', False),
+        # ('a["K"]["a"]', False),
+        # ('a["K"]["k"]', False),
+        # ('b', False),
+    ],
+)
+def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
+    """
+    Check that calling "is defined" on dictionaries works as syntactic sugar for != null
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        dict a = {"a": "ok", "b": null}
+    end
+    implement Test using std::none
+    t = Test()
+
+    a = {
+        "A": {
+            "1": "ok",
+            "2": null,
+            "3": []
+        },
+        "B": null,
+        "C": [],
+        "D": "ok",
+        "E": [null]
+    }"""
+        f"""
+    assert_expectation = {str(expectation).lower()}
+    assert_expectation = {lookup_path} is defined
+    """
+    )
+    compiler.do_compile()

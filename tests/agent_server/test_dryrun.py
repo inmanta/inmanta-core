@@ -20,8 +20,6 @@ import json
 import logging
 import uuid
 
-import pytest
-
 from inmanta import const, data, execute
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -31,7 +29,6 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_dryrun_and_deploy(server, client, resource_container, environment):
     """
     dryrun and deploy a configuration model
@@ -185,7 +182,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):
     """
     test dryrun scaling
@@ -271,7 +267,6 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_dryrun_scale(resource_container, server, client, environment, agent, clienthelper):
     """
     test dryrun scaling
@@ -316,19 +311,23 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_dryrun_v2(server, client, resource_container, environment, agent_factory):
     """
     Dryrun a configuration model with the v2 api, where applicable
     """
 
     await agent_factory(
-        hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False, agent_names=["agent1"]
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost"},
+        code_loader=False,
+        agent_names=["agent1"],
     )
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key_mod", {"first_level": {"nested": [5, 3, 2, 1, 1]}})
     resource_container.Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key_unmodified", "the_same")
 
     clienthelper = ClientHelper(client, environment)
 
@@ -368,6 +367,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
             "purged": False,
         },
         {
+            "key": "key_unmodified",
+            "value": "the_same",
+            "id": "test::Resource[agent1,key=key_unmodified],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+        },
+        {
             "key": "key4",
             "value": execute.util.Unknown(source=None),
             "id": "test::Resource[agent2,key=key4],v=%d" % version,
@@ -389,6 +396,14 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
             "id": "test::Resource[agent2,key=key6],v=%d" % version,
             "send_event": False,
             "requires": ["test::Resource[agent2,key=key5],v=%d" % version],
+            "purged": False,
+        },
+        {
+            "key": "key7",
+            "value": "val",
+            "id": "test::Resource[agent3,key=key7],v=%d" % version,
+            "send_event": False,
+            "requires": [],
             "purged": False,
         },
     ]
@@ -475,9 +490,13 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
         "to_value": resources[3]["value"],
         "to_value_compare": json.dumps(resources[3]["value"], indent=4, sort_keys=True),
     }
+    assert changes[4]["status"] == "unmodified"
+    assert changes[5]["status"] == "undefined"
+    assert changes[6]["status"] == "skipped_for_undefined"
+    assert changes[7]["status"] == "skipped_for_undefined"
+    assert changes[8]["status"] == "agent_down"
     # Changes for undeployable resources are empty
-    for i in range(4, 7):
-        assert changes[i]["status"] == "unmodified"
+    for i in range(4, 9):
         assert changes[i]["attributes"] == {}
 
     # Change a value for a new dryrun

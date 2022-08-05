@@ -20,20 +20,30 @@ import datetime
 import logging
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple, cast
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
+import pydantic
 
 from inmanta import const, data
+from inmanta.const import ResourceState
 from inmanta.data import (
     APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
     ENVIRONMENT_AGENT_TRIGGER_METHOD,
     PURGE_ON_DELETE,
     DesiredStateVersionOrder,
     InvalidSort,
     QueryType,
 )
-from inmanta.data.model import DesiredStateVersion, PromoteTriggerMethod, ResourceDiff, ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import (
+    DesiredStateVersion,
+    PromoteTriggerMethod,
+    ResourceDiff,
+    ResourceIdStr,
+    ResourceMinimal,
+    ResourceVersionIdStr,
+)
 from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -56,6 +66,188 @@ from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, I
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ResourceWithResourceSet:
+    def __init__(
+        self,
+        resource: ResourceMinimal,
+        resource_set: Optional[str],
+    ) -> None:
+        self.resource = resource
+        self.resource_set = resource_set
+
+    def is_shared_resource(self) -> bool:
+        return self.resource_set is None
+
+    def is_update(self, other: "ResourceWithResourceSet") -> bool:
+        """
+        return true if the ResourceWithResourceSet is an update of other: other exists but is different from self
+        """
+        if other is None:
+            return False
+        new_resource_dict = self.resource.dict()
+        old_resource_dict = other.resource.dict()
+        attr_names_new_resource = set(new_resource_dict.keys()).difference("id")
+        attr_names_old_resource = set(old_resource_dict.keys()).difference("id")
+        return attr_names_new_resource != attr_names_old_resource or any(
+            new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
+        )
+
+
+class PairedResource:
+    """
+    Pairs an old and a new ResourceWithResourceSet for the same id. Offers methods to inspect the difference.
+    """
+
+    def __init__(
+        self,
+        new_resource: ResourceWithResourceSet,
+        old_resource: Optional[ResourceWithResourceSet],
+    ) -> None:
+        self.new_resource = new_resource
+        self.old_resource = old_resource
+
+    def is_update(self) -> bool:
+        """
+        return true if new_resource is an update of old_resource: old_resource exists but is different form new_resource.
+        """
+        return self.new_resource.is_update(self.old_resource)
+
+    def is_new_resource(self) -> bool:
+        """
+        return true if old_resource doesn't exist
+        """
+        return self.old_resource is None
+
+    def resource_changed_resource_set(self) -> bool:
+        """
+        return true if the resource_set in new_resource and old_resource are not the same
+        """
+        assert self.old_resource is not None
+        return self.new_resource.resource_set != self.old_resource.resource_set
+
+
+class PartialUpdateMerger:
+    """
+    This class is used to merge the result of a partial compile with the previous resources and resource_sets
+    """
+
+    def __init__(
+        self,
+        partial_updates: Sequence[ResourceMinimal],
+        resource_sets: Mapping[ResourceIdStr, Optional[str]],
+        removed_resource_sets: Sequence[str],
+        env: data.Environment,
+    ) -> None:
+        self.partial_updates = partial_updates
+        self.resource_sets = resource_sets
+        self.removed_resource_sets = removed_resource_sets
+        self.env = env
+
+    def pair_resources_partial_update_to_old_version(
+        self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet]
+    ) -> List[PairedResource]:
+        """
+        returns a list of paired resources
+
+        :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set
+        """
+        paired_resources: List[PairedResource] = []
+        for partial_update in self.partial_updates:
+            key = Id.parse_id(partial_update.id).resource_str()
+            resource_set = self.resource_sets.get(key)
+            pair: PairedResource = PairedResource(
+                new_resource=ResourceWithResourceSet(partial_update, resource_set), old_resource=None
+            )
+            if key in old_resources:
+                pair.old_resource = ResourceWithResourceSet(old_resources[key].resource, old_resources[key].resource_set)
+            paired_resources.append(pair)
+        return paired_resources
+
+    async def _get_old_resources(
+        self,
+    ) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
+        """
+        Makes a call to the DB to get the latest resources in the environment and return a dict
+        where the keys are the Ids of the resources and the values are ResourceWithResourceSete
+        """
+        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
+        old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
+        for res in old_data:
+            resource: ResourceMinimal = ResourceMinimal(id=res.resource_version_id, **res.attributes)
+            old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
+        return old_resources
+
+    def _merge_resources(
+        self, old_resources: Dict[ResourceIdStr, ResourceWithResourceSet], paired_resources: List[PairedResource]
+    ) -> list[dict[str, object]]:
+        """
+        Merges the resources of the partial compile with the old resources. To do so it keeps the old resources that are not in
+        the removed_resource_sets, that are in the shared resource_set and that are not being updated. It then adds the
+        resources coming form the partial compile if they don't break any rule:
+        - cannot move a resource to another resource set
+        - cannot update resources without a resource set.
+        """
+        updated_resource_sets: Set[str] = set(
+            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
+        )
+
+        to_keep: Sequence[ResourceMinimal] = [
+            r.resource.incremented_resource_version()
+            for r in old_resources.values()
+            if r.resource_set not in self.removed_resource_sets
+            and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
+        ]
+
+        merged_resources: Dict[ResourceVersionIdStr, Dict[str, object]] = {r.id: r.dict() for r in to_keep}
+
+        for paired_resource in paired_resources:
+            new_resource = paired_resource.new_resource
+            old_resource = paired_resource.old_resource
+            assert (
+                old_resource is None
+                or Id.parse_id(old_resource.resource.id).resource_str() == Id.parse_id(new_resource.resource.id).resource_str()
+            )
+            if paired_resource.is_new_resource():
+                merged_resources[new_resource.resource.id] = new_resource.resource.dict()
+            else:
+                if paired_resource.resource_changed_resource_set():
+                    raise BadRequest(
+                        f"A partial compile cannot migrate resource {new_resource.resource.id} to another resource set"
+                    )
+                if new_resource.is_shared_resource() and paired_resource.is_update():
+                    raise BadRequest(
+                        f"Resource ({new_resource.resource.id}) without a resource set cannot"
+                        " be updated via a partial compile"
+                    )
+                else:
+                    merged_resources[new_resource.resource.id] = new_resource.resource.dict()
+        return list(merged_resources.values())
+
+    def _merge_resource_sets(
+        self, old_resource_sets: Dict[ResourceIdStr, Optional[str]], paired_resources: List[PairedResource]
+    ) -> Dict[ResourceIdStr, Optional[str]]:
+        updated_resource_sets: Set[str] = set(
+            res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
+        )
+        changed_resource_sets: Set[str] = updated_resource_sets.union(self.removed_resource_sets)
+        unchanged_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            k: v for k, v in old_resource_sets.items() if v not in changed_resource_sets
+        }
+        return {**unchanged_resource_sets, **self.resource_sets}
+
+    async def merge_partial_with_old(self) -> Tuple[list[dict[str, object]], Dict[ResourceIdStr, Optional[str]]]:
+        old_resources = await self._get_old_resources()
+
+        old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
+            res_id: res.resource_set for res_id, res in old_resources.items()
+        }
+
+        paired_resources = self.pair_resources_partial_update_to_old_version(old_resources)
+        new_resources = self._merge_resources(old_resources, paired_resources)
+        new_resource_sets = self._merge_resource_sets(old_resource_sets, paired_resources)
+        return new_resources, new_resource_sets
 
 
 class OrchestrationService(protocol.ServerSlice):
@@ -93,7 +285,7 @@ class OrchestrationService(protocol.ServerSlice):
         envs = await data.Environment.get_list()
         for env_item in envs:
             # get available versions
-            n_versions = opt.server_version_to_keep.get()
+            n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
             versions = await data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
@@ -188,16 +380,15 @@ class OrchestrationService(protocol.ServerSlice):
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
-    @handle(methods.put_version, env="tid")
-    async def put_version(
+    async def _put_version(
         self,
         env: data.Environment,
         version: int,
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, const.ResourceState],
         unknowns: List[Dict[str, PrimitiveTypes]],
-        version_info: JsonType,
-        compiler_version: Optional[str] = None,
+        version_info: Optional[JsonType] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param resources: a list of serialized resources
@@ -208,12 +399,8 @@ class OrchestrationService(protocol.ServerSlice):
          "source": str
          }
         :param version_info:
-        :param compiler_version:
         :return:
         """
-
-        if not compiler_version:
-            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
         if version > env.last_version:
             raise BadRequest(
@@ -223,11 +410,27 @@ class OrchestrationService(protocol.ServerSlice):
         if version <= 0:
             raise BadRequest(f"The version number used ({version}) is not positive")
 
+        for r in resources:
+            resource = Id.parse_id(r["id"])
+            if resource.get_version() != version:
+                raise BadRequest(
+                    f"The resource version of resource {r['id']} does not match the version argument (version: {version})"
+                )
+
+        if not resource_sets:
+            resource_sets = {}
+
+        for res_set in resource_sets.keys():
+            try:
+                Id.parse_id(res_set)
+            except Exception as e:
+                raise BadRequest("Invalid resource id in resource set: %s" % str(e))
+
         started = datetime.datetime.now().astimezone()
 
         agents = set()
         # lookup for all RV's, lookup by resource id
-        rv_dict: Dict[ResourceVersionIdStr, data.Resource] = {}
+        rv_dict: Dict[ResourceIdStr, data.Resource] = {}
         # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
         provides_tree: Dict[str, List[str]] = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
@@ -243,6 +446,8 @@ class OrchestrationService(protocol.ServerSlice):
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
                 if res_obj.status in const.UNDEPLOYABLE_STATES:
                     undeployable.append(res_obj)
+            if res_obj.resource_id in resource_sets:
+                res_obj.resource_set = resource_sets[res_obj.resource_id]
 
             # collect all agents
             agents.add(res_obj.agent)
@@ -270,28 +475,40 @@ class OrchestrationService(protocol.ServerSlice):
                     if rid.get_agent_name() != agent:
                         # it is a CAD
                         cross_agent_dep.append((res_obj, rid))
-
+        resource_ids = {res.resource_id for res in resource_objects}
+        superfluous_ids = set(resource_sets.keys()) - resource_ids
+        if superfluous_ids:
+            raise BadRequest(
+                "The following resource ids provided in the resource_sets parameter are not present "
+                f"in the resources list: {', '.join(superfluous_ids)}"
+            )
+        requires_ids = set(provides_tree.keys())
+        if not requires_ids.issubset(resource_ids):
+            raise BadRequest(
+                "The model should have a dependency graph that is closed and no dangling dependencies:"
+                f" {requires_ids-resource_ids}"
+            )
         # hook up all CADs
         for f, t in cross_agent_dep:
             res_obj = rv_dict[t.resource_str()]
             res_obj.provides.append(f.resource_version_id)
 
         # detect failed compiles
-        def safe_get(input: JsonType, key: str, default: object) -> object:
+        def safe_get(input: object, key: str, default: object) -> object:
             if not isinstance(input, dict):
                 return default
             if key not in input:
                 return default
             return input[key]
 
-        metadata: JsonType = safe_get(version_info, const.EXPORT_META_DATA, {})
+        metadata: object = safe_get(version_info, const.EXPORT_META_DATA, {})
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
         failed = compile_state == const.Compilestate.failed
 
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
             # search for deleted resources (purge_on_delete)
-            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
+            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, list(rv_dict.keys()))
 
             previous_requires = {}
             for res in resources_to_purge:
@@ -405,6 +622,70 @@ class OrchestrationService(protocol.ServerSlice):
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
+
+    @handle(methods.put_version, env="tid")
+    async def put_version(
+        self,
+        env: data.Environment,
+        version: int,
+        resources: List[JsonType],
+        resource_state: Dict[ResourceIdStr, const.ResourceState],
+        unknowns: List[Dict[str, PrimitiveTypes]],
+        version_info: JsonType,
+        compiler_version: Optional[str] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+    ) -> Apireturn:
+        if not compiler_version:
+            raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
+
+        return await self._put_version(env, version, resources, resource_state, unknowns, version_info, resource_sets)
+
+    @handle(methods_v2.put_partial, env="tid")
+    async def put_partial(
+        self,
+        env: data.Environment,
+        version: int,
+        resources: object,
+        resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+        unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
+        version_info: Optional[JsonType] = None,
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        removed_resource_sets: Optional[List[str]] = None,
+    ) -> None:
+        if resource_state is None:
+            resource_state = {}
+        if unknowns is None:
+            unknowns = []
+        if resource_sets is None:
+            resource_sets = {}
+        if removed_resource_sets is None:
+            removed_resource_sets = []
+        try:
+            resources = pydantic.parse_obj_as(List[ResourceMinimal], resources)
+        except pydantic.ValidationError:
+            raise BadRequest(
+                "Type validation failed for resources argument. "
+                f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
+            )
+
+        intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
+        if intersection:
+            raise BadRequest(
+                "Following resource sets are present in the removed resource sets and in the resources that are exported: "
+                f"{intersection}"
+            )
+
+        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
+        merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
+        await self._put_version(
+            env,
+            version,
+            merged_resources,
+            resource_state,
+            unknowns,
+            version_info,
+            merged_resource_sets,
+        )
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(

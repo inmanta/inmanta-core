@@ -249,10 +249,6 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-compiler_features = ExperimentalFeatureFlags()
-compiler_features.add(compiler.config.feature_compiler_cache)
-
-
 def compiler_config(parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
@@ -285,6 +281,13 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -298,8 +301,9 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
-    compiler_features.add_arguments(parser)
+
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command(
@@ -333,15 +337,19 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
+
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    compiler_features.read_options_to_config(options)
-
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     if options.profile:
         import cProfile
@@ -416,8 +424,7 @@ def deploy(options: argparse.Namespace) -> None:
     run = deploy_module.Deploy(options)
     try:
         if not run.setup():
-            LOGGER.error("Failed to setup the orchestrator.")
-            return
+            raise Exception("Failed to setup an embedded Inmanta orchestrator.")
         run.run()
     finally:
         run.stop()
@@ -492,11 +499,36 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
-    compiler_features.add_arguments(parser)
+    parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
+        "--partial",
+        dest="partial_compile",
+        help="Execute a partial export (experimental, may receive breaking changes in future releases).",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--delete-resource-set",
+        dest="delete_resource_set",
+        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
+        "be used together with the --partial option.",
+        action="append",
+    )
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
+    if not options.partial_compile and options.delete_resource_set:
+        raise CLIException(
+            "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+        )
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -521,7 +553,8 @@ def export(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    compiler_features.read_options_to_config(options)
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
@@ -541,7 +574,10 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     from inmanta.export import Exporter  # noqa: H307
 
@@ -559,7 +595,13 @@ def export(options: argparse.Namespace) -> None:
 
     export = Exporter(options)
     results = export.run(
-        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+        types,
+        scopes,
+        metadata=metadata,
+        model_export=options.model_export,
+        export_plugin=options.export_plugin,
+        partial_compile=options.partial_compile,
+        resource_sets_to_remove=options.delete_resource_set,
     )
     version = results[0]
 
@@ -608,8 +650,8 @@ def cmd_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="count",
         default=0,
-        help="Log level for messages going to the console. Default is only errors,"
-        "-v warning, -vv info and -vvv debug and -vvvv trace",
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
         "--warnings",
@@ -691,6 +733,14 @@ def _convert_to_log_level(level: int) -> int:
     return log_levels[level]
 
 
+def _convert_cli_log_level(level: int) -> int:
+    if level < 1:
+        # The minimal log level on the CLI is always WARNING
+        return logging.WARNING
+    else:
+        return _convert_to_log_level(level)
+
+
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
@@ -732,7 +782,7 @@ def app() -> None:
         if options.timed:
             formatter = _get_log_formatter_for_stream_handler(timed=True)
             stream_handler.setFormatter(formatter)
-        log_level = _convert_to_log_level(options.verbose)
+        log_level = _convert_cli_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)

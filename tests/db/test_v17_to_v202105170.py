@@ -47,10 +47,9 @@ async def migrate_v17_to_v202105170(
 
     # When the bootloader is started, it also executes the migration to v202105170
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_timestamp_timezones(
     migrate_v17_to_v202105170: Callable[[], Awaitable[None]], postgresql_client: Connection
 ) -> None:
@@ -97,7 +96,7 @@ async def test_timestamp_timezones(
         VALUES ('{env_id}', 'v202105170-test-env', '{project_id}', '', '', '{{}}')
         ;
         INSERT INTO public.compile
-        VALUES ('{compile_id}', '{env_id}', '{compile_started.isoformat()}', NULL)
+        VALUES ('{compile_id}', '{env_id}', '{compile_started.isoformat()}', '{compile_started.isoformat()}')
         ;
         """
     )
@@ -118,6 +117,6 @@ async def test_timestamp_timezones(
     assert compile.started is not None
     assert compile.started.tzinfo is not None
     assert compile.started == compile_started.astimezone()
-    assert compile.completed is None
+    assert compile.completed == compile_started.astimezone()
 
     assert await fetch_action_log_timestamps() == [naive.astimezone() for naive in naive_action_log_timestamps]

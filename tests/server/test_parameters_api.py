@@ -73,7 +73,6 @@ async def env_with_parameters(server, client, environment: str):
     yield environment, timestamps
 
 
-@pytest.mark.asyncio
 async def test_parameter_list_filters(client, env_with_parameters: Tuple[str, List[datetime.datetime]]):
     environment, timestamps = env_with_parameters
     result = await client.get_parameters(
@@ -112,7 +111,6 @@ def parameter_ids(parameter_objects):
 
 @pytest.mark.parametrize("order_by_column", ["name", "source", "updated"])
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
-@pytest.mark.asyncio
 async def test_parameters_paging(server, client, order_by_column, order, env_with_parameters):
     """Test querying parameters with paging, using different sorting parameters."""
     env, timestamps = env_with_parameters
@@ -198,7 +196,6 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
 
 
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, env_with_parameters):
     env, _ = env_with_parameters
     sort_status_map = {
@@ -215,7 +212,6 @@ async def test_sorting_validation(server, client, env_with_parameters):
         assert result.code == expected_status
 
 
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, env_with_parameters):
     env, _ = env_with_parameters
     filter_status_map = [

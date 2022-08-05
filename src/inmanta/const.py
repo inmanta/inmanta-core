@@ -171,18 +171,6 @@ class LogLevel(str, Enum):
     def to_int(self) -> int:
         return LOG_LEVEL_AS_INTEGER[self]
 
-    def from_int(level: int) -> "LogLevel":
-        """
-        This methods is an example of construction of a LogLevel value from an integer
-        """
-        return LogLevel(level)
-
-    def from_str(level: str) -> "LogLevel":
-        """
-        This methods is an example of construction of a LogLevel value from a string
-        """
-        return LogLevel(level)
-
 
 # Mapping each log level to its integer value
 LOG_LEVEL_AS_INTEGER = {
@@ -269,6 +257,8 @@ MAX_UPDATE_ATTEMPT = 5
 class AgentAction(str, Enum):
     pause = "pause"
     unpause = "unpause"
+    keep_paused_on_resume = "keep_paused_on_resume"
+    unpause_on_resume = "unpause_on_resume"
 
 
 class AgentStatus(str, Enum):
@@ -296,3 +286,22 @@ class DesiredStateVersionStatus(str, Enum):
     candidate = "candidate"
     retired = "retired"
     skipped_candidate = "skipped_candidate"
+
+
+class NotificationSeverity(str, Enum):
+    """
+    The possible values determine the styling used by the frontend to show them,
+    so notifications with severity 'info' will be shown as informational messages,
+    the ones with 'error' as error messages and so on.
+    The 'message' category corresponds to a generic message, which
+    is shown without extra styling on the frontend.
+    """
+
+    message = "message"
+    info = "info"
+    success = "success"
+    warning = "warning"
+    error = "error"
+
+
+CF_CACHE_DIR = ".cfcache"

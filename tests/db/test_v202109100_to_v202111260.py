@@ -41,10 +41,9 @@ async def migrate_v202109100_to_v202111260(
 
     # When the bootloader is started, it also executes the migration to v202111260
     yield ibl.start
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_added_environment_columns(
     migrate_v202109100_to_v202111260: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],

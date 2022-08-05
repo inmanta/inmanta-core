@@ -1,7 +1,7 @@
 version: 2
 updates:
-- package-ecosystem: pip
-  target-branch: master
+- target-branch: master
+  package-ecosystem: pip
   directory: "/"
   schedule:
     interval: daily
@@ -9,10 +9,12 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
-  ignore:
-    # importlib-metadata>=4.9.0 requires Python>=3.7
-    - dependency-name: "importlib-metadata"
-      versions: [">=4.9.0"]
-    # setuptools>=59.7.0 requires Python>=3.7
-    - dependency-name: "setuptools"
-      versions: [">=59.7.0"]
+- target-branch: iso5
+  package-ecosystem: pip
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  allow:
+    # Allow both direct and indirect updates for all packages
+    - dependency-type: "all"

@@ -70,7 +70,6 @@ async def env_with_compile_reports(client, environment):
         ("requested", "ASC"),
     ],
 )
-@pytest.mark.asyncio
 async def test_compile_reports_paging(server, client, env_with_compile_reports, order_by_column, order):
     environment, compile_requested_timestamps = env_with_compile_reports
 
@@ -167,7 +166,6 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 0, "page_size": 6}
 
 
-@pytest.mark.asyncio
 async def test_compile_reports_filters(server, client, env_with_compile_reports):
     environment, compile_requested_timestamps = env_with_compile_reports
 
@@ -239,7 +237,6 @@ async def test_compile_reports_filters(server, client, env_with_compile_reports)
         ("Dates.ASC", 400),
     ],
 )
-@pytest.mark.asyncio
 async def test_sorting_validation(server, client, sort, expected_status, env_with_compile_reports):
     environment, _ = env_with_compile_reports
     result = await client.get_compile_reports(environment, limit=2, sort=sort)
@@ -262,7 +259,6 @@ async def test_sorting_validation(server, client, sort, expected_status, env_wit
         ({"requested": f"{datetime.datetime.now()}"}, 400),
     ],
 )
-@pytest.mark.asyncio
 async def test_filter_validation(server, client, filter, expected_status, env_with_compile_reports):
     environment, _ = env_with_compile_reports
     result = await client.get_compile_reports(environment, filter=filter)

@@ -23,11 +23,13 @@ import hashlib
 import json
 import logging
 import re
+import typing
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import abc, defaultdict
 from configparser import RawConfigParser
+from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
@@ -46,15 +48,18 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    overload,
 )
 
 import asyncpg
 import dateutil
 import pydantic
+import pydantic.tools
 import typing_inspect
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+from crontab import CronTab
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
@@ -72,6 +77,9 @@ APILIMIT = 1000
 # TODO: disconnect
 # TODO: difference between None and not set
 
+# Used as the 'default' parameter value for the Field class, when no default value has been set
+default_unset = object()
+
 
 @enum.unique
 class QueryType(str, enum.Enum):
@@ -81,11 +89,19 @@ class QueryType(str, enum.Enum):
         """
         return name.lower()
 
-    EQUALS = enum.auto()
-    CONTAINS = enum.auto()
-    IS_NOT_NULL = enum.auto()
-    CONTAINS_PARTIAL = enum.auto()
-    RANGE = enum.auto()
+    EQUALS = enum.auto()  # The filter value equals the value in the database
+    CONTAINS = enum.auto()  # Any of the filter values are equal to the value in the database (exact match)
+    IS_NOT_NULL = enum.auto()  # The value is NULL in the database
+    CONTAINS_PARTIAL = enum.auto()  # Any of the filter values are equal to the value in the database (partial match)
+    RANGE = enum.auto()  # The values in the database are in the range described by the filter values and operators
+    NOT_CONTAINS = enum.auto()  # None of the filter values are equal to the value in the database (exact match)
+    COMBINED = enum.auto()  # The value describes a combination of other query types
+
+
+class InvalidQueryType(Exception):
+    def __init__(self, message: str) -> None:
+        super(InvalidQueryType, self).__init__(message)
+        self.message = message
 
 
 class RangeOperator(enum.Enum):
@@ -476,6 +492,21 @@ class FactOrder(DatabaseOrder):
         return Parameter
 
 
+class NotificationOrder(DatabaseOrder):
+    """Represents the ordering by which notifications should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            "created": datetime.datetime,
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Notification
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -712,25 +743,37 @@ class Field(Generic[T]):
         self,
         field_type: Type[T],
         required: bool = False,
-        unique: bool = False,
-        reference: bool = False,
+        is_many: bool = False,
         part_of_primary_key: bool = False,
+        ignore: bool = False,
+        default: object = default_unset,
         **kwargs: object,
     ) -> None:
+        """A field in a document/record in the database. This class holds the metadata one how the data layer should handle
+        the field.
+
+        :param field_type: The python type of the field. This type should work with isinstance
+        :param required: Is this value required. This means that it is not optional and it cannot be None
+        :param is_many: Set to true when this is a list type
+        :param part_of_primary_key: Set to true when the field is part of the primary key.
+        :param ignore: Should this field be ignored when saving it to the database. This can be used to add a field to a
+                       a class that should not be saved in the database.
+        :param default: The default value for this field.
+        """
 
         self._field_type = field_type
         self._required = required
-        self._reference = reference
+        self._ignore = ignore
         self._part_of_primary_key = part_of_primary_key
+        self._is_many = is_many
 
-        if "default" in kwargs:
+        self._default_value: object
+        if default != default_unset:
             self._default = True
-            self._default_value = kwargs["default"]
+            self._default_value = default
         else:
             self._default = False
             self._default_value = None
-
-        self._unique = unique
 
     def get_field_type(self) -> Type[T]:
         return self._field_type
@@ -752,20 +795,80 @@ class Field(Generic[T]):
 
     default_value = property(get_default_value)
 
-    def is_unique(self) -> bool:
-        return self._unique
-
-    unique = property(is_unique)
-
-    def is_reference(self) -> bool:
-        return self._reference
-
-    reference = property(is_reference)
+    @property
+    def ignore(self) -> bool:
+        return self._ignore
 
     def is_part_of_primary_key(self) -> bool:
         return self._part_of_primary_key
 
     part_of_primary_key = property(is_part_of_primary_key)
+
+    @property
+    def is_many(self) -> bool:
+        return self._is_many
+
+    def _validate_single(self, name: str, value: object) -> None:
+        """Validate a single value against the types in this field."""
+        if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
+            raise TypeError(
+                "Field %s should have the correct type (%s instead of %s)"
+                % (name, self.field_type.__name__, type(value).__name__)
+            )
+
+    def validate(self, name: str, value: T) -> None:
+        """Validate the value against the constraint in this field. Treat value as list when is_many is true"""
+        if value is None and self.required:
+            raise TypeError("%s field is required" % name)
+
+        if value is None:
+            return None
+
+        if self.is_many:
+            if not isinstance(value, List):
+                TypeError("Field %s should be a list, but got %s" % (name, type(value).__name__))
+            else:
+                [self._validate_single(name, v) for v in value]
+        else:
+            self._validate_single(name, value)
+
+    def from_db(self, name: str, value: object) -> object:
+        """Load values from database. Treat value as a list when is_many is true. Converts database
+        representation to appropriately typed object."""
+        if value is None and self.required:
+            raise TypeError("%s field is required" % name)
+
+        if value is None:
+            return None
+
+        if self.is_many:
+            if not isinstance(value, List):
+                TypeError("Field %s should be a list, but got %s" % (name, type(value).__name__))
+            else:
+                return [self._from_db_single(name, v) for v in value]
+        return self._from_db_single(name, value)
+
+    def _from_db_single(self, name: str, value: object) -> object:
+        """Load a single database value. Converts database representation to appropriately typed object."""
+        if value.__class__ is self.field_type or isinstance(value, self.field_type):
+            return value
+
+        # asyncpg does not convert a jsonb field to a dict
+        if isinstance(value, str) and self.field_type is dict:
+            return json.loads(value)
+        # asyncpg does not convert an enum field to an enum type
+        if isinstance(value, str) and issubclass(self.field_type, enum.Enum):
+            return self.field_type[value]
+        # decode typed json
+        if isinstance(value, str) and issubclass(self.field_type, pydantic.BaseModel):
+            jsv = json.loads(value)
+            return self.field_type(**jsv)
+        if self.field_type == pydantic.AnyHttpUrl:
+            return pydantic.tools.parse_obj_as(pydantic.AnyHttpUrl, value)
+
+        raise TypeError(
+            "Field %s should have the correct type (%s instead of %s)" % (name, self.field_type.__name__, type(value).__name__)
+        )
 
 
 class DataDocument(object):
@@ -787,18 +890,19 @@ class DataDocument(object):
         return self._data
 
 
+class InvalidAttribute(Exception):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 class DocumentMeta(type):
     def __new__(cls, class_name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
-        dct["_fields"] = {}
-        for name, field in dct.items():
-            if isinstance(field, Field):
-                dct["_fields"][name] = field
-
-        for base in bases:
-            if hasattr(base, "_fields"):
-                dct["_fields"].update(base._fields)
-
-        return type.__new__(cls, class_name, bases, dct)
+        dct["_fields_metadata"] = {}
+        new_type: Type[BaseDocument] = type.__new__(cls, class_name, bases, dct)
+        if class_name != "BaseDocument":
+            new_type.load_fields()
+        return new_type
 
 
 TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
@@ -809,16 +913,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
     """
     A base document in the database. Subclasses of this document determine collections names. This type is mainly used to
     bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
+
+    Fields are
+    modelled using type annotations similar to protocol and pydantic. The following is supported:
+
+    - Attributes are defined at class level with type annotations
+    - Attributes do not need a default value. When no default is provided, they are marked as required.
+    - When a value does not have to be set: either a default value or making it optional can be used. When a field is optional
+      without a default value, none will be set as default value so that the field is available.
+    - Fields that should be ignored, can be added to __ignore_fields__ This attribute is a tuple of strings
+    - Fields that are part of the primary key should be added to the __primary_key__ attributes. This attribute is a tuple of
+      strings.
     """
 
-    _connection_pool: asyncpg.pool.Pool = None
+    _connection_pool: Optional[asyncpg.pool.Pool] = None
+    _fields_metadata: Dict[str, Field]
+    __primary_key__: Tuple[str, ...]
+    __ignore_fields__: Tuple[str, ...]
+
+    def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
+        """
+        :param kwargs: The values to create the document. When id is defined in the fields but not provided, a new UUID is
+                       generated.
+        """
+        self.__process_kwargs(from_postgres, kwargs)
 
     @classmethod
-    def get_connection(cls) -> asyncpg.pool.PoolAcquireContext:
+    def get_connection(
+        cls, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> AbstractAsyncContextManager[asyncpg.connection.Connection]:
         """
-        Returns a PoolAcquireContext that can be either awaited or used in an async with statement to receive a Connection.
+        Returns a context manager to acquire a connection. If an existing connection is passed, returns a dummy context manager
+        wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
+        already been acquired.
         """
-        return cls._connection_pool.acquire()
+        # Make pypi happy
+        assert cls._connection_pool is not None
+        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
 
     @classmethod
     def table_name(cls) -> str:
@@ -827,78 +958,180 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         return cls.__name__.lower()
 
-    def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
-        self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
+    @classmethod
+    def get_field_metadata(cls) -> Dict[str, Field]:
+        return cls._fields_metadata.copy()
+
+    @staticmethod
+    def _annotation_to_field(
+        attribute: str,
+        annotation: Type[object],
+        has_value: bool = True,
+        value: Optional[object] = None,
+        part_of_primary_key: bool = False,
+        ignore_field: bool = False,
+    ) -> Field:
+        """Convert an annotated definition to a Field instance. The conversion rules are the following:
+        - The value assigned to the field is the default value
+        - When the default value is None the type has to be Optional
+        - When the field is not optional, None is not a valid value
+        - When the field has no default value, it is not required
+        """
+        field_type: Type[object] = annotation
+        required: bool = not has_value
+        default: object = default_unset
+        is_many: bool = False
+
+        # Only union with None (optional) is support
+        if typing_inspect.is_union_type(annotation) and not typing_inspect.is_optional_type(annotation):
+            raise InvalidAttribute(f"A union that is not an optional in field {attribute} is not supported.")
+
+        if typing_inspect.is_optional_type(annotation):
+            # The value optional. When no default is set, it will be None.
+            required = False
+            default = None
+
+            # Filter out the None from the union
+            type_args = typing_inspect.get_args(annotation, evaluate=True)
+            if len(type_args) != 2:
+                raise InvalidAttribute(f"Only optionals with one type are supported, field {attribute} has more.")
+            field_type = [typ for typ in type_args if typ][0]
+
+        if has_value:
+            # A default value is available, so not required. When optional type, override the default None
+            required = False
+            default = value
+
+        if typing_inspect.is_generic_type(field_type):
+            orig = typing_inspect.get_origin(field_type)
+            # First two are for python3.6, the last two for 3.7 and up
+            if orig in [typing.List, typing.Sequence, list, abc.Sequence]:
+                is_many = True
+                type_args = typing_inspect.get_args(field_type)
+                if len(type_args) == 0 or isinstance(type_args[0], typing.TypeVar):
+                    # In python3.8 type_args is not empty when you write List but it will contain an instance of TypeVar
+                    raise InvalidAttribute(f"Generic type of field {attribute} requires a type argument.")
+                field_type = type_args[0]
+
+                # List of Dict for example still cannot be validated. If the type is still a generic. Set the type to List of
+                # object.
+                if typing_inspect.is_generic_type(field_type):
+                    field_type = object
+
+            elif orig in [typing.Mapping, typing.Dict, abc.Mapping, dict]:
+                field_type = dict
+
+        if typing_inspect.is_new_type(field_type):
+            # Python 3.10 and later NewType is a real type and an isinstance will work. On older version NewType is a function.
+            # If this is the case we need to get the real supertype
+            if callable(field_type):
+                field_type = field_type.__supertype__
+
+        return Field(
+            field_type=field_type,
+            required=required,
+            default=default,
+            is_many=is_many,
+            part_of_primary_key=part_of_primary_key,
+            ignore=ignore_field,
+        )
 
     @classmethod
-    def get_valid_field_names(cls) -> List[str]:
-        return list(cls._fields.keys())
+    def load_fields(cls) -> None:
+        """Load the field metadata from the class definition. This method supports two different mechanisms:
+        1. Using the field class as the value of the attribute.
+        2. Using type annotations on the attributes
+        """
+        primary_key: Tuple[str, ...] = tuple()
+        ignore: Tuple[str, ...] = tuple()
+        if "__primary_key__" in cls.__dict__:
+            primary_key = cls.__primary_key__
+
+        if "__ignore_fields__" in cls.__dict__:
+            ignore = cls.__ignore_fields__
+
+        for attribute, value in cls.__dict__.items():
+            if attribute.startswith("_"):
+                continue
+            elif isinstance(value, Field):
+                warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
+                cls._fields_metadata[attribute] = value
+            elif cls.__annotations__ and attribute in cls.__annotations__:
+                annotation = cls.__annotations__[attribute]
+                cls._fields_metadata[attribute] = cls._annotation_to_field(
+                    attribute,
+                    annotation,
+                    has_value=True,
+                    value=value,
+                    part_of_primary_key=attribute in primary_key,
+                    ignore_field=attribute in ignore,
+                )
+
+        # attributes that do not have a default value will only be present in __annotations__ and not in __dict__
+        for attribute, annotation in cls.__annotations__.items():
+            if not attribute.startswith("_") and attribute not in cls._fields_metadata:
+                cls._fields_metadata[attribute] = cls._annotation_to_field(
+                    attribute,
+                    annotation,
+                    has_value=False,
+                    part_of_primary_key=attribute in primary_key,
+                    ignore_field=attribute in ignore,
+                )
 
     @classmethod
-    def _create_dict(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
-        result = {}
-        fields = cls._fields.copy()
+    def get_field_names(cls) -> typing.KeysView[str]:
+        """Returns all field names in the document"""
+        return cls.get_field_metadata().keys()
+
+    def __process_kwargs(self, from_postgres: bool, kwargs: Dict[str, object]) -> None:
+        """This helper method process the kwargs provided to the constructor and populates the fields of the object."""
+        fields = self.get_field_metadata()
 
         if "id" in fields and "id" not in kwargs:
-            kwargs["id"] = cls._new_id()
+            kwargs["id"] = uuid.uuid4()
 
         for name, value in kwargs.items():
             if name not in fields:
-                raise AttributeError("%s field is not defined for this document %s" % (name, cls.table_name()))
+                raise AttributeError("%s field is not defined for this document %s" % (name, type(self).__name__.lower()))
 
-            if value is None and fields[name].required:
-                raise TypeError("%s field is required" % name)
+            field = fields[name]
+            if not from_postgres:
+                field.validate(name, value)
+            elif not field.ignore:
+                value = field.from_db(name, value)
+            else:
+                value = None
 
-            if (
-                not fields[name].reference
-                and value is not None
-                and not (value.__class__ is fields[name].field_type or isinstance(value, fields[name].field_type))
-            ):
-                # pgasync does not convert a jsonb field to a dict
-                if from_postgres and isinstance(value, str) and fields[name].field_type is dict:
-                    value = json.loads(value)
-                # pgasync does not convert a enum field to a enum type
-                elif from_postgres and isinstance(value, str) and issubclass(fields[name].field_type, enum.Enum):
-                    value = fields[name].field_type[value]
-                else:
-                    raise TypeError(
-                        "Field %s should have the correct type (%s instead of %s)"
-                        % (name, fields[name].field_type.__name__, type(value).__name__)
-                    )
-
-            if from_postgres or value is not None:
-                result[name] = value
-            elif fields[name].default:
-                result[name] = fields[name].default_value
+            if value is not None:
+                setattr(self, name, value)
 
             del fields[name]
 
-        for name in list(fields.keys()):
-            if fields[name].default:
-                result[name] = fields[name].default_value
-                del fields[name]
+        required_fields = []
+        for name, field in fields.items():
+            # when a default value is used, make sure it is copied
+            if field.default:
+                setattr(self, name, copy.deepcopy(field.default_value))
 
-            elif not fields[name].required:
-                del fields[name]
+            # update the list of required fields
+            elif fields[name].required:
+                required_fields.append(name)
 
-        if len(fields) > 0:
-            raise AttributeError("%s fields are required." % ", ".join(fields.keys()))
+        if len(required_fields) > 0:
+            raise AttributeError("The fields %s are required and no value was provided." % ", ".join(required_fields))
 
-        return result
+    @classmethod
+    def get_valid_field_names(cls) -> List[str]:
+        return list(cls.get_field_names())
 
     @classmethod
     def _get_names_of_primary_key_fields(cls) -> List[str]:
-        fields = cls._fields.copy()
-        return [name for name, value in fields.items() if value.is_part_of_primary_key()]
+        return [name for name, value in cls.get_field_metadata().items() if value.is_part_of_primary_key()]
 
     def _get_filter_on_primary_key_fields(self, offset: int = 1) -> Tuple[str, List[Any]]:
         names_primary_key_fields = self._get_names_of_primary_key_fields()
         query = {field_name: self.__getattribute__(field_name) for field_name in names_primary_key_fields}
         return self._get_composed_filter(offset=offset, **query)
-
-    @classmethod
-    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
-        return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
     def _new_id(cls) -> uuid.UUID:
@@ -921,41 +1154,30 @@ class BaseDocument(object, metaclass=DocumentMeta):
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
         except asyncio.TimeoutError:
             cls._connection_pool.terminate()
+            # Don't propagate this exception but just write a log message. This way:
+            #   * A timeout here still makes sure that the other server slices get stopped
+            #   * The tests don't fail when this timeout occurs
+            LOGGER.exception("A timeout occurred while closing the connection pool to the database")
+        except asyncio.CancelledError:
+            cls._connection_pool.terminate()
+            # Propagate cancel
+            raise
+        except Exception:
+            LOGGER.exception("An unexpected exception occurred while closing the connection pool to the database")
+            raise
         finally:
             cls._connection_pool = None
-
-    def _get_field(self, name: str) -> Optional[Field]:
-        if hasattr(self.__class__, name):
-            field = getattr(self.__class__, name)
-            if isinstance(field, Field):
-                return field
-
-        return None
-
-    def __getattribute__(self, name: str) -> object:
-        if name[0] == "_":
-            return object.__getattribute__(self, name)
-
-        field = self._get_field(name)
-        if field is not None:
-            if name in self.__fields:
-                return self.__fields[name]
-            else:
-                return None
-
-        return object.__getattribute__(self, name)
 
     def __setattr__(self, name: str, value: object) -> None:
         if name[0] == "_":
             return object.__setattr__(self, name, value)
 
-        field = self._get_field(name)
-        if field is not None:
+        fields = self.get_field_metadata()
+        if name in fields:
+            field = fields[name]
             # validate
-            if value is not None and not isinstance(value, field.field_type):
-                raise TypeError("Field %s should be of type %s" % (name, field.field_type))
-
-            self.__fields[name] = value
+            field.validate(name, value)
+            object.__setattr__(self, name, value)
             return
 
         raise AttributeError(name)
@@ -964,26 +1186,30 @@ class BaseDocument(object, metaclass=DocumentMeta):
     def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, Any]) -> Dict[str, Any]:
         return field_dict
 
+    def get_value(self, name: str, default_value: Optional[object] = None) -> object:
+        """Check if a value is set for a field. Fields that are declared but that do not have a value are only present
+        in annotations but not as attribute (in __dict__)"""
+        if hasattr(self, name):
+            return getattr(self, name)
+        return default_value
+
     def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
         column_names: List[str] = []
         values: List[str] = []
-        for name, typing in self._fields.items():
-            if self._fields[name].reference:
+        for name, metadata in self.get_field_metadata().items():
+            if metadata.ignore:
                 continue
-            value = None
-            if name in self.__fields:
-                value = self.__fields[name]
 
-            if typing.required and value is None:
+            value = self.get_value(name)
+
+            if metadata.required and value is None:
                 raise TypeError("%s should have field '%s'" % (self.__name__, name))
 
-            if value is not None:
-                if not isinstance(value, typing.field_type):
-                    raise TypeError("Value of field %s does not have the correct type" % name)
+            metadata.validate(name, value)
             column_names.append(name)
             values.append(self._get_value(value))
 
-        return (column_names, values)
+        return column_names, values
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -997,30 +1223,34 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object) -> object:
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetchrow(cls, query: str, *values: object) -> Record:
-        async with cls._connection_pool.acquire() as con:
+    async def _fetch_int(cls, query: str, *values: object) -> Optional[int]:
+        """Fetch a single integer value"""
+        async with cls.get_connection() as con:
+            value = await con.fetchval(query, *values)
+            assert isinstance(value, int)
+            return value
+
+    @classmethod
+    async def _fetchrow(cls, query: str, *values: object) -> Optional[Record]:
+        async with cls.get_connection() as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
     async def _fetch_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> List[Record]:
-        if connection is None:
-            async with cls._connection_pool.acquire() as con:
-                return await con.fetch(query, *values)
-        return await connection.fetch(query, *values)
+    ) -> Sequence[Record]:
+        async with cls.get_connection(connection) as con:
+            return await con.fetch(query, *values)
 
     @classmethod
     async def _execute_query(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
     ) -> str:
-        if connection:
-            return await connection.execute(query, *values)
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection(connection) as con:
             return await con.execute(query, *values)
 
     @classmethod
@@ -1031,7 +1261,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if not documents:
             return
 
-        columns = list(cls._fields.copy().keys())
+        columns = cls.get_field_names()
         records = []
         for doc in documents:
             current_record = []
@@ -1040,7 +1270,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             current_record = tuple(current_record)
             records.append(current_record)
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
@@ -1078,7 +1308,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
         """
         Update the given fields of this document in the database. It will update the fields in this object and do a specific
         $set in the database on this document.
@@ -1129,7 +1359,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if o not in possible:
                 raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
 
-        if order_by_column not in cls._fields:
+        if order_by_column not in cls.get_field_names():
             raise RuntimeError(f"{order_by_column} is not a valid field name.")
 
         return ColumnNameStr(order_by_column), OrderStr(order)
@@ -1285,7 +1515,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values = []
         index_count = max(1, offset)
         for key, value in query.items():
-            (filter_statement, value) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
+            cls.validate_field_name(key)
+            name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
+            (filter_statement, value) = cls._get_filter(name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(value)
             index_count += len(value)
@@ -1293,12 +1525,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
+    def _get_filter(cls, name: str, value: Any, index: int) -> Tuple[str, List[object]]:
         if value is None:
             return (name + " IS NULL", [])
         filter_statement = name + "=$" + str(index)
-        if col_name_prefix is not None:
-            filter_statement = col_name_prefix + "." + filter_statement
         value = cls._get_value(value)
         return (filter_statement, [value])
 
@@ -1332,28 +1562,38 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            if query_type == QueryType.EQUALS:
-                (filter_statement, filter_values) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.IS_NOT_NULL:
-                (filter_statement, filter_values) = cls.get_is_not_null_filter(key, col_name_prefix=col_name_prefix)
-            elif query_type == QueryType.CONTAINS:
-                (filter_statement, filter_values) = cls.get_contains_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.CONTAINS_PARTIAL:
-                (filter_statement, filter_values) = cls.get_contains_partial_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-            elif query_type == QueryType.RANGE:
-                (filter_statement, filter_values) = cls.get_range_filter(
-                    key, value, index_count, col_name_prefix=col_name_prefix
-                )
-
+            cls.validate_field_name(key)
+            name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
+            filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index_count)
             filter_statements.append(filter_statement)
             values.extend(filter_values)
             index_count += len(filter_values)
 
         return (filter_statements, values)
+
+    @classmethod
+    def get_filter_for_query_type(
+        cls, query_type: QueryType, key: str, value: object, index_count: int
+    ) -> Tuple[str, List[object]]:
+        if query_type == QueryType.EQUALS:
+            (filter_statement, filter_values) = cls._get_filter(key, value, index_count)
+        elif query_type == QueryType.IS_NOT_NULL:
+            (filter_statement, filter_values) = cls.get_is_not_null_filter(key)
+        elif query_type == QueryType.CONTAINS:
+            (filter_statement, filter_values) = cls.get_contains_filter(key, value, index_count)
+        elif query_type == QueryType.CONTAINS_PARTIAL:
+            (filter_statement, filter_values) = cls.get_contains_partial_filter(key, value, index_count)
+        elif query_type == QueryType.RANGE:
+            (filter_statement, filter_values) = cls.get_range_filter(key, value, index_count)
+        elif query_type == QueryType.NOT_CONTAINS:
+            (filter_statement, filter_values) = cls.get_not_contains_filter(key, value, index_count)
+        elif query_type == QueryType.COMBINED:
+            (filter_statement, filter_values) = cls.get_filter_for_combined_query_type(
+                key, cast(Dict[QueryType, object], value), index_count
+            )
+        else:
+            raise InvalidQueryType(f"Query type should be one of {[query for query in QueryType]}")
+        return (filter_statement, filter_values)
 
     @classmethod
     def validate_field_name(cls, name: str) -> ColumnNameStr:
@@ -1369,47 +1609,65 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return filter_statement
 
     @classmethod
-    def get_is_not_null_filter(cls, name: str, col_name_prefix: Optional[str] = None) -> Tuple[str, List[object]]:
+    def get_is_not_null_filter(cls, name: str) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not null.
         """
-        cls.validate_field_name(name)
         filter_statement = f"{name} IS NOT NULL"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         return (filter_statement, [])
 
     @classmethod
-    def get_contains_filter(
-        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
-    ) -> Tuple[str, List[object]]:
+    def get_contains_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
         collection.
         """
-        cls.validate_field_name(name)
         filter_statement = f"{name} = ANY (${str(index)})"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         return (filter_statement, [value])
 
     @classmethod
-    def get_contains_partial_filter(
-        cls, name: str, value: object, index: int, col_name_prefix: Optional[str] = None
+    def get_filter_for_combined_query_type(
+        cls, name: str, combined_value: Dict[QueryType, object], index: int
     ) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter a single column
+        based on the defined query types
+        """
+        filters = []
+        for query_type, value in combined_value.items():
+            filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index)
+            filters.append((filter_statement, filter_values))
+            index += len(filter_values)
+        (filter_statement, values) = cls._combine_filter_statements(filters)
+
+        return (filter_statement, values)
+
+    @classmethod
+    def get_not_contains_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
+        """
+        Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are not contained in a given
+        collection.
+        """
+        filter_statement = f"NOT ({name} = ANY (${str(index)}))"
+        value = cls._get_value(value)
+        return (filter_statement, [value])
+
+    @classmethod
+    def get_contains_partial_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that are contained in a given
         collection.
         """
-        cls.validate_field_name(name)
+
         filter_statement = f"{name} ILIKE ANY (${str(index)})"
-        filter_statement = cls._add_column_name_prefix_if_needed(filter_statement, col_name_prefix)
         value = cls._get_value(value)
         value = [f"%{v}%" for v in value]
         return (filter_statement, [value])
 
     @classmethod
     def get_range_filter(
-        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int, col_name_prefix: Optional[str] = None
+        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int
     ) -> Tuple[str, List[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
@@ -1419,10 +1677,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values: List[object]
         (filter_statement, values) = cls._combine_filter_statements(
             (
-                cls._add_column_name_prefix_if_needed(
-                    f"{name} {operator.pg_value} ${str(index + i)}",
-                    col_name_prefix,
-                ),
+                f"{name} {operator.pg_value} ${str(index + i)}",
                 [cls._get_value(bound)],
             )
             for i, (operator, bound) in enumerate(value)
@@ -1604,12 +1859,36 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self.delete()
 
     @classmethod
+    @overload
     async def select_query(
-        cls, query: str, values: List[object], no_obj: bool = False, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> "BaseDocument":
-        async def perform_query(con: asyncpg.connection.Connection) -> object:
+        cls: Type[TBaseDocument], query: str, values: List[object], connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Sequence[TBaseDocument]:
+        """Return a sequence of objects of cls type."""
+        ...
+
+    @classmethod
+    @overload
+    async def select_query(
+        cls: Type[TBaseDocument],
+        query: str,
+        values: List[object],
+        no_obj: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Sequence[Record]:
+        """Return a sequence of records instances"""
+        ...
+
+    @classmethod
+    async def select_query(
+        cls: Type[TBaseDocument],
+        query: str,
+        values: List[object],
+        no_obj: bool = False,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Sequence[Union[Record, TBaseDocument]]:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
-                result = []
+                result: List[Union[Record, TBaseDocument]] = []
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         result.append(record)
@@ -1617,32 +1896,23 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         result.append(cls(from_postgres=True, **record))
                 return result
 
-        if connection is None:
-            async with cls._connection_pool.acquire() as con:
-                return await perform_query(con)
-        return await perform_query(connection)
-
     def to_dict(self) -> JsonType:
         """
         Return a dict representing the document
         """
         result = {}
-        for name, typing in self._fields.items():
-            value = None
-            if name in self.__fields:
-                value = self.__fields[name]
+        for name, metadata in self.get_field_metadata().items():
+            value = self.get_value(name)
 
-            if typing.required and value is None:
+            if metadata.required and value is None:
                 raise TypeError("%s should have field '%s'" % (self.__name__, name))
 
             if value is not None:
-                if not isinstance(value, typing.field_type):
-                    raise TypeError("Value of field %s does not have the correct type" % name)
-
+                metadata.validate(name, value)
                 result[name] = value
 
-            elif typing.default:
-                result[name] = typing.default_value
+            elif metadata.default:
+                result[name] = metadata.default_value
 
         return result
 
@@ -1654,14 +1924,16 @@ class Project(BaseDocument):
     :param name: The name of the configuration project.
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name: str = Field(field_type=str, required=True, unique=True)
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    name: str
 
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
 
-def convert_boolean(value: object) -> bool:
+def convert_boolean(value: Union[bool, str]) -> bool:
     if isinstance(value, bool):
         return value
 
@@ -1670,7 +1942,7 @@ def convert_boolean(value: object) -> bool:
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
-def convert_int(value: object) -> Union[int, float]:
+def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     if isinstance(value, (int, float)):
         return value
 
@@ -1680,6 +1952,16 @@ def convert_int(value: object) -> Union[int, float]:
     if i_value == f_value:
         return i_value
     return f_value
+
+
+def convert_positive_float(value: Union[float, int, str]) -> float:
+    if isinstance(value, float):
+        float_value = value
+    else:
+        float_value = float(value)
+    if float_value < 0:
+        raise ValueError(f"This value should be positive, got: {value}")
+    return float_value
 
 
 def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
@@ -1715,7 +1997,24 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar", "enum": "varchar"}
+def validate_cron(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        CronTab(value)
+    except ValueError as e:
+        raise ValueError("'%s' is not a valid cron expression: %s" % (value, e))
+    return value
+
+
+TYPE_MAP = {
+    "int": "integer",
+    "bool": "boolean",
+    "dict": "jsonb",
+    "str": "varchar",
+    "enum": "varchar",
+    "positive_float": "double precision",
+}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -1731,9 +2030,13 @@ AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
+NOTIFICATION_RETENTION = "notification_retention"
+AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
+RECOMPILE_BACKOFF = "recompile_backoff"
 
 
 class Setting(object):
@@ -1760,7 +2063,7 @@ class Setting(object):
                         is requested from the database, it will return the default value and also store
                         the default value in the database.
         :param doc: The documentation/help string for this setting
-        :param validator: A validation and casting function for input settings.
+        :param validator: A validation and casting function for input settings. Should raise ValueError if validation fails.
         :param recompile: Trigger a recompile of the model when a setting is updated?
         :param update_model: Update the configuration model (git pull on project and repos)
         :param agent_restart: Restart autostarted agents when this settings is updated.
@@ -1816,16 +2119,18 @@ class Environment(BaseDocument):
     :param icon: An icon for the environment
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name: str = Field(field_type=str, required=True)
-    project: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    repo_url: str = Field(field_type=str, default="")
-    repo_branch: str = Field(field_type=str, default="")
-    settings: Dict[str, m.EnvSettingType] = Field(field_type=dict, default={})
-    last_version: int = Field(field_type=int, default=0)
-    halted: bool = Field(field_type=bool, default=False)
-    description: str = Field(field_type=str, default="")
-    icon: str = Field(field_type=str, default="")
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    name: str
+    project: uuid.UUID
+    repo_url: str = ""
+    repo_branch: str = ""
+    settings: Dict[str, m.EnvSettingType] = {}
+    last_version: int = 0
+    halted: bool = False
+    description: str = ""
+    icon: str = ""
 
     def to_dto(self) -> m.Environment:
         return m.Environment(
@@ -1948,12 +2253,31 @@ class Environment(BaseDocument):
             validator=convert_boolean,
             doc="Allow the server to compile the configuration model.",
         ),
+        AUTO_FULL_COMPILE: Setting(
+            name=AUTO_FULL_COMPILE,
+            default="",
+            typ="str",
+            validator=validate_cron,
+            doc=(
+                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
+                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
+                " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
+            ),
+        ),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(
             name=RESOURCE_ACTION_LOGS_RETENTION,
             default=7,
             typ="int",
             validator=convert_int,
             doc="The number of days to retain resource-action logs",
+        ),
+        AVAILABLE_VERSIONS_TO_KEEP: Setting(
+            name=AVAILABLE_VERSIONS_TO_KEEP,
+            default=100,
+            typ="int",
+            validator=convert_int,
+            doc="The number of versions to keep stored in the database",
         ),
         PURGE_ON_DELETE: Setting(
             name=PURGE_ON_DELETE,
@@ -1969,6 +2293,21 @@ class Environment(BaseDocument):
             typ="bool",
             validator=convert_boolean,
             doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
+        ),
+        NOTIFICATION_RETENTION: Setting(
+            name=NOTIFICATION_RETENTION,
+            default=365,
+            typ="int",
+            validator=convert_int,
+            doc="The number of days to retain notifications for",
+        ),
+        RECOMPILE_BACKOFF: Setting(
+            name=RECOMPILE_BACKOFF,
+            default=0.1,
+            typ="positive_float",
+            validator=convert_positive_float,
+            doc="""The number of seconds to wait before the server may attempt to do a new recompile.
+                    Recompiles are triggered after facts updates for example.""",
         ),
     }
 
@@ -2069,6 +2408,7 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
+            await Notification.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
@@ -2088,8 +2428,21 @@ RETURNING last_version;
         return version
 
     @classmethod
+    async def register_setting(cls, setting: Setting) -> None:
+        """
+        Adds a new setting to the environments from outside inmanta-core.
+        As example, inmanta-lsm can use this method to add settings that are only
+        relevant for inmanta-lsm but that are needed in the environments.
+
+        :param setting: the setting that should be added to the existing settings
+        """
+        if setting.name in cls._settings:
+            raise KeyError()
+        cls._settings[setting.name] = setting
+
+    @classmethod
     async def get_list(
-        cls,
+        cls: Type[TBaseDocument],
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -2098,7 +2451,7 @@ RETURNING last_version;
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
         **query: object,
-    ) -> List["BaseDocument"]:
+    ) -> List[TBaseDocument]:
         """
         Get a list of documents matching the filter args.
 
@@ -2125,7 +2478,7 @@ RETURNING last_version;
 
     @classmethod
     async def get_list_without_details(
-        cls,
+        cls: Type[TBaseDocument],
         order_by_column: Optional[str] = None,
         order: str = "ASC",
         limit: Optional[int] = None,
@@ -2133,7 +2486,7 @@ RETURNING last_version;
         no_obj: bool = False,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
-    ) -> List["BaseDocument"]:
+    ) -> List[TBaseDocument]:
         """
         Get a list of environments matching the filter args.
         Don't return the description and icon columns.
@@ -2152,11 +2505,11 @@ RETURNING last_version;
 
     @classmethod
     async def get_by_id(
-        cls,
+        cls: Type[TBaseDocument],
         doc_id: uuid.UUID,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
-    ) -> Optional["BaseDocument"]:
+    ) -> Optional[TBaseDocument]:
         """
         Get a specific environment based on its ID
 
@@ -2184,14 +2537,16 @@ class Parameter(BaseDocument):
     :todo Add history
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
-    value: str = Field(field_type=str, default="", required=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    source: str = Field(field_type=str, required=True)
-    resource_id: m.ResourceIdStr = Field(field_type=str, default="")
-    updated: datetime.datetime = Field(field_type=datetime.datetime)
-    metadata: Dict[str, Any] = Field(field_type=dict)
+    __primary_key__ = ("id", "name", "environment")
+
+    id: uuid.UUID
+    name: str
+    value: str = ""
+    environment: uuid.UUID
+    source: str
+    resource_id: m.ResourceIdStr = ""
+    updated: Optional[datetime.datetime] = None
+    metadata: Optional[JsonType] = None
 
     @classmethod
     async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
@@ -2268,10 +2623,10 @@ class Parameter(BaseDocument):
         database_order: DatabaseOrder,
         limit: int,
         environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List[m.Parameter]:
@@ -2354,8 +2709,8 @@ class Parameter(BaseDocument):
         database_order: DatabaseOrder,
         limit: int,
         environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -2409,14 +2764,16 @@ class UnknownParameter(BaseDocument):
     :param version: The version id of the configuration model on which this parameter was reported
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name: str = Field(field_type=str, required=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    source: str = Field(field_type=str, required=True)
-    resource_id: m.ResourceIdStr = Field(field_type=str, default="")
-    version: int = Field(field_type=int, required=True)
-    metadata: Dict[str, Any] = Field(field_type=dict)
-    resolved: bool = Field(field_type=bool, default=False)
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    name: str
+    environment: uuid.UUID
+    source: str
+    resource_id: m.ResourceIdStr = ""
+    version: int
+    metadata: Optional[Dict[str, Any]]
+    resolved: bool = False
 
 
 class AgentProcess(BaseDocument):
@@ -2428,12 +2785,14 @@ class AgentProcess(BaseDocument):
     :param last_seen: When did the server receive data from the node for the last time.
     """
 
-    hostname: str = Field(field_type=str, required=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    first_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
-    last_seen: datetime.datetime = Field(field_type=datetime.datetime, default=None)
-    expired: datetime.datetime = Field(field_type=datetime.datetime, default=None)
-    sid: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    __primary_key__ = ("sid",)
+
+    sid: uuid.UUID
+    hostname: str
+    environment: uuid.UUID
+    first_seen: Optional[datetime.datetime] = None
+    last_seen: Optional[datetime.datetime] = None
+    expired: Optional[datetime.datetime] = None
 
     @classmethod
     async def get_live(cls, environment: Optional[uuid.UUID] = None) -> List["AgentProcess"]:
@@ -2555,12 +2914,14 @@ class AgentInstance(BaseDocument):
     :param last_seen: When did the server receive data from the node for the last time.
     """
 
+    __primary_key__ = ("id",)
+
     # TODO: add env to speed up cleanup
-    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    process = Field(field_type=uuid.UUID, required=True)
-    name = Field(field_type=str, required=True)
-    expired = Field(field_type=datetime.datetime)
-    tid = Field(field_type=uuid.UUID, required=True)
+    id: uuid.UUID
+    process: uuid.UUID
+    name: str
+    expired: Optional[datetime.datetime] = None
+    tid: uuid.UUID
 
     @classmethod
     async def active_for(
@@ -2595,7 +2956,7 @@ class AgentInstance(BaseDocument):
         if not endpoints:
             return
 
-        async def _execute_query(con: asyncpg.connection.Connection) -> None:
+        async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
                 INSERT INTO
@@ -2608,12 +2969,6 @@ class AgentInstance(BaseDocument):
                 """,
                 [tuple(map(cls._get_value, (cls._new_id(), tid, process, name))) for name in endpoints],
             )
-
-        if connection:
-            await _execute_query(connection)
-        else:
-            async with cls.get_connection() as con:
-                await _execute_query(con)
 
     @classmethod
     async def log_instance_expiry(
@@ -2656,23 +3011,18 @@ class Agent(BaseDocument):
         persist paused state when halting.
     """
 
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    name: str = Field(field_type=str, required=True, part_of_primary_key=True)
-    last_failover: datetime.datetime = Field(field_type=datetime.datetime)
-    paused: bool = Field(field_type=bool, default=False)
-    id_primary: Optional[uuid.UUID] = Field(field_type=uuid.UUID)  # AgentInstance
-    unpause_on_resume: Optional[bool] = Field(field_type=bool)
+    __primary_key__ = ("environment", "name")
 
-    def set_primary(self, primary: uuid.UUID) -> None:
-        self.id_primary = primary
+    environment: uuid.UUID
+    name: str
+    last_failover: Optional[datetime.datetime] = None
+    paused: bool = False
+    id_primary: Optional[uuid.UUID] = None
+    unpause_on_resume: Optional[bool] = None
 
-    def get_primary(self) -> Optional[uuid.UUID]:
+    @property
+    def primary(self) -> Optional[uuid.UUID]:
         return self.id_primary
-
-    def del_primary(self) -> None:
-        del self.id_primary
-
-    primary = property(get_primary, set_primary, del_primary)
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
@@ -2720,11 +3070,6 @@ class Agent(BaseDocument):
         return field_dict
 
     @classmethod
-    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
-        kwargs = cls._convert_field_names_to_db_column_names(kwargs)
-        return cls._create_dict(from_postgres, kwargs)
-
-    @classmethod
     async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
         return obj
@@ -2746,25 +3091,19 @@ class Agent(BaseDocument):
         Restores default halted state. Returns a list of agents that should be unpaused.
         """
 
-        async def query_with_connection(connection: asyncpg.connection.Connection) -> List[str]:
-            async with connection.transaction():
+        async with cls.get_connection(connection) as con:
+            async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 await cls._execute_query(
                     f"UPDATE {cls.table_name()} SET unpause_on_resume=NULL WHERE environment=$1",
                     cls._get_value(env),
-                    connection=connection,
+                    connection=con,
                 )
                 return sorted([r["name"] for r in unpause_on_resume])
-
-        if connection is not None:
-            return await query_with_connection(connection)
-
-        async with cls.get_connection() as con:
-            return await query_with_connection(con)
 
     @classmethod
     async def pause(
@@ -2783,6 +3122,25 @@ class Agent(BaseDocument):
             values = [cls._get_value(paused), cls._get_value(env), cls._get_value(endpoint)]
         result = await cls._fetch_query(query, *values, connection=connection)
         return sorted([r["name"] for r in result])
+
+    @classmethod
+    async def set_unpause_on_resume(
+        cls,
+        env: uuid.UUID,
+        endpoint: Optional[str],
+        should_be_unpaused_on_resume: bool,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """
+        Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
+        """
+        if endpoint is None:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env)]
+        else:
+            query = f"UPDATE {cls.table_name()} SET unpause_on_resume=$1 WHERE environment=$2 AND name=$3"
+            values = [cls._get_value(should_be_unpaused_on_resume), cls._get_value(env), cls._get_value(endpoint)]
+        await cls._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def update_primary(
@@ -2811,9 +3169,9 @@ class Agent(BaseDocument):
             else:
                 instances = await AgentInstance.active_for(tid=env, endpoint=agent.name, process=sid, connection=connection)
                 if instances:
-                    await agent.update_fields(last_failover=now, primary=instances[0].id, connection=connection)
+                    await agent.update_fields(last_failover=now, id_primary=instances[0].id, connection=connection)
                 else:
-                    await agent.update_fields(last_failover=now, primary=None, connection=connection)
+                    await agent.update_fields(last_failover=now, id_primary=None, connection=connection)
 
     @classmethod
     async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
@@ -2828,13 +3186,14 @@ class Agent(BaseDocument):
     def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ai.name as process_name, ai.process as process_id,
+                                    ap.hostname as process_name, ai.process as process_id,
                                     (CASE WHEN paused THEN 'paused'
                                         WHEN id_primary IS NOT NULL THEN 'up'
                                         ELSE 'down'
                                     END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id",
-            filter_statements=[" environment = $1 "],
+            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
             values=[cls._get_value(environment)],
         )
         return query_builder.build()
@@ -2931,15 +3290,17 @@ class Report(BaseDocument):
     :param outstream: what was reported on system out
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
-    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
-    command: str = Field(field_type=str, required=True)
-    name: str = Field(field_type=str, required=True)
-    errstream: str = Field(field_type=str, default="")
-    outstream: str = Field(field_type=str, default="")
-    returncode: Optional[int] = Field(field_type=int)
-    compile: uuid.UUID = Field(field_type=uuid.UUID, required=True)
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    started: datetime.datetime
+    completed: Optional[datetime.datetime]
+    command: str
+    name: str
+    errstream: str = ""
+    outstream: str = ""
+    returncode: Optional[int]
+    compile: uuid.UUID
 
     async def update_streams(self, out: str = "", err: str = "") -> None:
         if not out and not err:
@@ -2972,29 +3333,36 @@ class Compile(BaseDocument):
     :param compile_data: json data as exported by compiling with the --export-compile-data parameter
     :param substitute_compile_id: id of this compile's substitute compile, i.e. the compile request that is similar
         to this one that actually got compiled.
+    :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
+    :param removed_resource_sets: indicates the resource sets that should be removed from the model
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    remote_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    requested: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
-    started: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
-    completed: Optional[datetime.datetime] = Field(field_type=datetime.datetime)
+    __primary_key__ = ("id",)
 
-    do_export: bool = Field(field_type=bool, default=False)
-    force_update: bool = Field(field_type=bool, default=False)
-    metadata: dict = Field(field_type=dict, default={})
-    environment_variables: dict = Field(field_type=dict)
+    id: uuid.UUID
+    remote_id: Optional[uuid.UUID] = None
+    environment: uuid.UUID
+    requested: Optional[datetime.datetime] = None
+    started: Optional[datetime.datetime] = None
+    completed: Optional[datetime.datetime] = None
 
-    success: Optional[bool] = Field(field_type=bool)
-    handled: bool = Field(field_type=bool, default=False)
-    version: Optional[int] = Field(field_type=int)
+    do_export: bool = False
+    force_update: bool = False
+    metadata: JsonType = {}
+    environment_variables: Optional[JsonType] = {}
+
+    success: Optional[bool]
+    handled: bool = False
+    version: Optional[int] = None
 
     # Compile queue might be collapsed if it contains similar compile requests.
     # In that case, substitute_compile_id will reference the actually compiled request.
-    substitute_compile_id: Optional[uuid.UUID] = Field(field_type=uuid.UUID)
+    substitute_compile_id: Optional[uuid.UUID] = None
 
-    compile_data: Optional[dict] = Field(field_type=dict)
+    compile_data: Optional[JsonType] = None
+
+    partial: bool = False
+    removed_resource_sets: list[str] = []
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3051,7 +3419,7 @@ class Compile(BaseDocument):
         return results[0]
 
     @classmethod
-    async def get_next_run_all(cls) -> "List[Compile]":
+    async def get_next_run_all(cls) -> "Sequence[Compile]":
         """Get the next compile in the queue for each environment"""
         results = await cls.select_query(
             f"SELECT DISTINCT ON (environment) * FROM {cls.table_name()} WHERE completed IS NULL ORDER BY environment, "
@@ -3061,7 +3429,7 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_unhandled_compiles(cls) -> "List[Compile]":
+    async def get_unhandled_compiles(cls) -> "Sequence[Compile]":
         """Get all compiles that have completed but for which listeners have not been notified yet."""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL ORDER BY requested ASC", []
@@ -3069,7 +3437,7 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_next_compiles_for_environment(cls, environment_id: uuid.UUID) -> "List[Compile]":
+    async def get_next_compiles_for_environment(cls, environment_id: uuid.UUID) -> "Sequence[Compile]":
         """Get the queue of compiles that are scheduled in FIFO order."""
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND NOT handled and completed IS NULL "
@@ -3081,11 +3449,11 @@ class Compile(BaseDocument):
     @classmethod
     async def get_next_compiles_count(cls) -> int:
         """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
+        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
         return result
 
     @classmethod
-    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "List[Compile]":
+    async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
         results = await cls.select_query(
             f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND remote_id=$2",
             [cls._get_value(environment_id), cls._get_value(remote_id)],
@@ -3244,7 +3612,7 @@ class Compile(BaseDocument):
                     {cls.table_name()} comp
                     INNER JOIN compiledetails cd ON cd.substitute_compile_id = comp.id
                     LEFT JOIN public.report rep on comp.id = rep.compile
-        ) SELECT * FROM compiledetails;
+        ) SELECT * FROM compiledetails ORDER BY report_started ASC;
         """
         values = [cls._get_value(environment), cls._get_value(id)]
         result = await cls.select_query(query, values, no_obj=True)
@@ -3309,6 +3677,8 @@ class Compile(BaseDocument):
             metadata=self.metadata,
             environment_variables=self.environment_variables,
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
+            partial=self.partial,
+            removed_resource_sets=self.removed_resource_sets,
         )
 
 
@@ -3378,35 +3748,35 @@ class ResourceAction(BaseDocument):
     :param change: The change result of an action
     """
 
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    version: int = Field(field_type=int, required=True)
-    resource_version_ids: List[m.ResourceVersionIdStr] = Field(field_type=list, required=True)
+    __primary_key__ = ("action_id",)
 
-    action_id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    action: const.ResourceAction = Field(field_type=const.ResourceAction, required=True)
+    environment: uuid.UUID
+    version: int
+    resource_version_ids: List[m.ResourceVersionIdStr]
 
-    started: datetime.datetime = Field(field_type=datetime.datetime, required=True)
-    finished: datetime.datetime = Field(field_type=datetime.datetime)
+    action_id: uuid.UUID
+    action: const.ResourceAction
 
-    messages: List = Field(field_type=list)
-    status = Field(field_type=const.ResourceState)
-    changes = Field(field_type=dict)
-    change = Field(field_type=const.Change)
+    started: datetime.datetime
+    finished: Optional[datetime.datetime] = None
+
+    messages: Optional[List[Dict[str, Any]]] = None
+    status: Optional[const.ResourceState] = None
+    changes: Optional[Dict[m.ResourceIdStr, Dict[str, object]]] = None
+    change: Optional[const.Change] = None
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
 
-    @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+        # rewrite some data
+        if self.changes == {}:
+            self.changes = None
 
-    @classmethod
-    def _create_dict_wrapper(cls, from_postgres: bool, kwargs: Dict[str, object]) -> JsonType:
-        result = cls._create_dict(from_postgres, kwargs)
-        new_messages = []
-        if from_postgres and result.get("messages"):
-            for message in result["messages"]:
+        # load message json correctly
+        if from_postgres and self.messages:
+            new_messages = []
+            for message in self.messages:
                 message = json.loads(message)
                 if "timestamp" in message:
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
@@ -3414,10 +3784,11 @@ class ResourceAction(BaseDocument):
                     if message["timestamp"].tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                 new_messages.append(message)
-            result["messages"] = new_messages
-        if "changes" in result and result["changes"] == {}:
-            result["changes"] = None
-        return result
+            self.messages = new_messages
+
+    @classmethod
+    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id)
 
     @classmethod
     async def get_log(
@@ -3436,7 +3807,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -3456,37 +3827,13 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
-    def validate_field_name(cls, name: str) -> ColumnNameStr:
-        """Check if the name is a valid database column name for the current type"""
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if name not in valid_field_names:
-            raise InvalidFieldNameException(f"{name} is not valid for a query on {cls.table_name()}")
-        return ColumnNameStr(name)
-
-    @classmethod
-    def _validate_order_strict(cls, order_by_column: str, order: str) -> Tuple[ColumnNameStr, PagingOrder]:
-        """Validate the correct values for order ('ASC' or 'DESC') and if the order column is an existing column name
-        :param order_by_column: The name of the column to order by
-        :param order: The sorting order.
-        :return:
-        """
-        for o in order.split(" "):
-            possible = ["ASC", "DESC"]
-            if o not in possible:
-                raise RuntimeError(f"The following order can not be applied: {order}, {o} should be one of {possible}")
-
-        valid_field_names = list(cls._fields.keys())
-        valid_field_names.extend(["timestamp", "level", "msg"])
-        if order_by_column not in valid_field_names:
-            raise RuntimeError(f"{order_by_column} is not a valid field name.")
-
-        return ColumnNameStr(order_by_column), PagingOrder[order]
+    def get_valid_field_names(cls) -> List[str]:
+        return super().get_valid_field_names() + ["timestamp", "level", "msg"]
 
     @classmethod
     def _get_resource_logs_base_query(
@@ -3503,9 +3850,9 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1}) unnested
+                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
                     """
-        values = [cls._get_value(environment), cls._get_value(f"{resource_id}%")]
+        values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
 
     @classmethod
@@ -3680,6 +4027,7 @@ class ResourceAction(BaseDocument):
         agent: Optional[str] = None,
         attribute: Optional[str] = None,
         attribute_value: Optional[str] = None,
+        resource_id_value: Optional[str] = None,
         log_severity: Optional[str] = None,
         limit: int = 0,
         action_id: Optional[uuid.UUID] = None,
@@ -3687,12 +4035,11 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-
         query = f"""SELECT DISTINCT ra.*
                         FROM {cls.table_name()} ra
                         INNER JOIN
                         {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1
+                        WHERE r.environment=$1 AND ra.environment=$1
                      """
         values = [cls._get_value(environment)]
 
@@ -3706,10 +4053,14 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1}::varchar"
+            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
             values.append(cls._get_value(attribute))
             values.append(cls._get_value(attribute_value))
             parameter_index += 2
+        if resource_id_value:
+            query += f" AND r.resource_id_value = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
         if log_severity:
             # <@ Is contained by
             query += f" AND ${parameter_index} <@ ANY(messages)"
@@ -3749,9 +4100,9 @@ class ResourceAction(BaseDocument):
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
-                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+                return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
 
     def to_dto(self) -> m.ResourceAction:
         return m.ResourceAction(
@@ -3784,49 +4135,56 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
+    :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
     """
 
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    model: int = Field(field_type=int, required=True)
+    __primary_key__ = ("environment", "resource_version_id")
+
+    environment: uuid.UUID
+    model: int
 
     # ID related
-    resource_id: m.ResourceVersionIdStr = Field(field_type=str, required=True)
-    resource_type: m.ResourceType = Field(field_type=str, required=True)
-    resource_version_id: m.ResourceVersionIdStr = Field(field_type=str, required=True, part_of_primary_key=True)
-    resource_id_value: str = Field(field_type=str, required=True)
+    resource_id: m.ResourceIdStr
+    resource_type: m.ResourceType
+    resource_version_id: m.ResourceVersionIdStr
+    resource_id_value: str
 
-    agent: str = Field(field_type=str, required=True)
+    agent: str
 
     # Field based on content from the resource actions
-    last_deploy: datetime.datetime = Field(field_type=datetime.datetime)
+    last_deploy: Optional[datetime.datetime] = None
 
     # State related
-    attributes: Dict[str, Any] = Field(field_type=dict)
-    attribute_hash: str = Field(field_type=str)
-    status: const.ResourceState = Field(field_type=const.ResourceState, default=const.ResourceState.available)
+    attributes: Dict[str, Any] = {}
+    attribute_hash: Optional[str]
+    status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides: List[m.ResourceVersionIdStr] = Field(field_type=list, default=[])  # List of resource versions
+    provides: List[m.ResourceVersionIdStr] = []
 
     @classmethod
-    async def get_resource_state_for_dependencies(
+    async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id"
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
-        Return the ResourceState for each dependency of the given resource.
+        Return the last state of each dependency of the given resource that was not 'deploying'.
         """
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
-        query = f"""
-            SELECT r1.resource_version_id, r1.status
-            FROM {cls.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=$2 AND (
-                                                            SELECT (r2.attributes->'requires')::jsonb
-                                                            FROM {cls.table_name()} AS r2
-                                                            WHERE r2.environment=$1 AND r2.resource_version_id=$3
-                                                         ) ? r1.resource_version_id
+        query = """
+            SELECT r1.resource_version_id, r1.last_non_deploying_status
+            FROM resource AS r1
+            WHERE r1.environment=$1
+                  AND r1.model=$2
+                  AND (
+                      SELECT (r2.attributes->'requires')::jsonb
+                      FROM resource AS r2
+                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
+                  ) ? r1.resource_version_id
         """
         values = [
             cls._get_value(environment),
@@ -3834,7 +4192,7 @@ class Resource(BaseDocument):
             resource_version_id.resource_version_str(),
         ]
         result = await cls._fetch_query(query, *values)
-        return {r["resource_version_id"]: const.ResourceState(r["status"]) for r in result}
+        return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = "|".join(
@@ -3887,6 +4245,8 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         resource_type: Optional[m.ResourceType] = None,
         attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
         Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
@@ -3900,16 +4260,16 @@ class Resource(BaseDocument):
         query = f"""
             SELECT *
             FROM {Resource.table_name()} AS r1
-            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(r2.model)
-                                                  FROM {Resource.table_name()} AS r2
-                                                  WHERE r2.environment=$1)
+            WHERE r1.environment=$1 AND r1.model=(SELECT MAX(cm.version)
+                                                  FROM {ConfigurationModel.table_name()} AS cm
+                                                  WHERE cm.environment=$1)
         """
         if resource_type:
             query += " AND r1.resource_type=$2"
             values.append(cls._get_value(resource_type))
 
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource = cls(from_postgres=True, **record)
@@ -3956,7 +4316,7 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
@@ -3984,7 +4344,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -4031,24 +4391,61 @@ class Resource(BaseDocument):
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
+        # Emulate a loose index scan with a recursive common table expression (CTE),
+        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
+        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
+        # btree index efficiently; rather than scanning all equal values of a key,
+        # as soon as a new value is found, restart the search by looking for a larger value"
+        # In this case we don't scan all equal values of a resource_id
+        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
+        # and move on to the next resource_id
         return (
             f"""
-            {select_clause}
-            FROM (
-                SELECT DISTINCT ON (r.resource_id) r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.environment,
-                    (CASE WHEN
-                            (SELECT r.model < MAX(public.configurationmodel.version)
-                            FROM public.configurationmodel
-                            WHERE public.configurationmodel.released=TRUE
-                            AND environment=${offset})
+            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+            /* The cm_version CTE finds the maximum released version number in the environment  */
+            WITH RECURSIVE cm_version AS (
+                  SELECT
+                    MAX(public.configurationmodel.version) as max_version
+                    FROM public.configurationmodel
+                WHERE public.configurationmodel.released=TRUE
+                AND environment=${offset}
+                ),
+            /* emulate a loose (or skip) index scan */
+            cte AS (
+               (
+               /* specify the necessary columns */
+               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
+                        THEN 'orphaned' -- use the CTE to check the status
+                    ELSE r.status::text END) as status
+               FROM   resource r
+               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+               WHERE  r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY resource_id, model DESC
+               LIMIT  1
+               )
+               UNION ALL
+               SELECT r.*
+               FROM   cte c
+               CROSS JOIN LATERAL
+               /* specify the same columns in the recursive part */
+                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
+                            (SELECT r.model < cm_version.max_version
+                            FROM cm_version)
                         THEN 'orphaned'
                     ELSE r.status::text END) as status
-                FROM {cls.table_name()} as r
-                    JOIN public.configurationmodel as cm ON r.model=cm.version AND r.environment=cm.environment
-                    WHERE cm.released=TRUE AND r.environment=${offset}
-                    ORDER BY r.resource_id, r.model DESC)
-            as res
+               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
+               /* One result from the recursive call is the latest released version of one specific resource.
+                  We always start looking for this based on the previous resource_id. */
+               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
+               ORDER  BY r.resource_id, r.model DESC
+               LIMIT  1) r
+               )
+            {select_clause}
+            FROM   cte
             """,
             environment_db_value,
         )
@@ -4189,7 +4586,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_deleted_resources(
-        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceVersionIdStr]
+        cls, environment: uuid.UUID, current_version: int, current_resources: Sequence[m.ResourceIdStr]
     ) -> List["Resource"]:
         """
         This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
@@ -4197,7 +4594,7 @@ class Resource(BaseDocument):
 
         :param environment:
         :param current_version:
-        :param current_resources: A set of all resource ids in the current version.
+        :param current_resources: A Sequence of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
 
@@ -4210,7 +4607,7 @@ class Resource(BaseDocument):
         )
         versions = set()
         latest_version = None
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, cls._get_value(environment)):
                     version = record["version"]
@@ -4232,8 +4629,8 @@ class Resource(BaseDocument):
             + str(len(values) + 1)
         )
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = await cls._fetch_query(query, *values)
-        resources = [r["resource_id"] for r in resources]
+        resources_records = await cls._fetch_query(query, *values)
+        resources = [r["resource_id"] for r in resources_records]
 
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
@@ -4242,7 +4639,7 @@ class Resource(BaseDocument):
 
         # determined deleted resources
 
-        deleted = set(resources) - current_resources
+        deleted = set(resources) - set(current_resources)
         LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 
         # filter out resources that should not be purged:
@@ -4264,14 +4661,14 @@ class Resource(BaseDocument):
             )
             values.append(cls._get_value(current_version))
 
-            async with cls._connection_pool.acquire() as con:
+            async with cls.get_connection() as con:
                 async with con.transaction():
                     async for obj in con.cursor(query, *values):
                         # if a resource is part of a released version and it is deployed (this last condition is actually enough
                         # at the moment), we have found the last status of the resource. If it was not purged in that version,
                         # add it to the should purge list.
                         if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                            attributes = json.loads(obj["attributes"])
+                            attributes = json.loads(str(obj["attributes"]))
                             if not attributes["purged"]:
                                 should_purge.append(cls(from_postgres=True, **obj))
                             break
@@ -4332,7 +4729,6 @@ class Resource(BaseDocument):
         """
         values = [cls._get_value(env), cls._get_value(resource_id)]
         result = await cls.select_query(query, values, no_obj=True)
-        result = cast(List[Record], result)
 
         if not result:
             return None
@@ -4620,7 +5016,7 @@ class Resource(BaseDocument):
         await super(Resource, self).insert(connection=connection)
 
     @classmethod
-    async def insert_many(cls, documents: Iterable["Resource"]) -> None:
+    async def insert_many(cls, documents: Sequence["Resource"]) -> None:
         for doc in documents:
             doc.make_hash()
         await super(Resource, cls).insert_many(documents)
@@ -4651,6 +5047,7 @@ class Resource(BaseDocument):
             attributes=self.attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
+            resource_set=self.resource_set,
         )
 
 
@@ -4671,20 +5068,22 @@ class ConfigurationModel(BaseDocument):
     :param total: The total number of resources
     """
 
-    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    date: datetime.datetime = Field(field_type=datetime.datetime)
+    __primary_key__ = ("version", "environment")
 
-    released: bool = Field(field_type=bool, default=False)
-    deployed: bool = Field(field_type=bool, default=False)
-    result: const.VersionState = Field(field_type=const.VersionState, default=const.VersionState.pending)
-    version_info: Dict[str, Any] = Field(field_type=dict)
+    version: int
+    environment: uuid.UUID
+    date: Optional[datetime.datetime] = None
 
-    total: int = Field(field_type=int, default=0)
+    released: bool = False
+    deployed: bool = False
+    result: const.VersionState = const.VersionState.pending
+    version_info: Optional[Dict[str, Any]] = None
+
+    total: int = 0
 
     # cached state for release
-    undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
-    skipped_for_undeployable: List[m.ResourceIdStr] = Field(field_type=list, required=False)
+    undeployable: List[m.ResourceIdStr] = []
+    skipped_for_undeployable: List[m.ResourceIdStr] = []
 
     def __init__(self, **kwargs: object) -> None:
         super(ConfigurationModel, self).__init__(**kwargs)
@@ -4693,7 +5092,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
-        return super().get_valid_field_names() + ["status"]
+        return super().get_valid_field_names() + ["status", "model"]
 
     @property
     def done(self) -> int:
@@ -4744,7 +5143,7 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
-        query = f"""SELECT c.*,
+        query_string = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
                                          FROM {Resource.table_name()} AS r2
@@ -4758,7 +5157,7 @@ class ConfigurationModel(BaseDocument):
                     {order_by_statement}
                     {limit_statement}
                     {offset_statement}"""
-        query_result = await cls._fetch_query(query, *values, connection=connection)
+        query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
         for record in query_result:
             record = dict(record)
@@ -4791,7 +5190,7 @@ class ConfigurationModel(BaseDocument):
         return True
 
     @classmethod
-    async def get_version(cls, environment: uuid.UUID, version: int) -> "ConfigurationModel":
+    async def get_version(cls, environment: uuid.UUID, version: int) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
@@ -4799,7 +5198,7 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID) -> "ConfigurationModel":
+    async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment
         """
@@ -4833,7 +5232,7 @@ class ConfigurationModel(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
-        async with cls._connection_pool.acquire() as con:
+        async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     result.append(record["agent"])
@@ -4850,7 +5249,7 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self) -> None:
-        async with self._connection_pool.acquire() as con:
+        async with self.get_connection() as con:
             async with con.transaction():
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
@@ -4920,7 +5319,7 @@ class ConfigurationModel(BaseDocument):
     async def mark_done_if_done(
         cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
-        async def do_query_exclusive(con: asyncpg.connection.Connection) -> None:
+        async with cls.get_connection(connection) as con:
             """
             Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
             this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
@@ -4957,12 +5356,6 @@ class ConfigurationModel(BaseDocument):
                     cls._get_value(DONE_STATES),
                 ]
                 await cls._execute_query(query, *values, connection=con)
-
-        if connection is None:
-            async with cls._connection_pool.acquire() as con:
-                await do_query_exclusive(con)
-        else:
-            await do_query_exclusive(connection)
 
     @classmethod
     async def get_increment(
@@ -5175,7 +5568,6 @@ class ConfigurationModel(BaseDocument):
         sql_query, values = ordered_query.build()
 
         desired_state_version_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        desired_state_version_records = cast(Iterable[Record], desired_state_version_records)
 
         dtos = [
             m.DesiredStateVersion(
@@ -5206,10 +5598,12 @@ class Code(BaseDocument):
         {code_hash:(file_name, provider.__module__, [req])}
     """
 
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    resource: str = Field(field_type=str, required=True, part_of_primary_key=True)
-    version: int = Field(field_type=int, required=True, part_of_primary_key=True)
-    source_refs: Dict[str, Tuple[str, str, List[str]]] = Field(field_type=dict)
+    __primary_key__ = ("environment", "resource", "version")
+
+    environment: uuid.UUID
+    resource: str
+    version: int
+    source_refs: Optional[Dict[str, Tuple[str, str, List[str]]]] = None
 
     @classmethod
     async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
@@ -5238,13 +5632,15 @@ class DryRun(BaseDocument):
     :param resources: Changes for each of the resources in the version
     """
 
-    id: uuid.UUID = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    environment: uuid.UUID = Field(field_type=uuid.UUID, required=True)
-    model: int = Field(field_type=int, required=True)
-    date: datetime.datetime = Field(field_type=datetime.datetime)
-    total: int = Field(field_type=int, default=0)
-    todo: int = Field(field_type=int, default=0)
-    resources: Dict[str, Any] = Field(field_type=dict, default={})
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    environment: uuid.UUID
+    model: int
+    date: datetime.datetime
+    total: int = 0
+    todo: int = 0
+    resources: Dict[str, Any] = {}
 
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: m.ResourceVersionIdStr, dryrun_data: JsonType) -> None:
@@ -5322,6 +5718,149 @@ class DryRun(BaseDocument):
         )
 
 
+class Notification(BaseDocument):
+    """
+    A notification in an environment
+
+    :param id: The id of this notification
+    :param environment: The environment this notification belongs to
+    :param created: The date the notification was created at
+    :param title: The title of the notification
+    :param message: The actual text of the notification
+    :param severity: The severity of the notification
+    :param uri: A link to an api endpoint of the server, that is relevant to the message,
+                and can be used to get further information about the problem.
+                For example a compile related problem should have the uri: `/api/v2/compilereport/<compile_id>`
+    :param read: Whether the notification was read or not
+    :param cleared: Whether the notification was cleared or not
+    """
+
+    __primary_key__ = ("id", "environment")
+
+    id: uuid.UUID
+    environment: uuid.UUID
+    created: datetime.datetime
+    title: str
+    message: str
+    severity: const.NotificationSeverity = const.NotificationSeverity.message
+    uri: str
+    read: bool = False
+    cleared: bool = False
+
+    @classmethod
+    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT n.*""",
+            from_clause=f" FROM {cls.table_name()} as n",
+            filter_statements=[" environment = $1 "],
+            values=[cls._get_value(environment)],
+        )
+        return query_builder.build()
+
+    @classmethod
+    async def count_notifications_for_paging(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
+        **query: Tuple[QueryType, object],
+    ) -> PagingCounts:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+        base_query = PageCountQueryBuilder(
+            from_clause=f"FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        filtered_query = paging_query.filter(
+            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
+        )
+        sql_query, values = filtered_query.build()
+        result = await cls.select_query(sql_query, values, no_obj=True)
+        result = cast(List[Record], result)
+        if not result:
+            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
+        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
+
+    @classmethod
+    async def list_notifications(
+        cls,
+        database_order: DatabaseOrder,
+        limit: int,
+        environment: uuid.UUID,
+        first_id: Optional[uuid.UUID] = None,
+        last_id: Optional[uuid.UUID] = None,
+        start: Optional[datetime.datetime] = None,
+        end: Optional[datetime.datetime] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        **query: Tuple[QueryType, object],
+    ) -> List[m.Notification]:
+        subquery, subquery_values = cls.notification_list_subquery(environment)
+
+        query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT * """,
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        filtered_query = query_builder.filter(
+            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
+        )
+        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
+            *database_order.as_end_filter(filtered_query.offset, end, last_id)
+        )
+        order = database_order.get_order()
+        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
+            order == PagingOrder.DESC and (start is not None or first_id)
+        )
+        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
+        sql_query, values = ordered_query.build()
+
+        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
+        notification_records = cast(Iterable[Record], notification_records)
+        dtos = [
+            m.Notification(
+                id=notification["id"],
+                title=notification["title"],
+                message=notification["message"],
+                severity=notification["severity"],
+                created=notification["created"],
+                read=notification["read"],
+                cleared=notification["cleared"],
+                uri=notification["uri"],
+                environment=notification["environment"],
+            )
+            for notification in notification_records
+        ]
+        return dtos
+
+    @classmethod
+    async def clean_up_notifications(cls) -> None:
+        environments = await Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
+            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
+            LOGGER.info(
+                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
+            )
+            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
+            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+
+    def to_dto(self) -> m.Notification:
+        return m.Notification(
+            id=self.id,
+            title=self.title,
+            message=self.message,
+            severity=self.severity,
+            created=self.created,
+            read=self.read,
+            cleared=self.cleared,
+            uri=self.uri,
+            environment=self.environment,
+        )
+
+
 _classes = [
     Project,
     Environment,
@@ -5337,6 +5876,7 @@ _classes = [
     DryRun,
     Compile,
     Report,
+    Notification,
 ]
 
 
@@ -5348,7 +5888,12 @@ def set_connection_pool(pool: asyncpg.pool.Pool) -> None:
 
 async def disconnect() -> None:
     LOGGER.debug("Disconnecting data classes")
-    await asyncio.gather(*[cls.close_connection_pool() for cls in _classes])
+    # Enable `return_exceptions` to make sure we wait until all close_connection_pool() calls are finished
+    # or until the gather itself is cancelled.
+    result = await asyncio.gather(*[cls.close_connection_pool() for cls in _classes], return_exceptions=True)
+    exceptions = [r for r in result if r is not None and isinstance(r, Exception)]
+    if exceptions:
+        raise exceptions[0]
 
 
 PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions

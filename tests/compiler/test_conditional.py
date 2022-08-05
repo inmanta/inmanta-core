@@ -130,6 +130,87 @@ end
     assert "alt2" == test.lookup("field2").get_value()
 
 
+testdata = [
+    ("true", "true", "true", "if_branche"),
+    ("true", "true", "false", "if_branche"),
+    ("true", "false", "true", "if_branche"),
+    ("true", "false", "false", "if_branche"),
+    ("false", "true", "true", "elif1_branche"),
+    ("false", "true", "false", "elif1_branche"),
+    ("false", "false", "true", "elif2_branche"),
+    ("false", "false", "false", "else_branche"),
+]
+
+
+@pytest.mark.parametrize("if_value,elif1_value,elif2_value,result", testdata)
+def test_if_elif_elif_else(if_value, elif1_value, elif2_value, result, snippetcompiler):
+    snippet = """
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+if %s:
+    test.field = "if_branche"
+elif %s:
+    test.field = "elif1_branche"
+elif %s:
+    test.field = "elif2_branche"
+else:
+    test.field = "else_branche"
+end
+            """ % (
+        if_value,
+        elif1_value,
+        elif2_value,
+    )
+    snippetcompiler.setup_for_snippet(snippet)
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert result == root.lookup("test").get_value().lookup("field").get_value()
+
+
+def test_if_elif_true(snippetcompiler):
+    snippet = """
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+a = 3
+if a == 2:
+    test.field = "if_branche"
+elif a == 3:
+    test.field = "elif1_branche"
+end
+            """
+    snippetcompiler.setup_for_snippet(snippet)
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert "elif1_branche" == root.lookup("test").get_value().lookup("field").get_value()
+
+
+def test_if_elif_false(snippetcompiler):
+    snippet = """
+entity Test:
+    string field
+end
+implement Test using std::none
+test = Test()
+a = 4
+if a == 2:
+    test.field = "if_branche"
+elif a == 3:
+    test.field = "elif1_branche"
+end
+            """
+    snippetcompiler.setup_for_error(
+        snippet,
+        "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete: "
+        "attribute field ({dir}/main.cf:3:12) is not set",
+    )
+
+
 def test_if_scope_new(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

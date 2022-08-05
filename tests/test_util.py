@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,41 +16,203 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import dataclasses
 import datetime
 import logging
 import uuid
+from functools import partial
+from typing import Optional
 
 import pytest
 
+import inmanta
 from inmanta import util
-from inmanta.util import CycleException, ensure_future_and_handle_exception, stable_depth_first
+from inmanta.util import (
+    CronSchedule,
+    CycleException,
+    IntervalSchedule,
+    NamedLock,
+    ScheduledTask,
+    TaskSchedule,
+    ensure_future_and_handle_exception,
+    stable_depth_first,
+)
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio
+def test_interval_schedule() -> None:
+    """
+    Verifies that the IntervalSchedule class' primary methods work as expected.
+    """
+    simple: TaskSchedule = IntervalSchedule(interval=1.0)
+    assert simple.get_initial_delay() == 1.0
+    assert simple.get_next_delay() == 1.0
+    with_delay: TaskSchedule = IntervalSchedule(interval=1.0, initial_delay=0.0)
+    assert with_delay.get_initial_delay() == 0.0
+    assert with_delay.get_next_delay() == 1.0
+
+
+def test_interval_schedule_equals() -> None:
+    """
+    Verifies that the IntervalSchedule class' equality checks work as expected.
+    """
+    assert IntervalSchedule(interval=1.0) == IntervalSchedule(interval=1.0)
+    assert IntervalSchedule(interval=1.0) != IntervalSchedule(interval=2.0)
+    assert IntervalSchedule(interval=1.0, initial_delay=0.5) == IntervalSchedule(interval=1.0, initial_delay=0.5)
+    assert IntervalSchedule(interval=1.0, initial_delay=0.5) != IntervalSchedule(interval=1.0, initial_delay=0.0)
+
+
+def test_cron_schedule(monkeypatch) -> None:
+    """
+    Verifies that the CronSchedule class' primary methods work as expected.
+    """
+
+    def freeze_time(time: datetime.datetime) -> None:
+        """
+        Freeze time to a given value to avoid race conditions.
+        """
+
+        class frozendatetime(datetime.datetime):
+            @classmethod
+            def now(cls, tz: Optional[datetime.tzinfo] = None) -> datetime.datetime:
+                if tz is None:
+                    return time if time.tzinfo is None else time.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                else:
+                    aware: datetime.datetime = time if time.tzinfo is not None else time.replace(tzinfo=datetime.timezone.utc)
+                    return aware.astimezone(tz)
+
+        monkeypatch.setattr(datetime, "datetime", frozendatetime)
+
+    # min hour day month dow
+    schedule: TaskSchedule = CronSchedule(cron="1 2 * * *")
+
+    # year month day hour min sec ms
+    now: datetime.datetime = datetime.datetime(2022, 6, 16, 10, 15, 3, 0)
+    freeze_time(now)
+    next_delta: datetime.timedelta = datetime.datetime(2022, 6, 17, 2, 1, 0, 0) - now
+    assert schedule.get_initial_delay() == schedule.get_next_delay() == next_delta.total_seconds()
+
+    tomorrow: datetime.datetime = now + datetime.timedelta(days=1, seconds=42)
+    freeze_time(tomorrow)
+    assert schedule.get_initial_delay() == schedule.get_next_delay() == next_delta.total_seconds() - 42
+
+
+def test_cron_schedule_equals() -> None:
+    """
+    Verifies that the CronSchedule class' equality checks work as expected.
+    """
+    assert CronSchedule(cron="1 2 * * *") == CronSchedule(cron="1 2 * * *")
+    assert CronSchedule(cron="1 2 * * *") != CronSchedule(cron="0 2 * * *")
+
+
 async def test_scheduler_remove(caplog):
-    sched = util.Scheduler("remove")
+    scheduler = util.Scheduler("remove")
 
     i = []
 
     async def action():
         i.append(0)
 
-    sched.add_action(action, 0.05, 0)
+    schedule: IntervalSchedule = IntervalSchedule(0.05, 0)
+    scheduler.add_action(action, schedule)
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    sched.remove(action)
+    assert ScheduledTask(action=action, schedule=schedule) in scheduler._scheduled
+    scheduler.remove(ScheduledTask(action=action, schedule=schedule))
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not scheduler._executing_tasks[action]
+    assert not (action, schedule) in scheduler._scheduled
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
+async def test_scheduler_remove_same_action() -> None:
+    """
+    Verify that removing an action from the scheduler works as intended in the presence of other similar scheduled actions.
+    As long as there exists no other scheduled action for exactly the same action and schedule, removal should be unambiguous.
+    This test includes verification of potential edge cases such as `partial` of the same function, locally defined functions
+    within a body that gets evaluated twice, ...
+    """
+
+    scheduler = util.Scheduler("remove_same_action")
+
+    async def myaction() -> None:
+        pass
+
+    schedule_one: TaskSchedule = IntervalSchedule(100)
+    schedule_two: TaskSchedule = IntervalSchedule(200)
+
+    # same action, different schedule => expect distinct tasks
+    scheduler.add_action(myaction, schedule_one)
+    scheduler.add_action(myaction, schedule_two)
+
+    # same action wrapped in `partial`, same schedule => expect distinct tasks
+    partial_one = partial(myaction)
+    partial_two = partial(myaction)
+    assert partial_one != partial_two
+    scheduler.add_action(partial_one, schedule_one)
+    scheduler.add_action(partial_two, schedule_one)
+
+    locally_defined: list[object] = []
+
+    def add_locally_defined() -> None:
+        async def myaction() -> None:
+            pass
+
+        assert ScheduledTask(action=myaction, schedule=schedule_one) not in scheduler._scheduled
+        scheduler.add_action(myaction, schedule_one)
+        locally_defined.append(myaction)
+
+    add_locally_defined()
+    add_locally_defined()
+
+    scheduler.add_action(myaction, schedule_two)
+    assert ScheduledTask(action=myaction, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=myaction, schedule=schedule_two) in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=myaction, schedule=schedule_one))
+    assert ScheduledTask(action=myaction, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=myaction, schedule=schedule_two) in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=myaction, schedule=schedule_two))
+    assert ScheduledTask(action=myaction, schedule=schedule_two) not in scheduler._scheduled
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=partial_one, schedule=schedule_one))
+    assert ScheduledTask(action=partial_one, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=partial_two, schedule=schedule_one))
+    assert ScheduledTask(action=partial_two, schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=locally_defined[0], schedule=schedule_one))
+    assert ScheduledTask(action=locally_defined[0], schedule=schedule_one) not in scheduler._scheduled
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) in scheduler._scheduled
+
+    scheduler.remove(ScheduledTask(action=locally_defined[1], schedule=schedule_one))
+    assert ScheduledTask(action=locally_defined[1], schedule=schedule_one) not in scheduler._scheduled
+
+
 async def test_scheduler_stop(caplog):
     sched = util.Scheduler("stop")
 
@@ -60,7 +222,7 @@ async def test_scheduler_stop(caplog):
         i.append(0)
         return "A"
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -73,11 +235,11 @@ async def test_scheduler_stop(caplog):
     no_error_in_logs(caplog)
 
     caplog.clear()
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
     assert "Scheduling action 'action', while scheduler is stopped" in caplog.messages
+    assert not sched._executing_tasks[action]
 
 
-@pytest.mark.asyncio
 async def test_scheduler_async_run_fail(caplog):
     sched = util.Scheduler("xxx")
 
@@ -88,7 +250,7 @@ async def test_scheduler_async_run_fail(caplog):
         await asyncio.sleep(0)
         raise Exception("Marker")
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -98,13 +260,13 @@ async def test_scheduler_async_run_fail(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not sched._executing_tasks[action]
 
     print(caplog.messages)
 
     log_contains(caplog, "inmanta.util", logging.ERROR, "Uncaught exception while executing scheduled action")
 
 
-@pytest.mark.asyncio
 async def test_scheduler_run_async(caplog):
     sched = util.Scheduler("xxx")
 
@@ -113,7 +275,7 @@ async def test_scheduler_run_async(caplog):
     async def action():
         i.append(0)
 
-    sched.add_action(action, 0.05, 0)
+    sched.add_action(action, IntervalSchedule(0.05, 0))
 
     while len(i) == 0:
         await asyncio.sleep(0.01)
@@ -123,10 +285,41 @@ async def test_scheduler_run_async(caplog):
     length = len(i)
     await asyncio.sleep(0.1)
     assert len(i) == length
+    assert not sched._executing_tasks[action]
     no_error_in_logs(caplog)
 
 
-@pytest.mark.asyncio
+async def test_scheduler_cancel_executing_tasks() -> None:
+    """
+    Verify that executing tasks are cancelled when the scheduler is stopped.
+    """
+
+    @dataclasses.dataclass
+    class TaskStatus:
+        task_is_executing: bool = False
+        task_was_cancelled: bool = False
+
+    task_status = TaskStatus()
+
+    async def action():
+        task_status.task_is_executing = True
+        try:
+            await asyncio.sleep(1000)
+        except asyncio.CancelledError:
+            task_status.task_was_cancelled = True
+            raise
+
+    sched = util.Scheduler("xxx")
+    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0))
+    await util.retry_limited(lambda: task_status.task_is_executing, timeout=10)
+    assert task_status.task_is_executing
+    assert not task_status.task_was_cancelled
+    assert sched._executing_tasks[action]
+    sched.stop()
+    await util.retry_limited(lambda: task_status.task_was_cancelled, timeout=10)
+    assert not sched._executing_tasks[action]
+
+
 async def test_ensure_future_and_handle_exception(caplog):
     caplog.set_level(logging.INFO)
 
@@ -137,8 +330,8 @@ async def test_ensure_future_and_handle_exception(caplog):
         LOGGER.info("Fail")
         raise Exception("message F")
 
-    ensure_future_and_handle_exception(LOGGER, "marker 1", success())
-    ensure_future_and_handle_exception(LOGGER, "marker 2", fail())
+    ensure_future_and_handle_exception(LOGGER, "marker 1", success(), notify_done_callback=lambda x: None)
+    ensure_future_and_handle_exception(LOGGER, "marker 2", fail(), notify_done_callback=lambda x: None)
 
     await asyncio.sleep(0.2)
 
@@ -243,3 +436,24 @@ def test_is_sub_dict():
 def test_get_product_meta_data():
     """Basic smoke test for testing utils"""
     assert get_product_meta_data() is not None
+
+
+async def test_named_lock():
+    lock = NamedLock()
+    await lock.acquire("a")
+    await lock.acquire("b")
+    await lock.release("b")
+    fut = asyncio.create_task(lock.acquire("a"))
+    assert not fut.done()
+    await lock.release("a")
+    await fut
+    await lock.release("a")
+    # Don't leak
+    assert not lock._named_locks
+
+
+def test_running_test_fixture():
+    """
+    Assert that the RUNNING_TESTS variable is set to True when we run the tests
+    """
+    assert inmanta.RUNNING_TESTS

@@ -29,10 +29,10 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
+from inmanta.data import QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
-@pytest.mark.asyncio
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
     pool: Pool = await data.connect(
         postgres_db.host,
@@ -55,7 +55,6 @@ async def test_connect_too_small_connection_pool(postgres_db, database_name: str
         await data.disconnect()
 
 
-@pytest.mark.asyncio
 async def test_connect_default_parameters(postgres_db, database_name: str, create_db_schema: bool = False):
     pool: Pool = await data.connect(
         postgres_db.host, postgres_db.port, database_name, postgres_db.user, postgres_db.password, create_db_schema
@@ -68,7 +67,6 @@ async def test_connect_default_parameters(postgres_db, database_name: str, creat
         await data.disconnect()
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("min_size, max_size", [(-1, 1), (2, 1), (-2, -2)])
 async def test_connect_invalid_parameters(postgres_db, min_size, max_size, database_name: str, create_db_schema: bool = False):
     with pytest.raises(ValueError):
@@ -84,14 +82,12 @@ async def test_connect_invalid_parameters(postgres_db, min_size, max_size, datab
         )
 
 
-@pytest.mark.asyncio
 async def test_connection_failure(unused_tcp_port_factory, database_name, clean_reset):
     port = unused_tcp_port_factory()
     with pytest.raises(OSError):
         await data.connect("localhost", port, database_name, "testuser", None)
 
 
-@pytest.mark.asyncio
 async def test_postgres_client(postgresql_client):
     await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
     await postgresql_client.execute("INSERT INTO test VALUES(5, 'jef')")
@@ -105,7 +101,6 @@ async def test_postgres_client(postgresql_client):
     assert len(records) == 0
 
 
-@pytest.mark.asyncio
 async def test_project(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -119,7 +114,6 @@ async def test_project(init_dataclasses_and_load_schema):
     assert project.id == other.id
 
 
-@pytest.mark.asyncio
 async def test_project_unique(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -134,7 +128,6 @@ def test_project_no_project_name(init_dataclasses_and_load_schema):
         data.Project()
 
 
-@pytest.mark.asyncio
 async def test_project_cascade_delete(init_dataclasses_and_load_schema):
     async def create_full_environment(project_name, environment_name):
         project = data.Project(name=project_name)
@@ -158,7 +151,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         await agi2.insert()
 
         agent = data.Agent(
-            environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id
+            environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id
         )
         await agent.insert()
 
@@ -219,7 +212,6 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
     await assert_project_exists(*full_env_2, exists=True)
 
 
-@pytest.mark.asyncio
 async def test_environment(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -236,7 +228,6 @@ async def test_environment(init_dataclasses_and_load_schema):
     assert len(envs) == 0
 
 
-@pytest.mark.asyncio
 async def test_environment_no_environment_name(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -244,7 +235,6 @@ async def test_environment_no_environment_name(init_dataclasses_and_load_schema)
         data.Environment(project=project.id, repo_url="", repo_branch="")
 
 
-@pytest.mark.asyncio
 async def test_environment_no_project_id(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -252,7 +242,6 @@ async def test_environment_no_project_id(init_dataclasses_and_load_schema):
         data.Environment(name="dev", repo_url="", repo_branch="")
 
 
-@pytest.mark.asyncio
 async def test_environment_cascade_content_only(init_dataclasses_and_load_schema):
     project = data.Project(name="proj")
     await project.insert()
@@ -274,7 +263,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
     await agi2.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
+    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id)
     await agent.insert()
 
     version = int(time.time())
@@ -337,7 +326,6 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
 
-@pytest.mark.asyncio
 async def test_environment_set_setting_parameter(init_dataclasses_and_load_schema):
     project = data.Project(name="proj")
     await project.insert()
@@ -359,7 +347,6 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
         await env.set(data.AUTO_DEPLOY, 5)
 
 
-@pytest.mark.asyncio
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
     project = data.Project(name="proj")
     await project.insert()
@@ -387,7 +374,6 @@ async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, 
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
-@pytest.mark.asyncio
 async def test_agent_process(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -440,7 +426,6 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
 
 
-@pytest.mark.asyncio
 async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client):
     project = data.Project(name="test")
     await project.insert()
@@ -505,7 +490,6 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
         assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0).astimezone()
 
 
-@pytest.mark.asyncio
 async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_schema):
     """
     It should be impossible to delete an AgentInstance record which is references
@@ -529,7 +513,6 @@ async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_s
         await agent_instance.delete()
 
 
-@pytest.mark.asyncio
 async def test_agent_instance(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -581,7 +564,6 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     assert current_instances[0].id == agi1.id
 
 
-@pytest.mark.asyncio
 async def test_agent(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -600,7 +582,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     await agi1.insert()
 
     agent1 = data.Agent(
-        environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id
+        environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False, id_primary=agi1.id
     )
     await agent1.insert()
     agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
@@ -640,7 +622,6 @@ async def test_agent(init_dataclasses_and_load_schema):
     assert primary_process.sid == agent_proc.sid
 
 
-@pytest.mark.asyncio
 async def test_pause_agent_endpoint_set(environment):
     """
     Test the pause() method in the Agent class
@@ -667,7 +648,6 @@ async def test_pause_agent_endpoint_set(environment):
     assert not agent.paused
 
 
-@pytest.mark.asyncio
 async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -700,7 +680,6 @@ async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
         await assert_paused(env_paused_map={env1.id: False, env2.id: False})
 
 
-@pytest.mark.asyncio
 async def test_config_model(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -722,7 +701,6 @@ async def test_config_model(init_dataclasses_and_load_schema):
     assert "agent1" in agents
 
 
-@pytest.mark.asyncio
 async def test_model_list(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -755,7 +733,6 @@ async def test_model_list(init_dataclasses_and_load_schema):
     assert versions[-1].version == 1
 
 
-@pytest.mark.asyncio
 async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -783,7 +760,6 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     assert latest_version.version == 4
 
 
-@pytest.mark.asyncio
 async def test_model_set_ready(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -822,7 +798,6 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
         (const.ResourceState.skipped_for_undefined, True),
     ],
 )
-@pytest.mark.asyncio
 async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
     project = data.Project(name="test")
     await project.insert()
@@ -860,7 +835,6 @@ async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resourc
     assert cm.done == (1 if should_be_deployed else 0)
 
 
-@pytest.mark.asyncio
 async def test_model_get_list(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -904,7 +878,6 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
     assert not cms
 
 
-@pytest.mark.asyncio
 async def test_model_serialization(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -943,7 +916,6 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
     assert dct["status"] == {str(uuid.uuid5(env.id, key)): {"id": key, "status": const.ResourceState.deployed.name}}
 
 
-@pytest.mark.asyncio
 async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -976,7 +948,6 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
-@pytest.mark.asyncio
 async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1010,7 +981,6 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
         (const.ResourceState.skipped, const.VersionState.failed),
     ],
 )
-@pytest.mark.asyncio
 async def test_mark_done(init_dataclasses_and_load_schema, resource_state, version_state):
     project = data.Project(name="test")
     await project.insert()
@@ -1078,7 +1048,6 @@ async def populate_model(env_id, version):
     await res5.insert()
 
 
-@pytest.mark.asyncio
 async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1149,7 +1118,6 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
     assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
 
 
-@pytest.mark.asyncio
 async def test_issue_422(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1211,7 +1179,6 @@ async def test_issue_422(init_dataclasses_and_load_schema):
     assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
 
 
-@pytest.mark.asyncio
 async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_client):
     project = data.Project(name="test")
     await project.insert()
@@ -1264,7 +1231,6 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
     assert res.model == 2
 
 
-@pytest.mark.asyncio
 async def test_order_by_validation(init_dataclasses_and_load_schema):
     """Test the validation of the order by column names and the sort order value. This test case checks that wrong values
     are rejected. Other test cases validate that the parameters work.
@@ -1276,7 +1242,6 @@ async def test_order_by_validation(init_dataclasses_and_load_schema):
         await data.Resource.get_list(order_by_column="resource_id", order="BAD")
 
 
-@pytest.mark.asyncio
 async def test_get_resources(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1318,7 +1283,6 @@ async def test_get_resources(init_dataclasses_and_load_schema):
     assert len(resources) == 0
 
 
-@pytest.mark.asyncio
 async def test_model_get_resources_for_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1411,7 +1375,6 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
     assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, u, su])
 
 
-@pytest.mark.asyncio
 async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1453,8 +1416,22 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
     )
     assert resource.to_dict() == expected_resource.to_dict()
 
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=3,
+        date=datetime.datetime.now(),
+        total=2,
+        version_info={},
+        released=True,
+        deployed=True,
+    )
+    await cm.insert()
+    resources = await data.Resource.get_resources_in_latest_version(
+        env.id, "std::File", {"path": "/etc/motd1", "purge_on_delete": True}
+    )
+    assert len(resources) == 0
 
-@pytest.mark.asyncio
+
 async def test_model_get_resources_for_version_optional_args(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1494,7 +1471,6 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
         assert len(r["attributes"]) == 1
 
 
-@pytest.mark.asyncio
 async def test_escaped_resources(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1530,7 +1506,6 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
     assert resources[0].attributes["routes"] == routes
 
 
-@pytest.mark.asyncio
 async def test_resource_provides(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1581,7 +1556,6 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
     assert res2.provides == []
 
 
-@pytest.mark.asyncio
 async def test_resource_hash(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1643,7 +1617,6 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash != res3.attribute_hash
 
 
-@pytest.mark.asyncio
 async def test_resources_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1759,7 +1732,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file3]"]["agent"] == "agent1"
 
 
-@pytest.mark.asyncio
 async def test_resource_action(init_dataclasses_and_load_schema):
     """
     Test whether the save() method of a ResourceAction writes its changes, logs and fields
@@ -1830,7 +1802,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
             assert message == {}
 
 
-@pytest.mark.asyncio
 async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1912,7 +1883,6 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             assert action.action == const.ResourceAction.deploy
 
 
-@pytest.mark.asyncio
 async def test_data_document_recursion(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1938,7 +1908,6 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await ra.insert()
 
 
-@pytest.mark.asyncio
 async def test_code(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1996,7 +1965,6 @@ async def test_code(init_dataclasses_and_load_schema):
     assert len(code_list) == 0
 
 
-@pytest.mark.asyncio
 async def test_parameter(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2029,7 +1997,6 @@ async def test_parameter(init_dataclasses_and_load_schema):
     assert (parameters[2].environment, parameters[2].name) in list_of_ids
 
 
-@pytest.mark.asyncio
 async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2057,7 +2024,6 @@ async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     assert len(results) == 2
 
 
-@pytest.mark.asyncio
 async def test_dryrun(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2082,7 +2048,6 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     assert dryrun_retrieved.resources[key]["id"] == resource_version_id
 
 
-@pytest.mark.asyncio
 async def test_reports_append(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2102,7 +2067,6 @@ async def test_reports_append(init_dataclasses_and_load_schema):
         compiles.append(compile)
 
 
-@pytest.mark.asyncio
 async def test_compile_get_reports(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2130,7 +2094,6 @@ async def test_compile_get_reports(init_dataclasses_and_load_schema):
     assert report1.errstream == "eeee"
 
 
-@pytest.mark.asyncio
 async def test_compile_get_latest(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2169,7 +2132,6 @@ async def test_compile_get_latest(init_dataclasses_and_load_schema):
     assert sorted([x.id for x in await data.Compile.get_unhandled_compiles()]) == sorted([compile2.id, compile3.id])
 
 
-@pytest.mark.asyncio
 async def test_compile_get_next(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2213,7 +2175,6 @@ async def test_compile_get_next(init_dataclasses_and_load_schema):
     assert env_to_run[env2.id] == compile4.id
 
 
-@pytest.mark.asyncio
 async def test_compile_get_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2262,7 +2223,6 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     assert len(reports) == 1
 
 
-@pytest.mark.asyncio
 async def test_match_tables_in_db_against_table_definitions_in_orm(
     postgres_db, database_name, postgresql_client, init_dataclasses_and_load_schema
 ):
@@ -2277,7 +2237,6 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         assert item in table_names_in_database
 
 
-@pytest.mark.asyncio
 async def test_purgelog_test(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2336,7 +2295,6 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     assert remaining_resource_action.action_id == ra2.action_id
 
 
-@pytest.mark.asyncio
 async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
     project1 = data.Project(name="proj1")
     project2 = data.Project(name="proj2")
@@ -2350,7 +2308,6 @@ async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
     assert sorted(["proj1", "proj2"]) == sorted(project_names_in_result)
 
 
-@pytest.mark.asyncio
 async def test_resources_json(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2383,7 +2340,6 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     assert res1.attributes == res.attributes
 
 
-@pytest.mark.asyncio
 async def test_update_to_none_value(init_dataclasses_and_load_schema):
     """
     Verify that a field with a default value can be set to None if that field is nullable.
@@ -2400,11 +2356,11 @@ async def test_update_to_none_value(init_dataclasses_and_load_schema):
     await env.update(repo_url=None)
     # Assert None value
     assert env.repo_url is None
+
     env = await data.Environment.get_by_id(env.id)
-    assert env.repo_url is None
+    assert env.repo_url == ""
 
 
-@pytest.mark.asyncio
 async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2534,7 +2490,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert len(resource_actions) == 11
 
     # Get everything that starts with "/etc/file"
-    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/file%")
+    resource_actions = await data.ResourceAction.query_resource_actions(env.id, attribute="path", attribute_value="/etc/file")
     assert len(resource_actions) == 5
 
     # Get all files
@@ -2606,7 +2562,6 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert resource_actions[0].messages[0]["level"] == "WARNING"
 
 
-@pytest.mark.asyncio
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
     """
     Test querying resource actions that have non unique timestamps, with pagination, using an explicit start and end time
@@ -2754,20 +2709,19 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     assert [resource_action.action_id for resource_action in resource_actions] == expected_ids_on_page
 
 
-@pytest.mark.asyncio
-async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_schema):
+async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    async def assert_state_dependencies(
+    async def assert_last_non_deploying_state(
         environment: uuid.UUID,
         resource_version_id: ResourceVersionIdStr,
         expected_states: Dict[ResourceVersionIdStr, const.ResourceState],
     ) -> None:
-        rvid_to_resource_state = await data.Resource.get_resource_state_for_dependencies(
+        rvid_to_resource_state = await data.Resource.get_last_non_deploying_state_for_dependencies(
             environment=environment, resource_version_id=Id.parse_id(resource_version_id)
         )
         assert expected_states == rvid_to_resource_state
@@ -2784,24 +2738,28 @@ async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_sch
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
+        last_non_deploying_status=const.ResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
+        last_non_deploying_status=const.ResourceState.available,
         resource_version_id=rvid_r4_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -2811,10 +2769,10 @@ async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_sch
         rvid_r3_v1: const.ResourceState.failed,
         rvid_r4_v1: const.ResourceState.available,
     }
-    await assert_state_dependencies(env.id, rvid_r1_v1, expected_states=expected_states)
-    await assert_state_dependencies(env.id, rvid_r2_v1, expected_states={})
-    await assert_state_dependencies(env.id, rvid_r3_v1, expected_states={})
-    await assert_state_dependencies(env.id, rvid_r4_v1, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r1_v1, expected_states=expected_states)
+    await assert_last_non_deploying_state(env.id, rvid_r2_v1, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r3_v1, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r4_v1, expected_states={})
 
     # V2
     cm = data.ConfigurationModel(version=2, environment=env.id)
@@ -2829,30 +2787,35 @@ async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_sch
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.skipped,
+        last_non_deploying_status=const.ResourceState.skipped,
         resource_version_id=rvid_r1_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
+        last_non_deploying_status=const.ResourceState.failed,
         resource_version_id=rvid_r2_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r3_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r4_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
+        last_non_deploying_status=const.ResourceState.deployed,
         resource_version_id=rvid_r5_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -2861,8 +2824,23 @@ async def test_get_resource_state_for_dependencies(init_dataclasses_and_load_sch
         rvid_r2_v2: const.ResourceState.failed,
         rvid_r3_v2: const.ResourceState.deployed,
     }
-    await assert_state_dependencies(env.id, rvid_r1_v2, expected_states=expected_states)
-    await assert_state_dependencies(env.id, rvid_r2_v2, expected_states={})
-    await assert_state_dependencies(env.id, rvid_r3_v2, expected_states={})
-    await assert_state_dependencies(env.id, rvid_r4_v2, expected_states={rvid_r3_v2: const.ResourceState.deployed})
-    await assert_state_dependencies(env.id, rvid_r5_v2, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r1_v2, expected_states=expected_states)
+    await assert_last_non_deploying_state(env.id, rvid_r2_v2, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r3_v2, expected_states={})
+    await assert_last_non_deploying_state(env.id, rvid_r4_v2, expected_states={rvid_r3_v2: const.ResourceState.deployed})
+    await assert_last_non_deploying_state(env.id, rvid_r5_v2, expected_states={})
+
+
+def test_validate_combined_filter():
+    combined_filter, values = data.Resource.get_filter_for_combined_query_type(
+        "status", {QueryType.IS_NOT_NULL: None, QueryType.CONTAINS: ["deployed"]}, 1
+    )
+    assert combined_filter == "status IS NOT NULL AND status = ANY ($1)"
+    assert values == [["deployed"]]
+    combined_filter, values = data.Resource.get_filter_for_combined_query_type(
+        "status",
+        {QueryType.IS_NOT_NULL: None, QueryType.CONTAINS: ["deployed", "orphaned"], QueryType.NOT_CONTAINS: ["deploying"]},
+        1,
+    )
+    assert combined_filter == "status IS NOT NULL AND status = ANY ($1) AND NOT (status = ANY ($2))"
+    assert values == [["deployed", "orphaned"], ["deploying"]]

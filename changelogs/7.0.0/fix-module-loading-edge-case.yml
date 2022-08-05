@@ -1,0 +1,7 @@
+description: Fixed incorrect top level module loading for nested imports when v2 module is present in venv but not in explicit requires
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso5

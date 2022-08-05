@@ -17,13 +17,10 @@
 """
 import logging
 
-import pytest
-
 from agent_server.conftest import _deploy_resources, get_agent
 from utils import get_resource, log_contains, log_doesnt_contain, retry_limited
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_deploy_trigger(
     server, client, clienthelper, resource_container, environment, caplog, no_agent_backoff, async_finalizer
 ):

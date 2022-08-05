@@ -1,0 +1,8 @@
+change-type: patch
+description: Add anchor to documentation.
+issue-nr : 414
+issue-repo: lsm
+destination-branches:
+- master
+- iso5
+sections: {}

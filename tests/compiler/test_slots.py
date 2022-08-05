@@ -15,11 +15,18 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.ast import Location, Range
+import inspect
+from collections.abc import Iterator, Set
+from itertools import chain
+from typing import List, Type, TypeVar
+
+from inmanta.ast import Anchor, LocatableString, Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
-from inmanta.ast.statements import Literal, Resumer, Statement
+from inmanta.ast.statements import Literal, RequiresEmitStatement, Resumer, Statement
+from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttribute, SetAttributeHelper
 from inmanta.ast.statements.call import FunctionUnit
+from inmanta.ast.variables import Reference
 from inmanta.execute.dataflow import (
     AssignableNode,
     Assignment,
@@ -41,11 +48,12 @@ from inmanta.execute.runtime import (
     Instance,
     ListVariable,
     OptionVariable,
-    Promise,
+    ProgressionPromise,
     QueueScheduler,
     RawUnit,
     Resolver,
     ResultVariable,
+    SetPromise,
     Waiter,
 )
 
@@ -58,13 +66,15 @@ def test_slots_rt():
     ns = Namespace("root", None)
     rs = Resolver(ns)
     e = Entity("xx", ns)
-    qs = QueueScheduler(None, [], [], None, set())
+    qs = QueueScheduler(None, [], [], {}, set())
     r = RelationAttribute(e, None, "xx", Location("", 1))
     i = Instance(e, rs, qs)
+    sa = SetAttribute(Reference("a"), "a", Literal("a"))
 
     assert_slotted(ResultVariable())
     assert_slotted(AttributeVariable(None, None))
-    assert_slotted(Promise(None, None))
+    assert_slotted(ProgressionPromise(None, None))
+    assert_slotted(SetPromise(None, None))
     assert_slotted(ListVariable(r, i, qs))
     assert_slotted(OptionVariable(r, i, qs))
 
@@ -80,11 +90,68 @@ def test_slots_rt():
     assert_slotted(FunctionUnit(qs, rs, ResultVariable(), {}, None))
 
     assert_slotted(i)
+    assert_slotted(GradualSetAttributeHelper(sa, i, "A", ResultVariable()))
+    assert_slotted(SetAttributeHelper(qs, rs, ResultVariable(), {}, Literal("A"), sa, i, "A"))
 
 
 def test_slots_ast():
-    assert_slotted(Location("", 0))
-    assert_slotted(Range("", 0, 0, 0, 0))
+    """
+    Verify that all AST nodes below RequiresEmitStatement and all location objects use slots.
+    """
+    for ast_node_cls in chain(get_all_subclasses(RequiresEmitStatement), get_all_subclasses(Location)):
+        if inspect.isabstract(ast_node_cls):
+            continue
+        assert_slotted(create_instance(ast_node_cls))
+
+
+T = TypeVar("T", bound=Statement)
+
+
+def get_all_subclasses(cls: Type[T]) -> Set[Type[T]]:
+    """
+    Returns all subclasses of any depth for a given class. Includes the class itself.
+    """
+    return {cls}.union(*(get_all_subclasses(sub) for sub in cls.__subclasses__()))
+
+
+def create_instance(cls: Type[T]) -> T:
+    """
+    Create a dummy instance of a class. Assumes the class does not have keyword-only arguments for its constructor.
+    """
+
+    def create_argument(annotation: object) -> object:
+        if annotation in (str, "str"):
+            return "dummy"
+        if annotation in (int, "int"):
+            return 0
+        if inspect.isclass(annotation):
+            if issubclass(annotation, Statement):
+                instance: T = create_instance(annotation)
+                instance._location = create_instance(Range)
+                return instance
+            if issubclass(annotation, (LocatableString, Location)):
+                return create_instance(annotation)
+        return DummyArgument()
+
+    kwargs: dict[str, object] = {
+        name: create_argument(parameter.annotation) for name, parameter in inspect.signature(cls).parameters.items()
+    }
+    return cls(**kwargs)
+
+
+class DummyArgument:
+    """
+    Dummy class that mocks behavior of common constructor arguments to allow batch construction of dummy objects.
+    """
+
+    def __iter__(self) -> Iterator["DummyArgument"]:
+        return iter(())
+
+    def get_anchors(self) -> List[Anchor]:
+        return []
+
+    def get_location(self) -> Location:
+        return Location("dummy", 0)
 
 
 def test_slots_dataflow():

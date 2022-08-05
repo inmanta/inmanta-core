@@ -29,7 +29,6 @@ from inmanta.util import get_compiler_version
 from utils import get_resource, log_contains
 
 
-@pytest.mark.asyncio
 async def test_project(server, client, cli):
     # create a new project
     result = await cli.run("project", "create", "-n", "test_project")
@@ -71,7 +70,6 @@ async def test_project(server, client, cli):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
 async def test_environment(server, client, cli, tmpdir):
     project_name = "test_project"
     result = await client.create_project(project_name)
@@ -121,7 +119,30 @@ async def test_environment(server, client, cli, tmpdir):
         assert f"environment={env_id}" in file_content
 
 
-@pytest.mark.asyncio
+async def test_environment_recompile(server, environment, client, cli):
+    result = await client.get_compile_reports(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    result = await cli.run("environment", "recompile", environment)
+    assert result.exit_code == 0
+    assert "Recompile triggered successfully" in result.output
+
+    result = await cli.run("environment", "recompile", environment, "--update")
+    assert result.exit_code == 0
+    assert "Update & Recompile triggered successfully" in result.output
+
+    result = await client.get_compile_reports(environment)
+    assert result.code == 200
+    assert len(result.result["data"]) == 2
+
+    await client.set_setting(environment, data.SERVER_COMPILE, False)
+    result = await cli.run("environment", "recompile", environment)
+    assert result.exit_code == 0
+    assert "Skipping compile" in result.output
+    assert "Recompile triggered successfully" not in result.output
+
+
 async def test_environment_settings(server, environment, client, cli):
     result = await cli.run("environment", "setting", "list", "-e", environment)
     assert result.exit_code == 0
@@ -144,14 +165,12 @@ async def test_environment_settings(server, environment, client, cli):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
 async def test_agent(server, client, environment, cli):
     result = await cli.run("agent", "list", "-e", environment)
     assert result.exit_code == 0
 
 
 @pytest.mark.parametrize("push_method", [([]), (["-p"]), (["-p", "--full"])])
-@pytest.mark.asyncio
 async def test_version(server, client, clienthelper, environment, cli, push_method):
     version = str(await clienthelper.get_version())
     resources = [
@@ -208,7 +227,6 @@ async def test_version(server, client, clienthelper, environment, cli, push_meth
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
 async def test_param(server, client, environment, cli):
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
@@ -225,7 +243,6 @@ async def test_param(server, client, environment, cli):
     assert "var1" in result.output
 
 
-@pytest.mark.asyncio
 async def test_create_environment(tmpdir, server, client, cli):
     """
     Tests the "inmanta-cli environment create" command
@@ -267,7 +284,6 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert ctime_0 != ctime_2
 
 
-@pytest.mark.asyncio
 async def test_inmanta_cli_http_version(server, client, cli, caplog):
     with caplog.at_level(logging.DEBUG):
         result = await cli.run("project", "create", "-n", "test_project")
@@ -275,7 +291,6 @@ async def test_inmanta_cli_http_version(server, client, cli, caplog):
         log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")
 
 
-@pytest.mark.asyncio
 async def test_pause_agent(server, cli):
     project = data.Project(name="test")
     await project.insert()
@@ -339,7 +354,6 @@ async def test_pause_agent(server, cli):
         assert result.exit_code != 0
 
 
-@pytest.mark.asyncio
 async def test_list_actionlog(server, environment, client, cli, agent, clienthelper):
     """
     Test the `inmanta-cli action-log list` command.
@@ -430,7 +444,6 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
     assert "Invalid value for '--rvid': test" in result.stderr
 
 
-@pytest.mark.asyncio
 async def test_show_messages_actionlog(server, environment, client, cli, agent, clienthelper):
     """
     Test the `inmanta-cli action-log show-messages` command.

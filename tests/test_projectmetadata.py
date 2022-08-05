@@ -15,9 +15,11 @@
 
     Contact: code@inmanta.com
 """
+from typing import List, Optional
+
 import pytest
 
-from inmanta.module import ModuleRepoType, ProjectMetadata
+from inmanta.module import ModuleRepoType, ProjectMetadata, RelationPrecedenceRule
 
 
 @pytest.mark.parametrize(
@@ -45,3 +47,35 @@ def test_repo_parsing(repo):
             else:
                 assert project_metadata.repo[index].type == value["type"]
                 assert project_metadata.repo[index].url == value["url"]
+
+
+@pytest.mark.parametrize(
+    "precedence_rule, valid, expected_precedence_rule",
+    [
+        (["a before b", False, None]),  # Entity type missing
+        (["A::a before B::b", False, None]),  # Relationship name missing
+        (["A.a befor B.b", False, None]),  # before is misspelled
+        (["A:B.attr1 B:b.attr2", False, None]),  # Single colon instead of double colon
+        (["A.a before B.b", True, RelationPrecedenceRule("A", "a", "B", "b")]),
+        (
+            [
+                "__config__::B-B123.a before __config__::CC.b",
+                True,
+                RelationPrecedenceRule("__config__::B-B123", "a", "__config__::CC", "b"),
+            ]
+        ),
+        (["   A.b     before     B.c   ", True, RelationPrecedenceRule("A", "b", "B", "c")]),
+    ],
+)
+def test_relation_precedence_policy_parsing(
+    precedence_rule: str, valid: bool, expected_precedence_rule: Optional[RelationPrecedenceRule]
+) -> None:
+    if valid:
+        assert expected_precedence_rule is not None
+        project_metadata = ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
+        relation_precedence_rules: List[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
+        assert len(relation_precedence_rules) == 1
+        assert relation_precedence_rules[0] == expected_precedence_rule
+    else:
+        with pytest.raises(ValueError):
+            ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])

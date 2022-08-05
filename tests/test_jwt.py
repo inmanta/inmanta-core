@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import time
+from functools import partial
 
 import pytest
 import tornado
@@ -81,7 +82,6 @@ async def jwks(unused_tcp_port):
     await server.close_all_connections()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_validate_rs256(jwks, tmp_path):
     """
     Test that inmanta can download a rs256 public key
@@ -115,7 +115,61 @@ validate_cert=false
 
     from inmanta.config import AuthJWTConfig, Config
 
+    # Make sure the config starts from a clean slate
+    AuthJWTConfig.sections = {}
+    AuthJWTConfig.issuers = {}
     Config.load_config(config_file)
 
     cfg_list = await asyncio.get_event_loop().run_in_executor(None, AuthJWTConfig.list)
     assert len(cfg_list) == 2
+
+
+class SlowHandler(web.RequestHandler):
+    async def get(self):
+        await asyncio.sleep(5)
+        self.write(json.dumps({"keys": "not only slow, but also invalid"}))
+
+
+@pytest.fixture(scope="function")
+async def slow_jwks(unused_tcp_port):
+    http_app = web.Application([(r"/auth/realms/inmanta/protocol/openid-connect/certs", SlowHandler)])
+    server = tornado.httpserver.HTTPServer(http_app)
+    server.bind(unused_tcp_port)
+    server.start()
+    yield server
+
+    server.stop()
+    await server.close_all_connections()
+
+
+async def test_rs256_invalid_config_timeout(tmp_path, slow_jwks):
+    """
+    Test that an error is raised when the timeout to download the rs256 public key is exceeded
+    """
+    port = str(list(slow_jwks._sockets.values())[0].getsockname()[1])
+    config_file = os.path.join(tmp_path, "auth.cfg")
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(
+            """
+[auth_jwt_keycloak]
+algorithm=RS256
+sign=false
+client_types=api
+issuer=https://localhost:{0}/auth/realms/inmanta
+audience=sodev
+jwks_uri=http://localhost:{0}/auth/realms/inmanta/protocol/openid-connect/certs
+jwks_request_timeout=0.1
+validate_cert=false
+""".format(
+                port
+            )
+        )
+
+    from inmanta.config import AuthJWTConfig, Config
+
+    # Make sure the config starts from a clean slate
+    AuthJWTConfig.sections = {}
+    AuthJWTConfig.issuers = {}
+    Config.load_config(config_file)
+    with pytest.raises(ValueError):
+        await asyncio.get_event_loop().run_in_executor(None, partial(AuthJWTConfig.get, "auth_jwt_keycloak"))

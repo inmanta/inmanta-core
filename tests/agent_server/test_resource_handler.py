@@ -79,7 +79,6 @@ def test_get_file_not_found():
     assert result is None
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_logging_error(resource_container, environment, client, agent, clienthelper, caplog):
     """
     When a log call uses an argument that is not JSON serializable, the corresponding resource should be marked as failed,
@@ -113,10 +112,9 @@ async def test_logging_error(resource_container, environment, client, agent, cli
     assert result.code == 200
     assert result.result["status"] == "failed"
 
-    log_contains(caplog, "inmanta.agent", logging.ERROR, "Exception during serializing log message arguments")
+    log_contains(caplog, "inmanta.agent", logging.ERROR, "Failed to serialize argument for log message")
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "resource_type",
     ["test::FailFast", "test::FailFastCRUD", "test::BadPost", "test::BadPostCRUD"],

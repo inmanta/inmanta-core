@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import importlib
 import logging
 import pkgutil
@@ -68,6 +69,9 @@ class InmantaBootloader(object):
     - starting the server and its slices in the correct order
     """
 
+    # Cache field for available extensions
+    AVAILABLE_EXTENSIONS: Optional[Dict[str, str]] = None
+
     def __init__(self) -> None:
         self.restserver = Server()
         self.started = False
@@ -82,10 +86,39 @@ class InmantaBootloader(object):
         await self.restserver.start()
         self.started = True
 
-    async def stop(self) -> None:
+    async def stop(self, timeout: Optional[int] = None) -> None:
+        """
+        :param timeout: Raises TimeoutError when the server hasn't finished stopping after
+                        this amount of seconds. This argument should only be used by test
+                        cases.
+        """
+        if not timeout:
+            await self._stop()
+        else:
+            await asyncio.wait_for(self._stop(), timeout=timeout)
+
+    async def _stop(self) -> None:
         await self.restserver.stop()
         if self.feature_manager is not None:
             self.feature_manager.stop()
+
+    @classmethod
+    def get_available_extensions(cls) -> Dict[str, str]:
+        """
+        Returns a dictionary of with all available inmanta extensions.
+        The key contains the name of the extension and the value the fully qualified path to the python package.
+        """
+        if cls.AVAILABLE_EXTENSIONS is None:
+            try:
+                inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
+            except ModuleNotFoundError:
+                # This only happens when a test case creates and activates a new venv
+                return {}
+            else:
+                cls.AVAILABLE_EXTENSIONS = {
+                    name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)
+                }
+        return dict(cls.AVAILABLE_EXTENSIONS)
 
     # Extension loading Phase I: from start to setup functions collected
     def _discover_plugin_packages(self) -> List[str]:
@@ -94,9 +127,7 @@ class InmantaBootloader(object):
 
         :return: A list of all subpackages defined in inmanta_ext
         """
-        inmanta_ext = importlib.import_module(EXTENSION_NAMESPACE)
-        available = {name[len(EXTENSION_NAMESPACE) + 1 :]: name for finder, name, ispkg in iter_namespace(inmanta_ext)}
-
+        available = self.get_available_extensions()
         LOGGER.info("Discovered extensions: %s", ", ".join(available.keys()))
 
         extensions = []

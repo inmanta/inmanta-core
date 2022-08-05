@@ -26,7 +26,7 @@ import py
 import pytest
 
 from inmanta import env
-from inmanta.app import cmd_parser, compiler_features
+from inmanta.app import cmd_parser
 from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
@@ -66,10 +66,12 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
+        await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
-        await process.communicate()
+        (stdout, stderr) = await process.communicate()
+        print(stdout.decode())
+        print(stderr.decode())
         raise e
 
 
@@ -117,16 +119,17 @@ def test_feature_flags(inmanta_config, capsys):
     out, _ = capsys.readouterr()
 
     assert out.startswith("usage:")
-    assert "--experimental-cache" in out
+    assert "--no-cache" in out
 
     parser = cmd_parser()
 
-    assert not feature_compiler_cache.get()
-
-    options, other = parser.parse_known_args(args=["compile", "--experimental-cache"])
-    compiler_features.read_options_to_config(options)
-
+    # Check that option defaults to true
     assert feature_compiler_cache.get()
+
+    options, other = parser.parse_known_args(args=["compile", "--no-cache"])
+
+    # Check that option was set to false with --no-cache
+    assert not options.feature_compiler_cache
 
 
 def test_module_help(inmanta_config, capsys):
@@ -136,7 +139,6 @@ def test_module_help(inmanta_config, capsys):
     assert info.value.args[0].startswith("A subcommand is required.")
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize_any("add_types", [True, False])
 async def test_export_to_json(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, add_types):
     workspace = tmpdir.mkdir("tmp")
@@ -186,7 +188,6 @@ std::ConfigFile(host=vm1, path="/test", content="")
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
 @pytest.mark.parametrize_any("set_server", [True, False])
 @pytest.mark.parametrize_any("set_port", [True, False])
-@pytest.mark.asyncio
 async def test_export(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, server, client, push_method, set_server, set_port):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -272,7 +273,6 @@ std::ConfigFile(host=vm1, path="/test", content="")
     shutil.rmtree(workspace)
 
 
-@pytest.mark.asyncio
 async def test_export_with_specific_export_plugin(tmpvenv_active_inherit: env.VirtualEnv, tmpdir, client):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -409,7 +409,6 @@ vm1.name = "other"
 
 
 @pytest.mark.parametrize_any("push_method", [([]), (["-d"]), (["-d", "--full"])])
-@pytest.mark.asyncio
 async def test_export_without_environment(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
     server_host = Config.get("client_rest_transport", "host", "localhost")
@@ -470,3 +469,21 @@ std::ConfigFile(host=vm1, path="/test", content="")
     assert len(result.result["versions"]) == 0
 
     shutil.rmtree(workspace)
+
+
+async def test_export_invalid_argument_combination() -> None:
+    """
+    Ensure that the `inmanta export` command exits with an error when the --delete-resource-set option is
+    provided without the --partial option being provided.
+    """
+    args = [sys.executable, "-m", "inmanta.app", "export", "--delete-resource-set", "test"]
+    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+
+    assert process.returncode == 1
+    assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")

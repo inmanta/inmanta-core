@@ -71,9 +71,10 @@ This can mean one of two things:
 The procedure to solve this is the following:
 
 1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns.
-2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
-4. Simplify the model by relying less on `is defined` but use a boolean instead.
+2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+4. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
+5. Simplify the model by relying less on `is defined` but use a boolean instead.
 """  # noqa: E501
         % {"dir": snippetcompiler.project_dir}
     )
@@ -130,9 +131,10 @@ This can mean one of two things:
 The procedure to solve this is the following:
 
 1. Ensure the model is correct by checking that the problematic assignment at \033[4m%(dir)s/main.cf:11\033[0m is not conditional on the value it assigns.
-2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
-4. Simplify the model by relying less on `is defined` but use a boolean instead.
+2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+4. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
+5. Simplify the model by relying less on `is defined` but use a boolean instead.
 """  # noqa: E501
         % {"dir": snippetcompiler.project_dir}
     )
@@ -188,9 +190,10 @@ This can mean one of two things:
 The procedure to solve this is the following:
 
 1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns.
-2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t.
-4. Simplify the model by relying less on `is defined` but use a boolean instead.
+2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+4. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t.
+5. Simplify the model by relying less on `is defined` but use a boolean instead.
 """  # noqa: E501
         % {"dir": snippetcompiler.project_dir}
     )
@@ -250,9 +253,10 @@ This can mean one of two things:
 The procedure to solve this is the following
 
 1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns.
-2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
-4. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
+2. Set a relation precedence policy on the Inmanta project (See: https://docs.inmanta.com/community/latest/troubleshooting.html#compilation-fails).
+3. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+4. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
+5. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
 
 """  # noqa: E501
         % {"dir": snippetcompiler.project_dir}

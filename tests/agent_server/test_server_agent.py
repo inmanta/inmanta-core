@@ -19,6 +19,7 @@ import asyncio
 import logging
 import time
 import uuid
+from functools import partial
 from itertools import groupby
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -33,9 +34,16 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_ENVIRONMENT,
+    SLICE_PARAM,
+    SLICE_SESSION_MANAGER,
+)
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
@@ -51,7 +59,6 @@ from utils import (
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
-@pytest.mark.asyncio(timeout=150)
 async def test_deploy_empty(server, client, clienthelper, environment, no_agent_backoff, async_finalizer):
     """
     Test deployment of empty model
@@ -83,7 +90,6 @@ async def test_deploy_empty(server, client, clienthelper, environment, no_agent_
     assert result.result["model"]["result"] == const.VersionState.success.name
 
 
-@pytest.mark.asyncio(timeout=100)
 async def test_deploy_with_undefined(server, client, resource_container, async_finalizer, no_agent_backoff):
     """
     Test deploy of resource with undefined
@@ -218,9 +224,8 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
     await retry_limited(done, 100)
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_server_restart(
-    resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff
+    resource_container, server, agent, environment, clienthelper, postgres_db, client, no_agent_backoff, async_finalizer
 ):
     """
     Test if agent reconnects correctly after server restart
@@ -229,9 +234,11 @@ async def test_server_restart(
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
-    await server.stop()
+    await asyncio.wait_for(server.stop(), timeout=15)
     ibl = InmantaBootloader()
     server = ibl.restserver
+    async_finalizer.add(agent.stop)
+    async_finalizer.add(partial(ibl.stop, timeout=15))
     await ibl.start()
 
     env_id = environment
@@ -291,11 +298,7 @@ async def test_server_restart(
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    await agent.stop()
-    await ibl.stop()
 
-
-@pytest.mark.asyncio(timeout=30)
 async def test_spontaneous_deploy(
     resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
 ):
@@ -369,7 +372,6 @@ async def test_spontaneous_deploy(
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_spontaneous_repair(
     resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
 ):
@@ -461,7 +463,6 @@ async def test_spontaneous_repair(
     await verify_deployment_result()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_failing_deploy_no_handler(
     resource_container, agent, environment, client, clienthelper, async_finalizer, no_agent_backoff
 ):
@@ -512,7 +513,6 @@ async def test_failing_deploy_no_handler(
     assert any("traceback" in log["kwargs"] for log in logs), "\n".join(result.result["resources"][0]["actions"][0]["messages"])
 
 
-@pytest.mark.asyncio
 async def test_dual_agent(resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer):
     """
     dryrun and deploy a configuration model
@@ -591,7 +591,6 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
     await myagent.stop()
 
 
-@pytest.mark.asyncio
 async def test_server_agent_api(
     resource_container, client, server, environment, clienthelper, no_agent_backoff, async_finalizer
 ):
@@ -709,7 +708,6 @@ async def test_server_agent_api(
     assert result.code == 404
 
 
-@pytest.mark.asyncio
 async def test_get_set_param(resource_container, environment, client, server):
     """
     Test getting and setting params
@@ -728,7 +726,24 @@ async def test_get_set_param(resource_container, environment, client, server):
     assert result.code == 200
 
 
-@pytest.mark.asyncio
+async def test_register_setting(environment, client, server):
+    """
+    Test registering a new setting.
+    """
+    new_setting: Setting = Setting(
+        name="a new boolean setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+    env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
+    await env_slice.register_setting(new_setting)
+    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    assert result.code == 200
+    assert result.result["value"] is False
+
+
 async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
     """
     Test retrieving facts from the agent
@@ -771,7 +786,6 @@ async def test_unkown_parameters(resource_container, environment, client, server
     assert result.code == 200
 
 
-@pytest.mark.asyncio()
 async def test_fail(resource_container, client, agent, environment, clienthelper, async_finalizer, no_agent_backoff):
     """
     Test results when a step fails
@@ -850,7 +864,6 @@ async def test_fail(resource_container, client, agent, environment, clienthelper
     assert states["test::Resource[agent1,key=key5],v=%d" % version] == "skipped"
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_wait(resource_container, client, clienthelper, environment, server, no_agent_backoff, async_finalizer):
     """
     If this test fail due to timeout,
@@ -942,6 +955,8 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     await wait_for_n_deployed_resources(client, env_id, version1, n=2)
 
+    generation_version1 = agent._instances["agent1"]._nq.generation
+
     result = await client.get_version(environment, version1)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
@@ -962,6 +977,10 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("second version released")
 
+    # Wait until the agent is deploying version2. Otherwise the call to `wait_for_done_with_waiters()`
+    # might notify a test::Wait resource of version1, instead of the resources of version2. This could
+    # cause problem when the resource states of version1 are checked later on in this test case.
+    await retry_limited(lambda: agent._instances["agent1"]._nq.generation != generation_version1, timeout=10)
     await resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
@@ -982,7 +1001,6 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
     assert states["test::Resource[agent1,key=key5],v=%d" % version1] == const.ResourceState.available.name
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_multi_instance(resource_container, client, clienthelper, server, environment, no_agent_backoff, async_finalizer):
     """
     Test for multi threaded deploy
@@ -1111,7 +1129,6 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_cross_agent_deps(resource_container, server, client, environment, clienthelper, no_agent_backoff):
     """
     deploy a configuration model with cross host dependency
@@ -1214,7 +1231,6 @@ async def test_cross_agent_deps(resource_container, server, client, environment,
     "agent_trigger_method, read_resource1, change_resource1, read_resource2, change_resource2",
     [(const.AgentTriggerMethod.push_incremental_deploy, 1, 1, 2, 2), (const.AgentTriggerMethod.push_full_deploy, 2, 1, 2, 2)],
 )
-@pytest.mark.asyncio
 async def test_auto_deploy(
     agent,
     client,
@@ -1302,7 +1318,6 @@ async def test_auto_deploy(
     assert resource_container.Provider.changecount("agent1", "key2") == change_resource2
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_auto_deploy_no_splay(server, client, clienthelper, resource_container, environment, no_agent_backoff):
     """
     dryrun and deploy a configuration model automatically with agent autostart
@@ -1322,7 +1337,15 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "send_event": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        }
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
     ]
 
     # set auto deploy and push
@@ -1340,7 +1363,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
@@ -1383,7 +1406,6 @@ def ps_diff_inmanta_agent_processes(original: List[psutil.Process], current_proc
     )
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_autostart_mapping(server, client, clienthelper, resource_container, environment, no_agent_backoff):
     """
     Test whether an autostarted agent updates its agent-map correctly when the autostart_agent_map is updated on the server.
@@ -1394,7 +1416,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()
-    children_pre = current_process.children(recursive=True)
+    agent_processes_pre: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(env_uuid)
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
@@ -1493,17 +1515,14 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     await assert_session_state({"agent1": AgentStatus.up, "agent2": AgentStatus.down}, ["agent1", "agent2"])
 
     # Stop server
-    await server.stop()
+    await asyncio.wait_for(server.stop(), timeout=15)
 
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    agent_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
-    newchildren = set(children) - set(children_pre)
-
-    assert len(newchildren) == 0, newchildren
+    assert len(new_agent_processes) == 0, new_agent_processes
 
 
-@pytest.mark.asyncio
 async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
     caplog.set_level(logging.INFO)
     agent_config.use_autostart_agent_map.set("true")
@@ -1519,9 +1538,11 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     async_finalizer(a.stop)
 
     # Wait until agent is up
+    async def agent_in_db() -> bool:
+        return len(await data.AgentInstance.get_list()) == 1
+
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
-    instances = await data.AgentInstance.get_list()
-    assert len(instances) == 1
+    await retry_limited(agent_in_db, 10)
 
     # Update agentmap
     caplog.clear()
@@ -1542,7 +1563,6 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from localhost to " in caplog.text, 10)
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_autostart_clear_environment(server, client, resource_container, environment, no_agent_backoff):
     """
     Test clearing an environment with autostarted agents. After clearing, autostart should still work
@@ -1728,7 +1748,6 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[p
     return [p for p in parent_process.children(recursive=True) if "inmanta.app" in try_get_cmd(p) and "agent" in try_get_cmd(p)]
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
     inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
@@ -1745,7 +1764,6 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
 
 
-@pytest.mark.asyncio(timeout=15)
 async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
     inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
@@ -1764,7 +1782,6 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
 
-@pytest.mark.asyncio
 async def test_export_duplicate(resource_container, snippetcompiler):
     """
     The exported should provide a compilation error when a resource is defined twice in a model
@@ -1871,7 +1888,6 @@ succ    n    n    y    n
 
 @pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
-@pytest.mark.asyncio
 async def test_deploy_and_events(
     client, agent, clienthelper, environment, resource_container, self_state, dep_state, async_finalizer, no_agent_backoff
 ):
@@ -1943,7 +1959,6 @@ dep_states_reload = [
 
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
-@pytest.mark.asyncio(timeout=5000)
 async def test_reload(server, client, clienthelper, environment, resource_container, dep_state, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -2001,7 +2016,6 @@ async def test_reload(server, client, clienthelper, environment, resource_contai
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_s_repair_postponed_due_to_running_deploy(
     resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog
 ):
@@ -2078,7 +2092,6 @@ async def test_s_repair_postponed_due_to_running_deploy(
 debug_timeout = 10
 
 
-@pytest.mark.asyncio(timeout=debug_timeout * 2)
 async def test_s_repair_interrupted_by_deploy_request(
     resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog
 ):
@@ -2207,7 +2220,6 @@ async def test_s_repair_interrupted_by_deploy_request(
     )
 
 
-@pytest.mark.asyncio
 async def test_s_repair_during_repair(resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog):
     caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
@@ -2286,7 +2298,6 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Repair 1' for 'Repair 2'")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_s_deploy_during_deploy(resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog):
     caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
@@ -2364,7 +2375,6 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Deploy 1' for 'Deploy 2'")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_s_full_deploy_interrupts_incremental_deploy(
     resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog
 ):
@@ -2451,7 +2461,6 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
 
 
-@pytest.mark.asyncio(timeout=30)
 async def test_s_incremental_deploy_interrupts_full_deploy(
     resource_container, client, agent, environment, clienthelper, no_agent_backoff, caplog
 ):
@@ -2533,7 +2542,6 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
 
 
-@pytest.mark.asyncio
 async def test_bad_post_get_facts(
     resource_container, server, client, agent, clienthelper, environment, caplog, no_agent_backoff
 ):
@@ -2582,7 +2590,6 @@ async def test_bad_post_get_facts(
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_inprogress(resource_container, server, client, clienthelper, environment, no_agent_backoff):
     """
     Test retrieving facts from the agent
@@ -2621,7 +2628,6 @@ async def test_inprogress(resource_container, server, client, clienthelper, envi
 
 
 @pytest.mark.parametrize("use_agent_trigger_method_setting", [(True,), (False)])
-@pytest.mark.asyncio
 async def test_push_incremental_deploy(
     resource_container,
     environment,
@@ -2726,7 +2732,6 @@ async def test_push_incremental_deploy(
 
 
 @pytest.mark.parametrize("push, agent_trigger_method", [(True, None), (True, const.AgentTriggerMethod.push_full_deploy)])
-@pytest.mark.asyncio
 async def test_push_full_deploy(
     resource_container, environment, server, client, clienthelper, no_agent_backoff, push, agent_trigger_method, async_finalizer
 ):
@@ -2805,7 +2810,6 @@ async def test_push_full_deploy(
     await agent.stop()
 
 
-@pytest.mark.asyncio
 async def test_agent_run_sync(resource_container, environment, server, client, clienthelper, no_agent_backoff, async_finalizer):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -2851,7 +2855,6 @@ async def test_agent_run_sync(resource_container, environment, server, client, c
     assert "agent2" in (await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP)).result["value"]
 
 
-@pytest.mark.asyncio
 async def test_format_token_in_logline(server, agent, client, environment, resource_container, caplog, no_agent_backoff):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character."""
     version = (await client.reserve_version(environment)).result["data"]
@@ -2896,7 +2899,6 @@ async def test_format_token_in_logline(server, agent, client, environment, resou
     assert log_string in caplog.text
 
 
-@pytest.mark.asyncio
 async def test_1016_cache_invalidation(
     server, agent, client, clienthelper, environment, resource_container, no_agent_backoff, caplog
 ):
@@ -2968,7 +2970,6 @@ async def test_1016_cache_invalidation(
     log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update", idx2)
 
 
-@pytest.mark.asyncio
 async def test_agent_lockout(resource_container, environment, server, client, clienthelper, async_finalizer, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
@@ -3015,7 +3016,6 @@ async def test_agent_lockout(resource_container, environment, server, client, cl
     assert result.code == 409
 
 
-@pytest.mark.asyncio
 async def test_deploy_no_code(resource_container, client, clienthelper, environment, autostarted_agent):
     """
     Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
@@ -3058,7 +3058,6 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
 
 
-@pytest.mark.asyncio
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, request):
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
@@ -3107,7 +3106,6 @@ async def test_issue_1662(resource_container, server, client, clienthelper, envi
     await _wait_until_deployment_finishes(client, environment, version, timeout=10)
 
 
-@pytest.mark.asyncio
 async def test_restart_agent_with_outdated_agent_map(server, client, environment):
     """
     Due to a race condition, it is possible that an autostarted agent get's started with an outdated agent_map.
@@ -3139,7 +3137,6 @@ async def test_restart_agent_with_outdated_agent_map(server, client, environment
     await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 2, 10)
 
 
-@pytest.mark.asyncio
 async def test_agent_stop_deploying_when_paused(
     server, client, environment, agent_factory, clienthelper, resource_container, no_agent_backoff
 ):
@@ -3226,7 +3223,6 @@ async def test_agent_stop_deploying_when_paused(
     assert rvid_to_actual_states_dct == rvis_to_expected_states
 
 
-@pytest.mark.asyncio
 async def test_agentinstance_stops_deploying_when_stopped(
     server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
 ):
@@ -3257,7 +3253,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "id": f"test::Wait[agent1,key=key3],v={version}",
             "send_event": False,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+            "requires": [f"test::Wait[agent1,key=key2],v={version}"],
         },
     ]
 
@@ -3292,7 +3288,6 @@ async def test_agentinstance_stops_deploying_when_stopped(
     )
 
 
-@pytest.mark.asyncio
 async def test_set_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """
     Test whether facts set in the handler via the ctx.set_fact() method arrive on the server.
@@ -3389,7 +3384,6 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     compare_params(params, [param1, param2, param3, param4])
 
 
-@pytest.mark.asyncio
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """
     Test whether the resource states are set correctly when the deploy() method is overridden.

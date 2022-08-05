@@ -44,10 +44,9 @@ async def migrate_v6_to_v7(
     await ibl.start()
     # When the bootloader is started, it also executes the migration to v7
     yield
-    await ibl.stop()
+    await ibl.stop(timeout=15)
 
 
-@pytest.mark.asyncio(timeout=20)
 async def test_unique_agent_instances(migrate_v6_to_v7: None, postgresql_client: Connection) -> None:
     # assert that existing documents have been merged and expired state has been set correctly
     async with postgresql_client.transaction():

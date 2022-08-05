@@ -1,0 +1,7 @@
+description: Fix issue with get_resources_in_latest_version call not taking into account versions without resources
+issue-nr: 739
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  bugfix: "{{description}}"

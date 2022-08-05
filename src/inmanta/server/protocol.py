@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from typing import TYPE_CHECKING, Callable, Coroutine, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -36,7 +36,16 @@ from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.types import ArgumentTypes, JsonType
-from inmanta.util import CycleException, Scheduler, TaskHandler, stable_depth_first
+from inmanta.util import (
+    CronSchedule,
+    CycleException,
+    IntervalSchedule,
+    ScheduledTask,
+    Scheduler,
+    TaskHandler,
+    TaskMethod,
+    stable_depth_first,
+)
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager
@@ -295,8 +304,30 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: Union[Callable, Coroutine], interval: int = 60, initial_delay: Optional[float] = None) -> None:
-        self._sched.add_action(call, interval, initial_delay)
+    def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None) -> None:
+        """
+        Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
+        same. Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
+
+        :param interval: The interval between executions of the task.
+        :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
+        """
+        self._sched.add_action(call, IntervalSchedule(float(interval), initial_delay))
+
+    def schedule_cron(self, call: TaskMethod, cron: str) -> None:
+        """
+        Schedule a task according to a cron specifier. Tasks with the same call and the same schedule are considered the same.
+        Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
+
+        :param cron: The cron specifier to schedule the task by.
+        """
+        self._sched.add_action(call, CronSchedule(cron=cron))
+
+    def remove_cron(self, call: TaskMethod, cron: str) -> None:
+        """
+        Remove a cron-scheduled task.
+        """
+        self._sched.remove(ScheduledTask(action=call, schedule=CronSchedule(cron=cron)))
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """

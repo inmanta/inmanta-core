@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
-
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import AttributeException, MultiException
+from inmanta.ast import AttributeException, MultiException, OptionalValueException
+from inmanta.execute.scheduler import InvalidRelationPrecedenceRuleError
+from inmanta.module import RelationPrecedenceRule
 
 
 def test_issue_139_scheduler(snippetcompiler):
@@ -463,3 +464,161 @@ a2.b += b
 """
     )
     compiler.do_compile()
+
+
+def test_relation_precedence_policy(snippetcompiler) -> None:
+    """
+    End-to-end test that verifies whether the relation precedence policy set on a project
+    is correctly handled.
+    """
+    non_deterministic_model = """
+    entity A:
+    end
+
+    A.list [0:] -- A
+    A.optional [0:1] -- A
+
+    implementation a for A:
+        self.optional = A()
+    end
+
+    implement A using std::none
+    implement A using a when std::count(self.list) > 0
+
+    a = A(list=A())
+    test = a.optional
+    """
+
+    snippetcompiler.setup_for_snippet(
+        non_deterministic_model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
+    # Relation precedence rules are set correctly, compile should succeed.
+    compiler.do_compile()
+
+    snippetcompiler.setup_for_snippet(
+        non_deterministic_model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="optional",
+                then_type="__config__::A",
+                then_relation_name="list",
+            )
+        ],
+    )
+    # Relation precedence rules are set correctly, compile should fail.
+    with pytest.raises(OptionalValueException, match="Optional variable accessed that has no value"):
+        compiler.do_compile()
+
+
+def test_validation_relation_precedence_rules(snippetcompiler, caplog) -> None:
+    """
+    Verify that an appropriate exception is raised when invalid relation precedence rules are defined and
+    ensure that the usage a relation precedence policy results in a warning message in the compiler log.
+    """
+    model = """
+        entity A:
+            string var = ""
+        end
+
+        A.list [0:] -- A
+        A.optional [0:1] -- A
+
+        implement A using std::none
+
+        typedef tcp_port as int matching self > 0 and self < 65535
+    """
+    snippetcompiler.setup_for_snippet(
+        model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::B",
+                then_relation_name="test",
+            )
+        ],
+    )
+    expected_error_message = "A relation precedence rule was defined for __config__::B, but no such type was defined"
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
+        compiler.do_compile()
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="non_existing_relationship",
+            )
+        ],
+    )
+    expected_error_message = (
+        "A relation precedence rule was defined for __config__::A.non_existing_relationship, "
+        "but entity __config__::A doesn't have an attribute non_existing_relationship."
+    )
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
+        compiler.do_compile()
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="var",
+            )
+        ],
+    )
+    expected_error_message = (
+        "A relation precedence rule was defined for __config__::A.var, " "but attribute var is not a relationship attribute."
+    )
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
+        compiler.do_compile()
+
+    snippetcompiler.setup_for_snippet(
+        model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::tcp_port",
+                first_relation_name="test",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
+    expected_error_message = "A relation precedence rule was defined for non-entity type __config__::tcp_port"
+    with pytest.raises(InvalidRelationPrecedenceRuleError, match=expected_error_message):
+        compiler.do_compile()
+
+    # Only valid relation precedence rules are specified. Ensure log message regarding use of experimental feature.
+    snippetcompiler.setup_for_snippet(
+        model,
+        relation_precedence_rules=[
+            RelationPrecedenceRule(
+                first_type="__config__::A",
+                first_relation_name="list",
+                then_type="__config__::A",
+                then_relation_name="optional",
+            )
+        ],
+    )
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using the relation precedence policy" in caplog.text
+
+    # No relation precedence policy defined. No warning usage experimental feature
+    snippetcompiler.setup_for_snippet(model)
+    caplog.clear()
+    compiler.do_compile()
+    assert "[EXPERIMENTAL FEATURE] Using the relation precedence policy" not in caplog.text

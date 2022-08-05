@@ -1,0 +1,7 @@
+description: Fix order of stages in compile report details
+issue-nr: 3082
+issue-repo: web-console
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+    bugfix: "{{description}}"

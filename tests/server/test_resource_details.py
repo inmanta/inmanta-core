@@ -382,7 +382,6 @@ async def env_with_resources(server, client):
     yield env, cm_times, ids, resources
 
 
-@pytest.mark.asyncio
 async def test_resource_details(server, client, env_with_resources):
     """Test the resource details endpoint with multiple resources
     The released versions in the test environment are 2, 3 and 4, while 1 and 5 are not released.

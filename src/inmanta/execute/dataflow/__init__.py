@@ -973,7 +973,7 @@ class InstanceNode(Node):
             return self.get_self().assign_other_direction(attribute, node_ref, responsible, context)
         if self.entity is None:
             return
-        ast_attribute: "Attribute" = self.entity.get_attribute(attribute)
+        ast_attribute: Optional["Attribute"] = self.entity.get_attribute(attribute)
         if ast_attribute is None:
             return
         if ast_attribute.end is not None:
