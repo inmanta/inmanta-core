@@ -610,7 +610,7 @@ class ActiveEnv(PythonEnvironment):
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not upgrade and PythonWorkingSet.are_installed(requirements):
+        if not upgrade and self.are_installed(requirements):
             return
         try:
             super(ActiveEnv, self).install_from_index(
@@ -730,7 +730,7 @@ class ActiveEnv(PythonEnvironment):
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
         """
-        if not upgrade and PythonWorkingSet.are_installed(requirements_list):
+        if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
             return
         try:
