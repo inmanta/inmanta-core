@@ -429,8 +429,8 @@ class ModuleSource(Generic[TModule]):
         Returns the appropriate module instance for a given module spec.
 
         :param project: The project associated with the module.
-        :param module_spec: The module specification including any constraints on its version. Ignored if module
-            is already installed. In this case, the project is responsible for verifying constraint compatibility.
+        :param module_spec: The module specification including any constraints on its version. In this case,
+                            the project is responsible for verifying constraint compatibility.
         :param install: Whether to attempt to install the module if it hasn't been installed yet.
         """
         module_name: str = self._get_module_name(module_spec)
