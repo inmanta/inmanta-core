@@ -864,7 +864,7 @@ import custom_mod_two
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
-            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<999")),
+            module.InmantaModuleRequirement.parse("custom_mod_one<999").get_python_package_requirement(),
         ],
         install_mode=InstallMode.release,
         autostd=False,

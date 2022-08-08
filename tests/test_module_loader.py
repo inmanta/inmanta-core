@@ -159,7 +159,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
             install_project=True,
             python_package_sources=[],
             python_requires=[
-                ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name)),
+                InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
     message: str = (
@@ -465,8 +465,8 @@ import elaboratev2module
         """.strip(),
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("minimalv2module")),
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module")),
+            InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+            InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -504,7 +504,7 @@ def test_project_has_v2_requirements_on_non_imported_module(
         snippet="",  # Don't import elaboratev2module
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(dependency)),
+            InmantaModuleRequirement.parse(dependency).get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -524,7 +524,7 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
         snippet="import dependency_but_no_import",
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("dependency_but_no_import")),
+            InmantaModuleRequirement.parse("dependency_but_no_import").get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -541,7 +541,7 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
     process_env.install_from_index(
-        [ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module"))],
+        [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
         index_urls=[local_module_package_index],
     )
 
@@ -630,7 +630,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
         "",
         install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
-        python_requires=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name))],
+        python_requires=[InmantaModuleRequirement.parse(module_name).get_python_package_requirement()],
         autostd=False,
     )
 
@@ -695,8 +695,8 @@ def test_module_conflicting_dependencies_with_v2_modules(
         publish_index=index,
     )
 
-    req1 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name1))
-    req2 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+    req1 = InmantaModuleRequirement.parse(module_name1).get_python_package_requirement()
+    req2 = InmantaModuleRequirement.parse(module_name2).get_python_package_requirement()
     # Setup project
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "",
@@ -764,7 +764,7 @@ def test_module_conflicting_dependencies_with_v1_module(
         publish_index=index,
     )
 
-    req = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+    req = InmantaModuleRequirement.parse(module_name2).get_python_package_requirement()
 
     # Setup project
     project: Project = snippetcompiler_clean.setup_for_snippet(
@@ -812,9 +812,7 @@ def test_module_install_extra_on_project_level_v2_dep(
         },
         publish_index=index,
     )
-    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("mymod[myfeature]")
-    )
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
     package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}mymod"
 
     # project with dependency on mymod with extra
@@ -869,7 +867,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         str(tmpdir.join("myv2mod")),
         new_name="myv2mod",
         new_content_init_cf="import depmod",
-        new_requirements=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod[myfeature]"))],
+        new_requirements=[InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()],
         publish_index=index,
     )
     # project with dependency on mymod with extra
@@ -924,7 +922,7 @@ def test_module_install_extra_on_dep_of_v1_module(
         os.path.join(modules_dir, "minimalv1module"),
         str(tmpdir.join("myv1mod")),
         new_name="myv1mod",
-        new_requirements=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod[myfeature]"))],
+        new_requirements=[InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()],
     )
     snippetcompiler_clean.setup_for_snippet(
         "import myv1mod",
@@ -967,10 +965,8 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("mymod"))
-    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("mymod[myfeature]")
-    )
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("mymod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
@@ -1036,10 +1032,8 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
         },
         publish_index=index,
     )
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod"))
-    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("depmod[myfeature]")
-    )
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
@@ -1117,10 +1111,8 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
     index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
 
     # Publish dependency of V1 module (depmod) to python package repo
-    package_without_extra: Requirement = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("depmod"))
-    package_with_extra: Requirement = ModuleV2Source.get_python_package_requirement(
-        InmantaModuleRequirement.parse("depmod[myfeature]")
-    )
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
     package_name: str = str(package_without_extra)
 
     module_from_template(

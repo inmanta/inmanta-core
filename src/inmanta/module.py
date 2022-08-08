@@ -162,13 +162,14 @@ class InmantaModuleRequirement:
             raise ValueError("Invalid Inmanta module requirement: Inmanta module names use '_', not '-'.")
         return cls(Requirement.parse(spec))
 
-    def get_pip_requirement(self) -> Requirement:
+    def get_python_package_requirement(self) -> Requirement:
         """
-        Return the requirement as it would be passed to pip. Only relevant for V2 modules.
+        Return a Requirement with the name of the Python distribution package for this module requirement.
         """
-        req_as_str = str(self._requirement)
-        req_as_str = req_as_str.replace(self._requirement.key, ModuleV2Source.get_package_name_for(self._requirement.key))
-        return Requirement.parse(req_as_str.replace("_", "-"))
+        module_name = self.project_name
+        pkg_name = ModuleV2Source.get_package_name_for(module_name)
+        pkg_req_str = str(self).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
+        return Requirement.parse(pkg_req_str)
 
 
 class CompilerExceptionWithExtendedTrace(CompilerException):
@@ -446,8 +447,8 @@ class ModuleSource(Generic[TModule]):
                 # Package is not installed
                 return True
             if isinstance(installed, ModuleV2):
-                pip_requirements = [r.get_pip_requirement() for r in module_spec]
-                if not project.virtualenv.are_installed(pip_requirements):
+                python_pkg_req = [r.get_python_package_requirement() for r in module_spec]
+                if not project.virtualenv.are_installed(python_pkg_req):
                     # Package could define an extra that is not installed yet
                     return True
             # Already installed
@@ -529,16 +530,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return f"{ModuleV2.PKG_NAME_PREFIX}{module_name}"
 
     @classmethod
-    def get_python_package_requirement(cls, requirement: InmantaModuleRequirement) -> Requirement:
-        """
-        Return a Requirement with the name of the Python distribution package for this module requirement.
-        """
-        module_name = requirement.project_name
-        pkg_name = ModuleV2Source.get_package_name_for(module_name)
-        pkg_req_str = str(requirement).replace(module_name, pkg_name, 1)  # Replace max 1 occurrence
-        return Requirement.parse(pkg_req_str)
-
-    @classmethod
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
@@ -552,7 +543,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 "\n\t- type: package"
                 "\n\t  url: https://pypi.org/simple"
             )
-        requirements: List[Requirement] = [self.get_python_package_requirement(req) for req in module_spec]
+        requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
@@ -2151,10 +2142,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         requirements_txt_file_path = os.path.join(self._path, "requirements.txt")
         if not add_as_v1_module:
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(ModuleV2Source.get_python_package_requirement(requirement))
+            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
         elif os.path.exists(requirements_txt_file_path):
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-            requirements_txt_file.remove_requirement_and_write(ModuleV2Source.get_python_package_requirement(requirement).key)
+            requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
 
     def get_module_requirements(self) -> List[str]:
         return [*self.metadata.requires, *(str(req) for req in self.get_module_v2_requirements())]
@@ -2704,13 +2695,11 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from requirements.txt file
             if os.path.exists(requirements_txt_file_path):
                 requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path)
-                requirements_txt_file.remove_requirement_and_write(
-                    ModuleV2Source.get_python_package_requirement(requirement).key
-                )
+                requirements_txt_file.remove_requirement_and_write(requirement.get_python_package_requirement().key)
         else:
             # Add requirement to requirements.txt
             requirements_txt_file = RequirementsTxtFile(requirements_txt_file_path, create_file_if_not_exists=True)
-            requirements_txt_file.set_requirement_and_write(ModuleV2Source.get_python_package_requirement(requirement))
+            requirements_txt_file.set_requirement_and_write(requirement.get_python_package_requirement())
             # Remove requirement from module.yml file
             self.remove_module_requirement_from_requires_and_write(requirement.key)
 
@@ -2849,7 +2838,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Parse config file
         config_parser = ConfigParser()
         config_parser.read(self.get_metadata_file_path())
-        python_pkg_requirement: Requirement = ModuleV2Source.get_python_package_requirement(requirement)
+        python_pkg_requirement: Requirement = requirement.get_python_package_requirement()
         if config_parser.has_option("options", "install_requires"):
             new_install_requires = [
                 r

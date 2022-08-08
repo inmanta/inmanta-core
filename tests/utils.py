@@ -476,10 +476,7 @@ def module_from_template(
     def to_python_requires(
         requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
     ) -> abc.Iterator[Requirement]:
-        return (
-            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
-            for req in requires
-        )
+        return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
 
     if (dest_dir is None) != in_place:
         raise ValueError("Either dest_dir or in_place must be set, never both.")
@@ -585,7 +582,7 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+                    str(req if isinstance(req, Requirement) else req.get_python_package_requirement())
                     for req in new_requirements
                 )
             )
