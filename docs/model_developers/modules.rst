@@ -177,7 +177,7 @@ The directory layout of the V1 module is similar to that of a V2 module. The fol
   directory in the V1 format.
 * The ``requirements.txt`` file defines the dependencies of this module to other V2 modules and the dependencies to external
   libraries used by the code in the ``plugins`` directory. This file is not present in the V2 module format, since V2 modules
-  defined their dependencies in the ``setup.cfg`` file. Dependencies with extras are supported by in the
+  defined their dependencies in the ``setup.cfg`` file. Dependencies with extras are supported in the
   ``requirements.txt`` file using the ``dependency[extra-a,extra-b]`` syntax.
 * The ``pyproject.toml`` file doesn't exist in a V1 module, because V1 modules cannot be packaged into a Python package.
 
