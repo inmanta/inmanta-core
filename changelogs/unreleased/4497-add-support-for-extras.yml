@@ -1,0 +1,8 @@
+---
+description: Add support for extras on Python dependencies
+issue-nr: 4497
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"
