@@ -83,7 +83,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
 
     [options.extras_require]
     feature-x =
-        inmanta-modules-mod2
+      inmanta-modules-mod2
 
     zip_safe=False
     include_package_data=True
