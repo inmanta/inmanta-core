@@ -1,0 +1,6 @@
+description: The set_setting endpoint now correctly returns a 400 status code when an invalid value is provided.
+change-type: patch
+destination-branches: [master, iso4, iso5]
+issue-nr: 4361
+sections:
+    bugfix: "{{description}}"

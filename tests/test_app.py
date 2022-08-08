@@ -372,6 +372,7 @@ caused by:
 
     def exec(*cmd):
         process = do_run([sys.executable, "-m", "inmanta.app"] + list(cmd), cwd=snippetcompiler.project_dir)
+
         _, err = process.communicate(timeout=30)
         assert output in err.decode()
 

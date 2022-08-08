@@ -289,3 +289,6 @@ class DesiredStateVersionStatus(str, Enum):
     candidate = "candidate"
     retired = "retired"
     skipped_candidate = "skipped_candidate"
+
+
+CF_CACHE_DIR = ".cfcache"

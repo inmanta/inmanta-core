@@ -131,6 +131,8 @@ section expects the following keys:
 * audience: The audience for tokens, as per RFC this should match or the token is rejected.
 * jwks_uri: The uri to the public key information. This is required for algorithm RS256. The keys are loaded the first time
   a token needs to be verified after a server restart. There is not key refresh mechanism.
+* jwks_request_timeout: The timeout for the request to the 'jwks_uri', in seconds. If not provided,
+  the default value of 30 seconds will be used.
 
 An example configuration is:
 

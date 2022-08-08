@@ -63,6 +63,7 @@ from pyformance.registry import MetricsRegistry
 from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -75,6 +76,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import Project
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.postgresproc import PostgresProc
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -392,6 +394,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():
@@ -1128,3 +1131,11 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop()
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True

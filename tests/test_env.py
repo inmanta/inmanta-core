@@ -68,17 +68,22 @@ def test_basic_install(tmpdir):
     import iplib  # NOQA
 
 
-def test_install_fails(tmpdir, caplog):
+def test_install_fails(tmpdir, caplog, monkeypatch):
     venv = env.VirtualEnv(tmpdir)
     venv.use_virtual_env()
     caplog.clear()
+    caplog.set_level(logging.INFO)
     package_name = "non-existing-pkg-inmanta"
+
+    # monkeypatch pip env vars to set for security reasons (anyone could publish this package to PyPi)
+    monkeypatch.setenv("PIP_INDEX_URL", "non-existing-local-index")
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "")
 
     with pytest.raises(Exception):
         venv.install_from_list([package_name])
 
     log_sequence = LogSequence(caplog)
-    log_sequence.contains("inmanta.env", logging.ERROR, f"requirements: {package_name}")
+    log_sequence.contains("inmanta.env", logging.INFO, f"requirements:\n{package_name}")
 
 
 def test_install_package_already_installed_in_parent_env(tmpdir):
@@ -104,8 +109,8 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert not os.listdir(site_dir)
 
     # test installing a package that is already present in the parent venv
-    random_package = parent_installed[0]
-    venv.install_from_list([random_package])
+    assert "more-itertools" in parent_installed
+    venv.install_from_list(["more-itertools"])
 
     # Assert nothing installed in the virtual env
     assert not os.listdir(site_dir)
@@ -152,3 +157,34 @@ def test_gen_req_file(tmpdir):
         'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
+
+
+def test_gen_requirements_file_extras(tmpdir):
+    """
+    Ensure that the `env.ActiveEnv._gen_content_requirements_file` method takes into account extras.
+    """
+    active_env = env.VirtualEnv(tmpdir)
+    dependency = "dep==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep == 1.2.3"
+
+    dependency = "dep[opt]==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep[opt] == 1.2.3"
+
+    dependency = "dep[opt,dev]==1.2.3"
+    content: str = active_env._gen_requirements_file([dependency])
+    assert content.strip() == "dep[dev,opt] == 1.2.3"
+
+
+def test_basic_logging(tmpdir, caplog):
+    with caplog.at_level(logging.INFO):
+        env_dir1 = tmpdir.mkdir("env1").strpath
+
+        venv1 = env.VirtualEnv(env_dir1)
+
+        venv1.use_virtual_env()
+
+        log_sequence = LogSequence(caplog)
+        log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
+        log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
