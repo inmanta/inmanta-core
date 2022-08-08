@@ -870,7 +870,7 @@ def test_module_install_extra_on_dep_of_v2_module(
         new_requirements=[InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()],
         publish_index=index,
     )
-    # project with dependency on mymod with extra
+    # project with dependency on myv2mod with extra
     snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=True,
