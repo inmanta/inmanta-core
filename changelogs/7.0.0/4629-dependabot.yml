@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump pip from 22.2.1 to 22.2.2
+destination-branches:
+- master
+sections: {}

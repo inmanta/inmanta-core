@@ -1,0 +1,6 @@
+description: Marked partial compile features as experimental because they may be subject to breaking changes in future releases.
+issue-nr: 4612
+change-type: patch
+destination-branches:
+  - iso5
+  - master
