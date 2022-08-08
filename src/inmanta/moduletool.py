@@ -58,7 +58,6 @@ from inmanta.module import (
     ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
-    ModuleV2Source,
     Project,
     gitprovider,
 )
@@ -341,7 +340,7 @@ compatible with the dependencies specified by the updated modules.
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
             v2_python_specs: List[Requirement] = [
-                ModuleV2Source.get_python_package_requirement(module_spec)
+                module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
                 if module in v2_modules
@@ -1226,7 +1225,7 @@ graft inmanta_plugins/{self._module.name}/templates
         ]
         python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
-            requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
+            requires: List[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
             requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 

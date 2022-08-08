@@ -18,10 +18,11 @@
 import logging
 import os
 import shutil
-from typing import List
+from typing import List, Optional
 
 import py
 import pytest
+from pkg_resources import Requirement
 
 from inmanta.command import CLIException
 from inmanta.env import process_env
@@ -70,7 +71,10 @@ def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
 
 @pytest.mark.slowtest
 def test_module_add_v2_module_to_project(
-    tmpdir: py.path.local, snippetcompiler_clean, local_module_package_index: str, modules_v2_dir: str
+    tmpdir: py.path.local,
+    snippetcompiler_clean,
+    local_module_package_index: str,
+    modules_v2_dir: str,
 ) -> None:
     """
     Add a V2 module to an inmanta project using the `inmanta module add` command.
@@ -84,6 +88,7 @@ def test_module_add_v2_module_to_project(
             dest_dir=os.path.join(tmpdir, f"elaboratev2module-v{version}"),
             new_version=Version(version),
             publish_index=pip_index,
+            new_extras={"optional": [Requirement.parse("inmanta-module-minimalv2module")]},
         )
 
     # Create project
@@ -93,9 +98,16 @@ def test_module_add_v2_module_to_project(
 
     requirements_txt_file = os.path.join(project.path, "requirements.txt")
 
-    def _assert_project_state(pkg_name: str, expected_version: Version, project_requires_constraint: str) -> None:
+    def _assert_project_state(
+        pkg_name: str,
+        expected_version: Version,
+        project_requires_constraint: str,
+        expected_pkg_from_extra: Optional[str] = None,
+    ) -> None:
         installed_packages = process_env.get_installed_packages()
         assert pkg_name in installed_packages
+        if expected_pkg_from_extra:
+            assert expected_pkg_from_extra in installed_packages
         assert installed_packages[pkg_name] == expected_version
         with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             project_metadata = ProjectMetadata.parse(fd)
@@ -119,6 +131,16 @@ def test_module_add_v2_module_to_project(
     ModuleTool().add(module_req=new_version_constraint, v2=True, override=True)
     _assert_project_state(
         pkg_name=pkg_name, expected_version=Version("1.2.0"), project_requires_constraint=new_version_constraint
+    )
+
+    # Use extra optional
+    new_version_constraint = f"{module_name}[optional]==1.2.0"
+    ModuleTool().add(module_req=new_version_constraint, v2=True, override=True)
+    _assert_project_state(
+        pkg_name=pkg_name,
+        expected_version=Version("1.2.0"),
+        project_requires_constraint=new_version_constraint,
+        expected_pkg_from_extra="inmanta-module-minimalv2module",
     )
 
 
