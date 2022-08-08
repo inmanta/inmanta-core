@@ -189,8 +189,10 @@ class PythonWorkingSet:
             for r in reqs:
                 if r in seen_requirements:
                     continue
-                # Requirements created by the `Distribution.requires() method have the extra, the Requirement was created from,
-                # set as a marker. The line below makes sure that the "extra" marker matches.
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+                # the marker evaluation fail.
                 environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
                 if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
                     # The marker of the requirement doesn't apply on this environment
