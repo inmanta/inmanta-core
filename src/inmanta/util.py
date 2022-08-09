@@ -237,7 +237,7 @@ class Scheduler(object):
         # able to cancel them when the scheduler is stopped.
         self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
         # Keep track of tasks that should be awaited before the scheduler is stopped
-        self._await_tasks: Set[Task] = set()
+        self._await_tasks: Dict[ScheduledTask, object] = {}
 
     def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
         """
@@ -304,6 +304,9 @@ class Scheduler(object):
 
         handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
+        if not cancel_on_stop:
+            self._await_tasks[task_spec] = handle
+
         return task_spec
 
     @stable_api
@@ -316,12 +319,14 @@ class Scheduler(object):
             del self._scheduled[task]
 
     @stable_api
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
         Stop the scheduler
         """
         self._stopped = True
-        await gather(*self._await_tasks)
+        await gather(*[handle for handle in self._await_tasks.values()])
+        for k in self._await_tasks.keys():
+            self._scheduled.pop(k, None)
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:

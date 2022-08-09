@@ -276,7 +276,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         All dependencies are up (if present)
         """
         self._stopping = True
-        self._sched.stop()
+        await self._sched.stop()
 
     async def stop(self) -> None:
         """
