@@ -55,6 +55,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    cast,
 )
 
 import more_itertools
@@ -708,7 +709,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     def log_pre_install_information(self, module_name: str) -> None:
         LOGGER.debug("Installing module %s (v1).", module_name)
 
-    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None):
+    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, "Version"]:
         """
         Log and return a dictionary containing currently installed modules and their versions.
 
@@ -2301,23 +2302,23 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         LOGGER.info("The following modules are currently installed:")
 
-        sorted_modules = self.sorted_modules()
+        sorted_modules: List["Module"] = self.sorted_modules()
 
-        def get_modules_with_gen(gen: ModuleGeneration) -> List["Module"]:
+        def get_modules_with_gen(gen: ModuleGeneration) -> Sequence["Module"]:
             return list(filter(lambda mod: mod.GENERATION == gen, sorted_modules))
 
-        v1_modules = get_modules_with_gen(ModuleGeneration.V1)
-        v2_modules = get_modules_with_gen(ModuleGeneration.V2)
+        v1_modules: Sequence["ModuleV1"] = cast(list["ModuleV1"], get_modules_with_gen(ModuleGeneration.V1))
+        v2_modules: Sequence["ModuleV2"] = cast(list["ModuleV2"], get_modules_with_gen(ModuleGeneration.V2))
 
         if v2_modules:
             LOGGER.info("V2 modules:")
-            for mod in v2_modules:
-                path = f" ({mod.path})" if mod._is_editable_install else ""
-                LOGGER.info(f"  {mod.name}: {mod.version}{path}")
+            for v2_mod in v2_modules:
+                path = f" ({v2_mod.path})" if v2_mod._is_editable_install else ""
+                LOGGER.info(f"  {v2_mod.name}: {v2_mod.version}{path}")
         if v1_modules:
             LOGGER.info("V1 modules:")
-            for mod in v1_modules:
-                LOGGER.info(f"  {mod.name}: {mod.version}")
+            for v1_mod in v1_modules:
+                LOGGER.info(f"  {v1_mod.name}: {v1_mod.version}")
 
     def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:
         # Add requirement to metadata file
