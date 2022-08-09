@@ -592,12 +592,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 )
         try:
             self.log_pre_install_information(module_name)
-            modules_pre_install = self.take_v2_modules_snapshot(header="Snapshot of modules versions before installation:")
+            modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
 
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(
-                modules_pre_install, header="Snapshot of modules versions after installation:"
+                modules_pre_install, header="Modules versions after installation:"
             )
         except env.PackageNotFound:
             return None
@@ -745,10 +745,6 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     ) -> None:
         """
         Logs all inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
-        For each module, the prefix gives some context:
-            - "+" means this module is newly installed
-            - "~" means this module was previously installed but a new version has been installed
-            - " " means this module was already installed and left untouched
 
         :param project: The currently active project.
         :param modules_pre_install: Mapping of inmanta module names to their respective versions. This is the baseline against
@@ -808,13 +804,13 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                 )
                 self.log_pre_install_information(module_name)
                 modules_pre_install = self.take_modules_snapshot(
-                    project, header="Snapshot of modules versions before installation:"
+                    project, header="Modules versions before installation:"
                 )
                 module = ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )
                 self.log_snapshot_difference_v1_modules(
-                    project, modules_pre_install, header="Snapshot of modules versions after installation:"
+                    project, modules_pre_install, header="Modules versions after installation:"
                 )
                 self.log_post_install_information(module)
                 return module
@@ -830,13 +826,13 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
             self.log_pre_install_information(module_name)
             modules_pre_install = self.take_modules_snapshot(
-                project, header="Snapshot of modules versions before installation:"
+                project, header="Modules versions before installation:"
             )
             module = ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
             )
             self.log_snapshot_difference_v1_modules(
-                project, modules_pre_install, header="Snapshot of modules versions after installation:"
+                project, modules_pre_install, header="Modules versions after installation:"
             )
             self.log_post_install_information(module)
 
