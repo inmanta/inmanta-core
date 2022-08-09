@@ -413,32 +413,6 @@ class SyncClient(object):
             self.name = client.name
             self._client = client
 
-    def run_sync(self, func):
-        """
-        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
-
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f = Future()
-
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
-            try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
-            except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.add_callback(run)
-
-        return f.result()
-
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
             method: Callable[..., Coroutine[Any, Any, common.Result]] = getattr(self._client, name)
@@ -449,7 +423,7 @@ class SyncClient(object):
             try:
                 if self._ioloop is None:
                     return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
-                return self.run_sync(method_call)
+                return self._ioloop.run_coroutine_threadsafe(method_call).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
