@@ -25,6 +25,7 @@ import os
 import shutil
 import time
 import uuid
+from collections import abc
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Union
 
@@ -362,6 +363,7 @@ def create_python_package(
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
+    optional_dependencies: Optional[Dict[str, Sequence[Requirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -391,6 +393,8 @@ build-backend = "setuptools.build_meta"
 requires = ["setuptools"]
             """.strip()
         )
+
+    install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
     with open(os.path.join(path, "setup.cfg"), "w") as fd:
         egg_info: str = (
             f"""
@@ -411,11 +415,17 @@ author = Inmanta <code@inmanta.com>
 
 {egg_info}
 
-[options]
-install_requires =%s
-            """.strip()
-            % "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+""".strip()
         )
+
+        fd.write("\n[options]")
+        fd.write(f"\ninstall_requires ={install_requires_content}")
+
+        if optional_dependencies:
+            fd.write("\n[options.extras_require]")
+            for option_name, requirements in optional_dependencies.items():
+                requirements_as_string = "".join(f"\n  {req}" for req in requirements)
+                fd.write(f"\n{option_name} ={requirements_as_string}")
 
     if install:
         env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
@@ -437,6 +447,7 @@ def module_from_template(
     new_version: Optional[version.Version] = None,
     new_name: Optional[str] = None,
     new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
+    new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]]] = None,
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
@@ -452,6 +463,7 @@ def module_from_template(
     :param new_version: The new version for the module, if any.
     :param new_name: The new name of the inmanta module, if any.
     :param new_requirements: The new requirements for the module, if any.
+    :param new_extras: The new optional dependencies for the module, if any.
     :param install: Install the newly created module with the module tool. Requires virtualenv to be installed in the
         python environment unless editable is True.
     :param editable: Whether to install the module in editable mode, ignored if install is False.
@@ -460,6 +472,12 @@ def module_from_template(
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
     """
+
+    def to_python_requires(
+        requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
+    ) -> abc.Iterator[Requirement]:
+        return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
+
     if (dest_dir is None) != in_place:
         raise ValueError("Either dest_dir or in_place must be set, never both.")
     if dest_dir is None:
@@ -487,10 +505,13 @@ def module_from_template(
         with open(manifest_file, "w", encoding="utf-8") as fd:
             fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
     if new_requirements:
-        config["options"]["install_requires"] = "\n    ".join(
-            str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
-            for req in new_requirements
-        )
+        config["options"]["install_requires"] = "\n    ".join(to_python_requires(new_requirements))
+    if new_extras:
+        # start from a clean slate
+        config.remove_section("options.extras_require")
+        config.add_section("options.extras_require")
+        for extra, requires in new_extras.items():
+            config["options.extras_require"][extra] = "\n    ".join(to_python_requires(requires))
     if new_content_init_cf is not None:
         init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
         with open(init_cf_file, "w", encoding="utf-8") as fd:
@@ -561,7 +582,7 @@ def v1_module_from_template(
         with open(os.path.join(dest_dir, "requirements.txt"), "w") as fd:
             fd.write(
                 "\n".join(
-                    str(req if isinstance(req, Requirement) else module.ModuleV2Source.get_python_package_requirement(req))
+                    str(req if isinstance(req, Requirement) else req.get_python_package_requirement())
                     for req in new_requirements
                 )
             )
