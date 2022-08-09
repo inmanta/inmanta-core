@@ -360,7 +360,7 @@ async def test_await_task_on_scheduler_shutdown() -> None:
     assert not task_await.task_status.task_was_cancelled
     assert sched._executing_tasks[task_cancel.action]
 
-    assert ScheduledTask(task_await.action, IntervalSchedule(interval=1000, initial_delay=3)) in sched._await_tasks
+    assert util.retry_limited(lambda: ScheduledTask(task_await.action, IntervalSchedule(interval=1000, initial_delay=3)) in sched._await_tasks[task_await.action], timeout=10)
     await sched.stop()
 
     await util.retry_limited(lambda: task_await.task_status.task_was_executed, timeout=10)

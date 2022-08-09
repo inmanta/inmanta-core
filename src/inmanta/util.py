@@ -237,15 +237,19 @@ class Scheduler(object):
         # able to cancel them when the scheduler is stopped.
         self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
         # Keep track of tasks that should be awaited before the scheduler is stopped
-        self._await_tasks: Dict[ScheduledTask, object] = {}
+        self._await_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool=True) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
-        self._executing_tasks[action].append(task)
+        if cancel_on_stop:
+            self._executing_tasks[action].append(task)
+        else:
+            self._await_tasks[action].append(task)
+
 
     def _notify_done(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
         """
@@ -294,7 +298,7 @@ class Scheduler(object):
                         action=action(),
                         notify_done_callback=functools.partial(self._notify_done, action),
                     )
-                    self._add_to_executing_tasks(action, task)
+                    self._add_to_executing_tasks(action, task, cancel_on_stop)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -304,8 +308,6 @@ class Scheduler(object):
 
         handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
-        if not cancel_on_stop:
-            self._await_tasks[task_spec] = handle
 
         return task_spec
 
