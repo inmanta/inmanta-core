@@ -2309,13 +2309,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         v1_modules = get_modules_with_gen(ModuleGeneration.V1)
         v2_modules = get_modules_with_gen(ModuleGeneration.V2)
 
-        if v1_modules:
-            LOGGER.info("V1 modules:")
-            for mod in v1_modules:
-                LOGGER.info(f"  {mod.name}: {mod.version}")
         if v2_modules:
             LOGGER.info("V2 modules:")
             for mod in v2_modules:
+                path = f" ({mod.path})" if mod._is_editable_install else ""
+                LOGGER.info(f"  {mod.name}: {mod.version}{path}")
+        if v1_modules:
+            LOGGER.info("V1 modules:")
+            for mod in v1_modules:
                 LOGGER.info(f"  {mod.name}: {mod.version}")
 
     def add_module_requirement_persistent(self, requirement: InmantaModuleRequirement, add_as_v1_module: bool) -> None:

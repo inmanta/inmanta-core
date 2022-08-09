@@ -349,7 +349,7 @@ def compile_project(options: argparse.Namespace) -> None:
     strict_deps_check = moduletool.get_strict_deps_check(
         no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
     )
-    project_instance = module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     if options.profile:
         import cProfile
@@ -362,8 +362,6 @@ def compile_project(options: argparse.Namespace) -> None:
         t1 = time.time()
         do_compile()
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
-
-    project_instance.log_installed_modules()
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
@@ -579,7 +577,7 @@ def export(options: argparse.Namespace) -> None:
     strict_deps_check = moduletool.get_strict_deps_check(
         no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
     )
-    project_instance = module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     from inmanta.export import Exporter  # noqa: H307
 
@@ -622,8 +620,6 @@ def export(options: argparse.Namespace) -> None:
         tid = cfg_env.get()
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
         conn.release_version(tid, version, True, agent_trigger_method)
-
-    project_instance.log_installed_modules()
 
 
 log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}

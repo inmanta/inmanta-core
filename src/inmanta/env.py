@@ -390,7 +390,7 @@ class PythonEnvironment:
 
         if return_code != 0:
             not_found: List[str] = []
-            conflicts: bool = False
+            conflicts: List[str] = []
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
@@ -398,12 +398,15 @@ class PythonEnvironment:
                     not_found.append(m.group(1))
 
                 if "versions have conflicting dependencies" in line:
-                    conflicts = True
+                    conflicts.append(line)
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             if conflicts:
-                raise ConflictingRequirements("\n".join(full_output))
-            raise Exception(f"Process {cmd} exited with return code {return_code}")
+                raise ConflictingRequirements("\n".join(conflicts))
+            raise Exception(
+                f"Process {cmd} exited with return code {return_code}."
+                "Increase the verbosity level with the -v option for more information."
+            )
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
