@@ -475,7 +475,7 @@ class Scheduler(object):
                     next_rv.freeze()
 
         now = time.time()
-        LOGGER.info(
+        LOGGER.debug(
             "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
             i,
             len(basequeue),
