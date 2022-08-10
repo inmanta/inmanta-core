@@ -26,6 +26,7 @@ from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Se
 from urllib import parse
 
 from tornado import ioloop
+from tornado.platform.asyncio import BaseAsyncIOLoop
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -405,6 +406,7 @@ class SyncClient(object):
         self.timeout = timeout
         self._ioloop = ioloop
         if client is None:
+            assert name is not None  # Make mypy happy
             self.name = name
             self._client = Client(name, self.timeout)
         else:
@@ -421,6 +423,7 @@ class SyncClient(object):
             try:
                 if self._ioloop is None:
                     return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
                 return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
