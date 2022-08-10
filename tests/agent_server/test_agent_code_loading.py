@@ -22,26 +22,37 @@ import tempfile
 import uuid
 from asyncio import gather
 from logging import DEBUG, INFO
-from typing import List, Optional
 from typing import Dict, List, Optional
 
 import pytest
 
 import inmanta
 from inmanta.agent import Agent
+from inmanta.protocol import Client
 from utils import LogSequence
 
 
-def make_source_structure(into: dict, file: str, module: str, source: str, dependencies: Optional[List[str]] = None) -> str:
-    """
-    Build up the content of the sources argument of the upload_code() API endpoint.
-    """
-    if dependencies is None:
-        dependencies = []
+async def make_source_structure(
+    into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: List[str] = []
+) -> str:
+    if byte_code:
+        fd, source_file = tempfile.mkstemp(suffix=".py")
+        with open(fd, "w+") as fh:
+            fh.write(source)
+        py_compile.compile(source_file, cfile=source_file + "c")
+
+        with open(source_file + "c", "rb") as fh:
+            data = fh.read()
+        file_name = source_file + "c"
+    else:
+        data = source.encode()
+        file_name = file
+
     sha1sum = hashlib.new("sha1")
-    sha1sum.update(source.encode())
+    sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
-    into[hv] = [file, module, source, dependencies]
+    into[hv] = (file_name, module, dependencies)
+    await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
     return hv
 
 
@@ -55,27 +66,6 @@ async def test_agent_code_loading(caplog, server, agent_factory, client, environ
     """
 
     caplog.set_level(DEBUG)
-
-    async def make_source_structure(into: dict, file: str, module: str, source: str, byte_code: bool = False) -> str:
-        if byte_code:
-            fd, source_file = tempfile.mkstemp(suffix=".py")
-            with open(fd, "w+") as fh:
-                fh.write(source)
-            py_compile.compile(source_file, cfile=source_file + "c")
-
-            with open(source_file + "c", "rb") as fh:
-                data = fh.read()
-            file_name = source_file + "c"
-        else:
-            data = source.encode()
-            file_name = file
-
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(data)
-        hv: str = sha1sum.hexdigest()
-        into[hv] = (file_name, module, [])
-        await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
-        return hv
 
     codea = """
 def test():
@@ -105,10 +95,12 @@ inmanta.test_agent_code_loading = 15
     sources = {}
     sources2 = {}
     sources3 = {}
-    hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea)
-    hv2 = await make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb)
+    hv1 = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea, client=client)
+    hv2 = await make_source_structure(
+        sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb, client=client
+    )
     hv3 = await make_source_structure(
-        sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec, byte_code=True
+        sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec, byte_code=True, client=client
     )
 
     res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
@@ -211,11 +203,16 @@ def test():
     """
 
     sources = {}
-    make_source_structure(
-        sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", code, dependencies=["pkg[optional-a]"]
+    await make_source_structure(
+        sources,
+        "inmanta_plugins/test/__init__.py",
+        "inmanta_plugins.test",
+        code,
+        dependencies=["pkg[optional-a]"],
+        client=client,
     )
 
-    res = await client.upload_code(tid=environment, id=5, resource="test::Test", sources=sources)
+    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
     assert res.code == 200
 
     agent: Agent = await agent_factory(
