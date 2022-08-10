@@ -30,13 +30,12 @@ from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
 import py
-import pydantic
 import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
 from packaging import version
-from utils import LogSequence
+from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     pytest.skip(
@@ -246,7 +245,6 @@ def test_process_env_install_from_index_conflicting_reqs(
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_process_env_install_from_source(
-    tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     editable: bool,
@@ -254,20 +252,13 @@ def test_process_env_install_from_source(
     """
     Install a package from source into the process_env. Make sure the editable option actually results in an editable install.
     """
-    venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.process_env.get_installed_packages()
     env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
     assert package_name in env.process_env.get_installed_packages()
     if editable:
-        assert any(
-            package["name"] == package_name
-            for package in pydantic.parse_raw_as(
-                List[Dict[str, str]],
-                subprocess.check_output([python_path, "-m", "pip", "list", "--editable", "--format", "json"]).decode(),
-            )
-        )
+        assert package_name in env.process_env.get_installed_packages(only_editable=True)
 
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
@@ -419,7 +410,7 @@ def test_active_env_check_basic(
             else:
                 with pytest.raises(env.ConflictingRequirements) as e:
                     env.ActiveEnv.check(in_scope)
-                assert expect[1] in e.value.msg
+                assert expect[1] in e.value.get_message()
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
@@ -503,7 +494,11 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
 
     pip_binary = os.path.join(os.path.dirname(venv.python_path), "pip")
     # Ensure that the pip command doesn't raise an exception
-    result = subprocess.check_output([pip_binary, "list", "--format", "json"], timeout=10, encoding="utf-8")
+    result = subprocess.check_output(
+        [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
+        timeout=10,
+        encoding="utf-8",
+    )
     parsed_output = json.loads(result)
     # Ensure inheritance works correctly
     assert "inmanta-core" in [elem["name"] for elem in parsed_output]
@@ -559,3 +554,38 @@ def test_basic_logging(tmpdir, caplog):
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
         log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+
+
+def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that the `ActiveEnv.are_installed()` method doesn't go into an infinite loop when there is a circular dependency
+    involving an extra.
+
+    Dependency loop:
+        pkg[optional]
+           -> dep[optional]
+               -> pkg[optional]
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-pkg": [Requirement.parse("dep[optional-dep]")],
+        },
+    )
+    create_python_package(
+        name="dep",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "dep"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
+        },
+    )
+
+    requirements = [Requirement.parse("pkg[optional-pkg]")]
+    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    assert tmpvenv_active_inherit.are_installed(requirements=requirements)

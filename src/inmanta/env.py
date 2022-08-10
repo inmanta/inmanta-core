@@ -82,20 +82,142 @@ class VersionConflict:
 
 
 class ConflictingRequirements(CompilerException):
+    """
+    Conflict reporting
+
+    Can be used in two ways:
+    - if we don't know the exact conflicts (detected by e.g. pip), the messages is used
+    - if we have detailed conflict info, the message is derived from it
+
+    """
+
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
-        CompilerException.__init__(self, msg=self.get_msg(message, conflicts))
+
+        CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
-    @classmethod
-    def get_msg(cls, message: str, conflicts: Optional[Set[VersionConflict]]) -> str:
-        msg: str = message
-        if conflicts is not None:
-            for current_conflict in sorted(conflicts, key=lambda x: x.requirement.key):
-                msg += f"\n\t* {current_conflict}"
+    def get_message(self) -> str:
+        # The message has three potential parts
+        # First the advices, derived from the conflicts, if present
+        # Then the message, if present
+        # Then the individual conflicts, if present
+        out = []
+
+        advices = self.get_advice()
+        if advices:
+            out.append(advices)
+
+        if self.msg:
+            out.append(self.msg)
+
+        conflicts = self.get_conflicts_string()
+        if conflicts:
+            out.append(conflicts)
+
+        return "\n".join(out)
+
+    def get_conflicts_string(self) -> Optional[str]:
+        if not self.conflicts:
+            return None
+        msg = ""
+        for current_conflict in sorted(self.conflicts, key=lambda x: x.requirement.key):
+            msg += f"\n\t* {current_conflict}"
         return msg
+
+    def has_missing(self) -> bool:
+        """Does the set of conflicts contain any missing dependency?"""
+        if not self.conflicts:
+            return False
+        return any(conflict.installed_version is None for conflict in self.conflicts)
+
+    def get_advice(self) -> Optional[str]:
+        """
+        Derive an end-user centric message from the conflicts
+        """
+        if self.conflicts is None:
+            return None
+        if self.has_missing():
+            return "Not all required python packages are installed run 'inmanta project install' to resolve this"
+        else:
+            return (
+                "A dependency conflict exists, this is either because some modules are stale, incompatible "
+                "or because pip can not find a correct combination of packages. To resolve this, "
+                "first try `inmanta project update` to ensure no modules are stale. "
+                "Second, try adding additional constraints to the requirements.txt file of "
+                "the inmanta project to help pip resolve this problem. After every change, run `inmanta project update`"
+            )
+
+
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class PythonWorkingSet:
+    @classmethod
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+        """
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
+    @classmethod
+    def are_installed(cls, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this workingset.
+        """
+        if not requirements:
+            return True
+        installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
+
+        def _are_installed_recursive(
+            reqs: Sequence[Requirement],
+            seen_requirements: Sequence[Requirement],
+            contained_in_extra: Optional[str] = None,
+        ) -> bool:
+            """
+            Recursively check the given reqs are installed in this working set
+
+            :param reqs: The requirements that should be checked.
+            :param seen_requirements: An accumulator that contains all the requirements that were check in
+                                      previous iterators. It prevents infinite loops when the dependency
+                                      graph contains circular dependencies.
+            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
+                                       iteration of this method this value is None.
+            """
+            for r in reqs:
+                if r in seen_requirements:
+                    continue
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+                # the marker evaluation fail.
+                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                    # The marker of the requirement doesn't apply on this environment
+                    continue
+                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                    return False
+                if r.extras:
+                    for extra in r.extras:
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        if distribution is None:
+                            return False
+                        pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=())
+                        )
+                        if not _are_installed_recursive(
+                            reqs=list(pkgs_required_by_extra),
+                            seen_requirements=list(seen_requirements) + list(reqs),
+                            contained_in_extra=extra,
+                        ):
+                            return False
+            return True
+
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
+
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
         """
@@ -456,9 +578,6 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         yield fd.name
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
-
-
 class ActiveEnv(PythonEnvironment):
     """
     The active Python environment. Method implementations assume this environment is active when they're called.
@@ -480,31 +599,11 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
-    @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
-        """
-        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
-        """
-        if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
-        else:
-            return requirements
-
     def are_installed(self, requirements: req_list) -> bool:
         """
-        Return True iff the given requirements are installed in this venv.
+        Return True iff the given requirements are installed in this environment.
         """
-        if not requirements:
-            return True
-        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-        return True
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,
@@ -740,8 +839,7 @@ class ActiveEnv(PythonEnvironment):
 
         if len(constraint_violations_strict) != 0:
             raise ConflictingRequirements(
-                "The following conflicting requirements exist. Add additional constraints to the requirements.txt file of "
-                "the inmanta project to resolve this problem.",
+                "",  # The exception has a detailed list of constraint_violations, so it can make its own message
                 constraint_violations_strict,
             )
 

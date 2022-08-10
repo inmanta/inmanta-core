@@ -54,6 +54,8 @@ def put_partial(
 
     The version number must be obtained through the reserve_version call
 
+    This method is experimental and its interface may receive breaking changes in future releases.
+
     :param tid: The id of the environment
     :param version: The version of the configuration model
     :param resource_state: A dictionary with the initial const.ResourceState per resource id

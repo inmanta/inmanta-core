@@ -119,6 +119,7 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
+from packaging.version import Version
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -1504,12 +1505,43 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
-    with tempfile.TemporaryDirectory() as artifact_dir:
+    cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
+    build_dir = os.path.join(cache_dir, "build")
+    index_dir = os.path.join(build_dir, "simple")
+    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
+
+    def _should_rebuild_cache() -> bool:
+        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
+            # Cache doesn't exist
+            return True
+        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 1:  # #modules + index.html
+            # Modules were added/removed from the build_dir
+            return True
+        # Cache is dirty
+        return any(
+            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
+            for root, _, files in os.walk(modules_v2_dir)
+            for f in files
+        )
+
+    if _should_rebuild_cache():
+        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
+        # Remove cache
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.makedirs(build_dir)
+        # Build modules
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=artifact_dir)
-        dir2pi(argv=["dir2pi", artifact_dir])
-        yield os.path.join(artifact_dir, "simple")
+            ModuleTool().build(path=path, output_dir=build_dir)
+        # Build python package repository
+        dir2pi(argv=["dir2pi", build_dir])
+        # Update timestamp file
+        open(timestamp_file, "w").close()
+    else:
+        logger.info(f"Using cache {cache_dir}")
+
+    yield index_dir
 
 
 @pytest.fixture
@@ -1569,3 +1601,32 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="session")
+def index_with_pkgs_containing_optional_deps() -> str:
+    """
+    This fixture creates a python package repository containing packages with optional dependencies.
+    These packages are NOT inmanta modules but regular python packages. This fixture returns the URL
+    to the created python package repository.
+    """
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        pip_index = utils.PipIndex(artifact_dir=tmpdirname)
+        utils.create_python_package(
+            name="pkg",
+            pkg_version=Version("1.0.0"),
+            path=os.path.join(tmpdirname, "pkg"),
+            publish_index=pip_index,
+            optional_dependencies={
+                "optional-a": [Requirement.parse("dep-a")],
+                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+            },
+        )
+        for pkg_name in ["dep-a", "dep-b", "dep-c"]:
+            utils.create_python_package(
+                name=pkg_name,
+                pkg_version=Version("1.0.0"),
+                path=os.path.join(tmpdirname, pkg_name),
+                publish_index=pip_index,
+            )
+        yield pip_index.url

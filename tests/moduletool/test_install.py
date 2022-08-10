@@ -18,6 +18,7 @@
 import argparse
 import logging
 import os
+import re
 import shutil
 import subprocess
 from importlib.abc import Loader
@@ -29,9 +30,10 @@ import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import const, env, loader, module
+from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
+from inmanta.env import ConflictingRequirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -221,6 +223,43 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
+
+
+@pytest.mark.slowtest
+def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+    """
+    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    """
+    # activate snippetcompiler's venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modone"),
+        new_name="modone",
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        install=True,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modtwo"),
+        new_name="modtwo",
+        new_requirements=[Requirement.parse("lorem~=0.1.0")],
+        install=True,
+    )
+
+    module_path: str = os.path.join(str(tmpdir), "conflictingdeps")
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_path,
+        new_name="conflictingdeps",
+        new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
+    )
+
+    with pytest.raises(module.InvalidModuleException) as exc_info:
+        run_module_install(module_path, False, True)
+    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
+    assert "caused by:" in exc_info.value.format_trace()
 
 
 @pytest.mark.parametrize_any("dev", [True, False])
@@ -422,6 +461,26 @@ def test_project_install(
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
+
+    # ensure we can compile
+    compiler.do_compile()
+
+    # add a dependency
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names]
+        + ["lorem"],
+        install_project=False,
+    )
+
+    with pytest.raises(
+        expected_exception=ConflictingRequirements,
+        match=re.escape("Not all required python packages are installed run 'inmanta project install' to resolve this"),
+    ):
+        # ensure we can compile
+        compiler.do_compile()
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
@@ -805,7 +864,7 @@ import custom_mod_two
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
-            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("custom_mod_one<999")),
+            module.InmantaModuleRequirement.parse("custom_mod_one<999").get_python_package_requirement(),
         ],
         install_mode=InstallMode.release,
         autostd=False,

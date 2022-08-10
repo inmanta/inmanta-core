@@ -20,6 +20,7 @@ import os
 import py_compile
 import shutil
 import sys
+from collections import abc
 from typing import List, Optional, Set
 
 import py
@@ -41,7 +42,7 @@ from inmanta.module import (
     ModuleV2Source,
     Project,
 )
-from inmanta.moduletool import ModuleConverter, ModuleTool
+from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
 from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
 
@@ -159,12 +160,12 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
             install_project=True,
             python_package_sources=[],
             python_requires=[
-                ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name)),
+                InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
     message: str = (
-        "Attempting to install a v2 module but no v2 module source is configured. Add at least one repo of type"
-        ' "package" to the project config file.'
+        "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add at least one repo of "
+        'type "package" to the project config file.'
     )
     assert message in e.value.format_trace()
 
@@ -465,8 +466,8 @@ import elaboratev2module
         """.strip(),
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("minimalv2module")),
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module")),
+            InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+            InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -504,7 +505,7 @@ def test_project_has_v2_requirements_on_non_imported_module(
         snippet="",  # Don't import elaboratev2module
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(dependency)),
+            InmantaModuleRequirement.parse(dependency).get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -524,7 +525,7 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
         snippet="import dependency_but_no_import",
         python_package_sources=[local_module_package_index],
         python_requires=[
-            ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("dependency_but_no_import")),
+            InmantaModuleRequirement.parse("dependency_but_no_import").get_python_package_requirement(),
         ],
         autostd=False,
     )
@@ -541,7 +542,7 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
     process_env.install_from_index(
-        [ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse("elaboratev2module"))],
+        [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
         index_urls=[local_module_package_index],
     )
 
@@ -590,7 +591,7 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     with pytest.raises(InvalidModuleException) as e:
         ModuleTool().install(editable=False, path=module_path)
 
-    assert ("these package versions have conflicting dependencies.") in str(e.value.msg)
+    assert ("Module installation failed due to conflicting dependencies") in str(e.value.msg)
 
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after
@@ -630,7 +631,7 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
         "",
         install_project=False,
         python_package_sources=[index.url, "https://pypi.org/simple"],
-        python_requires=[ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name))],
+        python_requires=[InmantaModuleRequirement.parse(module_name).get_python_package_requirement()],
         autostd=False,
     )
 
@@ -695,8 +696,8 @@ def test_module_conflicting_dependencies_with_v2_modules(
         publish_index=index,
     )
 
-    req1 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name1))
-    req2 = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+    req1 = InmantaModuleRequirement.parse(module_name1).get_python_package_requirement()
+    req2 = InmantaModuleRequirement.parse(module_name2).get_python_package_requirement()
     # Setup project
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "",
@@ -712,7 +713,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
     if strict_deps_check is None or strict_deps_check:
         with pytest.raises(ConflictingRequirements) as e:
             project.install_modules()
-        assert msg in e.value.args[0]
+        assert msg in e.value.get_message()
     else:
         # The version conflict is present in a transitive dependency, so without strict_deps_check enabled,
         # only a warning message will be logged.
@@ -764,7 +765,7 @@ def test_module_conflicting_dependencies_with_v1_module(
         publish_index=index,
     )
 
-    req = ModuleV2Source.get_python_package_requirement(InmantaModuleRequirement.parse(module_name2))
+    req = InmantaModuleRequirement.parse(module_name2).get_python_package_requirement()
 
     # Setup project
     project: Project = snippetcompiler_clean.setup_for_snippet(
@@ -782,9 +783,486 @@ def test_module_conflicting_dependencies_with_v1_module(
         # The version conflict is present in a direct dependency, so this always results in an error.
         project.install_modules()
     if strict_deps_check is None or strict_deps_check:
-        assert "Incompatibility between constraint y" in e.value.args[0]
+        assert "Incompatibility between constraint y" in e.value.get_message()
     else:
-        assert "requirements conflicts were found" in e.value.args[0]
+        assert "requirements conflicts were found" in e.value.get_message()
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_project_level_v2_dep(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correctly when a project has a V2 module dependency with an extra.
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("mymod")),
+        new_name="mymod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}mymod"
+
+    # project with dependency on mymod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_with_extra],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v2_module(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correctly when a V2 module defines a dependency with an extra.
+
+    Dependency tree:
+
+        myv2mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    # Create myv2mod with extra
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_content_init_cf="import depmod",
+        new_requirements=[InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()],
+        publish_index=index,
+    )
+    # project with dependency on myv2mod with extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod")],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+def test_module_install_extra_on_dep_of_v1_module(
+    tmpdir,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    local_module_package_index: str,
+    package_name_extra: str,
+) -> None:
+    """
+    Verify that module installation works correct when a V1 module has a dependency that defines an extra.
+
+    Dependency tree:
+
+        myv1mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    # v1 module with dependency on myv1mod with extra
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        str(tmpdir.join("myv1mod")),
+        new_name="myv1mod",
+        new_requirements=[InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()],
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        autostd=False,
+    )
+
+    installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+    package_name: str = f"{ModuleV2.PKG_NAME_PREFIX}depmod"
+    assert package_name in installed
+    assert package_name_extra in installed
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_project_level_v2_dep_update_scenario(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+    do_project_update: bool,
+) -> None:
+    """
+    Verify that module installation works correctly when a project is updated with a V2 module dependency with an extra.
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("mymod")),
+        new_name="mymod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("mymod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("mymod[myfeature]").get_python_package_requirement()
+    package_name: str = str(package_without_extra)
+
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
+
+    # project with dependency on mymod without extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_without_extra],
+        autostd=False,
+    )
+    assert_installed(extra_installed=False)
+
+    # project with dependency on mymod with extra
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import mymod",
+        install_project=not do_project_update,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[package_with_extra],
+        autostd=False,
+    )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
+    assert_installed(extra_installed=True)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_dep_of_v2_module_update_scenario(
+    snippetcompiler_clean,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+    local_module_package_index: str,
+    package_name_extra: str,
+    do_project_update: bool,
+) -> None:
+    """
+    Verify that module installation works correctly when a new version of a module defines a dependency with an extra.
+
+    Dependency tree:
+
+        myv2mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # create module with optional dependency
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
+    package_name: str = str(package_without_extra)
+
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
+
+    # Create myv2mod
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_content_init_cf="import depmod",
+        new_requirements=[package_without_extra],
+        publish_index=index,
+    )
+    # project with dependency on myv2mod without extra
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
+        autostd=False,
+    )
+    assert_installed(extra_installed=False)
+
+    # Create myv2mod with extra
+    shutil.rmtree(tmpdir.join("myv2mod"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("2.0.0"),
+        new_content_init_cf="import depmod",
+        new_requirements=[package_with_extra],
+        publish_index=index,
+    )
+    # project with dependency on mymod with extra
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=not do_project_update,
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
+        autostd=False,
+    )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
+    assert_installed(extra_installed=True)
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize("package_name_extra", ["inmanta-module-minimalv2module", "lorem"])
+@pytest.mark.parametrize("do_project_update", [True, False])
+def test_module_install_extra_on_dep_of_v1_module_update_scenario(
+    tmpdir,
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    local_module_package_index: str,
+    package_name_extra: str,
+    do_project_update: bool,
+) -> None:
+    """
+    Verify that module installation works correct when a V1 module is updated with a dependency that defines an extra.
+
+    Dependency tree:
+
+        myv1mod
+           --> depmod (V2)
+           [--> <extra>]
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Publish dependency of V1 module (depmod) to python package repo
+    package_without_extra: Requirement = InmantaModuleRequirement.parse("depmod").get_python_package_requirement()
+    package_with_extra: Requirement = InmantaModuleRequirement.parse("depmod[myfeature]").get_python_package_requirement()
+    package_name: str = str(package_without_extra)
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("depmod")),
+        new_name="depmod",
+        new_requirements=[],
+        new_extras={
+            "myfeature": [Requirement.parse(package_name_extra)],
+        },
+        publish_index=index,
+    )
+
+    def assert_installed(*, module_installed: bool = True, extra_installed: bool) -> None:
+        installed: abc.Mapping[str, Version] = process_env.get_installed_packages()
+        assert (package_name in installed) == module_installed
+        assert (package_name_extra in installed) == extra_installed
+
+    # v1 module with dependency on myv1mod without extra
+    path_myv1mod = str(tmpdir.join("myv1mod"))
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        path_myv1mod,
+        new_name="myv1mod",
+        new_requirements=[package_without_extra],
+    )
+    snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        autostd=False,
+    )
+    assert_installed(extra_installed=False)
+
+    # v1 module with dependency on myv1mod with extra
+    shutil.rmtree(path_myv1mod)
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        path_myv1mod,
+        new_name="myv1mod",
+        new_requirements=[package_with_extra],
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=not do_project_update,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        autostd=False,
+    )
+    if do_project_update:
+        project_tool = ProjectTool()
+        project_tool.update(project=project)
+
+    assert_installed(extra_installed=True)
+
+
+@pytest.mark.slowtest
+async def test_v1_module_depends_on_third_party_dep_with_extra(
+    tmpdir, snippetcompiler_clean, modules_dir: str, index_with_pkgs_containing_optional_deps: str
+) -> None:
+    """
+    Test whether extras on third party python dependencies are correctly handled on V1 modules.
+    """
+    # Add dependency pkg[optional-a] to module
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(tmpdir, "myv1mod"),
+        new_name="myv1mod",
+        new_content_init_cf="",
+        new_requirements=[Requirement.parse("pkg[optional-a]")],
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a"])
+    assert not project.virtualenv.are_installed(["dep-b"])
+    assert not project.virtualenv.are_installed(["dep-c"])
+
+    # Add dependency pkg[optional-a,optional-b] to module
+    shutil.rmtree(os.path.join(tmpdir, "myv1mod"))
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        os.path.join(tmpdir, "myv1mod"),
+        new_name="myv1mod",
+        new_content_init_cf="",
+        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv1mod",
+        install_project=True,
+        add_to_module_path=[str(tmpdir)],
+        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
+
+
+@pytest.mark.slowtest
+async def test_v2_module_depends_on_third_party_dep_with_extra(
+    tmpdir, snippetcompiler_clean, modules_v2_dir: str, index_with_pkgs_containing_optional_deps: str
+) -> None:
+    """
+    Test whether extras on third party python dependencies are correctly handled on V2 modules.
+    """
+    index: PipIndex = PipIndex(artifact_dir=str(tmpdir.join(".index")))
+
+    # Add dependency pkg[optional-a] to module
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("1.0.0"),
+        new_requirements=[Requirement.parse("pkg[optional-a]")],
+        publish_index=index,
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
+        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a"])
+    assert not project.virtualenv.are_installed(["dep-b"])
+    assert not project.virtualenv.are_installed(["dep-c"])
+
+    # Add dependency pkg[optional-a,optional-b] to module
+    shutil.rmtree(tmpdir.join("myv2mod"))
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        str(tmpdir.join("myv2mod")),
+        new_name="myv2mod",
+        new_version=Version("2.0.0"),
+        new_requirements=[Requirement.parse("pkg[optional-a,optional-b]")],
+        publish_index=index,
+    )
+    project: Project = snippetcompiler_clean.setup_for_snippet(
+        "import myv2mod",
+        install_project=True,
+        python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
+        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        autostd=False,
+    )
+    assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
 
 
 async def test_loading_source_and_bytecode(
