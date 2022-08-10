@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequ
 
 from inmanta import const
 from inmanta.stable_api import stable_api
+from inmanta.util import hash_file_streaming
 
 if TYPE_CHECKING:
     from inmanta import protocol
@@ -281,12 +282,15 @@ class CodeLoader(object):
                 # A file of the other type exists, we should clean it up
                 os.remove(os.path.join(module_dir, alternate_file))
 
-            if module_source.source is not None:
-                source_code = module_source.source
-            else:
-                source_code = module_source.get_source_code()
+            if os.path.exists(source_file):
+                with open(source_file, "rb") as fh:
+                    thehash = hash_file_streaming(fh)
+                if thehash == module_source.hash_value:
+                    LOGGER.debug("Not deploying code (hv=%s, module=%s) because it is already on disk", module_source.hash_value, module_source.name)
+                    return False
 
             # write the new source
+            source_code = module_source.get_source_code()
             with open(source_file, "wb+") as fd:
                 fd.write(source_code)
             return True
