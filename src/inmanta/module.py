@@ -476,6 +476,17 @@ class ModuleSource(Generic[TModule]):
             return self.install(project, module_spec)
         return installed
 
+    def _get_constraints(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> str:
+        """
+        Returns the constraints on a given inmanta module as a string.
+
+        :param module_name: The name of the module.
+        :param module_spec: List of inmanta requirements in which to look for the module.
+        """
+        constraints_on_module: List[str] = [str(req) for req in module_spec if module_name == req.key and req.specs]
+        from_constraints = f" (from constraints {' '.join(constraints_on_module)})" if constraints_on_module else ""
+        return from_constraints
+
     @abstractmethod
     def log_pre_install_information(self, module_name: str) -> None:
         """
@@ -484,6 +495,30 @@ class ModuleSource(Generic[TModule]):
         :param module_name: The module's name.
         """
         raise NotImplementedError("Abstract method")
+
+    def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, "Version"]):
+        if version_snapshot:
+            out = [header] if header is not None else []
+            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
+            LOGGER.debug("\n".join(out))
+
+    def _log_snapshot_difference(self, version_snapshot, previous_snapshot, header):
+        set_pre_install = set(previous_snapshot.items())
+        set_post_install = set(version_snapshot.items())
+        updates_and_additions = set_post_install - set_pre_install
+
+        if version_snapshot:
+            out = [header] if header is not None else []
+            for inmanta_module_name, package_version in sorted(version_snapshot.items()):
+                if inmanta_module_name not in previous_snapshot.keys():
+                    # new module that wasn't previously installed
+                    out.append("+ " + inmanta_module_name + ": " + str(package_version))
+                elif inmanta_module_name in [elmt[0] for elmt in updates_and_additions]:
+                    # module has a different version
+                    out.append("+ " + inmanta_module_name + ": " + str(package_version))
+                    out.append("- " + inmanta_module_name + ": " + str(previous_snapshot[inmanta_module_name]))
+
+            LOGGER.debug("\n".join(out))
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
@@ -591,14 +626,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                     ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
         try:
-            self.log_pre_install_information(module_name)
+            self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
             env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
 
             self.log_post_install_information(module_name)
-            self.log_snapshot_difference_v2_modules(
-                modules_pre_install, header="Modules versions after installation:"
-            )
+            self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
         except env.PackageNotFound:
             return None
         path: Optional[str] = self.path_for(module_name)
@@ -608,8 +641,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
         return self.from_path(project, module_name, path)
 
-    def log_pre_install_information(self, module_name: str) -> None:
-        LOGGER.debug("Installing module %s (v2).", module_name)
+    def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
+        LOGGER.debug("Installing module %s (v2)%s.", module_name, super()._get_constraints(module_name, module_spec))
 
     def take_v2_modules_snapshot(self, header: Optional[str] = None) -> Dict[str, "Version"]:
         """
@@ -619,15 +652,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         """
         packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
-        if version_snapshot:
-            out = [header] if header is not None else []
-            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
-            LOGGER.debug("\n".join(out))
+        super()._log_version_snapshot(header, version_snapshot)
         return version_snapshot
 
-    def log_snapshot_difference_v2_modules(
-        self, modules_pre_install: Dict[str, "Version"], header: Optional[str] = None
-    ) -> None:
+    def log_snapshot_difference_v2_modules(self, previous_snapshot: Dict[str, "Version"], header: Optional[str] = None) -> None:
         """
         Logs all v2 inmanta modules currently installed (in alphabetical order) and their version.
         For each module, the prefix gives some context:
@@ -635,29 +663,14 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             - "~" means this module was previously installed but a new version has been installed
             - " " means this module was already installed and left untouched
 
-        :param modules_pre_install: Mapping of inmanta module names to their respective versions. This is the baseline against
+        :param previous_snapshot: Mapping of inmanta module names to their respective versions. This is the baseline against
         which the currently installed versions will be compared.
         :param header: Optional text to be displayed before logging the diff view
         """
         packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
-        set_pre_install = set(modules_pre_install.items())
-        set_post_install = set(version_snapshot.items())
-        updates_and_additions = set_post_install - set_pre_install
 
-        if version_snapshot:
-            out = [header] if header is not None else []
-            for inmanta_module_name, package_version in sorted(version_snapshot.items()):
-                prefix = " "
-                suffix = ""
-                if inmanta_module_name not in modules_pre_install.keys():
-                    prefix = "+"
-                elif inmanta_module_name in [elmt[0] for elmt in updates_and_additions]:
-                    prefix = "~"
-                    suffix = f" (was previously {modules_pre_install[inmanta_module_name]})"
-
-                out.append(prefix + inmanta_module_name + ": " + str(package_version) + suffix)
-            LOGGER.debug("\n".join(out))
+        super()._log_snapshot_difference(version_snapshot, previous_snapshot, header)
 
     def log_post_install_information(self, module_name: str) -> None:
         """
@@ -723,52 +736,33 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
-    def log_pre_install_information(self, module_name: str) -> None:
-        LOGGER.debug("Installing module %s (v1).", module_name)
+    def log_pre_install_information(self, module_name: str, module_spec) -> None:
+        LOGGER.debug("Installing module %s (v1)%s.", module_name, super()._get_constraints(module_name, module_spec))
 
     def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, "Version"]:
         """
-        Log and return a dictionary containing currently installed modules and their versions.
+        Log and return a dictionary containing currently loaded modules and their versions.
 
         :param header: Optional text to be displayed before logging the modules and their versions
         """
 
         version_snapshot = {module_name: module.version for module_name, module in project.modules.items()}
-        if version_snapshot:
-            out = [header] if header is not None else []
-            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
-            LOGGER.debug("\n".join(out))
+        super()._log_version_snapshot(header, version_snapshot)
         return version_snapshot
 
     def log_snapshot_difference_v1_modules(
-        self, project: "Project", modules_pre_install: Dict[str, "Version"], header: Optional[str] = None
+        self, project: "Project", previous_snapshot: Dict[str, "Version"], header: Optional[str] = None
     ) -> None:
         """
-        Logs all inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
+        Logs a diff view on inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
 
         :param project: The currently active project.
-        :param modules_pre_install: Mapping of inmanta module names to their respective versions. This is the baseline against
+        :param previous_snapshot: Mapping of inmanta module names to their respective versions. This is the baseline against
         which the currently installed versions will be compared.
         :param header: Optional text to be displayed before logging the diff view.
         """
         version_snapshot = {module_name: module.version for module_name, module in project.modules.items()}
-        set_pre_install = set(modules_pre_install.items())
-        set_post_install = set(version_snapshot.items())
-        updates_and_additions = set_post_install - set_pre_install
-
-        if version_snapshot:
-            out = [header] if header is not None else []
-            for inmanta_module_name, package_version in sorted(version_snapshot.items()):
-                prefix = " "
-                suffix = ""
-                if inmanta_module_name not in modules_pre_install.keys():
-                    prefix = "+"
-                elif inmanta_module_name in [elmt[0] for elmt in updates_and_additions]:
-                    prefix = "~"
-                    suffix = f" (was previously {modules_pre_install[inmanta_module_name]})"
-
-                out.append(prefix + inmanta_module_name + ": " + str(package_version) + suffix)
-            LOGGER.debug("\n".join(out))
+        super()._log_snapshot_difference(version_snapshot, previous_snapshot, header)
 
     def log_post_install_information(self, module: TModule) -> None:
         """
@@ -802,10 +796,8 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
                     preinstalled_version,
                     ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
                 )
-                self.log_pre_install_information(module_name)
-                modules_pre_install = self.take_modules_snapshot(
-                    project, header="Modules versions before installation:"
-                )
+                self.log_pre_install_information(module_name, module_spec)
+                modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")
                 module = ModuleV1.update(
                     project, module_name, module_spec, preinstalled.path, fetch=False, install_mode=project.install_mode
                 )
@@ -824,16 +816,12 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
             if not result:
                 return None
 
-            self.log_pre_install_information(module_name)
-            modules_pre_install = self.take_modules_snapshot(
-                project, header="Modules versions before installation:"
-            )
+            self.log_pre_install_information(module_name, module_spec)
+            modules_pre_install = self.take_modules_snapshot(project, header="Modules versions before installation:")
             module = ModuleV1.update(
                 project, module_name, module_spec, download_path, fetch=False, install_mode=project.install_mode
             )
-            self.log_snapshot_difference_v1_modules(
-                project, modules_pre_install, header="Modules versions after installation:"
-            )
+            self.log_snapshot_difference_v1_modules(project, modules_pre_install, header="Modules versions after installation:")
             self.log_post_install_information(module)
 
             return module

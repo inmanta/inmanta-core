@@ -220,7 +220,6 @@ class PythonWorkingSet:
         return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
 
     @classmethod
-
     def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> Dict[str, version.Version]:
         """
         Return all packages present in `pkg_resources.working_set` together with the version of the package.
