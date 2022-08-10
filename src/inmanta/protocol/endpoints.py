@@ -15,19 +15,17 @@
 
     Contact: code@inmanta.com
 """
-import concurrent
 import inspect
 import logging
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import defaultdict
-from concurrent.futures import Future
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
 
-from tornado import concurrent, ioloop
+from tornado import ioloop
 
 from inmanta import config as inmanta_config
 from inmanta import util

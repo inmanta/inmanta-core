@@ -17,7 +17,6 @@
 """
 import abc
 import asyncio
-import base64
 import datetime
 import logging
 import os
@@ -41,7 +40,6 @@ from inmanta.agent.handler import ResourceHandler, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data import model
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2

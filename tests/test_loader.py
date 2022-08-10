@@ -32,6 +32,14 @@ from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 
 
+def get_module_source(module: str, code: str) -> ModuleSource:
+    data = code.encode()
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(data)
+    hv: str = sha1sum.hexdigest()
+    return ModuleSource(module, hv, module.replace(".", "/") + ".py", data)
+
+
 def test_code_manager(tmpdir: py.path.local):
     """Verify the code manager"""
     original_project_dir: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "plugins_project")
@@ -96,10 +104,7 @@ def test_code_loader(tmp_path, caplog):
     cl = loader.CodeLoader(tmp_path)
 
     def deploy(code: bytes) -> None:
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(code)
-        hv: str = sha1sum.hexdigest()
-        cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_unit_test", code, hv)])
+        cl.deploy_version([get_module_source("inmanta_plugins.inmanta_unit_test", code)])
 
     with pytest.raises(ImportError):
         import inmanta_plugins.inmanta_unit_test  # NOQA
@@ -108,7 +113,7 @@ def test_code_loader(tmp_path, caplog):
         """
 def test():
     return 10
-        """.encode()
+        """
     )
     assert any("Deploying code " in message for message in caplog.messages)
     caplog.clear()
@@ -122,7 +127,7 @@ def test():
         """
 def test():
     return 20
-        """.encode()
+        """
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 20
@@ -135,7 +140,7 @@ def test():
         """
 def test():
     return 20
-        """.encode()
+        """
     )
 
     assert inmanta_plugins.inmanta_unit_test.test() == 20
@@ -145,13 +150,6 @@ def test():
 def test_code_loader_dependency(tmp_path, caplog):
     """Test loading two modules with a dependency between them"""
     cl = loader.CodeLoader(tmp_path)
-
-    def get_module_source(module: str, code: str) -> ModuleSource:
-        data = code.encode()
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(data)
-        hv: str = sha1sum.hexdigest()
-        return ModuleSource(module, data, hv)
 
     source_init: ModuleSource = get_module_source(
         "inmanta_plugins.inmanta_unit_test_modular",
@@ -191,11 +189,8 @@ def test_2312_code_loader_missing_init(tmp_path) -> None:
     code: bytes = """
 def test():
     return 10
-        """.encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv: str = sha1sum.hexdigest()
-    cl.deploy_version([ModuleSource("inmanta_plugins.my_module.my_sub_mod", code, hv)])
+        """
+    cl.deploy_version([get_module_source("inmanta_plugins.my_module.my_sub_mod", code)])
 
     import inmanta_plugins.my_module.my_sub_mod as sm
 
@@ -209,16 +204,12 @@ def test_code_loader_import_error(tmp_path, caplog):
 import badimmport
 def test():
     return 10
-    """.encode()
-
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv = sha1sum.hexdigest()
+    """
 
     with pytest.raises(ImportError):
         import inmanta_bad_unit_test  # NOQA
 
-    cl.deploy_version([ModuleSource("inmanta_plugins.inmanta_bad_unit_test", code, hv)])
+    cl.deploy_version([get_module_source("inmanta_plugins.inmanta_bad_unit_test", code)])
 
     assert "ModuleNotFoundError: No module named 'badimmport'" in caplog.text
 

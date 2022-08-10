@@ -20,9 +20,8 @@ import hashlib
 import py_compile
 import tempfile
 import uuid
-from asyncio import gather
 from logging import DEBUG, INFO
-from typing import Dict, List, Optional
+from typing import List
 
 import pytest
 

@@ -180,8 +180,11 @@ class ModuleSource:
     def is_bytecode(self) -> bool:
         return self.file_name.endswith(".pyc")
 
-    def fetch_source_code(self) -> bytes:
+    def get_source_code(self) -> bytes:
         """Load the source code"""
+        if self.source is not None:
+            return self.source
+
         if self._client is None:
             raise Exception("_client should be set to use this method.")
 
@@ -281,7 +284,7 @@ class CodeLoader(object):
             if module_source.source is not None:
                 source_code = module_source.source
             else:
-                source_code = module_source.fetch_source_code()
+                source_code = module_source.get_source_code()
 
             # write the new source
             with open(source_file, "wb+") as fd:
