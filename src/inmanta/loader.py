@@ -172,6 +172,14 @@ class CodeManager(object):
 
 @dataclass(frozen=True)
 class ModuleSource:
+    """
+    :param name: the name of the python module. e.g. inmanta_plugins.model.x
+    :param file_name: the file name of the python module. e.g. inmanta_plugins/model/x.pyc
+    :param source: the content of the file
+    :param _client: a protocol client, required when source is not set
+
+    """
+
     name: str
     hash_value: str
     file_name: str
@@ -286,7 +294,11 @@ class CodeLoader(object):
                 with open(source_file, "rb") as fh:
                     thehash = hash_file_streaming(fh)
                 if thehash == module_source.hash_value:
-                    LOGGER.debug("Not deploying code (hv=%s, module=%s) because it is already on disk", module_source.hash_value, module_source.name)
+                    LOGGER.debug(
+                        "Not deploying code (hv=%s, module=%s) because it is already on disk",
+                        module_source.hash_value,
+                        module_source.name,
+                    )
                     return False
 
             # write the new source

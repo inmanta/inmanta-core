@@ -36,7 +36,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union, BinaryIO
+from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -84,15 +84,15 @@ def hash_file(content: bytes) -> str:
 
 
 def hash_file_streaming(file_handle: BinaryIO) -> str:
-        h = hashlib.new("sha1")
-        while True:
-            # Reading is buffered, so we can read smaller chunks.
-            chunk = file_handle.read(h.block_size)
-            if not chunk:
-                break
-            h.update(chunk)
+    h = hashlib.new("sha1")
+    while True:
+        # Reading is buffered, so we can read smaller chunks.
+        chunk = file_handle.read(h.block_size)
+        if not chunk:
+            break
+        h.update(chunk)
 
-        return h.hexdigest()
+    return h.hexdigest()
 
 
 def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:

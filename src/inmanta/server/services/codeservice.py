@@ -107,7 +107,13 @@ class CodeService(protocol.ServerSlice):
             for code_hash, (file_name, module, req) in code.source_refs.items():
                 # To support non utf-8 encoded files, the agent uses the file API to load the source code. For backwards
                 # compatability the method returns and empty string.
-                sources[code_hash] = (file_name, module, "", req)
+                try:
+                    content = self.file_slice.get_file_internal(code_hash)
+                    sources[code_hash] = (file_name, module, content.decode(), req)
+                except UnicodeDecodeError:
+                    raise BadRequest(
+                        f"The source file {file_name}({hash}) is not correctly encoded," f" use the v2 endpoint to retrieve it"
+                    )
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
