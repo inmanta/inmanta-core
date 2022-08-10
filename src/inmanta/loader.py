@@ -173,16 +173,12 @@ class CodeManager(object):
 class ModuleSource:
     name: str
     hash_value: str
+    file_name: str
     source: Optional[bytes] = None
     _client: Optional["protocol.SyncClient"] = None
 
     def is_bytecode(self) -> bool:
-        try:
-            # The magic number in the bytecode changes with python releases. This method is more future proof.
-            self.source.decode("utf-8")
-            return False
-        except Exception:
-            return True
+        return self.file_name.endswith(".pyc")
 
     def fetch_source_code(self) -> bytes:
         """Load the source code"""
@@ -257,8 +253,10 @@ class CodeLoader(object):
 
             if module_source.is_bytecode():
                 init_file = "__init__.pyc"
+                alternate_file = "__init__.py"
             else:
                 init_file = "__init__.py"
+                alternate_file = "__init__.pyc"
 
             def touch_inits(directory: str) -> None:
                 """
@@ -276,10 +274,9 @@ class CodeLoader(object):
             touch_inits(os.path.dirname(module_dir))
             source_file = os.path.join(module_dir, init_file)
 
-            if os.path.exists(os.path.join(module_dir, "__init__.py")) and source_file[-4:] == ".pyc":
-                # we seem to have create an __init__.py before, we now have a pyc file so we should remove it before
-                # creating the pyc to keep the structure clean
-                os.remove(os.path.join(module_dir, "__init__.py"))
+            if os.path.exists(os.path.join(module_dir, alternate_file)):
+                # A file of the other type exists, we should clean it up
+                os.remove(os.path.join(module_dir, alternate_file))
 
             if module_source.source is not None:
                 source_code = module_source.source

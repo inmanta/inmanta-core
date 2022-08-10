@@ -1211,7 +1211,12 @@ class Agent(SessionEndpoint):
                         sources = []
                         for source in result.result["data"]:
                             sources.append(
-                                ModuleSource(name=source["module_name"], hash_value=source["hash"], _client=sync_client)
+                                ModuleSource(
+                                    name=source["module_name"],
+                                    file_name=source["file_name"],
+                                    hash_value=source["hash"],
+                                    _client=sync_client,
+                                )
                             )
                             requirements.update(source["requirements"])
 

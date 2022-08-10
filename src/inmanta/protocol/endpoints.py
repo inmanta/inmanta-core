@@ -20,7 +20,7 @@ import inspect
 import logging
 import socket
 import uuid
-from asyncio import CancelledError, sleep
+from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import defaultdict
 from concurrent.futures import Future
 from enum import Enum
@@ -423,7 +423,7 @@ class SyncClient(object):
             try:
                 if self._ioloop is None:
                     return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
-                return self._ioloop.run_coroutine_threadsafe(method_call).result(self.timeout)
+                return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
