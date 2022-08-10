@@ -657,11 +657,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def log_snapshot_difference_v2_modules(self, previous_snapshot: Dict[str, "Version"], header: Optional[str] = None) -> None:
         """
-        Logs all v2 inmanta modules currently installed (in alphabetical order) and their version.
-        For each module, the prefix gives some context:
-            - "+" means this module is newly installed
-            - "~" means this module was previously installed but a new version has been installed
-            - " " means this module was already installed and left untouched
+        Logs a diff view of v2 inmanta modules currently installed (in alphabetical order) and their version.
 
         :param previous_snapshot: Mapping of inmanta module names to their respective versions. This is the baseline against
         which the currently installed versions will be compared.
