@@ -148,7 +148,76 @@ class ConflictingRequirements(CompilerException):
             )
 
 
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
+
+
 class PythonWorkingSet:
+    @classmethod
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+        """
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
+    @classmethod
+    def are_installed(cls, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this workingset.
+        """
+        if not requirements:
+            return True
+        installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
+
+        def _are_installed_recursive(
+            reqs: Sequence[Requirement],
+            seen_requirements: Sequence[Requirement],
+            contained_in_extra: Optional[str] = None,
+        ) -> bool:
+            """
+            Recursively check the given reqs are installed in this working set
+
+            :param reqs: The requirements that should be checked.
+            :param seen_requirements: An accumulator that contains all the requirements that were check in
+                                      previous iterators. It prevents infinite loops when the dependency
+                                      graph contains circular dependencies.
+            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
+                                       iteration of this method this value is None.
+            """
+            for r in reqs:
+                if r in seen_requirements:
+                    continue
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+                # the marker evaluation fail.
+                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                    # The marker of the requirement doesn't apply on this environment
+                    continue
+                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                    return False
+                if r.extras:
+                    for extra in r.extras:
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        if distribution is None:
+                            return False
+                        pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=())
+                        )
+                        if not _are_installed_recursive(
+                            reqs=list(pkgs_required_by_extra),
+                            seen_requirements=list(seen_requirements) + list(reqs),
+                            contained_in_extra=extra,
+                        ):
+                            return False
+            return True
+
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
+
     @classmethod
     def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
         """
@@ -509,9 +578,6 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         yield fd.name
 
 
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
-
-
 class ActiveEnv(PythonEnvironment):
     """
     The active Python environment. Method implementations assume this environment is active when they're called.
@@ -533,31 +599,11 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
-    @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
-        """
-        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
-        """
-        if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
-        else:
-            return requirements
-
     def are_installed(self, requirements: req_list) -> bool:
         """
-        Return True iff the given requirements are installed in this venv.
+        Return True iff the given requirements are installed in this environment.
         """
-        if not requirements:
-            return True
-        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-        return True
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,
