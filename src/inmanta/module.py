@@ -488,7 +488,7 @@ class ModuleSource(Generic[TModule]):
         return from_constraints
 
     @abstractmethod
-    def log_pre_install_information(self, module_name: str) -> None:
+    def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
         """
         Display information about this module's installation before the actual installation.
 
@@ -496,13 +496,15 @@ class ModuleSource(Generic[TModule]):
         """
         raise NotImplementedError("Abstract method")
 
-    def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, "Version"]):
+    def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, "Version"]) -> None:
         if version_snapshot:
             out = [header] if header is not None else []
             out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
             LOGGER.debug("\n".join(out))
 
-    def _log_snapshot_difference(self, version_snapshot, previous_snapshot, header):
+    def _log_snapshot_difference(
+        self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
+    ) -> None:
         set_pre_install = set(previous_snapshot.items())
         set_post_install = set(version_snapshot.items())
         updates_and_additions = set_post_install - set_pre_install
@@ -732,7 +734,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.local_repo: ModuleRepo = local_repo
         self.remote_repo: ModuleRepo = remote_repo
 
-    def log_pre_install_information(self, module_name: str, module_spec) -> None:
+    def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v1)%s.", module_name, super()._get_constraints(module_name, module_spec))
 
     def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, "Version"]:
