@@ -296,7 +296,9 @@ class CodeLoader(object):
                         module_source.hash_value,
                         module_source.name,
                     )
-                    return False
+                    # Force (re)load, because we have it on disk, but not on the in-memory cache
+                    # We may have not loaded it
+                    return True
 
             # write the new source
             source_code = module_source.get_source_code()
