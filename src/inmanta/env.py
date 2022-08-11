@@ -63,6 +63,10 @@ class PackageNotFound(Exception):
     pass
 
 
+class PipInstallError(Exception):
+    pass
+
+
 @dataclass(eq=True, frozen=True)
 class VersionConflict:
     """
@@ -472,7 +476,7 @@ class PythonEnvironment:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
-            raise Exception(
+            raise PipInstallError(
                 f"Process {cmd} exited with return code {return_code}."
                 "Increase the verbosity level with the -v option for more information."
             )

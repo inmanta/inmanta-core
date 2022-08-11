@@ -1315,43 +1315,72 @@ Modules versions after installation:
 
 @pytest.mark.slowtest
 def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_clean, local_module_package_index):
+    """
+    Test that the version constraints are appropriately logged on module install.
+    """
     caplog.set_level(logging.DEBUG)
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
-    module_c: module.ModuleV2Metadata = module_from_template(
+    module.ModuleV2Metadata = module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "module_a"),
+        os.path.join(str(tmpdir), "module_a_low"),
         new_version=version.Version("8.8.8"),
         new_name="module_a",
         install=False,
         publish_index=index,
     )
 
+    module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a_high"),
+        new_version=version.Version("9.9.9"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+
+    module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_b"),
+        new_version=version.Version("8.8.8"),
+        new_requirements=[
+            InmantaModuleRequirement.parse("module_a<10.10.10"),
+            InmantaModuleRequirement.parse("module_a>=0.0.0"),
+        ],
+        new_name="module_b",
+        install=False,
+        publish_index=index,
+    )
+
     snippetcompiler_clean.setup_for_snippet(
-        f"""
-        import {module.ModuleV2.get_name_from_metadata(module_c)}
+        """
+        import module_a
+        import module_b
         """,
         autostd=False,
         python_package_sources=[local_module_package_index, index.url],
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_a"))],
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
+        ],
         install_project=True,
         project_requires=[
-            module.InmantaModuleRequirement.parse("module_a>0.0"),
-            module.InmantaModuleRequirement.parse("module_a>=0.0"),
-            module.InmantaModuleRequirement.parse("module_a==8.8.8"),
-            module.InmantaModuleRequirement.parse("module_a<=18.8.8"),
-            module.InmantaModuleRequirement.parse("module_a<18.8.8"),
+            module.InmantaModuleRequirement.parse("module_a<9.9.9"),
+            module.InmantaModuleRequirement.parse("module_a>1.1.1"),
         ],
     )
-    log_contains(
-        caplog,
-        "inmanta.module",
-        logging.DEBUG,
-        (
-            "Installing module module_a (v2) (from constraints module_a>0.0 module_a>=0.0 module_a==8.8.8 module_a<=18.8.8 "
-            "module_a<18.8.8)"
-        ),
-    )
+
+    expected_log_messages = [
+        "Installing module module_a (v2) (with constraints module_a<9.9.9 module_a>1.1.1 module_a<10.10.10 module_a>=0.0.0).",
+        "Installing module module_b (v2) (with no version constraints)",
+    ]
+
+    for log_message in expected_log_messages:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            logging.DEBUG,
+            log_message,
+        )
 
 
 @pytest.mark.slowtest
@@ -1377,5 +1406,5 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "Installing module std (v1) (from constraints std>0.0 std>=0.0 std==3.0.15 std<=100.0.0 std<100.0.0)",
+        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==3.0.15 std<=100.0.0 std<100.0.0)",
     )

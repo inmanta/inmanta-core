@@ -476,7 +476,7 @@ class ModuleSource(Generic[TModule]):
             return self.install(project, module_spec)
         return installed
 
-    def _get_constraints(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> str:
+    def _format_constraints(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> str:
         """
         Returns the constraints on a given inmanta module as a string.
 
@@ -484,7 +484,10 @@ class ModuleSource(Generic[TModule]):
         :param module_spec: List of inmanta requirements in which to look for the module.
         """
         constraints_on_module: List[str] = [str(req) for req in module_spec if module_name == req.key and req.specs]
-        from_constraints = f" (from constraints {' '.join(constraints_on_module)})" if constraints_on_module else ""
+        if constraints_on_module:
+            from_constraints = f"(with constraints {' '.join(constraints_on_module)})"
+        else:
+            from_constraints = "(with no version constraints)"
         return from_constraints
 
     @abstractmethod
@@ -644,7 +647,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return self.from_path(project, module_name, path)
 
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
-        LOGGER.debug("Installing module %s (v2)%s.", module_name, super()._get_constraints(module_name, module_spec))
+        LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
     def take_v2_modules_snapshot(self, header: Optional[str] = None) -> Dict[str, "Version"]:
         """
@@ -735,7 +738,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         self.remote_repo: ModuleRepo = remote_repo
 
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
-        LOGGER.debug("Installing module %s (v1)%s.", module_name, super()._get_constraints(module_name, module_spec))
+        LOGGER.debug("Installing module %s (v1) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
     def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, "Version"]:
         """
