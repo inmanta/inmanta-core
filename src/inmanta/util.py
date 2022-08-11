@@ -245,9 +245,8 @@ class Scheduler(object):
         """
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
-        if cancel_on_stop:
-            self._executing_tasks[action].append(task)
-        else:
+        self._executing_tasks[action].append(task)
+        if not cancel_on_stop:
             self._await_tasks[action].append(task)
 
 
@@ -273,7 +272,7 @@ class Scheduler(object):
 
         :param action: A function to call periodically
         :param schedule: The schedule for this action
-        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine is awaited.
+        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
         """
         assert is_coroutine(action)
 
