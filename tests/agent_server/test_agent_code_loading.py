@@ -88,7 +88,8 @@ inmanta.test_agent_code_loading = 10
 import inmanta
 inmanta.test_agent_code_loading = 15
     """
-    # set a different value to check if the agent has loaded the code. use setattr to avoid type complaints
+    # set a different value to check if the agent has loaded the code.
+    # use monkeypatch for cleanup
     monkeypatch.setattr(inmanta, "test_agent_code_loading", 0, raising=False)
 
     sources = {}

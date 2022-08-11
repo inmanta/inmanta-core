@@ -61,6 +61,7 @@ def test_code_manager(tmpdir: py.path.local):
 
     def assert_content(source_info: SourceInfo, handler) -> str:
         filename = inspect.getsourcefile(handler)
+        assert filename is not None
         content: str
         with open(filename, "rb") as fd:
             content = fd.read()
@@ -85,7 +86,7 @@ def test_code_manager(tmpdir: py.path.local):
     )
 
     # get_file_hashes
-    mgr_contents: Set[str] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
+    mgr_contents: Set[bytes] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
     assert single_content in mgr_contents
     assert multi_content in mgr_contents
 
@@ -103,7 +104,7 @@ def test_code_loader(tmp_path, caplog):
 
     cl = loader.CodeLoader(tmp_path)
 
-    def deploy(code: bytes) -> None:
+    def deploy(code: str) -> None:
         cl.deploy_version([get_module_source("inmanta_plugins.inmanta_unit_test", code)])
 
     with pytest.raises(ImportError):
@@ -186,7 +187,7 @@ def helper():
 def test_2312_code_loader_missing_init(tmp_path) -> None:
     cl = loader.CodeLoader(tmp_path)
 
-    code: bytes = """
+    code = """
 def test():
     return 10
         """
