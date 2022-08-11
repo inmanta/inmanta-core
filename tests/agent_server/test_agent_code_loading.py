@@ -125,6 +125,10 @@ inmanta.test_agent_code_loading = 15
     res = await client.upload_code_batched(tid=environment, id=8, resources={"test::Test4": sources2})
     assert res.code == 200
 
+    # Try to pull binary file via v1 API, get a 400
+    result = await client.get_code(tid=environment, id=7, resource="test::Test4")
+    assert result.code == 400
+
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
