@@ -37,7 +37,7 @@ def get_module_source(module: str, code: str) -> ModuleSource:
     sha1sum = hashlib.new("sha1")
     sha1sum.update(data)
     hv: str = sha1sum.hexdigest()
-    return ModuleSource(module, hv, module.replace(".", "/") + ".py", data)
+    return ModuleSource(module, hv, False, data)
 
 
 def test_code_manager(tmpdir: py.path.local):

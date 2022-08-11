@@ -1211,7 +1211,7 @@ class Agent(SessionEndpoint):
                             sources.append(
                                 ModuleSource(
                                     name=source["module_name"],
-                                    file_name=source["file_name"],
+                                    is_byte_code=source["is_byte_code"],
                                     hash_value=source["hash"],
                                     _client=sync_client,
                                 )

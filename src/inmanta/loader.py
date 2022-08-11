@@ -174,7 +174,7 @@ class CodeManager(object):
 class ModuleSource:
     """
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
-    :param file_name: the file name of the python module. e.g. inmanta_plugins/model/x.pyc
+    :param is_byte_code: is this content python byte code or python source
     :param source: the content of the file
     :param _client: a protocol client, required when source is not set
 
@@ -182,12 +182,9 @@ class ModuleSource:
 
     name: str
     hash_value: str
-    file_name: str
+    is_byte_code: bool
     source: Optional[bytes] = None
     _client: Optional["protocol.SyncClient"] = None
-
-    def is_bytecode(self) -> bool:
-        return self.file_name.endswith(".pyc")
 
     def get_source_code(self) -> bytes:
         """Load the source code"""
@@ -263,7 +260,7 @@ class CodeLoader(object):
                 os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
             )
 
-            if module_source.is_bytecode():
+            if module_source.is_byte_code:
                 init_file = "__init__.pyc"
                 alternate_file = "__init__.py"
             else:

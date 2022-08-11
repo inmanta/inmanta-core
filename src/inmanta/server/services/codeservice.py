@@ -126,6 +126,10 @@ class CodeService(protocol.ServerSlice):
         sources = []
         if code.source_refs is not None:
             for code_hash, (file_name, module, requires) in code.source_refs.items():
-                sources.append(model.Source(hash=code_hash, file_name=file_name, module_name=module, requirements=requires))
+                sources.append(
+                    model.Source(
+                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
+                    )
+                )
 
         return sources

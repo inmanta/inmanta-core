@@ -667,6 +667,6 @@ class Source(BaseModel):
     """Model for source code"""
 
     hash: str
-    file_name: str
+    is_byte_code: bool
     module_name: str
     requirements: List[str]
