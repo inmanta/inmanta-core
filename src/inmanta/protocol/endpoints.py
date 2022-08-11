@@ -400,6 +400,17 @@ class SyncClient(object):
         client: Optional[Client] = None,
         ioloop: Optional[ioloop.IOLoop] = None,
     ) -> None:
+        """
+        either name or client is required.
+        they can not be used at the same time
+
+        :param name: name of the configuration to use for this endpoint. The config section used is "{name}_rest_transport"
+        :param client: the client to use for this sync_client
+        :param timeout: http timeout on all requests
+
+        :param ioloop: the specific (running) ioloop to schedule this request on.
+        if no ioloop is passed,we assume there is no running ioloop in the context where this syncclient is used.
+        """
         if name is None and client is None:
             raise Exception("Either name or client needs to be provided.")
 
@@ -422,9 +433,14 @@ class SyncClient(object):
 
             try:
                 if self._ioloop is None:
+                    # No specific IOLoop if given, so we assume we can start one in this context
                     return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
-                assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-                return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
+                else:
+                    # a specific IOloop is passed
+                    # we unwrap the tornado loop to get the native python loop
+                    # and safely tap into it using run_coroutine_threadsafe
+                    assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
+                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
