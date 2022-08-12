@@ -138,11 +138,11 @@ class Scheduler(object):
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
 
-        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
         # Keep track of tasks that should be awaited before the scheduler is stopped
-        self._await_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        self._await_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool = True) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task, cancel_on_stop: bool = True) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
@@ -157,7 +157,7 @@ class Scheduler(object):
         Called by the callback function of executing task when the task has finished executing.
         """
 
-        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task[object]]]) -> None:
+        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task]]) -> None:
             if action in task_dict:
                 try:
                     task_dict[action].remove(task)

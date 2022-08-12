@@ -295,9 +295,10 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True) -> None:
+    def schedule(
+        self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True
+    ) -> None:
         self._sched.add_action(call, interval, initial_delay, cancel_on_stop)
-
 
     def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """

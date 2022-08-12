@@ -189,7 +189,7 @@ async def test_scheduler_waits_on_shutdown(cancel_on_stop) -> None:
         task_status.task_was_executed = True
 
     sched = util.Scheduler("test_await_tasks_on_shutdown")
-    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0), cancel_on_stop=cancel_on_stop)
+    sched.add_action(action, interval=1000, initial_delay=0, cancel_on_stop=cancel_on_stop)
     await util.retry_limited(lambda: task_status.task_is_executing, timeout=3)
 
     await sched.stop()
