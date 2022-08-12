@@ -481,12 +481,14 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
     loader.unload_inmanta_plugins()
+    default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
+    data.Environment._settings = default_settings
 
 
 def reset_all_objects():
