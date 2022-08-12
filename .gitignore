@@ -79,3 +79,6 @@ _build
 logs
 
 docs/reference/openapi.json
+
+# Ignore modules_v2 python package repo cache
+tests/data/modules_v2.cache
