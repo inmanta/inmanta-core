@@ -45,7 +45,9 @@ class DatabaseService(protocol.ServerSlice):
         # Schedule cleanup agentprocess and agentinstance tables
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
-            self.schedule(self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0)
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def stop(self) -> None:
         await self.disconnect_database()
