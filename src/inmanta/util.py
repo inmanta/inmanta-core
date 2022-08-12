@@ -137,31 +137,42 @@ class Scheduler(object):
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
-        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task) -> None:
+        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
+        # Keep track of tasks that should be awaited before the scheduler is stopped
+        self._await_tasks: Dict[TaskMethod, List[asyncio.Task]] = defaultdict(list)
+
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task, cancel_on_stop: bool = True) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
+        if not cancel_on_stop:
+            self._await_tasks[action].append(task)
 
     def _notify_done(self, action: TaskMethod, task: asyncio.Task) -> None:
         """
         Called by the callback function of executing task when the task has finished executing.
         """
-        if action in self._executing_tasks:
-            try:
-                self._executing_tasks[action].remove(task)
-            except ValueError:
-                pass
+
+        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task]]) -> None:
+            if action in task_dict:
+                try:
+                    task_dict[action].remove(task)
+                except ValueError:
+                    pass
+
+        for task_dict in [self._executing_tasks, self._await_tasks]:
+            remove_action_from_task_dict(task_dict)
 
     def add_action(
         self,
         action: TaskMethod,
         interval: float,
         initial_delay: Optional[float] = None,
+        cancel_on_stop: bool = True,
     ) -> None:
         """
         Add a new action
@@ -169,6 +180,7 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param interval: The interval between execution of actions
         :param initial_delay: Delay to the first execution, defaults to interval
+        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
         """
         assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
 
@@ -191,7 +203,7 @@ class Scheduler(object):
                         action=action(),
                         notify_done_callback=functools.partial(self._notify_done, action),
                     )
-                    self._add_to_executing_tasks(action, task)
+                    self._add_to_executing_tasks(action, task, cancel_on_stop)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -210,7 +222,7 @@ class Scheduler(object):
             IOLoop.current().remove_timeout(self._scheduled[action])
             del self._scheduled[action]
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
         Stop the scheduler
         """
@@ -226,7 +238,9 @@ class Scheduler(object):
         # Cancel all tasks that are already executing
         for action, tasks in self._executing_tasks.items():
             for task in tasks:
-                task.cancel()
+                if task not in self._await_tasks[action]:
+                    task.cancel()
+        await gather(*[handle for handles in self._await_tasks.values() for handle in handles])
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
