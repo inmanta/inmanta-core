@@ -239,7 +239,7 @@ class Scheduler(object):
         # Keep track of tasks that should be awaited before the scheduler is stopped
         self._await_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool=True) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool = True) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
@@ -248,7 +248,6 @@ class Scheduler(object):
         self._executing_tasks[action].append(task)
         if not cancel_on_stop:
             self._await_tasks[action].append(task)
-
 
     def _notify_done(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
         """
@@ -325,9 +324,6 @@ class Scheduler(object):
         Stop the scheduler
         """
         self._stopped = True
-        await gather(*[handle for handle in self._await_tasks.values()])
-        for k in self._await_tasks.keys():
-            self._scheduled.pop(k, None)
         try:
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
@@ -339,7 +335,9 @@ class Scheduler(object):
         # Cancel all tasks that are already executing
         for action, tasks in self._executing_tasks.items():
             for task in tasks:
-                task.cancel()
+                if task not in self._await_tasks[action]:
+                    task.cancel()
+        await gather(*[handle for handles in self._await_tasks.values() for handle in handles])
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:

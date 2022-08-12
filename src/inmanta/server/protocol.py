@@ -304,7 +304,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         return self._handlers
 
     # utility methods for extensions developers
-    def schedule(self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True) -> None:
+    def schedule(
+        self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True
+    ) -> None:
         """
         Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
         same. Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
@@ -314,14 +316,14 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """
         self._sched.add_action(call, IntervalSchedule(float(interval), initial_delay), cancel_on_stop)
 
-    def schedule_cron(self, call: TaskMethod, cron: str) -> None:
+    def schedule_cron(self, call: TaskMethod, cron: str, cancel_on_stop: bool = True) -> None:
         """
         Schedule a task according to a cron specifier. Tasks with the same call and the same schedule are considered the same.
         Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
 
         :param cron: The cron specifier to schedule the task by.
         """
-        self._sched.add_action(call, CronSchedule(cron=cron))
+        self._sched.add_action(call, CronSchedule(cron=cron), cancel_on_stop)
 
     def remove_cron(self, call: TaskMethod, cron: str) -> None:
         """

@@ -544,7 +544,7 @@ class CompilerService(ServerSlice):
             recompile: TaskMethod = partial(
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
             )
-            self.schedule_cron(recompile, schedule_cron)
+            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
             self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
 
     async def request_recompile(
