@@ -320,59 +320,41 @@ async def test_scheduler_cancel_executing_tasks() -> None:
     assert not sched._executing_tasks[action]
 
 
-async def test_await_task_on_scheduler_shutdown() -> None:
+@pytest.mark.parametrize("cancel_on_stop", [True, False])
+async def test_scheduler_waits_on_shutdown(cancel_on_stop) -> None:
     """
     Verify that tasks can be tagged to be awaited when the scheduler is stopped.
     """
 
-
-    # class TaskWrapper():
-    #     def __init__(self, sleep_time: float):
-    #         self.task_status = TaskStatus()
-    #         self.sleep_time = sleep_time
-    # task_await = TaskWrapper(sleep_time=3)
-    # task_cancel = TaskWrapper(sleep_time=1000)
-
-    # sched.add_action(task_cancel.action, IntervalSchedule(interval=1000, initial_delay=0), cancel_on_stop=True)
-    #
-    #
-    # await util.retry_limited(lambda: task_cancel.task_status.task_is_executing, timeout=10)
-    # assert task_cancel.task_status.task_is_executing
-
-    # assert sched._executing_tasks[task_cancel.action]
-
-    # await util.retry_limited(lambda: task_cancel.task_status.task_was_cancelled, timeout=10)
-    # assert not sched._executing_tasks[task_await.action]
-    # assert not task_await.task_status.task_was_cancelled
-
     @dataclasses.dataclass
     class TaskStatus:
+        task_is_executing: bool = False
         task_was_cancelled: bool = False
         task_was_executed: bool = False
 
     task_status = TaskStatus()
 
-    i = []
     async def action():
-        while len(i) < 5:
-            try:
-                i.append(len(i))
-                await asyncio.sleep(.5)
-            except asyncio.CancelledError:
-                task_status.task_was_cancelled = True
-                raise
+        task_status.task_is_executing = True
+        try:
+            await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            task_status.task_was_cancelled = True
+            raise
         task_status.task_was_executed = True
 
-    sched = util.Scheduler("await_tasks_on_shutdown")
-    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0), cancel_on_stop=False)
-    assert ScheduledTask(action=action, schedule=IntervalSchedule(interval=1000, initial_delay=0)) in sched._scheduled
-    await asyncio.sleep(.8)
-    assert ScheduledTask(action=action, schedule=IntervalSchedule(interval=1000, initial_delay=0)) in sched._executing_tasks
-    # assert ScheduledTask(action=action, schedule=IntervalSchedule(interval=1000, initial_delay=0)) in sched._await_tasks
-    # await util.retry_limited(lambda: ScheduledTask(action, IntervalSchedule(interval=1000, initial_delay=0)) in sched._await_tasks[action], timeout=10)
+    sched = util.Scheduler("test_await_tasks_on_shutdown")
+    sched.add_action(action, IntervalSchedule(interval=1000, initial_delay=0), cancel_on_stop=cancel_on_stop)
+    await util.retry_limited(lambda: task_status.task_is_executing, timeout=3)
+
     await sched.stop()
 
-    await util.retry_limited(lambda: task_status.task_was_executed, timeout=5)
+    if cancel_on_stop:
+        await util.retry_limited(lambda: task_status.task_was_cancelled, timeout=3)
+        assert not task_status.task_was_executed
+    else:
+        await util.retry_limited(lambda: task_status.task_was_executed, timeout=3)
+        assert not task_status.task_was_cancelled
 
 
 async def test_ensure_future_and_handle_exception(caplog):
