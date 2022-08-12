@@ -227,7 +227,7 @@ async def test_scheduler_stop(caplog):
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    sched.stop()
+    await sched.stop()
 
     length = len(i)
     await asyncio.sleep(0.1)
@@ -255,7 +255,7 @@ async def test_scheduler_async_run_fail(caplog):
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    sched.stop()
+    await sched.stop()
 
     length = len(i)
     await asyncio.sleep(0.1)
@@ -280,7 +280,7 @@ async def test_scheduler_run_async(caplog):
     while len(i) == 0:
         await asyncio.sleep(0.01)
 
-    sched.stop()
+    await sched.stop()
 
     length = len(i)
     await asyncio.sleep(0.1)
@@ -315,7 +315,7 @@ async def test_scheduler_cancel_executing_tasks() -> None:
     assert task_status.task_is_executing
     assert not task_status.task_was_cancelled
     assert sched._executing_tasks[action]
-    sched.stop()
+    await sched.stop()
     await util.retry_limited(lambda: task_status.task_was_cancelled, timeout=10)
     assert not sched._executing_tasks[action]
 
