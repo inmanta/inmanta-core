@@ -253,11 +253,16 @@ class Scheduler(object):
         """
         Called by the callback function of executing task when the task has finished executing.
         """
-        if action in self._executing_tasks:
-            try:
-                self._executing_tasks[action].remove(task)
-            except ValueError:
-                pass
+
+        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task[object]]]):
+            if action in task_dict:
+                try:
+                    task_dict[action].remove(task)
+                except ValueError:
+                    pass
+
+        for task_dict in [self._executing_tasks, self._await_tasks]:
+            remove_action_from_task_dict(task_dict)
 
     @stable_api
     def add_action(
