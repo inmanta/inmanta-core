@@ -34,7 +34,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -586,7 +586,9 @@ class PythonEnvironment:
             return output.decode()
 
     @staticmethod
-    def run_command_and_stream_output(cmd: List[str], shell: bool = False, timeout: float = 10) -> Tuple[int, List[str]]:
+    def run_command_and_stream_output(
+        cmd: List[str], shell: bool = False, timeout: float = 10, env_vars: Optional[Mapping[str, str]] = None
+    ) -> Tuple[int, List[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
@@ -596,6 +598,7 @@ class PythonEnvironment:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             shell=shell,
+            env=env_vars,
         )
 
         full_output: List[str] = []
