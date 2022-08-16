@@ -1,6 +1,0 @@
-description: Dropped dependency on requests[chardet] because compatibility has been restored
-change-type: patch
-destination-branches:
-  - iso4
-  - iso5
-  - master
