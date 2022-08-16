@@ -47,7 +47,7 @@ from libpip2pi.commands import dir2pi
 from packaging import version
 
 
-async def retry_limited(fun, timeout, *args, **kwargs):
+async def retry_limited(fun, timeout, interval: float = 0.1, *args, **kwargs):
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):
             return await fun(*args, **kwargs)
@@ -56,7 +56,7 @@ async def retry_limited(fun, timeout, *args, **kwargs):
 
     start = time.time()
     while time.time() - start < timeout and not (await fun_wrapper()):
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(interval)
     if not (await fun_wrapper()):
         raise AssertionError("Bounded wait failed")
 

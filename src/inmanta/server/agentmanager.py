@@ -621,11 +621,24 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
-    def are_agents_up(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
-        return all([self.is_agent_up(tid, e) for e in endpoints])
+    async def are_agents_active(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
+        """
+        Return true iff all the given agents are in the up or the paused state.
+        """
+        availables = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
+        return all(availables)
 
-    def is_agent_up(self, tid: uuid.UUID, endpoint: str) -> bool:
-        return (tid, endpoint) in self.tid_endpoint_to_session
+    async def is_agent_active(self, tid: uuid.UUID, endpoint: str) -> bool:
+        """
+        Return true iff the given agent is in the up or the paused state.
+        """
+        if (tid, endpoint) in self.tid_endpoint_to_session:
+            # Agent is up
+            return True
+        # Verify if there is an AgentInstance for the given endpoint.
+        # This case happens when the Agent is paused.
+        result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
+        return len(result) > 0
 
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
@@ -1038,10 +1051,10 @@ class AutostartedAgentManager(ServerSlice):
 
         LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
 
-        def is_start_agent_required() -> bool:
+        async def is_start_agent_required() -> bool:
             if needsstart:
                 return True
-            return not self._agent_manager.are_agents_up(env.id, agents)
+            return not await self._agent_manager.are_agents_active(env.id, agents)
 
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
@@ -1052,7 +1065,7 @@ class AutostartedAgentManager(ServerSlice):
             if env.halted:
                 return False
 
-            if is_start_agent_required():
+            if await is_start_agent_required():
                 res = await self.__do_start_agent(agents, env)
                 return res
         return False
@@ -1112,9 +1125,24 @@ class AutostartedAgentManager(ServerSlice):
                 proc.kill()
             raise e
 
+        async def _wait_until_agent_instances_are_active() -> None:
+            timeout_in_sec = 5
+            nr_active_instances = 0
+            expected_nr_active_instances = len(agents)
+            now = int(time.time())
+
+            while nr_active_instances < expected_nr_active_instances:
+                if now - int(time.time()) > timeout_in_sec:
+                    raise asyncio.TimeoutError()
+                instances = await data.AgentInstance.active_for_many(tid=env.id, endpoints=agents)
+                if len(instances) > nr_active_instances:
+                    # Reset timeout timer because a new instance came online
+                    now = int(time.time())
+                nr_active_instances = len(instances)
+
         # Wait for all agents to start
         try:
-            await retry_limited(lambda: self._agent_manager.are_agents_up(env.id, agents), 5)
+            await _wait_until_agent_instances_are_active()
         except asyncio.TimeoutError:
             LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
 

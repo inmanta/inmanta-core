@@ -2938,6 +2938,22 @@ class AgentInstance(BaseDocument):
         return objects
 
     @classmethod
+    async def active_for_many(
+        cls: Type[TAgentInstance],
+        tid: uuid.UUID,
+        endpoints: List[str],
+    ) -> List[TAgentInstance]:
+        in_query = ",".join(f"${i+2}" for i in range(len(endpoints)))
+        query = f"""
+SELECT *
+FROM {cls.table_name()}
+WHERE tid=$1 AND name IN ({in_query}) AND expired is NULL
+        """
+        values = [cls._get_value(tid)] + [cls._get_value(ep) for ep in endpoints]
+        records = await cls._fetch_query(query, *values)
+        return [cls(from_postgres=True, **record) for record in records]
+
+    @classmethod
     async def active(cls: Type[TAgentInstance]) -> List[TAgentInstance]:
         objects = await cls.get_list(expired=None)
         return objects
