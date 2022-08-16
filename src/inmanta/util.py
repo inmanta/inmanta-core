@@ -462,8 +462,14 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
     return task
 
 
-async def retry_limited(fun, timeout, interval: float = 0.1, *args, **kwargs):
-    async def fun_wrapper():
+async def retry_limited(
+    fun: Callable[[...], Union[bool, Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args,
+    **kwargs
+) -> None:
+    async def fun_wrapper() -> bool:
         if inspect.iscoroutinefunction(fun):
             return await fun(*args, **kwargs)
         else:

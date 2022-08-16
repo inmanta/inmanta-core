@@ -625,8 +625,8 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Return true iff all the given agents are in the up or the paused state.
         """
-        availables = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
-        return all(availables)
+        are_active: Tuple[bool, ...] = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
+        return all(are_active)
 
     async def is_agent_active(self, tid: uuid.UUID, endpoint: str) -> bool:
         """
@@ -1126,17 +1126,23 @@ class AutostartedAgentManager(ServerSlice):
             raise e
 
         async def _wait_until_agent_instances_are_active() -> None:
+            """
+            Wait until all AgentInstances for the endpoints `agents` are active.
+            A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
+            became active in the last 5 seconds.
+            """
             timeout_in_sec = 5
             nr_active_instances = 0
             expected_nr_active_instances = len(agents)
             now = int(time.time())
 
             while nr_active_instances < expected_nr_active_instances:
+                await asyncio.sleep(0.1)
                 if now - int(time.time()) > timeout_in_sec:
                     raise asyncio.TimeoutError()
                 instances = await data.AgentInstance.active_for_many(tid=env.id, endpoints=agents)
                 if len(instances) > nr_active_instances:
-                    # Reset timeout timer because a new instance came online
+                    # Reset timeout timer because a new instance became active
                     now = int(time.time())
                 nr_active_instances = len(instances)
 

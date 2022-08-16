@@ -1242,21 +1242,21 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
 
-    # The agent is not started ->  it should not be available
+    # The agent is not started yet ->  it should not be active
     assert (not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name]))
 
     # Start agent
     await agentmanager.ensure_agent_registered(env, agent_name)
     await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
 
-    # Verify agent is available
+    # Verify agent is active
     await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
 
     # Pause agent
     result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
     assert result.code == 200, result.result
 
-    # Ensure the agent is still available
+    # Ensure the agent is still active
     await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
 
 
