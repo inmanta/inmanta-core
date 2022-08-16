@@ -586,7 +586,9 @@ class PythonEnvironment:
             return output.decode()
 
     @staticmethod
-    def run_command_and_stream_output(cmd: List[str], shell: bool = False, timeout: float = 10) -> Tuple[int, List[str]]:
+    def run_command_and_stream_output(
+        cmd: List[str], shell: bool = False, timeout: float = 10, env_vars: Optional[Dict[str, str]] = None
+    ) -> Tuple[int, List[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
@@ -596,6 +598,7 @@ class PythonEnvironment:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             shell=shell,
+            **({"env": env_vars} if env_vars is not None else {}),
         )
 
         full_output: List[str] = []
