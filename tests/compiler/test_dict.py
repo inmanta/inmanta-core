@@ -366,3 +366,54 @@ z = c.tests[n = 42, **dct]
     x: Instance = scope.lookup("x").get_value()
     z: Instance = scope.lookup("z").get_value()
     assert x is z
+
+
+@pytest.mark.parametrize(
+    "lookup_path, expectation",
+    [
+        ('a["A"]["1"]', True),
+        ('a["A"]["2"]', False),
+        ('a["A"]["3"]', False),
+        ('a["A"]["4"]', False),
+        ('a["A"]', True),
+        ('a["B"]', False),
+        ('a["C"]', False),
+        ('a["D"]', True),
+        ('a["E"]', True),
+        ('a["K"]', False),
+        ('t.a["a"]', True),
+        ('t.a["b"]', False),
+        # ('a["K"]["a"]', False),
+        # ('a["K"]["k"]', False),
+        # ('b', False),
+    ],
+)
+def test_dict_is_defined_4317(snippetcompiler, lookup_path, expectation):
+    """
+    Check that calling "is defined" on dictionaries works as syntactic sugar for != null
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        dict a = {"a": "ok", "b": null}
+    end
+    implement Test using std::none
+    t = Test()
+
+    a = {
+        "A": {
+            "1": "ok",
+            "2": null,
+            "3": []
+        },
+        "B": null,
+        "C": [],
+        "D": "ok",
+        "E": [null]
+    }"""
+        f"""
+    assert_expectation = {str(expectation).lower()}
+    assert_expectation = {lookup_path} is defined
+    """
+    )
+    compiler.do_compile()

@@ -16,12 +16,13 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Set
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
-from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement
+from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
@@ -53,6 +54,9 @@ class BasicBlock(object):
         self.__definition_stmts.append(stmt)
 
     def get_variables(self) -> List[str]:
+        """
+        Returns a list of all variables declared in this block. Does not include variables declared in nested blocks.
+        """
         return [var for var, _ in self.__variables]
 
     def add_var(self, name: str, stmt: Statement) -> None:
@@ -79,6 +83,21 @@ class BasicBlock(object):
 
     #     def get_requires(self) -> List[str]:
     #         return self.external
+
+    def get_eager_promises(self) -> Sequence[StaticEagerPromise]:
+        """
+        Returns the collection of eager promises for this block, i.e. promises parent scopes should acquire as a result of
+        attribute assignments in or below this block.
+
+        Should only be called after normalization.
+        """
+        declared_variables: Set[str] = set(self.get_variables())
+        return [
+            promise
+            for statement in self.get_stmts()
+            for promise in statement.get_all_eager_promises()
+            if promise.get_root_variable() not in declared_variables
+        ]
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for s in self.__stmts:
@@ -112,7 +131,7 @@ class BasicBlock(object):
         surrounding_vars: Optional[Dict[str, FrozenSet[Locatable]]] = None,
     ) -> Iterator[Tuple[str, FrozenSet[Locatable], FrozenSet[Locatable]]]:
         """
-        Returns an iterator over variables shadowed in this block or it's nested blocks.
+        Returns an iterator over variables shadowed in this block or its nested blocks.
         The elements are tuples of the variable name, a set of the shadowed locations
         and a set of the originally declared locations.
         :param surrounding_vars: an accumulator for variables declared in surrounding blocks.

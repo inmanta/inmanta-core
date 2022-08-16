@@ -525,6 +525,72 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
+@pytest.mark.slowtest
+async def test_server_partial_compile(server, client, environment, monkeypatch):
+    """
+    Test a partial_compile on the server
+    """
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write("")
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    remote_id1 = uuid.uuid4()
+
+    async def wait_for_report() -> bool:
+        report = await client.get_report(compile_id)
+        if report.code != 200:
+            return False
+        return report.result["report"]["completed"] is not None
+
+    def verify_command_report(report: dict, expected: str) -> bool:
+        """
+        verify that the expected string is present in the command field of the 'Recompiling configuration model' report
+        """
+        reports = report.result["report"]["reports"]
+        report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
+        return expected in report["command"]
+
+    # # Do a compile
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert not verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile with removed resource_sets
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
+
+
+@pytest.mark.slowtest
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -599,9 +665,46 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # update the parameter to a new value
     await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
-    versions = await wait_for_version(client, environment, 3)
     logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, 3)
     assert versions["count"] == 3
+
+    # set a full compile schedule
+    async def schedule_soon() -> None:
+        soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+        cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
+        await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+
+    async def is_compiling() -> None:
+        return (await client.is_compiling(environment)).code == 200
+
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, 4)
+    assert versions["count"] == 4
+
+    # override existing schedule
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, 5)
+    assert versions["count"] == 5
+
+    # delete schedule, verify it is cancelled
+    await schedule_soon()
+    await client.environment_setting_delete(environment, id="auto_full_compile")
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
+
+    # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
+    recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
+    cron_recent: str = "%d %d %d * * *" % (recent.second, recent.minute, recent.hour)
+    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
 
     # clear the environment
     state_dir = server_config.state_dir.get()
@@ -823,10 +926,8 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "handled": True,
         "version": 1,
     }
-    await Compile(**old_compile).insert()
     compile_id_new = uuid.uuid4()
     new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
-    await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
@@ -846,8 +947,14 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "name": "Recompiling configuration model",
         "compile": compile_id_new,
     }
-    await Report(**report1).insert()
-    await Report(**report2).insert()
+
+    async with Compile.get_connection() as con:
+        async with con.transaction():
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+            await Report(**report1).insert(connection=con)
+            await Report(**report2).insert(connection=con)
+
     yield compile_id_old, compile_id_new
 
 
@@ -1053,5 +1160,51 @@ async def test_notification_on_failed_exporting_compile(server, client, environm
     result = await client.list_notifications(env.id)
     assert result.code == 200
     compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
+    assert compile_failed_notification
+    assert str(compile_id) in compile_failed_notification["uri"]
+
+
+async def test_notification_on_failed_pull_during_compile(
+    server, client, environment_factory: EnvironmentFactory, tmp_path
+) -> None:
+    env = await environment_factory.create_environment("")
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env.id))
+
+    compilerservice = server.get_slice(SLICE_COMPILER)
+
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    # Do a compile
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
+    # Change the remote to an invalid value
+    subprocess.check_output(["git", "remote", "set-url", "origin", str(tmp_path)], cwd=project_dir)
+
+    # During the next compile, the pull should fail
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+
+    await retry_limited(compile_done, timeout=10)
+
+    async def notification_logged() -> bool:
+        result = await client.list_notifications(env.id)
+        assert result.code == 200
+        return len(result.result["data"]) > 0
+
+    await retry_limited(notification_logged, timeout=10)
+
+    # Check if the correct notification was created
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    compile_failed_notification = next(
+        (item for item in result.result["data"] if item["title"] == "Pulling updates during compile failed"), None
+    )
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]

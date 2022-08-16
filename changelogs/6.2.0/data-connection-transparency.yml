@@ -1,0 +1,6 @@
+description: "Improved transparency of get_connection method in inmanta.data"
+change-type: patch
+destination-branches:
+  # changes require Python 3.9 so not compatible with iso4
+  - master
+  - iso5

@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import logging
 import re
 from itertools import accumulate
@@ -27,8 +26,8 @@ from ply.yacc import YaccProduction
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.constraint.expression import IsDefined, Not, Operator
-from inmanta.ast.statements import Literal, Statement
+from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
+from inmanta.ast.statements import ExpressionStatement, Literal, Statement
 from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, StringFormat
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
@@ -349,6 +348,16 @@ def p_attribute_type(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
+def p_attr_err(p: YaccProduction) -> None:
+    """attr : attr_type CID empty
+    | attr_type CID '=' constant
+    | attr_type CID '=' constant_list
+    | attr_type CID '=' UNDEF"""
+    raise ParserException(
+        p[2].location, str(p[2]), "Invalid identifier: attribute names must start with a lower case character"
+    )
+
+
 def p_attr(p: YaccProduction) -> None:
     "attr : attr_type ID"
     p[0] = DefineAttribute(p[1], p[2], None)
@@ -366,6 +375,18 @@ def p_attr_undef(p: YaccProduction) -> None:
     "attr : attr_type ID '=' UNDEF"
     p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
     attach_from_string(p, 2)
+
+
+def p_attr_dict_err(p: YaccProduction) -> None:
+    """attr : DICT empty CID empty
+    | DICT empty CID '=' map_def
+    | DICT empty CID '=' NULL
+    | DICT '?' CID empty
+    | DICT '?'  CID '=' map_def
+    | DICT '?'  CID '=' NULL"""
+    raise ParserException(
+        p[3].location, str(p[3]), "Invalid identifier: attribute names must start with a lower case character"
+    )
 
 
 def p_attr_dict(p: YaccProduction) -> None:
@@ -423,8 +444,10 @@ def p_implement(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list empty
     | IMPLEMENT class_ref USING implement_ns_list MLS"""
     (inherit, implementations) = p[4]
-    p[0] = DefineImplement(p[2], implementations, Literal(True), inherit=inherit, comment=p[5])
+    when: Literal = Literal(True)
+    p[0] = DefineImplement(p[2], implementations, when, inherit=inherit, comment=p[5])
     attach_lnr(p)
+    p[0].copy_location(when)
 
 
 def p_implement_when(p: YaccProduction) -> None:
@@ -669,6 +692,26 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     attach_lnr(p)
 
 
+def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
+    """boolean_expression : map_lookup IS DEFINED"""
+
+    location = Location(file, p.lineno(2))
+    lexpos = p.lexpos(2)
+
+    def attach_lnr_to_statement(inp: ExpressionStatement) -> ExpressionStatement:
+        inp.location = location
+        inp.lexpos = lexpos
+        return inp
+
+    # syntactic sugar for `is defined` on dicts
+    key_in_dict = attach_lnr_to_statement(In(p[1].key, p[1].themap))
+    not_none = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(Literal(NoneValue()))))
+    not_empty_list = attach_lnr_to_statement(NotEqual(p[1], attach_lnr_to_statement(CreateList(list()))))
+
+    out = attach_lnr_to_statement(And(attach_lnr_to_statement(And(key_in_dict, not_none)), not_empty_list))
+    p[0] = out
+
+
 def p_operand(p: YaccProduction) -> None:
     """operand : expression"""
     p[0] = p[1]
@@ -850,6 +893,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
         ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
+        ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
             attribute_offsets: Iterator[int] = accumulate(
@@ -894,6 +938,7 @@ def p_constants_collect(p: YaccProduction) -> None:
 def p_wrapped_kwargs(p: YaccProduction) -> None:
     "wrapped_kwargs : '*' '*' operand"
     p[0] = WrappedKwargs(p[3])
+    attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:
@@ -1148,5 +1193,5 @@ def parse(namespace: Namespace, filename: str, content: Optional[str] = None) ->
     if statements is not None:
         return statements
     statements = base_parse(namespace, filename, content)
-    cache_manager.cache(filename, statements)
+    cache_manager.cache(namespace, filename, statements)
     return statements

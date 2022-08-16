@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump pip from 22.0.4 to 22.1
+destination-branches:
+- iso5
+sections: {}

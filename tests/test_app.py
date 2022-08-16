@@ -411,7 +411,6 @@ end
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=30)
-    assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:

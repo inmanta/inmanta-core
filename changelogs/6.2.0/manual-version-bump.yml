@@ -1,0 +1,4 @@
+description: Bumped version according to change entries to allow external constraints on dev version
+change-type: minor
+destination-branches:
+  - iso5

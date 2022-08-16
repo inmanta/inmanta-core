@@ -96,6 +96,7 @@ from tornado import netutil
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
+import inmanta
 import inmanta.agent
 import inmanta.app
 import inmanta.compiler as compiler
@@ -110,6 +111,7 @@ from inmanta.env import LocalPackagePath
 from inmanta.export import cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
+from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
@@ -443,6 +445,9 @@ def deactive_venv():
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
     old_working_set = pkg_resources.working_set
+    old_available_extensions = (
+        dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
+    )
 
     yield
 
@@ -462,6 +467,7 @@ def deactive_venv():
         del os.environ["VIRTUAL_ENV"]
     env.mock_process_env(python_path=old_process_env)
     loader.PluginModuleFinder.reset()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = old_available_extensions
 
 
 def reset_metrics():
@@ -479,6 +485,7 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
+    cache_manager.detach_from_project()
 
 
 def reset_all_objects():
@@ -490,6 +497,7 @@ def reset_all_objects():
     handler.Commander.reset()
     Project._project = None
     unknown_parameters.clear()
+    InmantaBootloader.AVAILABLE_EXTENSIONS = None
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -982,6 +990,7 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        strict_deps_check: Optional[bool] = None,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -999,6 +1008,7 @@ class SnippetCompilationTest(KeepOnFail):
                              no install mode is set explicitly in the project.yml file.
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
+        :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1009,7 +1019,7 @@ class SnippetCompilationTest(KeepOnFail):
             install_mode,
             relation_precedence_rules,
         )
-        return self._load_project(autostd, install_project, install_v2_modules)
+        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
     def _load_project(
         self,
@@ -1017,9 +1027,12 @@ class SnippetCompilationTest(KeepOnFail):
         install_project: bool,
         install_v2_modules: Optional[List[LocalPackagePath]] = None,
         main_file: str = "main.cf",
+        strict_deps_check: Optional[bool] = None,
     ):
         loader.PluginModuleFinder.reset()
-        self.project = Project(self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env)
+        self.project = Project(
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+        )
         Project.set(self.project)
         self.project.use_virtual_env()
         self._patch_process_env()
@@ -1108,16 +1121,35 @@ class SnippetCompilationTest(KeepOnFail):
             dirs.extend(add_to_module_path)
         return f"[{', '.join(dirs)}]"
 
-    def do_export(self, include_status=False, do_raise=True):
-        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+    def do_export(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return self._do_export(
+            deploy=False,
+            include_status=include_status,
+            do_raise=do_raise,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
     def get_exported_json(self) -> JsonType:
         with open(os.path.join(self.project_dir, "dump.json")) as fh:
             return json.load(fh)
 
-    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+    def _do_export(
+        self,
+        deploy=False,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
         """
-        helper function to allow actual export to be run an a different thread
+        helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
 
@@ -1145,10 +1177,31 @@ class SnippetCompilationTest(KeepOnFail):
         # continue the export
         export = Exporter(options)
 
-        return export.run(types, scopes, model_export=False, include_status=include_status)
+        return export.run(
+            types,
+            scopes,
+            model_export=False,
+            include_status=include_status,
+            partial_compile=partial_compile,
+            resource_sets_to_remove=resource_sets_to_remove,
+        )
 
-    async def do_export_and_deploy(self, include_status=False, do_raise=True):
-        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
+    async def do_export_and_deploy(
+        self,
+        include_status=False,
+        do_raise=True,
+        partial_compile: bool = False,
+        resource_sets_to_remove: Optional[List[str]] = None,
+    ):
+        return await off_main_thread(
+            lambda: self._do_export(
+                deploy=True,
+                include_status=include_status,
+                do_raise=do_raise,
+                partial_compile=partial_compile,
+                resource_sets_to_remove=resource_sets_to_remove,
+            )
+        )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
         """
@@ -1454,12 +1507,43 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
-    with tempfile.TemporaryDirectory() as artifact_dir:
+    cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
+    build_dir = os.path.join(cache_dir, "build")
+    index_dir = os.path.join(build_dir, "simple")
+    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
+
+    def _should_rebuild_cache() -> bool:
+        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
+            # Cache doesn't exist
+            return True
+        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 1:  # #modules + index.html
+            # Modules were added/removed from the build_dir
+            return True
+        # Cache is dirty
+        return any(
+            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
+            for root, _, files in os.walk(modules_v2_dir)
+            for f in files
+        )
+
+    if _should_rebuild_cache():
+        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
+        # Remove cache
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.makedirs(build_dir)
+        # Build modules
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
-            ModuleTool().build(path=path, output_dir=artifact_dir)
-        dir2pi(argv=["dir2pi", artifact_dir])
-        yield os.path.join(artifact_dir, "simple")
+            ModuleTool().build(path=path, output_dir=build_dir)
+        # Build python package repository
+        dir2pi(argv=["dir2pi", build_dir])
+        # Update timestamp file
+        open(timestamp_file, "w").close()
+    else:
+        logger.info(f"Using cache {cache_dir}")
+
+    yield index_dir
 
 
 @pytest.fixture
@@ -1511,3 +1595,11 @@ def guard_testing_venv():
             venv_was_altered = True
             error_message += f"\t* {pkg}: initial version={version_before_tests} --> after tests={version_after_tests}\n"
     assert not venv_was_altered, error_message
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def set_running_tests():
+    """
+    Ensure the RUNNING_TESTS variable is True when running tests
+    """
+    inmanta.RUNNING_TESTS = True

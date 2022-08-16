@@ -181,29 +181,123 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
 
-async def test_version_removal(client, server):
+@pytest.mark.parametrize(
+    "n_versions_to_keep, n_versions_to_create",
+    [
+        (2, 4),
+        (4, 2),
+        (2, 2),
+    ],
+)
+async def test_create_too_many_versions(client, server, n_versions_to_keep, n_versions_to_create):
     """
-    Test auto removal of older deploy model versions
+    - set AVAILABLE_VERSIONS_TO_KEEP environment setting to <n_versions_to_keep>
+    - create <n_versions_to_create> versions
+    - check the actual number of versions before and after cleanup
     """
+
+    # Create project
     result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
+    # Create environment
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_1_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep)
+    assert result.code == 200
 
-    for _i in range(20):
-        version = (await client.reserve_version(env_id)).result["data"]
+    # Check value was set
+    result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
+    assert result.code == 200
+    assert result.result["value"] == n_versions_to_keep
 
-        await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+    for _ in range(n_versions_to_create):
+        version = (await client.reserve_version(env_1_id)).result["data"]
+
         res = await client.put_version(
-            tid=env_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
         )
         assert res.code == 200
-        result = await client.get_project(id=project_id)
 
-        versions = await client.list_versions(tid=env_id)
-        assert versions.result["count"] <= opt.server_version_to_keep.get() + 1
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_create
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+
+
+async def test_n_versions_env_setting_scope(client, server):
+    """
+    The AVAILABLE_VERSIONS_TO_KEEP environment setting used to be a global config option.
+    This test checks that a specific environment setting can be set for each environment
+    """
+
+    n_versions_to_keep_env1 = 5
+    n_versions_to_keep_env2 = 2
+
+    n_many_versions = n_versions_to_keep_env1 + n_versions_to_keep_env2
+
+    # Create project
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    # Create environments
+    result = await client.create_environment(project_id=project_id, name="env_1")
+    env_1_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env1)
+    assert result.code == 200
+
+    result = await client.create_environment(project_id=project_id, name="env_2")
+    env_2_id = result.result["environment"]["id"]
+    result = await client.set_setting(tid=env_2_id, id=data.AVAILABLE_VERSIONS_TO_KEEP, value=n_versions_to_keep_env2)
+    assert result.code == 200
+
+    # Create a lot of versions in both environments
+    for _ in range(n_many_versions):
+
+        env1_version = (await client.reserve_version(env_1_id)).result["data"]
+        env2_version = (await client.reserve_version(env_2_id)).result["data"]
+
+        res = await client.put_version(
+            tid=env_1_id,
+            version=env1_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+        res = await client.put_version(
+            tid=env_2_id,
+            version=env2_version,
+            resources=[],
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+
+    # Before cleanup we have too many versions in both envs
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_many_versions
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_many_versions
+
+    # Cleanup
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # After cleanup each env should have its specific number of version
+    versions = await client.list_versions(tid=env_1_id)
+    assert versions.result["count"] == n_versions_to_keep_env1
+
+    versions = await client.list_versions(tid=env_2_id)
+    assert versions.result["count"] == n_versions_to_keep_env2
 
 
 @pytest.mark.slowtest
@@ -290,9 +384,15 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
-    assert result.code == 200
-    assert len(result.result["resources"]) == 3
+    async def wait_for_session() -> bool:
+        result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
+        return result.code == 200 and len(result.result["resources"]) == 3
+
+    """
+    This retry_limited is required to prevent 409 errors in case the agent didn't obtain
+    a session yet by the time the get_resources_for_agent API call is made.
+    """
+    await retry_limited(wait_for_session, 10)
 
     action_id = uuid.uuid4()
     now = datetime.now()
@@ -428,9 +528,9 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     logs = {x["action"]: x for x in result.result["logs"]}
 
     assert "deploy" in logs
-    assert "finished" not in logs["deploy"]
-    assert "messages" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["messages"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Send some logs
     result = await aclient.resource_action_update(
@@ -452,8 +552,8 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     assert "messages" in logs["deploy"]
     assert len(logs["deploy"]["messages"]) == 1
     assert logs["deploy"]["messages"][0]["msg"] == "Test log a b"
-    assert "finished" not in logs["deploy"]
-    assert "changes" not in logs["deploy"]
+    assert logs["deploy"]["finished"] is None
+    assert logs["deploy"]["changes"] is None
 
     # Finish the deploy
     now = datetime.now()
@@ -516,8 +616,14 @@ async def test_clear_environment(client, server, clienthelper, environment):
     assert len(result.result["environment"]["versions"]) == 0
 
 
-async def test_tokens(server_multi, client_multi, environment_multi):
+async def test_tokens(server_multi, client_multi, environment_multi, request):
     # Test using API tokens
+
+    # Check the parameters of the 'server_multi' fixture
+    if request.node.callspec.id in ["SSL", "Normal"]:
+        # Generating tokens is not allowed if auth is not enabled
+        return
+
     test_token = client_multi._transport_instance.token
     token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
     jot = token.result["token"]
@@ -539,6 +645,12 @@ async def test_tokens(server_multi, client_multi, environment_multi):
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment_multi)
     assert result.code == 401
+
+
+async def test_token_without_auth(server, client, environment):
+    """Generating a token when auth is not enabled is not allowed"""
+    token = await client.create_token(environment, ["api"], idempotent=True)
+    assert token.code == 400
 
 
 def make_source(collector, filename, module, source, req):
@@ -985,7 +1097,6 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
@@ -1104,14 +1215,13 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is None
-    assert resource_action["messages"] is None
     assert resource_action["status"] == const.ResourceState.deploying
     assert resource_action["changes"] is None
     assert resource_action["change"] is None
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert "last_deploy" not in result.result["resource"]
+    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)

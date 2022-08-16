@@ -1,0 +1,5 @@
+description: This adds a space between the type and the relation. Without the space will not always render
+issue-nr: 52
+issue-repo: inmanta-sphinx
+change-type: patch
+destination-branches: [master, iso5, iso4]

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump jinja2 from 3.0.3 to 3.1.1
+destination-branches:
+- iso5
+sections: {}

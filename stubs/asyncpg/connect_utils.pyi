@@ -4,7 +4,6 @@
 
 from collections import namedtuple
 
-_ConnectionParameters = namedtuple('ConnectionParameters', ['user', 'password', 'database', 'ssl', 'ssl_is_advisory', 'connect_timeout', 'server_settings'])
-
-_ClientConfiguration = namedtuple('ConnectionConfiguration', ['command_timeout', 'statement_cache_size', 'max_cached_statement_lifetime', 'max_cacheable_statement_size'])
+_ConnectionParameters = namedtuple('_ConnectionParameters', ['user', 'password', 'database', 'ssl', 'ssl_is_advisory', 'connect_timeout', 'server_settings'])
+_ClientConfiguration = namedtuple('_ClientConfiguration', ['command_timeout', 'statement_cache_size', 'max_cached_statement_lifetime', 'max_cacheable_statement_size'])
 PGPASSFILE: str

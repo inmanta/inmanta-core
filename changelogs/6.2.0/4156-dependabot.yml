@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-python-dateutil from 2.8.11 to 2.8.12
+destination-branches:
+- iso5
+sections: {}

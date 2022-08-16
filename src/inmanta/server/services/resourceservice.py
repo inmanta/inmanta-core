@@ -735,6 +735,13 @@ class ResourceService(protocol.ServerSlice):
                     action_id=action_id,
                     action=const.ResourceAction.deploy,
                     started=datetime.datetime.now().astimezone(),
+                    messages=[
+                        data.LogLine.log(
+                            logging.INFO,
+                            "Resource deploy started on agent %(agent)s, setting status to deploying",
+                            agent=resource_id.agent_name,
+                        )
+                    ],
                     status=const.ResourceState.deploying,
                 )
                 try:

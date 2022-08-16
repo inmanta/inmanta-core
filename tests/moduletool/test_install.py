@@ -23,17 +23,18 @@ import shutil
 import subprocess
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import py
 import pytest
 import yaml
 from pkg_resources import Requirement
 
-from inmanta import const, env, loader, module
+from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.module import InstallMode, ModuleLoadingException
+from inmanta.env import ConflictingRequirements
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
@@ -172,7 +173,7 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
     os.chdir(coroot)
     Config.load_config()
 
-    with pytest.raises(CompilerException, match="Not all module dependencies have been met"):
+    with pytest.raises(CompilerException, match="requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1"):
         ProjectTool().execute("install", [])
 
 
@@ -222,6 +223,43 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
+
+
+@pytest.mark.slowtest
+def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
+    """
+    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    """
+    # activate snippetcompiler's venv
+    snippetcompiler_clean.setup_for_snippet("")
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modone"),
+        new_name="modone",
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        install=True,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modtwo"),
+        new_name="modtwo",
+        new_requirements=[Requirement.parse("lorem~=0.1.0")],
+        install=True,
+    )
+
+    module_path: str = os.path.join(str(tmpdir), "conflictingdeps")
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        module_path,
+        new_name="conflictingdeps",
+        new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
+    )
+
+    with pytest.raises(module.InvalidModuleException) as exc_info:
+        run_module_install(module_path, False, True)
+    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
+    assert "caused by:" in exc_info.value.format_trace()
 
 
 @pytest.mark.parametrize_any("dev", [True, False])
@@ -423,6 +461,27 @@ def test_project_install(
     v1_mod_dir: str = os.path.join(project.path, project.downloadpath)
     assert os.path.exists(v1_mod_dir)
     assert os.listdir(v1_mod_dir) == ["std"]
+
+    # ensure we can compile
+    compiler.do_compile()
+
+    # add a dependency
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names]
+        + ["lorem"],
+        install_project=False,
+        strict_deps_check=True,
+    )
+
+    with pytest.raises(
+        expected_exception=ConflictingRequirements,
+        match=re.escape("Not all required python packages are installed run 'inmanta project install' to resolve this"),
+    ):
+        # ensure we can compile
+        compiler.do_compile()
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
@@ -636,22 +695,21 @@ def test_project_install_incompatible_versions(
 
     # install project
     os.chdir(module.Project.get().path)
-    with pytest.raises(
-        CompilerException, match="Not all module dependencies have been met. Run `inmanta modules update` to resolve this."
-    ):
+    with pytest.raises(CompilerException) as excinfo:
         ProjectTool().execute("install", [])
 
-    log_messages: Set[str] = {rec.message for rec in caplog.records}
-    expected: Set[str] = {
-        f"requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}",
-        f"requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}",
-    }
-    assert expected.issubset(log_messages)
+    assert f"""
+The following requirements were not satisfied:
+\t* requirement {req_v1_on_v2} on module {v2_mod_name} not fulfilled, now at version {current_version}.
+\t* requirement {req_v1_on_v1} on module v1mod1 not fulfilled, now at version {current_version}.
+Run `inmanta project update` to resolve this.
+    """.strip() in str(
+        excinfo.value
+    )
 
 
 @pytest.mark.slowtest
 def test_project_install_incompatible_dependencies(
-    caplog,
     snippetcompiler_clean,
     tmpdir: py.path.local,
     modules_dir: str,
@@ -669,14 +727,14 @@ def test_project_install_incompatible_dependencies(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod1"),
         new_name="v2mod1",
-        new_requirements=[Requirement.parse("more-itertools~=7.0")],
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
         publish_index=index,
     )
     v2mod2: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod2"),
         new_name="v2mod2",
-        new_requirements=[Requirement.parse("more-itertools~=8.0")],
+        new_requirements=[Requirement.parse("lorem~=0.1.1")],
         publish_index=index,
     )
 
@@ -697,20 +755,9 @@ def test_project_install_incompatible_dependencies(
 
     # install project
     os.chdir(module.Project.get().path)
-    with pytest.raises(
-        CompilerException,
-        match=(
-            "Not all installed modules are compatible: requirements conflicts were found. Please resolve any conflicts before"
-            " attempting another compile. Run `pip check` to check for any incompatibilities."
-        ),
-    ):
+    with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-
-    assert any(
-        re.match("Incompatibility between constraint more-itertools~=[78].0 and installed version [78]\\..*", rec.message)
-        is not None
-        for rec in caplog.records
-    )
+    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
 
 
 def test_project_install_requirement_not_loaded(
@@ -814,7 +861,7 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=2.0,<2.1.11"),
+            module.InmantaModuleRequirement.parse("std~=3.0,<3.0.16"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -836,7 +883,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
+| std            | v1   | yes      | 3.0.15         | 3.0.15         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -862,7 +909,36 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 2.1.10         | 2.1.10         | yes     |
+| std            | v1   | yes      | 3.0.15         | 3.0.15         | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
+    )
+
+
+def test_install_project_with_install_mode_master(tmpdir: py.path.local, snippetcompiler, modules_repo, capsys) -> None:
+    """
+    Ensure that an appropriate exception message is returned when a module installed in a project is not in-line with
+    the version constraint on the project and the install_mode of the project is set to master.
+    """
+    mod_with_multiple_version = os.path.join(modules_repo, "mod11")
+    mod_with_multiple_version_copy = os.path.join(tmpdir, "mod11")
+    shutil.copytree(mod_with_multiple_version, mod_with_multiple_version_copy)
+    snippetcompiler.setup_for_snippet(
+        snippet="import mod11",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[str(tmpdir)],
+        project_requires=[InmantaModuleRequirement(Requirement.parse("mod11==3.2.1"))],
+        install_mode=InstallMode.master,
+    )
+
+    with pytest.raises(CompilerException) as excinfo:
+        ProjectTool().execute("update", [])
+
+    assert """
+The following requirements were not satisfied:
+\t* requirement mod11==3.2.1 on module mod11 not fulfilled, now at version 4.2.0.
+The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
+    """.strip() in str(
+        excinfo.value
     )

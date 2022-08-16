@@ -129,3 +129,30 @@ foo::Entity.test [1] -- std::Entity
         """,
         "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2:1)",
     )
+
+
+def test_unknown_type_in_dicts(snippetcompiler):
+    """This test checks that accessing an unknown map, or a known map with an unknown key
+    rightfully propagates the unknown value.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import tests
+
+        unk = tests::unknown()
+        map = {"k": "v"}
+
+        map_lookup = unk["key"]
+        key_fetch = map[unk]
+
+        unknown_map_lookup = tests::is_uknown(map_lookup)
+        unknown_key_fetch = tests::is_uknown(key_fetch)
+
+        """
+    )
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert root.lookup("unknown_map_lookup").get_value()
+    assert root.lookup("unknown_key_fetch").get_value()

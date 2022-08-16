@@ -34,9 +34,16 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_ENVIRONMENT,
+    SLICE_PARAM,
+    SLICE_SESSION_MANAGER,
+)
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
@@ -719,6 +726,24 @@ async def test_get_set_param(resource_container, environment, client, server):
     assert result.code == 200
 
 
+async def test_register_setting(environment, client, server):
+    """
+    Test registering a new setting.
+    """
+    new_setting: Setting = Setting(
+        name="a new boolean setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+    env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
+    await env_slice.register_setting(new_setting)
+    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    assert result.code == 200
+    assert result.result["value"] is False
+
+
 async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
     """
     Test retrieving facts from the agent
@@ -930,6 +955,8 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     await wait_for_n_deployed_resources(client, env_id, version1, n=2)
 
+    generation_version1 = agent._instances["agent1"]._nq.generation
+
     result = await client.get_version(environment, version1)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
@@ -950,6 +977,10 @@ async def test_wait(resource_container, client, clienthelper, environment, serve
 
     logger.info("second version released")
 
+    # Wait until the agent is deploying version2. Otherwise the call to `wait_for_done_with_waiters()`
+    # might notify a test::Wait resource of version1, instead of the resources of version2. This could
+    # cause problem when the resource states of version1 are checked later on in this test case.
+    await retry_limited(lambda: agent._instances["agent1"]._nq.generation != generation_version1, timeout=10)
     await resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
@@ -1306,7 +1337,15 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
             "send_event": False,
             "purged": False,
             "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        }
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
     ]
 
     # set auto deploy and push
@@ -1324,7 +1363,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "failed"
 
     # check if agent 1 is started by the server
@@ -1377,7 +1416,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()
-    children_pre = current_process.children(recursive=True)
+    agent_processes_pre: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(env_uuid)
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
@@ -1478,12 +1517,10 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     # Stop server
     await asyncio.wait_for(server.stop(), timeout=15)
 
-    current_process = psutil.Process()
-    children = current_process.children(recursive=True)
+    agent_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
-    newchildren = set(children) - set(children_pre)
-
-    assert len(newchildren) == 0, newchildren
+    assert len(new_agent_processes) == 0, new_agent_processes
 
 
 async def test_autostart_mapping_update_uri(server, client, environment, async_finalizer, caplog):
@@ -1501,9 +1538,11 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     async_finalizer(a.stop)
 
     # Wait until agent is up
+    async def agent_in_db() -> bool:
+        return len(await data.AgentInstance.get_list()) == 1
+
     await retry_limited(lambda: (env_uuid, agent_name) in agent_manager.tid_endpoint_to_session, 10)
-    instances = await data.AgentInstance.get_list()
-    assert len(instances) == 1
+    await retry_limited(agent_in_db, 10)
 
     # Update agentmap
     caplog.clear()
@@ -3214,7 +3253,7 @@ async def test_agentinstance_stops_deploying_when_stopped(
             "id": f"test::Wait[agent1,key=key3],v={version}",
             "send_event": False,
             "purged": False,
-            "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+            "requires": [f"test::Wait[agent1,key=key2],v={version}"],
         },
     ]
 

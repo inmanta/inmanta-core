@@ -15,9 +15,27 @@
 
     Contact: code@inmanta.com
 """
+from typing import Dict
+from uuid import UUID
+
+import pytest
 
 from inmanta import data
+from inmanta.data import Environment, Setting, convert_boolean
 from inmanta.util import get_compiler_version
+
+
+def get_environment_setting_default(setting: str) -> object:
+    return data.Environment._settings[setting].default
+
+
+def check_only_contains_default_setting(settings_dict: Dict[str, object]) -> None:
+    """
+    Depending on when the background cleanup processes are run, it is possible that environment settings are set, independently
+    of the tests below. This method ensures these settings are properly set with their default values.
+    """
+    for setting_name, setting_value in settings_dict.items():
+        assert setting_value == get_environment_setting_default(setting_name)
 
 
 async def test_environment_settings(client, server, environment_default):
@@ -29,11 +47,12 @@ async def test_environment_settings(client, server, environment_default):
     assert "settings" in result.result
     assert "metadata" in result.result
     assert "auto_deploy" in result.result["metadata"]
-    assert len(result.result["settings"]) == 0
+
+    check_only_contains_default_setting(result.result["settings"])
 
     # set invalid value
     result = await client.set_setting(tid=environment_default, id="auto_deploy", value="test")
-    assert result.code == 500
+    assert result.code == 400
 
     # set non existing setting
     result = await client.set_setting(tid=environment_default, id="auto_deploy_non", value=False)
@@ -44,7 +63,12 @@ async def test_environment_settings(client, server, environment_default):
 
     result = await client.list_settings(tid=environment_default)
     assert result.code == 200
-    assert len(result.result["settings"]) == 1
+
+    for setting_name, setting_value in result.result["settings"].items():
+        if setting_name == "auto_deploy":
+            assert setting_value is False
+        else:
+            assert setting_value == get_environment_setting_default(setting_name)
 
     result = await client.get_setting(tid=environment_default, id="auto_deploy")
     assert result.code == 200
@@ -69,7 +93,8 @@ async def test_environment_settings(client, server, environment_default):
     result = await client.list_settings(tid=environment_default)
     assert result.code == 200
     assert "settings" in result.result
-    assert len(result.result["settings"]) == 1
+
+    check_only_contains_default_setting(result.result["settings"])
 
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
     assert result.code == 200
@@ -94,7 +119,7 @@ async def test_environment_settings(client, server, environment_default):
 
     # Internal agent is missing
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value={"agent1": ""})
-    assert result.code == 500
+    assert result.code == 400
     assert "The internal agent must be present in the autostart_agent_map" in result.result["message"]
     # Assert agent_map didn't change
     result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
@@ -102,7 +127,7 @@ async def test_environment_settings(client, server, environment_default):
     assert result.result["value"] == agent_map
 
     result = await client.set_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP, value="")
-    assert result.code == 500
+    assert result.code == 400
     assert "Agent map should be a dict" in result.result["message"]
     # Assert agent_map didn't change
     result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_MAP)
@@ -119,7 +144,7 @@ async def test_environment_settings_v2(client_v2, server, environment_default):
     assert "settings" in response.result["data"]
     assert "definition" in response.result["data"]
     assert "auto_deploy" in response.result["data"]["definition"]
-    assert len(response.result["data"]["settings"]) == 0
+    check_only_contains_default_setting(response.result["data"]["settings"])
 
     response = await client_v2.environment_settings_set(tid=environment_default, id="auto_deploy", value=False)
     assert response.code == 200
@@ -290,3 +315,85 @@ async def test_default_value_purge_on_delete_setting(server, client):
     result = await client.get_setting(tid=env_id, id=data.PURGE_ON_DELETE)
     assert result.code == 200
     assert result.result["value"] is False
+
+
+async def test_environment_add_new_setting_parameter(server, client, environment):
+    new_setting: Setting = Setting(
+        name="a new setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+
+    await data.Environment.register_setting(new_setting)
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 200
+    assert result.result["value"] is False
+
+    result = await client.set_setting(tid=environment, id="a new setting", value=True)
+    assert result.code == 200
+
+    result = await client.get_setting(tid=environment, id="a new setting")
+    assert result.code == 200
+    assert result.result["value"] is True
+
+    result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    assert result.result["value"] is False
+
+    existing_setting: Setting = Setting(
+        name=data.AUTO_DEPLOY,
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="an existing setting",
+    )
+    with pytest.raises(KeyError):
+        await data.Environment.register_setting(existing_setting)
+
+    result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
+    assert result.code == 200
+    assert result.result["value"] is False
+
+
+async def test_get_setting_no_longer_exist(server, client, environment):
+    """
+    Test what happens when a setting exists in the database for which the definition no longer exists
+    """
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+    project_id = env.project
+    setting_db_query = (
+        "UPDATE environment SET settings=jsonb_set(settings, $1::text[], "
+        "to_jsonb($2::boolean), TRUE) WHERE name=$3 AND project=$4"
+    )
+    values = [["new_setting"], True, "dev", project_id]
+    await Environment._execute_query(setting_db_query, *values)
+
+    result = await client.get_setting(tid=environment, id="a setting")
+    assert result.code == 404
+    assert result.result["message"] == "Request or referenced resource does not exist"
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "new_setting" not in result.result["settings"].keys()
+
+    new_setting: Setting = Setting(
+        name="new_setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="new_setting",
+    )
+
+    await data.Environment.register_setting(new_setting)
+
+    result = await client.get_setting(tid=environment, id="new_setting")
+    assert result.code == 200
+    assert result.result["value"] is True
+
+    result = await client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "new_setting" in result.result["settings"].keys()

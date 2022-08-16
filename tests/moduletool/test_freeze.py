@@ -21,7 +21,7 @@ import sys
 
 import pytest
 
-from inmanta.command import CLIException
+from inmanta.ast import CompilerException
 from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
@@ -72,17 +72,10 @@ def test_project_freeze_basic(git_modules_dir, modules_repo):
 def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
     coroot = install_project(git_modules_dir, "baddep", config=False)
 
-    with pytest.raises(CLIException) as e:
+    with pytest.raises(CompilerException) as e:
         app(["project", "freeze"])
 
-    assert e.value.exitcode == 1
-    assert str(e.value) == "Could not load project"
-
-    out, err = capsys.readouterr()
-
-    assert len(err) == 0, err
-    assert len(out) == 0, out
-    assert "requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1" in caplog.text
+    assert "requirement mod2<2016 on module mod2 not fulfilled, now at version 2016.1" in str(e.value)
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
 
