@@ -103,7 +103,9 @@ class DatabaseService(protocol.ServerSlice):
         """Attach to monitoring system"""
         gauge(
             "db.connected",
-            CallbackGauge(callback=lambda: self._pool is not None and not self._pool._closing and not self._pool._closed),
+            CallbackGauge(
+                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
+            ),
         )
         gauge("db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0))
         gauge("db.open_connections", CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0))
