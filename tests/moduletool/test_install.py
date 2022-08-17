@@ -1209,7 +1209,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
 
 
 @pytest.mark.slowtest
-def test_version_snapshot(local_module_package_index: str, snippetcompiler, caplog, modules_v2_dir, tmpdir):
+def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
     """
     Make sure the logs contain the correct version snapshot after each module installation.
     """
@@ -1259,7 +1259,7 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler, capl
 
     # Scenario 1
     # Installing module b
-    snippetcompiler.setup_for_snippet(
+    snippetcompiler_clean.setup_for_snippet(
         f"""
         import {module.ModuleV2.get_name_from_metadata(module_b)}
         """,
@@ -1284,7 +1284,7 @@ Modules versions after installation:
 
     # Scenario 2
     # Installing module c in the same environment
-    snippetcompiler.setup_for_snippet(
+    snippetcompiler_clean.setup_for_snippet(
         f"""
         import {module.ModuleV2.get_name_from_metadata(module_c)}
         """,
