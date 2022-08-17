@@ -1322,7 +1322,7 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
     caplog.set_level(logging.DEBUG)
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
-    module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "module_a_low"),
         new_version=version.Version("8.8.8"),
@@ -1331,7 +1331,7 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         publish_index=index,
     )
 
-    module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "module_a_high"),
         new_version=version.Version("9.9.9"),
@@ -1340,7 +1340,7 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         publish_index=index,
     )
 
-    module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         os.path.join(modules_v2_dir, "minimalv2module"),
         os.path.join(str(tmpdir), "module_b"),
         new_version=version.Version("8.8.8"),
