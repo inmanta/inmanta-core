@@ -4,9 +4,9 @@ Resource sets and partial compile
 To reduce the time of a compile action, resource sets can be used. Without the use of those, each time a resource is added,
 updated or removed, the entire model is recompiled.
 By using resource sets, the resources that are usually updated together can be grouped in resource sets.
-This way, the time to compile will depend on the size of the targeted resource set where not using resource sets,
+This way, the time to compile will depend on the size of the targeted resource set. When not using resource sets,
 the time to compile will depend on the size of the entire model.
-This allows to perform certain actions only on the resources of a specific resource sets.
+This allows to perform certain actions only on the resources of a specific resource set.
 Compiling only some resource sets and not the entire model is called a partial compile.
 
 Resource sets
