@@ -1138,7 +1138,7 @@ class AutostartedAgentManager(ServerSlice):
 
             while nr_active_instances < expected_nr_active_instances:
                 await asyncio.sleep(0.1)
-                if now - int(time.time()) > timeout_in_sec:
+                if int(time.time()) - now > timeout_in_sec:
                     raise asyncio.TimeoutError()
                 instances = await data.AgentInstance.active_for_many(tid=env.id, endpoints=agents)
                 if len(instances) > nr_active_instances:
