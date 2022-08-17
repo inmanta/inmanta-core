@@ -1,0 +1,4 @@
+---
+description: Fix test case that uses the snippetcompiler fixture while it should use the snippetcompiler_clean fixture.
+change-type: patch
+destination-branches: [master, iso5]
