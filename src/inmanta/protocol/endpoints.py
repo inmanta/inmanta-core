@@ -411,7 +411,8 @@ class SyncClient(object):
         :param ioloop: the specific (running) ioloop to schedule this request on.
         if no ioloop is passed,we assume there is no running ioloop in the context where this syncclient is used.
         """
-        if name is None and client is None:
+        if (name is None) == (client is None):
+            # Exactly one must be set
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout

@@ -105,8 +105,6 @@ class CodeService(protocol.ServerSlice):
         sources = {}
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
-                # To support non utf-8 encoded files, the agent uses the file API to load the source code. For backwards
-                # compatability the method returns and empty string.
                 try:
                     content = self.file_slice.get_file_internal(code_hash)
                     sources[code_hash] = (file_name, module, content.decode(), req)

@@ -275,7 +275,10 @@ class CodeLoader(object):
                 normdir: str = os.path.normpath(directory)
                 if normdir == package_dir:
                     return
-                pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+                if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
+                    os.path.join(normdir, "__init__.pyc")
+                ):
+                    pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
                 touch_inits(os.path.dirname(normdir))
 
             # ensure correct package structure
