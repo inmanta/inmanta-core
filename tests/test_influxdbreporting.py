@@ -165,19 +165,22 @@ async def test_timing():
 async def test_available_metrics(server):
     metrics = global_registry().dump_metrics()
 
-    types: dict[str, Type] = {}
+    types: dict[str, list[Type]] = {}
     # Ensure type consistency
     for metric in metrics.values():
         for key, value in metric.items():
             if key in types:
-                assert isinstance(value, types[key]), f"inconsistent types for {key}: {type(value)} and {types[key]}"
+                # don't use isinstance, because bool is int in python, but not for influxdb
+                assert type(value) in types[key], f"inconsistent types for {key}: {type(value)} and {types[key]}"
             else:
                 base_type = type(value)
                 # https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
                 # Floats - by default, InfluxDB assumes all numerical field values are floats.
-                if base_type == int:
-                    base_type = float
-                types[key] = base_type
+                if base_type == int or base_type == float:
+                    base_types = [int, float]
+                else:
+                    base_types = [base_type]
+                types[key] = base_types
 
     assert metrics["db.connected"]["value"]
     assert "db.max_pool" in metrics
