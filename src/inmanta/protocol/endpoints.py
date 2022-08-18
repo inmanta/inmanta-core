@@ -19,13 +19,14 @@ import inspect
 import logging
 import socket
 import uuid
-from asyncio import CancelledError, sleep
+from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
 from urllib import parse
 
 from tornado import ioloop
+from tornado.platform.asyncio import BaseAsyncIOLoop
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -392,10 +393,37 @@ class SyncClient(object):
     A synchronous client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name: str, timeout: int = 120) -> None:
-        self.name = name
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        timeout: int = 120,
+        client: Optional[Client] = None,
+        ioloop: Optional[ioloop.IOLoop] = None,
+    ) -> None:
+        """
+        either name or client is required.
+        they can not be used at the same time
+
+        :param name: name of the configuration to use for this endpoint. The config section used is "{name}_rest_transport"
+        :param client: the client to use for this sync_client
+        :param timeout: http timeout on all requests
+
+        :param ioloop: the specific (running) ioloop to schedule this request on.
+        if no ioloop is passed,we assume there is no running ioloop in the context where this syncclient is used.
+        """
+        if (name is None) == (client is None):
+            # Exactly one must be set
+            raise Exception("Either name or client needs to be provided.")
+
         self.timeout = timeout
-        self._client = Client(self.name, self.timeout)
+        self._ioloop = ioloop
+        if client is None:
+            assert name is not None  # Make mypy happy
+            self.name = name
+            self._client = Client(name, self.timeout)
+        else:
+            self.name = client.name
+            self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
@@ -405,7 +433,15 @@ class SyncClient(object):
                 return method(*args, **kwargs)
 
             try:
-                return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                if self._ioloop is None:
+                    # No specific IOLoop if given, so we assume we can start one in this context
+                    return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                else:
+                    # a specific IOloop is passed
+                    # we unwrap the tornado loop to get the native python loop
+                    # and safely tap into it using run_coroutine_threadsafe
+                    assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
+                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
