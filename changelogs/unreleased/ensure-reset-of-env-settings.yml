@@ -1,0 +1,6 @@
+---
+description: Ensure that the dictionary, holding the environment settings, is reset by the cleanup fixtures to its initial state
+issue-nr: 927
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso5]
