@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump setuptools-rust from 1.5.0 to 1.5.1
+destination-branches:
+- master
+sections: {}
