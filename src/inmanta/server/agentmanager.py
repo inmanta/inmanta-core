@@ -22,7 +22,6 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
-from collections import abc
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
@@ -625,20 +624,16 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Return true iff all the given agents are in the up or the paused state.
         """
-        are_active: abc.Sequence[bool] = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
-        return all(are_active)
+        return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
 
-    async def is_agent_active(self, tid: uuid.UUID, endpoint: str) -> bool:
+    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: List[str]) -> List[Tuple[str, bool]]:
         """
-        Return true iff the given agent is in the up or the paused state.
+        Return a list of tuples where the first element of the tuple contains the name of an endpoint
+        and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
         """
-        if (tid, endpoint) in self.tid_endpoint_to_session:
-            # Agent is up
-            return True
-        # Verify if there is an AgentInstance for the given endpoint.
-        # This case happens when the Agent is paused.
-        result = await data.AgentInstance.active_for(tid=tid, endpoint=endpoint)
-        return len(result) > 0
+        all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
+        all_active_endpoints_for_env = set(ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid])
+        return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
 
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
@@ -1140,11 +1135,14 @@ class AutostartedAgentManager(ServerSlice):
                 await asyncio.sleep(0.1)
                 if int(time.time()) - now > timeout_in_sec:
                     raise asyncio.TimeoutError()
-                instances = await data.AgentInstance.active_for_many(tid=env.id, endpoints=agents)
-                if len(instances) > nr_active_instances:
+                agent_statuses: List[Tuple[str, bool]] = await self._agent_manager.get_agent_active_status(
+                    tid=env.id, endpoints=agents
+                )
+                new_nr_active_instances = sum(1 for (_, active) in agent_statuses if active)
+                if new_nr_active_instances > nr_active_instances:
                     # Reset timeout timer because a new instance became active
                     now = int(time.time())
-                nr_active_instances = len(instances)
+                nr_active_instances = new_nr_active_instances
 
         # Wait for all agents to start
         try:
