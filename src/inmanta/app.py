@@ -506,6 +506,8 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         action="store_false",
         default=True,
     )
+    # TODO: mention in combination with --json 0 is used as placeholder for version
+    # TODO: mention all invariants/caller responsibilities (same Python code, ...?)
     parser.add_argument(
         "--partial",
         dest="partial_compile",

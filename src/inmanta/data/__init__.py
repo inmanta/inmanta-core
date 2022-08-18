@@ -2483,6 +2483,9 @@ class Environment(BaseDocument):
             await self.delete()
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
+        """
+        Reserves the next available version and returns it. Increments the last_version counter.
+        """
         record = await self._fetchrow(
             f"""
 UPDATE {self.table_name()}
@@ -5140,10 +5143,12 @@ class ConfigurationModel(BaseDocument):
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
     :param date: The date this configuration model was created
+    :param partial_base: If this version was calculated from a partial export, the version the partial was applied on.
     :param released: Is this model released and available for deployment?
     :param deployed: Is this model deployed?
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
+    :param total: The total number of resources
     :param total: The total number of resources
     """
 
@@ -5152,6 +5157,7 @@ class ConfigurationModel(BaseDocument):
     version: int
     environment: uuid.UUID
     date: Optional[datetime.datetime] = None
+    partial_base: Optional[int] = None
 
     released: bool = False
     deployed: bool = False
@@ -5278,6 +5284,24 @@ class ConfigurationModel(BaseDocument):
         """
         result = await cls.get_one(environment=environment, version=version, connection=connection)
         return result
+
+    # TODO: delete?
+    @classmethod
+    async def get_full_version_base(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> Optional[int]:
+        # TODO: docstring -> return values: None, self, other
+        query: str = f"""
+            WITH RECURSIVE ancestors(version, base) AS (
+                    VALUES ($1::integer, $1::integer)
+                UNION
+                    SELECT m.version, m.partial_base
+                    FROM ancestors AS a JOIN {cls.table_name()} AS m ON m.environment=$2 AND m.version=a.base
+            )
+            SELECT version FROM ancestors
+            WHERE base IS NULL
+        """
+        return await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection)
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
@@ -5701,6 +5725,25 @@ class Code(BaseDocument):
     async def get_versions(cls, environment: uuid.UUID, version: int) -> List["Code"]:
         codes = await cls.get_list(environment=environment, version=version)
         return codes
+
+    @classmethod
+    async def copy_versions(
+        cls,
+        environment: uuid.UUID,
+        old_version: int,
+        new_version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        query: str = f"""
+            INSERT INTO {cls.table_name()} (environment, resource, version, source_refs)
+            SELECT environment, resource, $1, source_refs
+            FROM {cls.table_name()}
+            WHERE environment=$2 AND version=$3
+        """
+        return await cls._execute_query(
+            query, cls._get_value(new_version), cls._get_value(environment), cls._get_value(old_version), connection=connection
+        )
 
 
 class DryRun(BaseDocument):

@@ -19,7 +19,7 @@
 import datetime
 import logging
 import uuid
-from collections import defaultdict
+from collections import abc, defaultdict
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
@@ -139,11 +139,15 @@ class PartialUpdateMerger:
         partial_updates: Sequence[ResourceMinimal],
         resource_sets: Mapping[ResourceIdStr, Optional[str]],
         removed_resource_sets: Sequence[str],
+        base_version: int,
+        new_version: int,
         env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
         self.resource_sets = resource_sets
         self.removed_resource_sets = removed_resource_sets
+        self.base_version: int = base_version
+        self.new_version: int = new_version
         self.env = env
 
     def pair_resources_partial_update_to_old_version(
@@ -152,7 +156,7 @@ class PartialUpdateMerger:
         """
         returns a list of paired resources
 
-        :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set
+        :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set.
         """
         paired_resources: List[PairedResource] = []
         for partial_update in self.partial_updates:
@@ -166,18 +170,20 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_latest_resources(
+    async def _get_base_resources(
         self, *, connection: asyncpg.connection.Connection
     ) -> dict[ResourceIdStr, ResourceWithResourceSet]:
         """
-        Makes a call to the DB to get the latest resources in the environment and return a dict
+        Makes a call to the DB to get the resources for this instance's base version in the environment and return a dict
         where the keys are the Ids of the resources and the values are ResourceWithResourceSet.
+        Sets the resource objects' version to the new version for the partial export.
         """
-        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id, connection=connection)
+        old_data = await data.Resource.get_resources_for_version(environment=self.env.id, version=self.base_version, connection=connection)
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: ResourceMinimal = ResourceMinimal(id=res.resource_version_id, **res.attributes)
-            old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
+            new_version_id: Id = Id.parse_id(res.resource_version_id).copy(version=self.new_version)
+            resource: ResourceMinimal = ResourceMinimal(id=new_version_id, **res.attributes)
+            old_resources[new_id.resource_str()] = ResourceWithResourceSet(resource, res.resource_set)
         return old_resources
 
     def _merge_resources(
@@ -189,13 +195,16 @@ class PartialUpdateMerger:
         resources coming form the partial compile if they don't break any rule:
         - cannot move a resource to another resource set
         - cannot update resources without a resource set.
+
+        :param old_resources: The resources to use as base for the merge. The version for each resource is expected to already
+            be set to the new version for this partial export.
         """
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
         )
 
         to_keep: Sequence[ResourceMinimal] = [
-            r.resource.incremented_resource_version()
+            r.resource
             for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
@@ -238,18 +247,18 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def apply_partial_on_latest(
+    async def apply_partial(
         self, *, connection: asyncpg.connection.Connection
     ) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
         """
-        Applies the partial model's resources on the current latest version. The caller should acquire appropriate locks on the
+        Applies the partial model's resources on this instance's base version. The caller should acquire appropriate locks on the
         database connection as defined in the put_partial method definition.
 
         :param connection: The database connection to use to determine the latest version. Appropriate locks are assumed to be
             acquired.
-        :return: A tuple of the model version, the resources and the resource sets
+        :return: A tuple of the resources and the resource sets
         """
-        old_resources = await self._get_latest_resources(connection=connection)
+        old_resources = await self._get_base_resources(connection=connection)
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
@@ -677,7 +686,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
-    ) -> None:
+    ) -> int:
         if resource_state is None:
             resource_state = {}
         if unknowns is None:
@@ -723,9 +732,18 @@ class OrchestrationService(protocol.ServerSlice):
                         )
                     resource.set_version(version)
 
-                merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
-                merged_resources, merged_resource_sets = await merger.apply_partial_on_latest(connection=con)
+                current_versions: abc.Sequence[data.ConfigurationModel] = ConfigurationModel.get_versions(env.id, limit=1)
+                if not current_versions:
+                    raise BadRequest(
+                        "A partial export requires a base model but no versions have been exported yet."
+                    )
+                base_version: int = current_versions[0].version
 
+                merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, base_version, env)
+                merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
+                await data.Code.copy_versions(env, base_version, version)
+
+                # TODO: does this really need to live within the transaction?
                 await self._put_version(
                     env,
                     version,
@@ -736,6 +754,7 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resource_sets,
                     connection=con,
                 )
+        return version
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(

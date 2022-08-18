@@ -137,7 +137,8 @@ class Exporter(object):
         self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
-        self._version = 0
+        # When export starts: None iff partial export
+        self._version: Optional[int] = None
         self._scope = None
         self.failed = False
 
@@ -360,7 +361,7 @@ class Exporter(object):
         resource_sets_to_remove: Optional[Sequence[str]] = None,
     ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
         """
-        Run the export functions
+        Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
@@ -369,8 +370,7 @@ class Exporter(object):
         self.types = types
         self.scopes = scopes
 
-        # TODO: make sure not to reserve a version for partial
-        self._version = self.get_version(no_commit)
+        self._version = self.get_version(no_commit) if not partial_compile else None
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -416,12 +416,13 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
+            self._version = self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
             LOGGER.info("Committed resources with version %d" % self._version)
 
+        exported_version: int = self._version if self._version is not None else 0
         if include_status:
-            return self._version, self._resources, self._resource_state, model
-        return self._version, self._resources
+            return exported_version, self._resources, self._resource_state, model
+        return exported_version, self._resources
 
     def add_resource(self, resource: Resource) -> None:
         """
@@ -435,7 +436,8 @@ class Exporter(object):
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
 
-        resource.set_version(self._version)
+        # If self._version is None we use 0 as a placeholder. The actual version will be set on the server
+        resource.set_version(self._version if self._version is not None else 0)
 
         if resource.id in self._resources:
             raise CompilerException("Resource %s exists more than once in the configuration model" % resource.id)
@@ -486,24 +488,31 @@ class Exporter(object):
 
     def commit_resources(
         self,
-        version: int,
+        version: Optional[int],
         resources: List[Dict[str, str]],
         metadata: Dict[str, str],
         model: Dict,
         partial_compile: bool,
         resource_sets_to_remove: List[str],
-    ) -> None:
+    ) -> int:
         """
         Commit the entire list of resources to the configuration server.
+
+        :return: The version for which resources were committed.
         """
         tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
             raise Exception("The environment for this model should be set!")
 
+        if version is None and not partial_compile:
+            raise Exception("Full export requires version to be set")
+
         conn = protocol.SyncClient("compiler")
-        # TODO: partial export does not have a version yet -> how to upload code?
-        self.deploy_code(conn, tid, version)
+
+        # partial exports use the same code as the version they're based on
+        if not partial:
+            self.deploy_code(conn, tid, version)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -559,10 +568,13 @@ class Exporter(object):
                 version_info=version_info,
                 compiler_version=get_compiler_version(),
             )
+            new_version = version
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
+
+        return result.result["data"] if version is None else version
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """

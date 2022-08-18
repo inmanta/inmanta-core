@@ -760,6 +760,52 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     assert latest_version.version == 4
 
 
+async def test_model_get_full_export_version(init_dataclasses_and_load_schema) -> None:
+    """
+    Test the behavior of the ConfigurationModel.get_full_version_base() method.
+    """
+    project = data.Project(name="myproject")
+    await project.insert()
+
+    env_one = data.Environment(name="env_one", project=project.id, repo_url="", repo_branch="")
+    await env_one.insert()
+    env_two = data.Environment(name="env_two", project=project.id, repo_url="", repo_branch="")
+    await env_two.insert()
+
+    # full export model 1 -> partial 2
+    await data.ConfigurationModel(environment=env_one.id, version=1, partial_base=None).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=2, partial_base=1).insert()
+    # full export model 3 -> sequential partials 4, 5, 6
+    await data.ConfigurationModel(environment=env_one.id, version=3, partial_base=None).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=4, partial_base=3).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=5, partial_base=4).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=6, partial_base=5).insert()
+    # partial based on older version
+    await data.ConfigurationModel(environment=env_one.id, version=7, partial_base=1).insert()
+    # partial based on version that does not exist anymore
+    await data.ConfigurationModel(environment=env_one.id, version=8, partial_base=0).insert()
+    # invalid (cyclic) bases should be handled gracefully
+    await data.ConfigurationModel(environment=env_one.id, version=9, partial_base=9).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=10, partial_base=11).insert()
+    await data.ConfigurationModel(environment=env_one.id, version=11, partial_base=10).insert()
+    # same version number in other env
+    await data.ConfigurationModel(environment=env_two.id, version=6, partial_base=None).insert()
+
+    # env_one assertions
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 1) == 1
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 2) == 1
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 3) == 3
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 6) == 3
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 7) == 1
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 8) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 9) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 10) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 11) is None
+
+    # env_two assertions
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 6) == 6
+
+
 async def test_model_set_ready(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1932,6 +1978,13 @@ async def test_code(init_dataclasses_and_load_schema):
     code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})
     await code3.insert()
 
+    # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
+    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+    await data.ConfigurationModel(environment=env2.id, version=code3.version).insert()
+    await data.Code(environment=env2.id, resource="std::File", version=code3.version, source_refs={}).insert()
+    await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
+
     def assert_match_code(code1, code2):
         assert code1 is not None
         assert code2 is not None
@@ -1962,6 +2015,18 @@ async def test_code(init_dataclasses_and_load_schema):
     code = code_list[0]
     assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
     code_list = await data.Code.get_versions(env.id, version + 2)
+    assert len(code_list) == 1
+    assert (
+        code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs
+    ) == (
+        code3.environment, code3.resource, code3.version + 1, code3.source_refs
+    )
+    code_list = await data.Code.get_versions(env.id, version + 3)
+    assert len(code_list) == 0
+
+    code_list = await data.Code.get_versions(env2.id, code3.version)
+    assert len(code_list) == 1
+    code_list = await data.Code.get_versions(env2.id, code3.version + 1)
     assert len(code_list) == 0
 
 

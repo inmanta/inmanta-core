@@ -47,7 +47,9 @@ def put_partial(
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
-) -> None:
+) -> int:
+    # TODO: docstring return version
+    # TODO: mention all invariants/caller responsibilities (same Python code, ...?)
     """
     Store a new version of the configuration model after a partial recompile. Dynamically acquires a new version and serializes
     concurrent calls.
