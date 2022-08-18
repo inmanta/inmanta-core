@@ -21,6 +21,7 @@ import datetime
 import inspect
 import logging
 import os
+import py_compile
 import re
 import shutil
 import subprocess
@@ -58,6 +59,7 @@ from inmanta.module import (
     ModuleNotFoundException,
     ModuleV1,
     ModuleV2,
+    ModuleV2Source,
     Project,
     gitprovider,
 )
@@ -567,6 +569,14 @@ mode.
             default=False,
             action="store_true",
         )
+        build.add_argument(
+            "-b",
+            "--byte-code",
+            help="Produce a module wheel that contains only python bytecode for the plugins.",
+            action="store_true",
+            default=False,
+            dest="byte_code",
+        )
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
 
@@ -617,7 +627,9 @@ mode.
             raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
         ModuleConverter(module).convert_in_place()
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False) -> str:
+    def build(
+        self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
+    ) -> str:
         """
         Build a v2 module and return the path to the build artifact.
         """
@@ -634,9 +646,9 @@ mode.
         if isinstance(module, ModuleV1):
             with tempfile.TemporaryDirectory() as tmpdir:
                 ModuleConverter(module).convert(tmpdir)
-                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build)
+                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build, byte_code=byte_code)
         else:
-            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build)
+            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build, byte_code=byte_code)
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -966,13 +978,16 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str, dev_build: bool = False) -> str:
+    def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
         Build the module and return the path to the build artifact.
+
+        :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
@@ -981,6 +996,9 @@ class V2ModuleBuilder:
                 self._add_dev_build_tag_to_setup_cfg(build_path)
             self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
+            if byte_code:
+                self._byte_compile_code(build_path)
+
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
             return path_to_wheel
@@ -1002,6 +1020,53 @@ class V2ModuleBuilder:
         # Write file back
         with open(path_setup_cfg, "w") as fh:
             config_in.write(fh)
+
+    def _byte_compile_code(self, build_path: str) -> None:
+        # Backup src dir and replace .py files with .pyc files
+        for root, dirs, files in os.walk(os.path.join(build_path, "inmanta_plugins"), followlinks=True):
+            for current_file in [f for f in files if f.endswith(".py")]:
+                py_file = os.path.join(root, current_file)
+                pyc_file = f"{py_file}c"
+                py_compile.compile(file=py_file, cfile=pyc_file, doraise=True)
+                os.remove(py_file)
+
+        # Make sure there is a pyc line in the manifest.in
+        with open(os.path.join(build_path, "MANIFEST.in"), "r+", encoding="utf-8") as fh:
+            content = fh.read()
+            # Make sure that there is at least one .pyc include
+            if ".pyc" not in content:
+                # Add it to the manifest. The read has moved the pointer to the end of the file
+                LOGGER.info("Adding .pyc include line to the MANIFEST")
+                fh.write("\nrecursive-include inmanta_plugins *.pyc\n")
+                fh.write("global-exclude */__pycache__/*\n")
+
+        # For wheel to build a non universal python wheel we need to trick it into thinking it contains
+        # compiled extensions against a specific python ABI. If not we might install this wheel on a python with incompatible
+        # python code
+        dummy_file = os.path.join(build_path, "inmanta_plugins", self._module.name, "_cdummy.c")
+        with open(dummy_file, "w") as fd:
+            fd.write("// Dummy python file")
+
+        setup_file = os.path.join(build_path, "setup.py")
+        if os.path.exists(setup_file):
+            LOGGER.warning("This command will overwrite setup.py to make sure a correct wheel is generated.")
+
+        with open(os.path.join(build_path, "setup.py"), "w") as fd:
+            fd.write(
+                f"""
+from distutils.core import setup
+from Cython.Build import cythonize
+setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
+    version="{self._module.version}",
+    ext_modules=cythonize("inmanta_plugins/{self._module.name}/_cdummy.c"),
+)
+            """
+            )
+
+        # make sure cython is in the pyproject.toml
+        pyproject = ModuleConverter.get_pyproject(build_path, build_requires=["wheel", "setuptools", "cython"])
+        with open(os.path.join(build_path, "pyproject.toml"), "w") as fh:
+            fh.write(pyproject)
 
     def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
         """
@@ -1159,7 +1224,8 @@ graft inmanta_plugins/{self._module.name}/templates
                 + "\n"
             )
 
-    def get_pyproject(self, in_folder: str, warn_on_merge: bool = False) -> str:
+    @classmethod
+    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:
         """
         Adds this to the existing config
 
@@ -1167,6 +1233,9 @@ graft inmanta_plugins/{self._module.name}/templates
         requires = ["setuptools", "wheel"]
         build-backend = "setuptools.build_meta"
         """
+        if build_requires is None:
+            build_requires = ["setuptools", "wheel"]
+
         config_in = {}
         if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
             with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
@@ -1197,7 +1266,7 @@ graft inmanta_plugins/{self._module.name}/templates
                     exitcode=1,
                 )
 
-        for req in ["setuptools", "wheel"]:
+        for req in build_requires:
             if req not in requires:
                 requires.append(req)
         build_system["build-backend"] = "setuptools.build_meta"
