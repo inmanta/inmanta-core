@@ -1,0 +1,5 @@
+description: cleanup sys.meta_path between tests to fix core failures
+change-type: patch
+destination-branches:
+  - iso5
+  - master
