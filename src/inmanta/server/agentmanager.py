@@ -52,7 +52,6 @@ from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes
-from inmanta.util import retry_limited
 
 from ..data.paging import QueryIdentifier
 from . import config as server_config

@@ -24,7 +24,6 @@ from asyncio import subprocess
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import Mock
 from uuid import UUID, uuid4
-import functools
 
 import pytest
 
@@ -1243,7 +1242,7 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     env = await data.Environment.get_by_id(env_id)
 
     # The agent is not started yet ->  it should not be active
-    assert (not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name]))
+    assert not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name])
 
     # Start agent
     await agentmanager.ensure_agent_registered(env, agent_name)
