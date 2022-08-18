@@ -36,7 +36,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from collections import abc
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -463,7 +464,11 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
 
 
 async def retry_limited(
-    fun: Callable[[...], Union[bool, Awaitable[bool]]], timeout: float, interval: float = 0.1, *args, **kwargs
+    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
 ) -> None:
     async def fun_wrapper() -> bool:
         if inspect.iscoroutinefunction(fun):

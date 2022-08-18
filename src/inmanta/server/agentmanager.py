@@ -26,6 +26,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 from uuid import UUID
+from collections import abc
 
 import asyncpg
 
@@ -624,7 +625,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Return true iff all the given agents are in the up or the paused state.
         """
-        are_active: Tuple[bool, ...] = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
+        are_active: abc.Sequence[bool] = await asyncio.gather(*[self.is_agent_active(tid, e) for e in endpoints])
         return all(are_active)
 
     async def is_agent_active(self, tid: uuid.UUID, endpoint: str) -> bool:

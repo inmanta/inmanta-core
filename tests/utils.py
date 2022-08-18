@@ -47,7 +47,13 @@ from libpip2pi.commands import dir2pi
 from packaging import version
 
 
-async def retry_limited(fun, timeout, interval: float = 0.1, *args, **kwargs):
+async def retry_limited(
+    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
     async def fun_wrapper():
         if inspect.iscoroutinefunction(fun):
             return await fun(*args, **kwargs)

@@ -2944,7 +2944,8 @@ class AgentInstance(BaseDocument):
         endpoints: List[str],
     ) -> List[TAgentInstance]:
         """
-        Return the AgentInstances for the given endpoints in the given environment.
+        Return the AgentInstances for the given endpoints in the given environment that
+        are not expired (are in the up or paused state).
         """
         in_query = ",".join(f"${i+2}" for i in range(len(endpoints)))
         query = f"""
