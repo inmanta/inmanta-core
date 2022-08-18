@@ -1,0 +1,8 @@
+description: Add option to bytecompile all python source in a v2 module wheel
+issue-nr: 1190
+issue-repo: irt
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  feature: "{{description}}"
+  deprecation-note: "The internal upload_code endpoint has been removed, deprecated since core release 2018.2"

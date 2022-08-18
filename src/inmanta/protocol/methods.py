@@ -794,21 +794,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
 
 
-# Upload code to the server
-
-
-@method(path="/code/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
-def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
-    """
-    Upload the supporting code to the server
-
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
-    :param sources: The source files that contain handlers and inmanta plug-ins
-        {code_hash:(file_name, provider.__module__, source_code, [req])}
-    """
-
-
 @method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
@@ -817,9 +802,6 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
     :param tid: The environment the code belongs to
     :param id: The id (version) of the configuration model
     """
-
-
-# Upload code to the server
 
 
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
