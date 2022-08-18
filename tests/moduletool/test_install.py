@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -33,12 +34,12 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements
-from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException
+from inmanta.env import ConflictingRequirements, PythonEnvironment
+from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -940,4 +941,470 @@ The following requirements were not satisfied:
 The release type of the project is set to 'master'. Set it to a value that is appropriate for the version constraint
     """.strip() in str(
         excinfo.value
+    )
+
+
+@pytest.mark.slowtest
+def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
+    """
+    Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
+    The check for v1 module is performed on the std module as it gets downloaded and installed, unlike other
+    v1 modules in tests/data/modules which are already on disk.
+    """
+
+    caplog.set_level(logging.DEBUG)
+
+    v2_module = "minimalv2module"
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
+        autostd=False,
+        python_package_sources=[local_module_package_index],
+        python_requires=v2_requirements,
+        install_project=False,
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std==3.0.0"),
+        ],
+    )
+
+    os.chdir(project.path)
+
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+
+    expected_logs = [
+        ("Installing module minimalv2module (v2)", logging.DEBUG),
+        ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
+        ("Installing module std (v1)", logging.DEBUG),
+        (
+            """Successfully installed module std (v1) version 3.0.0 in %s from %s"""
+            % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
+            logging.DEBUG,
+        ),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            level,
+            message,
+        )
+
+
+@pytest.mark.slowtest
+def test_real_time_logging(caplog):
+    """
+    Make sure the logging in run_command_and_stream_output happens in real time
+    """
+    caplog.set_level(logging.DEBUG)
+
+    cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    return_code: int
+    output: List[str]
+    return_code, output = PythonEnvironment.run_command_and_stream_output(cmd, shell=True)
+    assert return_code == 0
+
+    assert "one" in caplog.records[0].message
+    assert "one" in output[0]
+    first_log_line_time: datetime = datetime.fromtimestamp(caplog.records[0].created)
+
+    assert "two" in caplog.records[-1].message
+    assert "two" in output[-1]
+    last_log_line_time: datetime = datetime.fromtimestamp(caplog.records[-1].created)
+
+    # "two" should be logged at least one second after "one"
+    delta: float = (last_log_line_time - first_log_line_time).total_seconds()
+    assert delta >= 1
+
+
+@pytest.mark.slowtest
+def test_pip_output(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    This test checks that pip's output is correctly logged on module install.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    modone: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modone"),
+        new_version=version.Version("3.1.2"),
+        new_name="modone",
+        install=False,
+        publish_index=index,
+    )
+    modtwo: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "modtwo"),
+        new_version=version.Version("2.2.2"),
+        new_name="modtwo",
+        new_requirements=[InmantaModuleRequirement.parse("modone")],
+        install=False,
+        publish_index=index,
+    )
+
+    modules = ["modone", "modtwo"]
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in modules]
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(modone)}
+        import {module.ModuleV2.get_name_from_metadata(modtwo)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=v2_requirements,
+        install_project=True,
+    )
+
+    expected_logs = [
+        ("Successfully installed inmanta-module-modone-3.1.2", logging.DEBUG),
+        ("Successfully installed inmanta-module-modtwo-2.2.2", logging.DEBUG),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.env",
+            level,
+            message,
+        )
+
+
+@pytest.mark.slowtest
+def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
+    """
+    This test checks that git clone output is correctly logged on module install.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    project = snippetcompiler_clean.setup_for_snippet(
+        """
+        import std
+        """,
+        autostd=False,
+        install_project=True,
+    )
+
+    expected_logs = [
+        ("Cloning into '%s'..." % os.path.join(project.downloadpath, "std"), logging.DEBUG),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.env",
+            level,
+            message,
+        )
+
+
+@pytest.mark.slowtest
+def test_no_matching_distribution(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    Make sure the logs contain the correct message when no matching distribution is found during install.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # Scenario 1
+    # parent_module requires child_module v3.3.3 which is not installed yet.
+
+    parent_module: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "parent_module"),
+        new_version=version.Version("1.2.3"),
+        new_name="parent_module",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("child_module==3.3.3")],
+        publish_index=index,
+    )
+
+    with pytest.raises(ModuleNotFoundException):
+        snippetcompiler_clean.setup_for_snippet(
+            f"""
+            import {module.ModuleV2.get_name_from_metadata(parent_module)}
+            """,
+            autostd=False,
+            python_package_sources=[local_module_package_index, index.url],
+            python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+            install_project=True,
+        )
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
+    )
+
+    # Scenario 2
+    # parent_module requires child_module v3.3.3 but the index only has v1.1.1
+
+    # Prepare the required module with a low version:
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("1.1.1"),
+        new_name="child_module",
+        install=False,
+        publish_index=index,
+    )
+
+    with pytest.raises(ModuleNotFoundException):
+        snippetcompiler_clean.setup_for_snippet(
+            f"""
+            import {module.ModuleV2.get_name_from_metadata(parent_module)}
+            """,
+            autostd=False,
+            python_package_sources=[local_module_package_index, index.url],
+            python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+            install_project=True,
+        )
+
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "No matching distribution found for inmanta-module-child-module==3.3.3",
+    )
+
+    shutil.rmtree(os.path.join(str(tmpdir), "child_module"))
+
+    # Scenario 3
+    # parent_module requires child_module v3.3.3 which is present in the index.
+
+    # Prepare the required module with the correct version:
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "child_module"),
+        new_version=version.Version("3.3.3"),
+        new_name="child_module",
+        install=False,
+        publish_index=index,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(parent_module)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
+        install_project=True,
+    )
+    log_contains(
+        caplog,
+        "inmanta.env",
+        logging.DEBUG,
+        "Successfully installed inmanta-module-child-module-3.3.3 inmanta-module-parent-module-1.2.3",
+    )
+
+
+@pytest.mark.slowtest
+def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
+    """
+    Make sure the logs contain the correct version snapshot after each module installation.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # Prepare the modules:
+    # module a with version 1.0.0 and 5.0.0
+    # module b that depends on module a>=1.0.0
+    # module c that depends on module a==1.0.0
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a"),
+        new_version=version.Version("1.0.0"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a_hi"),
+        new_version=version.Version("5.0.0"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+    module_b: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_b"),
+        new_version=version.Version("1.2.3"),
+        new_name="module_b",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("module_a>=1.0.0")],
+        publish_index=index,
+    )
+    module_c: module.ModuleV2Metadata = module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_c"),
+        new_version=version.Version("8.8.8"),
+        new_name="module_c",
+        install=False,
+        new_requirements=[InmantaModuleRequirement.parse("module_a==1.0.0")],
+        publish_index=index,
+    )
+
+    # Scenario 1
+    # Installing module b
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(module_b)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_b"))],
+        install_project=True,
+    )
+
+    # We expect the latest version for a and b to be newly added
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.DEBUG,
+        (
+            """\
+Modules versions after installation:
++ module_a: 5.0.0
++ module_b: 1.2.3"""
+        ),
+    )
+
+    # Scenario 2
+    # Installing module c in the same environment
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(module_c)}
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_c"))],
+        install_project=True,
+    )
+
+    # We expect :
+    # - a to be downgraded to a compatible version
+    # - b to remain unchanged
+    # - c to be installed with the latest version
+
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.DEBUG,
+        (
+            """\
+Modules versions after installation:
++ module_a: 1.0.0
+- module_a: 5.0.0
++ module_c: 8.8.8"""
+        ),
+    )
+
+
+@pytest.mark.slowtest
+def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_clean, local_module_package_index):
+    """
+    Test that the version constraints are appropriately logged on module install.
+    """
+    caplog.set_level(logging.DEBUG)
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a_low"),
+        new_version=version.Version("8.8.8"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_a_high"),
+        new_version=version.Version("9.9.9"),
+        new_name="module_a",
+        install=False,
+        publish_index=index,
+    )
+
+    module_from_template(
+        os.path.join(modules_v2_dir, "minimalv2module"),
+        os.path.join(str(tmpdir), "module_b"),
+        new_version=version.Version("8.8.8"),
+        new_requirements=[
+            InmantaModuleRequirement.parse("module_a<10.10.10"),
+            InmantaModuleRequirement.parse("module_a>=0.0.0"),
+        ],
+        new_name="module_b",
+        install=False,
+        publish_index=index,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import module_a
+        import module_b
+        """,
+        autostd=False,
+        python_package_sources=[local_module_package_index, index.url],
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
+        ],
+        install_project=True,
+        project_requires=[
+            module.InmantaModuleRequirement.parse("module_a<9.9.9"),
+            module.InmantaModuleRequirement.parse("module_a>1.1.1"),
+        ],
+    )
+
+    expected_log_messages = [
+        "Installing module module_a (v2) (with constraints module_a<9.9.9 module_a>1.1.1 module_a<10.10.10 module_a>=0.0.0).",
+        "Installing module module_b (v2) (with no version constraints)",
+    ]
+
+    for log_message in expected_log_messages:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            logging.DEBUG,
+            log_message,
+        )
+
+
+@pytest.mark.slowtest
+def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_package_index):
+    caplog.set_level(logging.DEBUG)
+
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import std
+        """,
+        autostd=False,
+        install_project=True,
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std>0.0"),
+            module.InmantaModuleRequirement.parse("std>=0.0"),
+            module.InmantaModuleRequirement.parse("std==3.0.15"),
+            module.InmantaModuleRequirement.parse("std<=100.0.0"),
+            module.InmantaModuleRequirement.parse("std<100.0.0"),
+        ],
+        python_package_sources=[local_module_package_index],
+    )
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.DEBUG,
+        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==3.0.15 std<=100.0.0 std<100.0.0)",
     )
