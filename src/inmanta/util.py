@@ -32,12 +32,11 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
-from collections import defaultdict
+from collections import abc, defaultdict
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union, cast
-from collections import abc
+from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
