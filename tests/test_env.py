@@ -35,7 +35,7 @@ from pkg_resources import Requirement
 
 from inmanta import env, loader, module
 from packaging import version
-from utils import LogSequence
+from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     pytest.skip(
@@ -554,3 +554,38 @@ def test_basic_logging(tmpdir, caplog):
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
         log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+
+
+def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that the `ActiveEnv.are_installed()` method doesn't go into an infinite loop when there is a circular dependency
+    involving an extra.
+
+    Dependency loop:
+        pkg[optional]
+           -> dep[optional]
+               -> pkg[optional]
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-pkg": [Requirement.parse("dep[optional-dep]")],
+        },
+    )
+    create_python_package(
+        name="dep",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "dep"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
+        },
+    )
+
+    requirements = [Requirement.parse("pkg[optional-pkg]")]
+    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    assert tmpvenv_active_inherit.are_installed(requirements=requirements)

@@ -2498,6 +2498,19 @@ RETURNING last_version;
         return version
 
     @classmethod
+    async def register_setting(cls, setting: Setting) -> None:
+        """
+        Adds a new setting to the environments from outside inmanta-core.
+        As example, inmanta-lsm can use this method to add settings that are only
+        relevant for inmanta-lsm but that are needed in the environments.
+
+        :param setting: the setting that should be added to the existing settings
+        """
+        if setting.name in cls._settings:
+            raise KeyError()
+        cls._settings[setting.name] = setting
+
+    @classmethod
     async def get_list(
         cls: Type[TBaseDocument],
         *,

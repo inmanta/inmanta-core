@@ -45,7 +45,9 @@ class DatabaseService(protocol.ServerSlice):
         # Schedule cleanup agentprocess and agentinstance tables
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
-            self.schedule(self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0)
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def stop(self) -> None:
         await self.disconnect_database()
@@ -101,7 +103,9 @@ class DatabaseService(protocol.ServerSlice):
         """Attach to monitoring system"""
         gauge(
             "db.connected",
-            CallbackGauge(callback=lambda: self._pool is not None and not self._pool._closing and not self._pool._closed),
+            CallbackGauge(
+                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
+            ),
         )
         gauge("db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0))
         gauge("db.open_connections", CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0))

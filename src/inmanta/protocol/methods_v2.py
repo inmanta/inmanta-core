@@ -58,6 +58,8 @@ def put_partial(
     the full or the partial export might be immediately stale, and future exports will only be applied on top of the non-stale
     one.
 
+    This method is experimental and its interface may receive breaking changes in future releases.
+
     :param tid: The id of the environment
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete

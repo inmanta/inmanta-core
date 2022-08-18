@@ -1,0 +1,6 @@
+description: Reduce compiler log level for iterations and cache log lines to debug
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"
+

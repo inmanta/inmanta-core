@@ -119,6 +119,7 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
+from packaging.version import Version
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -441,6 +442,7 @@ def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
     old_path = list(sys.path)
+    old_meta_path = sys.meta_path.copy()
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
@@ -454,6 +456,9 @@ def deactive_venv():
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
+    # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+    sys.meta_path.clear()
+    sys.meta_path.extend(old_meta_path)
     pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
@@ -480,12 +485,14 @@ async def clean_reset(create_db, clean_db):
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
     loader.unload_inmanta_plugins()
+    default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
+    data.Environment._settings = default_settings
 
 
 def reset_all_objects():
@@ -1600,3 +1607,32 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="session")
+def index_with_pkgs_containing_optional_deps() -> str:
+    """
+    This fixture creates a python package repository containing packages with optional dependencies.
+    These packages are NOT inmanta modules but regular python packages. This fixture returns the URL
+    to the created python package repository.
+    """
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        pip_index = utils.PipIndex(artifact_dir=tmpdirname)
+        utils.create_python_package(
+            name="pkg",
+            pkg_version=Version("1.0.0"),
+            path=os.path.join(tmpdirname, "pkg"),
+            publish_index=pip_index,
+            optional_dependencies={
+                "optional-a": [Requirement.parse("dep-a")],
+                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+            },
+        )
+        for pkg_name in ["dep-a", "dep-b", "dep-c"]:
+            utils.create_python_package(
+                name=pkg_name,
+                pkg_version=Version("1.0.0"),
+                path=os.path.join(tmpdirname, pkg_name),
+                publish_index=pip_index,
+            )
+        yield pip_index.url

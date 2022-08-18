@@ -34,11 +34,12 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
+import inmanta.module
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
@@ -59,6 +60,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PackageNotFound(Exception):
+    pass
+
+
+class PipInstallError(Exception):
     pass
 
 
@@ -148,13 +153,88 @@ class ConflictingRequirements(CompilerException):
             )
 
 
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
+
+
 class PythonWorkingSet:
     @classmethod
-    def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+        """
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
+    @classmethod
+    def are_installed(cls, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this workingset.
+        """
+        if not requirements:
+            return True
+        installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
+
+        def _are_installed_recursive(
+            reqs: Sequence[Requirement],
+            seen_requirements: Sequence[Requirement],
+            contained_in_extra: Optional[str] = None,
+        ) -> bool:
+            """
+            Recursively check the given reqs are installed in this working set
+
+            :param reqs: The requirements that should be checked.
+            :param seen_requirements: An accumulator that contains all the requirements that were check in
+                                      previous iterators. It prevents infinite loops when the dependency
+                                      graph contains circular dependencies.
+            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
+                                       iteration of this method this value is None.
+            """
+            for r in reqs:
+                if r in seen_requirements:
+                    continue
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+                # the marker evaluation fail.
+                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                    # The marker of the requirement doesn't apply on this environment
+                    continue
+                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                    return False
+                if r.extras:
+                    for extra in r.extras:
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        if distribution is None:
+                            return False
+                        pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=())
+                        )
+                        if not _are_installed_recursive(
+                            reqs=list(pkgs_required_by_extra),
+                            seen_requirements=list(seen_requirements) + list(reqs),
+                            contained_in_extra=extra,
+                        ):
+                            return False
+            return True
+
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
+
+    @classmethod
+    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> Dict[str, version.Version]:
         """
         Return all packages present in `pkg_resources.working_set` together with the version of the package.
+
+        :param inmanta_modules_only: Only return inmanta modules from the working set
         """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+        return {
+            dist_info.key: version.Version(dist_info.version)
+            for dist_info in pkg_resources.working_set
+            if not inmanta_modules_only or dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
+        }
 
     @classmethod
     def rebuild_working_set(cls) -> None:
@@ -368,33 +448,38 @@ class PythonEnvironment:
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
     ) -> None:
-        try:
-            cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=python_path,
-                requirements=requirements,
-                paths=paths,
-                index_urls=index_urls,
-                upgrade=upgrade,
-                upgrade_strategy=upgrade_strategy,
-                allow_pre_releases=allow_pre_releases,
-                constraints_files=constraints_files,
-                requirements_files=requirements_files,
-            )
-            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
-        except CalledProcessError as e:
-            stderr: str = e.stderr.decode()
-            not_found: List[str] = [
-                requirement.project_name
-                for requirement in requirements
-                if f"No matching distribution found for {requirement.project_name}" in stderr
-            ]
+        cmd: List[str] = PipCommandBuilder.compose_install_command(
+            python_path=python_path,
+            requirements=requirements,
+            paths=paths,
+            index_urls=index_urls,
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            allow_pre_releases=allow_pre_releases,
+            constraints_files=constraints_files,
+            requirements_files=requirements_files,
+        )
+        return_code, full_output = self.run_command_and_stream_output(cmd)
+
+        if return_code != 0:
+            not_found: List[str] = []
+            conflicts: List[str] = []
+            for line in full_output:
+                m = re.search(r"No matching distribution found for ([\S]+)", line)
+                if m:
+                    # Add missing package name to not_found list
+                    not_found.append(m.group(1))
+
+                if "versions have conflicting dependencies" in line:
+                    conflicts.append(line)
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-            if "versions have conflicting dependencies" in stderr:
-                raise ConflictingRequirements(stderr)
-            raise e
-        except Exception:
-            raise
+            if conflicts:
+                raise ConflictingRequirements("\n".join(conflicts))
+            raise PipInstallError(
+                f"Process {cmd} exited with return code {return_code}."
+                "Increase the verbosity level with the -v option for more information."
+            )
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -500,6 +585,36 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
+    @staticmethod
+    def run_command_and_stream_output(
+        cmd: List[str], shell: bool = False, timeout: float = 10, env_vars: Optional[Mapping[str, str]] = None
+    ) -> Tuple[int, List[str]]:
+        """
+        Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
+        of the sub-process.
+        """
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=shell,
+            env=env_vars,
+        )
+
+        full_output: List[str] = []
+
+        assert process.stdout is not None  # Make mypy happy
+
+        for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+            output = line.decode().strip()
+            full_output.append(output)
+            LOGGER.debug(output)
+
+        return_code = process.wait(timeout=timeout)
+
+        return return_code, full_output
+
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
@@ -507,9 +622,6 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         fd.write(content)
         fd.flush()
         yield fd.name
-
-
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class ActiveEnv(PythonEnvironment):
@@ -533,31 +645,11 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
-    @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
-        """
-        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
-        """
-        if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
-        else:
-            return requirements
-
     def are_installed(self, requirements: req_list) -> bool:
         """
-        Return True iff the given requirements are installed in this venv.
+        Return True iff the given requirements are installed in this environment.
         """
-        if not requirements:
-            return True
-        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-        return True
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,

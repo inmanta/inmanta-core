@@ -284,7 +284,7 @@ class OrchestrationService(protocol.ServerSlice):
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
-        self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
+        self.schedule(self._purge_versions, opt.server_purge_version_interval.get(), cancel_on_stop=False)
         self.add_background_task(self._purge_versions())
         await super().start()
 
