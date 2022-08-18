@@ -661,3 +661,12 @@ class Notification(BaseModel):
     uri: str
     read: bool
     cleared: bool
+
+
+class Source(BaseModel):
+    """Model for source code"""
+
+    hash: str
+    is_byte_code: bool
+    module_name: str
+    requirements: List[str]

@@ -2641,6 +2641,22 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         raise NotImplementedError()
 
+    def _list_python_files(self, plugin_dir: str) -> list[str]:
+        """Generate a list of all python files"""
+        files: Dict[str, str] = {}
+
+        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
+            # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
+            if "__pycache__" not in file_name:
+                files[file_name[:-3]] = file_name
+
+        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
+            # store the python source file if we do not have a python file
+            if file_name[:-2] not in files:
+                files[file_name[:-2]] = file_name
+
+        return list(files.values())
+
     def get_plugin_files(self) -> Iterator[Tuple[Path, ModuleName]]:
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
@@ -2650,14 +2666,17 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         if plugin_dir is None:
             return iter(())
 
-        if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
+        if not os.path.exists(os.path.join(plugin_dir, "__init__.py")) and not os.path.exists(
+            os.path.join(plugin_dir, "__init__.pyc")
+        ):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
+
         return (
             (
                 Path(file_name),
                 ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
-            for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True)
+            for file_name in self._list_python_files(plugin_dir)
         )
 
     def load_plugins(self) -> None:
@@ -2685,7 +2704,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         :param mod_name: The top-level name of this module.
         """
         rel_py_file = os.path.relpath(py_file, start=plugin_dir)
-        return loader.PluginModuleLoader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
+        return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def execute_command(self, cmd: str) -> None:
         print("executing %s on %s in %s" % (cmd, self.name, self._path))
