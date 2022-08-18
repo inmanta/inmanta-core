@@ -131,17 +131,21 @@ class PairedResource:
 
 class PartialUpdateMerger:
     """
-    This class is used to merge the result of a partial compile with the previous resources and resource_sets
+    This class is used to merge the result of a partial compile with previous resources and resource_sets. Takes a partial spec
+    that should be applied on a given base version to form the given new version.
+
+    Any resource version ids this class works with (e.g. within resource objects) already represent the new version. It is the
+    caller's responsibility to ensure this invariant is met for any resource version ids in input objects.
     """
 
     def __init__(
         self,
+        env: data.Environment,
+        base_version: int,
+        new_version: int,
         partial_updates: Sequence[ResourceMinimal],
         resource_sets: Mapping[ResourceIdStr, Optional[str]],
         removed_resource_sets: Sequence[str],
-        base_version: int,
-        new_version: int,
-        env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
         self.resource_sets = resource_sets
@@ -256,7 +260,8 @@ class PartialUpdateMerger:
 
         :param connection: The database connection to use to determine the latest version. Appropriate locks are assumed to be
             acquired.
-        :return: A tuple of the resources and the resource sets
+        :return: A tuple of the resources and the resource sets. All resource version ids are set to this instance's new
+            version.
         """
         old_resources = await self._get_base_resources(connection=connection)
 
@@ -739,7 +744,14 @@ class OrchestrationService(protocol.ServerSlice):
                     )
                 base_version: int = current_versions[0].version
 
-                merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, base_version, env)
+                merger = PartialUpdateMerger(
+                    env=env,
+                    base_version=base_version,
+                    new_version=version,
+                    partial_updates=resources,
+                    resource_sets=resource_sets,
+                    removed_resource_sets=removed_resource_sets,
+                )
                 merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
                 await data.Code.copy_versions(env, base_version, version)
 
