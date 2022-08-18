@@ -2943,6 +2943,9 @@ class AgentInstance(BaseDocument):
         tid: uuid.UUID,
         endpoints: List[str],
     ) -> List[TAgentInstance]:
+        """
+        Return the AgentInstances for the given endpoints in the given environment.
+        """
         in_query = ",".join(f"${i+2}" for i in range(len(endpoints)))
         query = f"""
 SELECT *
