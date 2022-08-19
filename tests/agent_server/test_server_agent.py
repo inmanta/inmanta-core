@@ -52,6 +52,7 @@ from utils import (
     assert_equal_ish,
     log_contains,
     log_index,
+    resource_action_consistency_check,
     retry_limited,
     wait_until_logs_are_available,
 )
@@ -222,6 +223,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
         )
 
     await retry_limited(done, 100)
+    await resource_action_consistency_check()
 
 
 async def test_server_restart(
@@ -461,6 +463,7 @@ async def test_spontaneous_repair(
         await asyncio.sleep(0.1)
 
     await verify_deployment_result()
+    await resource_action_consistency_check()
 
 
 async def test_failing_deploy_no_handler(
@@ -1127,6 +1130,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
 
     logger.info("first version complete")
     await agent.stop()
+    await resource_action_consistency_check()
 
 
 async def test_cross_agent_deps(resource_container, server, client, environment, clienthelper, no_agent_backoff):

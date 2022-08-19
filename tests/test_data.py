@@ -1908,6 +1908,8 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         else:
             assert action.action == const.ResourceAction.deploy
 
+    await resource_action_consistency_check()
+
 
 async def test_data_document_recursion(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
@@ -2593,6 +2595,8 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     resource_actions = await data.ResourceAction.query_resource_actions(env.id, log_severity="WARNING")
     assert len(resource_actions) == 1
     assert resource_actions[0].messages[0]["level"] == "WARNING"
+
+    await resource_action_consistency_check()
 
 
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
