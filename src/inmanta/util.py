@@ -31,8 +31,8 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
-from collections import defaultdict
+from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
+from collections import abc, defaultdict
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
@@ -474,11 +474,23 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
     return task
 
 
-async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
+async def retry_limited(
+    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    async def fun_wrapper() -> bool:
+        if inspect.iscoroutinefunction(fun):
+            return await fun(*args, **kwargs)
+        else:
+            return fun(*args, **kwargs)
+
     start = time.time()
-    while time.time() - start < timeout and not fun():
-        await sleep(interval)
-    if not fun():
+    while time.time() - start < timeout and not (await fun_wrapper()):
+        await asyncio.sleep(interval)
+    if not (await fun_wrapper()):
         raise asyncio.TimeoutError()
 
 
