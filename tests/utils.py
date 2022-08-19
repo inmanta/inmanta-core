@@ -20,7 +20,7 @@ import datetime
 import json
 import logging
 import uuid
-from typing import Any, Dict, Union, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Union
 
 import pytest
 from pkg_resources import parse_version
