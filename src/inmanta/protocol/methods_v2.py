@@ -66,7 +66,7 @@ def put_partial(
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
     :param **kwargs: The following arguments are supported:
-              * resources: a list of resource objects.
+              * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
     :return: The newly stored version number.
     """

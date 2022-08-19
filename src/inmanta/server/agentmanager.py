@@ -1019,7 +1019,14 @@ class AutostartedAgentManager(ServerSlice):
             await self._agent_manager.expire_all_sessions()
 
     # Start/stop agents
-    async def _ensure_agents(self, env: data.Environment, agents: List[str], restart: bool = False) -> bool:
+    async def _ensure_agents(
+        self,
+        env: data.Environment,
+        agents: List[str],
+        restart: bool = False,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> bool:
         """
         Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
@@ -1031,13 +1038,13 @@ class AutostartedAgentManager(ServerSlice):
             raise ShutdownInProgress()
 
         agent_map: Dict[str, str]
-        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))  # we know the type of this map
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))  # we know the type of this map
 
         # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
         # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
         if "internal" not in agent_map:
             agent_map["internal"] = "local:"
-            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map))
+            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map), connection=connection)
 
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
@@ -1053,7 +1060,7 @@ class AutostartedAgentManager(ServerSlice):
 
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
-            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id)
+            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
             if refreshed_env is None:
                 raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
             env = refreshed_env
@@ -1061,20 +1068,22 @@ class AutostartedAgentManager(ServerSlice):
                 return False
 
             if is_start_agent_required():
-                res = await self.__do_start_agent(agents, env)
+                res = await self.__do_start_agent(agents, env, connection=connection)
                 return res
         return False
 
-    async def __do_start_agent(self, agents: List[str], env: data.Environment) -> bool:
+    async def __do_start_agent(
+        self, agents: List[str], env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> bool:
         """
         Start an agent process for the given agents in the given environment
 
         Note: Always call under agent_lock
         """
         agent_map: Dict[str, str]
-        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP))
+        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))
         config: str
-        config = await self._make_agent_config(env, agents, agent_map)
+        config = await self._make_agent_config(env, agents, agent_map, connection=connection)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
@@ -1129,7 +1138,14 @@ class AutostartedAgentManager(ServerSlice):
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
 
-    async def _make_agent_config(self, env: data.Environment, agent_names: List[str], agent_map: Dict[str, str]) -> str:
+    async def _make_agent_config(
+        self,
+        env: data.Environment,
+        agent_names: List[str],
+        agent_map: Dict[str, str],
+        *,
+        connection: Optional[asyncpg.connection.Connection],
+    ) -> str:
         """
         Generate the config file for the process that hosts the autostarted agents
 
@@ -1143,11 +1159,11 @@ class AutostartedAgentManager(ServerSlice):
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
-        agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME))
-        agent_deploy_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL))
+        agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
+        agent_deploy_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
 
-        agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME))
-        agent_repair_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL))
+        agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
+        agent_repair_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
         # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
         if "internal" not in agent_names:

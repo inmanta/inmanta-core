@@ -730,13 +730,15 @@ class OrchestrationService(protocol.ServerSlice):
                 # the window between reserve_version and put_version, is unavoidable due to the two-part nature of
                 # put_version (see put_partial docstring and #4416).
                 version: int = await env.get_next_version()
+
+                # set version on input resources
                 for r in resources:
-                    resource = Id.parse_id(r.id)
-                    if resource.get_version() != 0:
+                    rid = Id.parse_id(r.id)
+                    if rid.get_version() != 0:
                         raise BadRequest(
                             "Resources for partial export should not contain version information"
                         )
-                    resource.set_version(version)
+                    r.id = rid.copy(version=version).resource_version_str()
 
                 current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(env.id, limit=1)
                 if not current_versions:
@@ -831,7 +833,7 @@ class OrchestrationService(protocol.ServerSlice):
         if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-            await self.autostarted_agent_manager._ensure_agents(env, agents)
+            await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
             for agent in agents:
                 client = self.agentmanager_service.get_agent_client(env.id, agent)
