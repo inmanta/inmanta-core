@@ -1263,7 +1263,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     async def _fetch_int(
         cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[int]:
+    ) -> int:
         """Fetch a single integer value"""
         value = await cls._fetchval(query, *values, connection=connection)
         assert isinstance(value, int)
@@ -5348,7 +5348,10 @@ class ConfigurationModel(BaseDocument):
             SELECT version FROM ancestors
             WHERE base IS NULL
         """
-        return await cls._fetch_int(query, cls._get_value(version), cls._get_value(environment), connection=connection)
+        return pydantic.parse_obj_as(
+            Optional[int],
+            await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection),
+        )
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:

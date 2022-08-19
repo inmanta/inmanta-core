@@ -797,10 +797,11 @@ async def test_model_get_full_export_version(init_dataclasses_and_load_schema) -
     assert await data.ConfigurationModel.get_full_version_base(env_one.id, 3) == 3
     assert await data.ConfigurationModel.get_full_version_base(env_one.id, 6) == 3
     assert await data.ConfigurationModel.get_full_version_base(env_one.id, 7) == 1
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 8) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 9) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 10) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 11) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 8) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 9) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 10) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 11) is None
+    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 1000) is None
 
     # env_two assertions
     assert await data.ConfigurationModel.get_full_version_base(env_two.id, 6) == 6
