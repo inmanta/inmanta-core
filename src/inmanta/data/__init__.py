@@ -1403,7 +1403,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def get_one(
         cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query: object
     ) -> Optional[TBaseDocument]:
-        results = await cls.get_list(connection=connection, **query)
+        results = await cls.get_list(
+            connection=connection,
+            order_by_column=None,
+            order=None,
+            limit=None,
+            offset=None,
+            no_obj=None,
+            lock=None,
+            **query,
+        )
         if results:
             return results[0]
         return None
@@ -1446,11 +1455,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def get_list(
         cls: Type[TBaseDocument],
         *,
+        # All defaults None rather actual values to allow explicitly requesting defaults to improve type safety with **query
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
@@ -1475,10 +1485,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         cls: Type[TBaseDocument],
         *,
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         columns: Optional[List[str]] = None,
@@ -1487,8 +1497,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Get a list of documents matching the filter args
         """
+        if order is None:
+            order = "ASC"
         if order_by_column:
             cls._validate_order(order_by_column, order)
+
+        if no_obj is None:
+            no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -1517,11 +1532,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         *,
         page_by_column: str,
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         start: Optional[Any] = None,
         end: Optional[Any] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1538,8 +1553,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         :param connection: An optional connection
         :param **query: Any additional filter to apply
         """
+        if order is None:
+            order = "ASC"
         if order_by_column:
             cls._validate_order(order_by_column, order)
+
+        if no_obj is None:
+            no_obj = False
 
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
@@ -2518,10 +2538,11 @@ RETURNING last_version;
         cls: Type[TBaseDocument],
         *,
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
         **query: object,
@@ -2537,6 +2558,7 @@ RETURNING last_version;
                 limit=limit,
                 offset=offset,
                 no_obj=no_obj,
+                lock=lock,
                 connection=connection,
                 **query,
             )
@@ -2546,6 +2568,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             **query,
         )
@@ -2555,10 +2578,11 @@ RETURNING last_version;
         cls: Type[TBaseDocument],
         *,
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -2573,6 +2597,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=columns,
             **query,
@@ -5204,16 +5229,21 @@ class ConfigurationModel(BaseDocument):
         cls,
         *,
         order_by_column: Optional[str] = None,
-        order: str = "ASC",
+        order: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        no_obj: bool = False,
+        no_obj: Optional[bool] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
         # sanitize and validate order parameters
+        if order is None:
+            order = "ASC"
         if order_by_column:
             cls._validate_order(order_by_column, order)
+
+        if no_obj is None:
+            no_obj = False
 
         # ensure limit and offset is an integer
         if limit is not None:
@@ -5301,7 +5331,9 @@ class ConfigurationModel(BaseDocument):
             SELECT version FROM ancestors
             WHERE base IS NULL
         """
-        return await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection)
+        result: object = await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection)
+        assert isinstance(result, int)
+        return result
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
@@ -5741,7 +5773,7 @@ class Code(BaseDocument):
             FROM {cls.table_name()}
             WHERE environment=$2 AND version=$3
         """
-        return await cls._execute_query(
+        await cls._execute_query(
             query, cls._get_value(new_version), cls._get_value(environment), cls._get_value(old_version), connection=connection
         )
 
@@ -5814,6 +5846,11 @@ class DryRun(BaseDocument):
             order_by_column=order_by_column,
             order=order,
             columns=["id", "environment", "model", "date", "total", "todo"],
+            limit=None,
+            offset=None,
+            no_obj=None,
+            lock=None,
+            connection=None,
             **query,
         )
         return [
