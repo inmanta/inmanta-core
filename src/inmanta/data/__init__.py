@@ -1261,12 +1261,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetch_int(cls, query: str, *values: object) -> Optional[int]:
+    async def _fetch_int(
+        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[int]:
         """Fetch a single integer value"""
-        async with cls.get_connection() as con:
-            value = await con.fetchval(query, *values)
-            assert isinstance(value, int)
-            return value
+        value = await cls._fetchval(query, *values, connection=connection)
+        assert isinstance(value, int)
+        return value
 
     @classmethod
     async def _fetchrow(
@@ -4435,7 +4436,13 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version(
-        cls, environment: uuid.UUID, version: int, agent: Optional[str] = None, no_obj: bool = False
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        agent: Optional[str] = None,
+        no_obj: bool = False,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
@@ -4444,7 +4451,7 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
@@ -5331,9 +5338,7 @@ class ConfigurationModel(BaseDocument):
             SELECT version FROM ancestors
             WHERE base IS NULL
         """
-        result: object = await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection)
-        assert isinstance(result, int)
-        return result
+        return await cls._fetch_int(query, cls._get_value(version), cls._get_value(environment), connection=connection)
 
     @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:

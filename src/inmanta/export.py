@@ -21,6 +21,7 @@ import base64
 import itertools
 import logging
 import os
+import pydantic
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -511,7 +512,7 @@ class Exporter(object):
         conn = protocol.SyncClient("compiler")
 
         # partial exports use the same code as the version they're based on
-        if not partial:
+        if not partial_compile:
             self.deploy_code(conn, tid, version)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
@@ -574,7 +575,8 @@ class Exporter(object):
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
 
-        return result.result["data"] if version is None else version
+        assert result.result is not None
+        return pydantic.parse_obj_as(int, result.result["data"]) if version is None else version
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """

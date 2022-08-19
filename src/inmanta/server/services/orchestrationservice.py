@@ -186,8 +186,8 @@ class PartialUpdateMerger:
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
             new_version_id: Id = Id.parse_id(res.resource_version_id).copy(version=self.new_version)
-            resource: ResourceMinimal = ResourceMinimal(id=new_version_id, **res.attributes)
-            old_resources[new_id.resource_str()] = ResourceWithResourceSet(resource, res.resource_set)
+            resource: ResourceMinimal = ResourceMinimal(id=new_version_id.resource_version_str(), **res.attributes)
+            old_resources[new_version_id.resource_str()] = ResourceWithResourceSet(resource, res.resource_set)
         return old_resources
 
     def _merge_resources(
@@ -730,14 +730,14 @@ class OrchestrationService(protocol.ServerSlice):
                 # put_version (see put_partial docstring and #4416).
                 version: int = await env.get_next_version()
                 for r in resources:
-                    resource = Id.parse_id(r["id"])
+                    resource = Id.parse_id(r.id)
                     if resource.get_version() != 0:
                         raise BadRequest(
                             "Resources for partial export should not contain version information"
                         )
                     resource.set_version(version)
 
-                current_versions: abc.Sequence[data.ConfigurationModel] = ConfigurationModel.get_versions(env.id, limit=1)
+                current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(env.id, limit=1)
                 if not current_versions:
                     raise BadRequest(
                         "A partial export requires a base model but no versions have been exported yet."
@@ -753,7 +753,7 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                 )
                 merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
-                await data.Code.copy_versions(env, base_version, version)
+                await data.Code.copy_versions(env.id, base_version, version)
 
                 # TODO: does this really need to live within the transaction?
                 await self._put_version(
