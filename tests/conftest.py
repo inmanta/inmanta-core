@@ -443,6 +443,7 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_meta_path = sys.meta_path.copy()
+    print(f"OLD META PATH: {old_meta_path}")
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
