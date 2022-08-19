@@ -550,7 +550,6 @@ class Exporter(object):
         if partial_compile:
             result = conn.put_partial(
                 tid=tid,
-                version=version,
                 resources=resources,
                 resource_sets=self._resource_sets,
                 unknowns=unknown_parameters,
