@@ -2024,10 +2024,16 @@ async def test_code(init_dataclasses_and_load_schema):
     code_list = await data.Code.get_versions(env.id, version + 3)
     assert len(code_list) == 0
 
+    # env2
     code_list = await data.Code.get_versions(env2.id, code3.version)
     assert len(code_list) == 1
     code_list = await data.Code.get_versions(env2.id, code3.version + 1)
     assert len(code_list) == 0
+
+    # make sure deleting the base code does not delete the copied code
+    await code3.delete()
+    assert len(await data.Code.get_versions(env.id, code3.version)) == 0
+    assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
 async def test_parameter(init_dataclasses_and_load_schema):

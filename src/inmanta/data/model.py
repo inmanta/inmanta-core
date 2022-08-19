@@ -321,18 +321,6 @@ class ResourceMinimal(BaseModel):
     class Config:
         extra = Extra.allow
 
-    # TODO: remove
-    def set_version(self: "ResourceMinimal", version: int) -> "ResourceMinimal":
-        """
-        Sets the version on this instance and returns it.
-        """
-        old_res = resources.Id.parse_id(self.id)
-        new_res = resources.Id(
-            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, version
-        )
-        self.id = new_res.resource_version_str()
-        return self
-
 
 class Resource(BaseModel):
     environment: uuid.UUID

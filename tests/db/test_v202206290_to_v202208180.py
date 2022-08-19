@@ -18,7 +18,7 @@
 import os
 import uuid
 from collections import abc
-from inmanta.data import ConfigurationModel
+from inmanta.data import ConfigurationModel, Environment, Project
 
 import pytest
 
@@ -47,3 +47,23 @@ async def test_column_add(
         for model in await ConfigurationModel.get_list()
     )
 
+    # verify deletion of base version does not cascade deletion of partial
+    project = Project(name="myproject")
+    await project.insert()
+    env = Environment(name="myenv", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+    base: ConfigurationModel = ConfigurationModel(environment=env.id, version=1, partial_base=None)
+    partial_one: ConfigurationModel = ConfigurationModel(environment=env.id, version=2, partial_base=1)
+    partial_two: ConfigurationModel = ConfigurationModel(environment=env.id, version=3, partial_base=2)
+
+    await base.insert()
+    await partial_one.insert()
+    await partial_two.insert()
+
+    await base.delete()
+    assert await ConfigurationModel.get_version(environment=env.id, version=base.version) is None
+    assert await ConfigurationModel.get_version(environment=env.id, version=partial_one.version) is not None
+    assert await ConfigurationModel.get_version(environment=env.id, version=partial_two.version) is not None
+    await partial_one.delete()
+    assert await ConfigurationModel.get_version(environment=env.id, version=partial_one.version) is None
+    assert await ConfigurationModel.get_version(environment=env.id, version=partial_two.version) is not None

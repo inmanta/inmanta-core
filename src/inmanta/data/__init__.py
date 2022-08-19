@@ -1538,6 +1538,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1579,6 +1580,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if limit is not None and limit > 0:
             sql_query += " LIMIT $" + str(len(values) + 1)
             values.append(int(limit))
+        if lock is not None:
+            sql_query += f" {lock.value}"
 
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
@@ -5240,6 +5243,7 @@ class ConfigurationModel(BaseDocument):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
@@ -5266,6 +5270,7 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
+        lock_statement = f" {lock.value} " if lock is not None else ""
         query_string = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
@@ -5279,7 +5284,8 @@ class ConfigurationModel(BaseDocument):
                     GROUP BY c.environment, c.version
                     {order_by_statement}
                     {limit_statement}
-                    {offset_statement}"""
+                    {offset_statement}
+                    {lock_statement}"""
         query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
         for record in query_result:
