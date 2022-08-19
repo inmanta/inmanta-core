@@ -458,6 +458,7 @@ def deactive_venv():
     sys.prefix = old_prefix
     sys.path = old_path
     # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+    print(f"RESTORING META PATH: {old_meta_path}")
     sys.meta_path.clear()
     sys.meta_path.extend(old_meta_path)
     pkg_resources.working_set = old_working_set
