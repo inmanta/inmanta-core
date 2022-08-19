@@ -12,7 +12,9 @@ from inmanta.util import get_compiler_version
 
 async def test_resource_deploy_performance(server, client, clienthelper, environment, agent, caplog):
     """
-    Ensure proper error handling when a transient state is passed to the `resource_deploy_done` endpoint.
+    Method to 'quickly' benchmark the deploy performance wrt to the database
+
+    Not run by default, because filename doesn't start with test
     """
     n_version = 5
     n_resources = 1000
