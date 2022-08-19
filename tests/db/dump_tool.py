@@ -60,7 +60,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "simple_project")
-    outname = "dbdump"
+    outname = "dbdump.sql"
     print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
