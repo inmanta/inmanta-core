@@ -575,8 +575,11 @@ class Exporter(object):
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
 
-        assert result.result is not None
-        return pydantic.parse_obj_as(int, result.result["data"]) if version is None else version
+        if version is None:
+            assert result.result is not None
+            return pydantic.parse_obj_as(int, result.result["data"])
+        else:
+            return version
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """

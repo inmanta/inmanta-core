@@ -681,6 +681,7 @@ class OrchestrationService(protocol.ServerSlice):
                     env, version, resources, resource_state, unknowns, version_info, resource_sets, connection=con
                 )
 
+    # TODO: tests
     @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
         self,
