@@ -18,12 +18,10 @@
 import asyncio
 import configparser
 import datetime
-import inspect
 import json
 import logging
 import os
 import shutil
-import time
 import uuid
 from collections import abc
 from dataclasses import dataclass
@@ -37,7 +35,7 @@ from pydantic.tools import lru_cache
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module
+from inmanta import const, data, env, module, util
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -54,16 +52,9 @@ async def retry_limited(
     *args: object,
     **kwargs: object,
 ) -> None:
-    async def fun_wrapper():
-        if inspect.iscoroutinefunction(fun):
-            return await fun(*args, **kwargs)
-        else:
-            return fun(*args, **kwargs)
-
-    start = time.time()
-    while time.time() - start < timeout and not (await fun_wrapper()):
-        await asyncio.sleep(interval)
-    if not (await fun_wrapper()):
+    try:
+        await util.retry_limited(fun, timeout, interval, *args, **kwargs)
+    except asyncio.TimeoutError:
         raise AssertionError("Bounded wait failed")
 
 
