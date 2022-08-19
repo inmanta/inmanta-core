@@ -5333,7 +5333,11 @@ class ConfigurationModel(BaseDocument):
     async def get_full_version_base(
         cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Optional[int]:
-        # TODO: docstring -> return values: None, self, other
+        """
+        Returns the model version for a full export that is the base root of this version. If this is a version for a full
+        export itself, this version is returned. Returns None if the base can not be found, e.g. when it has already been
+        deleted.
+        """
         query: str = f"""
             WITH RECURSIVE ancestors(version, base) AS (
                     VALUES ($1::integer, $1::integer)

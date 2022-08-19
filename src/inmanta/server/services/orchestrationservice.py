@@ -755,7 +755,6 @@ class OrchestrationService(protocol.ServerSlice):
                 merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
                 await data.Code.copy_versions(env.id, base_version, version)
 
-                # TODO: does this really need to live within the transaction?
                 await self._put_version(
                     env,
                     version,

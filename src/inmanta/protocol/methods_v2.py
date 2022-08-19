@@ -48,19 +48,17 @@ def put_partial(
     removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> int:
-    # TODO: docstring return version
-    # TODO: mention all invariants/caller responsibilities (same Python code, ...?)
     """
-    Store a new version of the configuration model after a partial recompile. Dynamically acquires a new version and serializes
-    concurrent calls.
+    Store a new version of the configuration model after a partial recompile. The partial is applied on top of the latest
+    version. Dynamically acquires a new version and serializes concurrent calls. Python code for the new version is copied
+    from the base version.
 
-    Serialization prevents race conditions between two or more put_partial calls. To prevent races between put_partial and
-    put_version, the caller must consider the reserve_version + put_version operation atomic with respect to put_partial. In
-    other words, put_partial must not be called in the window between reserve_version and put_version. If not respected, either
-    the full or the partial export might be immediately stale, and future exports will only be applied on top of the non-stale
-    one.
-
-    This method is experimental and its interface may receive breaking changes in future releases.
+    Concurrent put_partial calls are safe from race conditions provided that their resource sets are disjunct. A put_version
+    call concurrent with a put_partial is not guaranteed to be safe. It is the caller's responsibility to appropriately
+    serialize them with respect to one another. The caller must ensure the reserve_version + put_version operation is atomic
+    with respect to put_partial. In other words, put_partial must not be called in the window between reserve_version and
+    put_version. If not respected, either the full or the partial export might be immediately stale, and future exports will
+    only be applied on top of the non-stale one.
 
     :param tid: The id of the environment
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
@@ -70,6 +68,7 @@ def put_partial(
     :param **kwargs: The following arguments are supported:
               * resources: a list of resource objects.
               * version_info: Model version information
+    :return: The newly stored version number.
     """
 
 
