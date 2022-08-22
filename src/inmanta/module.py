@@ -700,7 +700,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         if init is None:
             raise InvalidModuleException(f"Package {package} was installed but no __init__.py file could be found.")
-        # TODO: test case
         # In case of editable installs the path may contain symlinks to actual location (see
         # PythonEnvironment.get_module_file docstring). Since modules contain non-Python files (of which setuptools may not be
         # aware, therefore they may not exist in the link structure), we need the real path.
