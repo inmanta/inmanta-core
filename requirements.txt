@@ -24,7 +24,7 @@ setuptools==65.1.0
 texttable==1.6.4
 tornado==6.2
 toml==0.10.2
-typing_inspect==0.7.1
+typing_inspect==0.8.0
 build==0.8.0
 ruamel.yaml==0.17.21
 
