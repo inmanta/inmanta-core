@@ -570,6 +570,7 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     print("=====================================THIS IS: unload_inmanta_plugins")
     top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
     loaded_modules: KeysView[str] = sys.modules.keys()
+    print(loaded_modules)
     modules_to_unload: Sequence[str] = [
         fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
     ]
