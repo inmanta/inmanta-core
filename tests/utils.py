@@ -592,6 +592,12 @@ def parse_datetime_to_utc(time: str) -> datetime.datetime:
 
 
 async def resource_action_consistency_check():
+    """
+    The resourceaction table is joined to the resource table in two different ways
+    This method asserts that
+        - both methods produce identical results (i.e. the updates are consistent)
+        - both methods are in use (i.e. the queries return at least one record)
+    """
     async with data.ResourceAction.get_connection() as postgresql_client:
         post_ra_one = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
