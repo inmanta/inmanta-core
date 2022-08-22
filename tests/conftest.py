@@ -443,6 +443,7 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_meta_path = sys.meta_path.copy()
+    print(sys.modules)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
@@ -1284,8 +1285,6 @@ def modules_dir() -> str:
 
 @pytest.fixture(scope="session")
 def modules_v2_dir():
-    print("---------------------------------------------Hello")
-    print(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2"))
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 
