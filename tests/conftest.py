@@ -1499,6 +1499,7 @@ def unload_modules_for_path(path: str) -> None:
 
     def module_in_prefix(module: ModuleType, prefix: str) -> bool:
         file: Optional[str] = getattr(module, "__file__", None)
+        print(file)
         return file.startswith(prefix) if file is not None else False
 
     loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
