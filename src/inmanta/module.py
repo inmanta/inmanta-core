@@ -700,7 +700,11 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             return None
         if init is None:
             raise InvalidModuleException(f"Package {package} was installed but no __init__.py file could be found.")
-        pkg_installation_dir = os.path.abspath(os.path.dirname(init))
+        # TODO: test case
+        # In case of editable installs the path may contain symlinks to actual location (see
+        # PythonEnvironment.get_module_file docstring). Since modules contain non-Python files (of which setuptools may not be
+        # aware, therefore they may not exist in the link structure), we need the real path.
+        pkg_installation_dir = os.path.dirname(os.path.realpath(init))
         if os.path.exists(os.path.join(pkg_installation_dir, ModuleV2.MODULE_FILE)):
             # normal install: __init__.py is in module root
             return pkg_installation_dir
