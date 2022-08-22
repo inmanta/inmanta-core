@@ -567,12 +567,15 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     :param inmanta_module: Unload the Python modules for a specific inmanta module. If omitted, unloads the Python modules for
         all inmanta modules.
     """
+    print("=====================================THIS IS: unload_inmanta_plugins")
     top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
     loaded_modules: KeysView[str] = sys.modules.keys()
     modules_to_unload: Sequence[str] = [
         fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
     ]
     for k in modules_to_unload:
+        print("HELLLLLLLLO")
+        print(k)
         del sys.modules[k]
     if modules_to_unload:
         importlib.invalidate_caches()
