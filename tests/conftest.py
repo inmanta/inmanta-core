@@ -443,7 +443,6 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_meta_path = sys.meta_path.copy()
-    print(sys.modules)
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
@@ -1502,6 +1501,8 @@ def unload_modules_for_path(path: str) -> None:
 
     loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
     for mod_name in loaded_modules:
+        print("--------")
+        print(mod_name)
         del sys.modules[mod_name]
     importlib.invalidate_caches()
 
