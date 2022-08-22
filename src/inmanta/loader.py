@@ -573,6 +573,7 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     modules_to_unload: Sequence[str] = [
         fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
     ]
+    print(sys.modules)
     for k in modules_to_unload:
         print("HELLLLLLLLO")
         print(k)
