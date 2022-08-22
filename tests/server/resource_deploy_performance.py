@@ -38,6 +38,7 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
     n_version = 5
     n_resources = 1000
     n_deploys = 5
+    dependency_density = 5
 
     env_id = uuid.UUID(environment)
 
@@ -53,7 +54,10 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
                 "id": f"test::Resource[agent1,key=key{resource}],v={version}",
                 "send_event": False,
                 "purged": False,
-                "requires": [],
+                "requires": [
+                    f"test::Resource[agent1,key=key{dresource}],v={version}"
+                    for dresource in range(1, max(1, resource - dependency_density))
+                ],
             }
             for resource in range(1, n_resources + 1)
         ]
@@ -112,7 +116,7 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
                         ON ra.action_id = jt.resource_action_id
                         WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action=$5 ORDER BY started DESC, action_id DESC LIMIT $6"""
 
-    resource_type = 'test::Resource'
+    resource_type = "test::Resource"
     agent = "agent1"
     resource_id_value = "key1"
     ra_action = "deploy"
@@ -120,7 +124,24 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
 
     async with ResourceAction.get_connection() as con:
         stmt = await con.prepare(key_query)
-        print( json.dumps(await stmt.explain(env_id, resource_type, agent, resource_id_value, ra_action, limit, analyze=True)))
+        print(json.dumps(await stmt.explain(env_id, resource_type, agent, resource_id_value, ra_action, limit, analyze=True)))
+
+
+    query_2 = """
+        SELECT r1.resource_version_id, r1.last_non_deploying_status
+        FROM resource AS r1
+        WHERE r1.environment=$1
+              AND r1.model=$2
+              AND (
+                  SELECT (r2.attributes->'requires')::jsonb
+                  FROM resource AS r2
+                  WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
+              ) ? r1.resource_version_id
+    """
+    async with ResourceAction.get_connection() as con:
+        stmt = await con.prepare(query_2)
+        print(json.dumps(await stmt.explain(env_id, 2, "test::Resource[agent1,key=key3],v=1", analyze=True)))
+
 
 """
 Baseline output
