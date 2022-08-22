@@ -849,6 +849,8 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: Id,
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
+        # TODO optimize
+
         resource_id_str = resource_id.resource_version_str()
 
         async def get_deploy_actions(
