@@ -52,7 +52,6 @@ from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes
-from inmanta.util import retry_limited
 
 from ..data.paging import QueryIdentifier
 from . import config as server_config
@@ -590,11 +589,20 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
-    def are_agents_up(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
-        return all([self.is_agent_up(tid, e) for e in endpoints])
+    async def are_agents_active(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
+        """
+        Return true iff all the given agents are in the up or the paused state.
+        """
+        return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
 
-    def is_agent_up(self, tid: uuid.UUID, endpoint: str) -> bool:
-        return (tid, endpoint) in self.tid_endpoint_to_session
+    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: List[str]) -> List[Tuple[str, bool]]:
+        """
+        Return a list of tuples where the first element of the tuple contains the name of an endpoint
+        and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
+        """
+        all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
+        all_active_endpoints_for_env = set(ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid])
+        return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
 
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
         async with self.session_lock:
@@ -1007,10 +1015,10 @@ class AutostartedAgentManager(ServerSlice):
 
         LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
 
-        def is_start_agent_required() -> bool:
+        async def is_start_agent_required() -> bool:
             if needsstart:
                 return True
-            return not self._agent_manager.are_agents_up(env.id, agents)
+            return not await self._agent_manager.are_agents_active(env.id, agents)
 
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
@@ -1021,7 +1029,7 @@ class AutostartedAgentManager(ServerSlice):
             if env.halted:
                 return False
 
-            if is_start_agent_required():
+            if await is_start_agent_required():
                 res = await self.__do_start_agent(agents, env)
                 return res
         return False
@@ -1081,9 +1089,33 @@ class AutostartedAgentManager(ServerSlice):
                 proc.kill()
             raise e
 
+        async def _wait_until_agent_instances_are_active() -> None:
+            """
+            Wait until all AgentInstances for the endpoints `agents` are active.
+            A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
+            became active in the last 5 seconds.
+            """
+            timeout_in_sec = 5
+            nr_active_instances = 0
+            expected_nr_active_instances = len(agents)
+            now = int(time.time())
+
+            while nr_active_instances < expected_nr_active_instances:
+                await asyncio.sleep(0.1)
+                if int(time.time()) - now > timeout_in_sec:
+                    raise asyncio.TimeoutError()
+                agent_statuses: List[Tuple[str, bool]] = await self._agent_manager.get_agent_active_status(
+                    tid=env.id, endpoints=agents
+                )
+                new_nr_active_instances = sum(1 for (_, active) in agent_statuses if active)
+                if new_nr_active_instances > nr_active_instances:
+                    # Reset timeout timer because a new instance became active
+                    now = int(time.time())
+                nr_active_instances = new_nr_active_instances
+
         # Wait for all agents to start
         try:
-            await retry_limited(lambda: self._agent_manager.are_agents_up(env.id, agents), 5)
+            await _wait_until_agent_instances_are_active()
         except asyncio.TimeoutError:
             LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
 
