@@ -871,6 +871,14 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             version_info={},
         )
         await cm.insert()
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.now() + timedelta(minutes=i),
+            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+        )
+        await res1.insert()
 
     # Add resource actions for motd
     motd_first_start_time = datetime.now()
@@ -915,15 +923,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     await resource_action.insert()
     resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=6)])
     await resource_action.save()
-    for i in range(0, 11):
-        res1 = data.Resource.new(
-            environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
-            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
-        )
-        await res1.insert()
 
     result = await client.get_resource_actions(
         tid=env.id,

@@ -25,7 +25,8 @@ async def update(connection: Connection) -> None:
         environment uuid NOT NULL,
         resource_action_id uuid NOT NULL REFERENCES public.resourceaction ON DELETE CASCADE,
         resource_version_id character varying NOT NULL,
-        FOREIGN KEY(environment, resource_version_id) REFERENCES public.resource (environment, resource_version_id) ON DELETE CASCADE,
+        FOREIGN KEY(environment, resource_version_id) REFERENCES
+            public.resource (environment, resource_version_id) ON DELETE CASCADE,
         PRIMARY KEY(environment, resource_version_id, resource_action_id)
     );
 
