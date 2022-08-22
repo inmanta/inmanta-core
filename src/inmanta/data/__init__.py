@@ -4055,11 +4055,13 @@ class ResourceAction(BaseDocument):
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
         query = f"""SELECT DISTINCT ra.*
-                        FROM {cls.table_name()} ra
-                        INNER JOIN
-                        {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1 AND ra.environment=$1
-                     """
+                    FROM public.resource as r
+                    INNER JOIN public.resourceaction_resource as jt
+                        ON r.environment = jt.environment
+                        AND r.resource_version_id = jt.resource_version_id
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                        WHERE r.environment=$1 AND ra.environment=$1"""
         values = [cls._get_value(environment)]
 
         parameter_index = 2

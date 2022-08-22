@@ -24,6 +24,7 @@ import uuid
 from pyformance import global_registry
 
 from inmanta import const
+from inmanta.data import ResourceAction
 from inmanta.data.model import AttributeStateChange
 from inmanta.util import get_compiler_version
 
@@ -103,6 +104,23 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
 
     print(json.dumps(global_registry().dump_metrics(), indent=4))
 
+    key_query = """
+    SELECT DISTINCT ra.* FROM public.resource as r INNER JOIN public.resourceaction_resource as jt
+                        ON r.environment = jt.environment
+                        AND r.resource_version_id = jt.resource_version_id
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                        WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action=$5 ORDER BY started DESC, action_id DESC LIMIT $6"""
+
+    resource_type = 'test::Resource'
+    agent = "agent1"
+    resource_id_value = "key1"
+    ra_action = "deploy"
+    limit = 1000
+
+    async with ResourceAction.get_connection() as con:
+        stmt = await con.prepare(key_query)
+        print( json.dumps(await stmt.explain(env_id, resource_type, agent, resource_id_value, ra_action, limit, analyze=True)))
 
 """
 Baseline output
