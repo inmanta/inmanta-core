@@ -572,7 +572,9 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     loaded_modules: KeysView[str] = sys.modules.keys()
     print(loaded_modules)
     modules_to_unload: Sequence[str] = [
-        fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
+        fq_name
+        for fq_name in loaded_modules
+        if fq_name == top_level or fq_name.startswith(f"{top_level}.") or fq_name.startswith("__editable__")
     ]
     print(sys.modules)
     for k in modules_to_unload:
