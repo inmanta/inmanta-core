@@ -67,7 +67,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     version = sorted([v.version for v in DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, None)._get_update_functions()])[
         -1
     ]
-    outname = f"v{version}.sql"
+    outfile = os.path.join(os.path.dirname(__file__), "dumps", f"v{version}.sql")
     print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
@@ -96,6 +96,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await _wait_until_deployment_finishes(client, env_id_1, v2, 20)
 
     proc = await asyncio.create_subprocess_exec(
-        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outname, "-O", "-U", postgres_db.user, database_name
+        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
     )
     await proc.wait()
