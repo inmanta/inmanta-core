@@ -536,9 +536,7 @@ class Id(object):
         """
         Creates a copy of this resource id for another model version.
         """
-        return Id(
-            self.entity_type, self.agent_name, self.attribute, self.attribute_value, version
-        )
+        return Id(self.entity_type, self.agent_name, self.attribute, self.attribute_value, version)
 
     def __str__(self) -> str:
         if self._version > 0:

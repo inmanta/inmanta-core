@@ -1038,7 +1038,9 @@ class AutostartedAgentManager(ServerSlice):
             raise ShutdownInProgress()
 
         agent_map: Dict[str, str]
-        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))  # we know the type of this map
+        agent_map = cast(
+            Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+        )  # we know the type of this map
 
         # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
         # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.

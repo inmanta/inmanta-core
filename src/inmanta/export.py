@@ -21,10 +21,11 @@ import base64
 import itertools
 import logging
 import os
-import pydantic
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+
+import pydantic
 
 import inmanta.model as model
 from inmanta import const, loader, protocol
@@ -417,7 +418,9 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self._version = self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
+            self._version = self.commit_resources(
+                self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all
+            )
             LOGGER.info("Committed resources with version %d" % self._version)
 
         exported_version: int = self._version if self._version is not None else 0
@@ -568,7 +571,6 @@ class Exporter(object):
                 version_info=version_info,
                 compiler_version=get_compiler_version(),
             )
-            new_version = version
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])

@@ -1254,16 +1254,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def _fetchval(
-        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> object:
+    async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
         async with cls.get_connection(connection) as con:
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetch_int(
-        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> int:
+    async def _fetch_int(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """Fetch a single integer value"""
         value = await cls._fetchval(query, *values, connection=connection)
         assert isinstance(value, int)
@@ -5320,7 +5316,11 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def get_version(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None,
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
@@ -5331,7 +5331,11 @@ class ConfigurationModel(BaseDocument):
     # TODO: delete?
     @classmethod
     async def get_full_version_base(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None,
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Optional[int]:
         """
         Returns the model version for a full export that is the base root of this version. If this is a version for a full

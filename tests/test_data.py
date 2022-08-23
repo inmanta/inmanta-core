@@ -2017,10 +2017,11 @@ async def test_code(init_dataclasses_and_load_schema):
     assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
     code_list = await data.Code.get_versions(env.id, version + 2)
     assert len(code_list) == 1
-    assert (
-        code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs
-    ) == (
-        code3.environment, code3.resource, code3.version + 1, code3.source_refs
+    assert (code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs) == (
+        code3.environment,
+        code3.resource,
+        code3.version + 1,
+        code3.source_refs,
     )
     code_list = await data.Code.get_versions(env.id, version + 3)
     assert len(code_list) == 0

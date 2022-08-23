@@ -16,11 +16,11 @@
     Contact: code@inmanta.com
 """
 import os
-import uuid
 from collections import abc
-from inmanta.data import ConfigurationModel, Environment, Project
 
 import pytest
+
+from inmanta.data import ConfigurationModel, Environment, Project
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202206290.sql"))
@@ -42,10 +42,7 @@ async def test_column_add(
     # Assert state after running the DB migration script
     assert "partial_base" in (await get_columns_in_db_table(ConfigurationModel.table_name()))
 
-    assert all(
-        model.partial_base is None
-        for model in await ConfigurationModel.get_list()
-    )
+    assert all(model.partial_base is None for model in await ConfigurationModel.get_list())
 
     # verify deletion of base version does not cascade deletion of partial
     project = Project(name="myproject")

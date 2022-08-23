@@ -182,7 +182,9 @@ class PartialUpdateMerger:
         where the keys are the Ids of the resources and the values are ResourceWithResourceSet.
         Sets the resource objects' version to the new version for the partial export.
         """
-        old_data = await data.Resource.get_resources_for_version(environment=self.env.id, version=self.base_version, connection=connection)
+        old_data = await data.Resource.get_resources_for_version(
+            environment=self.env.id, version=self.base_version, connection=connection
+        )
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
             new_version_id: Id = Id.parse_id(res.resource_version_id).copy(version=self.new_version)
@@ -255,8 +257,8 @@ class PartialUpdateMerger:
         self, *, connection: asyncpg.connection.Connection
     ) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
         """
-        Applies the partial model's resources on this instance's base version. The caller should acquire appropriate locks on the
-        database connection as defined in the put_partial method definition.
+        Applies the partial model's resources on this instance's base version. The caller should acquire appropriate locks on
+        the database connection as defined in the put_partial method definition.
 
         :param connection: The database connection to use to determine the latest version. Appropriate locks are assumed to be
             acquired.
@@ -415,7 +417,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         *,
-        connection: asyncpg.connection.Connection
+        connection: asyncpg.connection.Connection,
     ) -> None:
         """
         :param resources: a list of serialized resources
@@ -624,9 +626,7 @@ class OrchestrationService(protocol.ServerSlice):
         if resource_version_ids:
             now = datetime.datetime.now().astimezone()
             log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-            self.resource_service.log_resource_action(
-                env.id, resource_version_ids, logging.INFO, now, log_line.msg
-            )
+            self.resource_service.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
             ra = data.ResourceAction(
                 environment=env.id,
                 version=version,
@@ -657,13 +657,9 @@ class OrchestrationService(protocol.ServerSlice):
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
             push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
-            agent_trigger_method_on_autodeploy = cast(
-                str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
-            )
+            agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(
-                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy
-            )
+            await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
     @handle(methods.put_version, env="tid")
     async def put_version(
@@ -744,16 +740,14 @@ class OrchestrationService(protocol.ServerSlice):
                 for r in resources:
                     rid = Id.parse_id(r.id)
                     if rid.get_version() != 0:
-                        raise BadRequest(
-                            "Resources for partial export should not contain version information"
-                        )
+                        raise BadRequest("Resources for partial export should not contain version information")
                     r.id = rid.copy(version=version).resource_version_str()
 
-                current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(env.id, limit=1)
+                current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(
+                    env.id, limit=1
+                )
                 if not current_versions:
-                    raise BadRequest(
-                        "A partial export requires a base model but no versions have been exported yet."
-                    )
+                    raise BadRequest("A partial export requires a base model but no versions have been exported yet.")
                 base_version: int = current_versions[0].version
 
                 merger = PartialUpdateMerger(
