@@ -19,7 +19,6 @@
 from asyncpg import Connection
 
 
-# TODO: db dump
 async def update(connection: Connection) -> None:
     async with connection.transaction():
         # Don't add foreign key to allow for deletion of base version
