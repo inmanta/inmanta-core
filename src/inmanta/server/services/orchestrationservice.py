@@ -416,7 +416,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         *,
         connection: asyncpg.connection.Connection
-    ) -> Apireturn:
+    ) -> None:
         """
         :param resources: a list of serialized resources
         :param unknowns: dict with the following structure
@@ -426,7 +426,6 @@ class OrchestrationService(protocol.ServerSlice):
          "source": str
          }
         :param version_info:
-        :return:
         """
 
         if version > env.last_version:
@@ -644,19 +643,27 @@ class OrchestrationService(protocol.ServerSlice):
 
         self.resource_service.clear_env_cache(env)
 
-        auto_deploy = await env.get(data.AUTO_DEPLOY, connection=connection)
+    async def _trigger_auto_deploy(
+        self,
+        env: data.Environment,
+        version: int,
+    ) -> None:
+        """
+        Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
+        to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
+        deploying state.
+        """
+        auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY, connection=connection))
+            push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = cast(
-                str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, connection=connection)
+                str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
             )
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(
-                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy
             )
-
-        return 200
 
     @handle(methods.put_version, env="tid")
     async def put_version(
@@ -677,9 +684,11 @@ class OrchestrationService(protocol.ServerSlice):
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial.
                 await data.Resource.lock_table(data.TableLockMode.ROW_EXCLUSIVE, connection=con)
-                return await self._put_version(
+                await self._put_version(
                     env, version, resources, resource_state, unknowns, version_info, resource_sets, connection=con
                 )
+        await self._trigger_auto_deploy(env, version)
+        return 200
 
     # TODO: tests
     @handle(methods_v2.put_partial, env="tid")
@@ -768,6 +777,7 @@ class OrchestrationService(protocol.ServerSlice):
                     merged_resource_sets,
                     connection=con,
                 )
+        await self._trigger_auto_deploy(env, version)
         return version
 
     @handle(methods.release_version, version_id="id", env="tid")
