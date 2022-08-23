@@ -21,17 +21,21 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
+    DROP INDEX resource_env_resourceid_index;
+    CREATE UNIQUE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model DESC);
+
     CREATE TABLE IF NOT EXISTS public.resourceaction_resource (
         environment uuid NOT NULL,
         resource_action_id uuid NOT NULL REFERENCES public.resourceaction ON DELETE CASCADE,
-        resource_version_id character varying NOT NULL,
-        FOREIGN KEY(environment, resource_version_id) REFERENCES
-            public.resource (environment, resource_version_id) ON DELETE CASCADE,
-        PRIMARY KEY(environment, resource_version_id, resource_action_id)
+        resource_id character varying NOT NULL,
+        resource_version integer NOT NULL,
+        FOREIGN KEY(environment, resource_id, resource_version) REFERENCES
+            public.resource (environment, resource_id, model) ON DELETE CASCADE,
+        PRIMARY KEY(environment, resource_id, resource_version, resource_action_id)
     );
 
-    INSERT INTO public.resourceaction_resource (resource_action_id, environment, resource_version_id)
-        SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
+    INSERT INTO public.resourceaction_resource (resource_action_id, environment, resource_id, resource_version)
+        SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
             INNER JOIN public.resource as r
                 ON r.resource_version_id = ANY(ra.resource_version_ids)
                 AND r.environment = ra.environment
