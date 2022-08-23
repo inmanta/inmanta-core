@@ -25,11 +25,9 @@ import pytest
 async def test_added_resource_join_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,
-    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[list[str]]],
-    get_custom_postgresql_types: abc.Callable[[], abc.Awaitable[list[str]]],
 ) -> None:
     """
-    Test the database migration script that adds the `resource_set` column to the database.
+    Test the database migration script that adds the `resourceaction_resource` join table.
 
     """
     all_ras = await postgresql_client.fetch(

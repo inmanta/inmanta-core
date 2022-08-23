@@ -3967,7 +3967,8 @@ class ResourceAction(BaseDocument):
                 parsed_rv = [Id.parse_resource_version_id(id) for id in self.resource_version_ids]
                 # No additional checking of field validity is done here, because the insert above validates all fields
                 await con.execute(
-                    "INSERT INTO public.resourceaction_resource (resource_id, resource_version, environment, resource_action_id) "
+                    "INSERT INTO public.resourceaction_resource "
+                    "(resource_id, resource_version, environment, resource_action_id) "
                     "SELECT unnest($1::text[]), unnest($2::int[]), $3, $4",
                     [id.resource_str() for id in parsed_rv],
                     [id.get_version() for id in parsed_rv],
