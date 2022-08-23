@@ -1,0 +1,7 @@
+description: "Don't set PYTHONPATH environment variable on venv activation: fixes editable install compatibility with setuptools<64"
+issue-nr: 4713
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - iso5
+  - master
