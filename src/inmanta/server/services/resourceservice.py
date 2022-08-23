@@ -849,26 +849,17 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: Id,
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
+        return await self.get_resource_events_internal(env, resource_id)
+
+    async def get_resource_events_internal(
+        self,
+        env: data.Environment,
+        resource_id: Id,
+        exclude_change: Optional[Change] = None
+    ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         # TODO optimize
 
         resource_id_str = resource_id.resource_version_str()
-
-        async def get_deploy_actions(
-            resource_id: Id,
-            first_timestamp: Optional[datetime.datetime] = None,
-            last_timestamp: Optional[datetime.datetime] = None,
-            limit: int = 1000,
-        ) -> List[data.ResourceAction]:
-            return await data.ResourceAction.query_resource_actions(
-                environment=env.id,
-                resource_type=resource_id.get_entity_type(),
-                agent=resource_id.get_agent_name(),
-                resource_id_value=resource_id.get_attribute_value(),
-                first_timestamp=first_timestamp,
-                last_timestamp=last_timestamp,
-                action=const.ResourceAction.deploy,
-                limit=limit,
-            )
 
         current_deploy_start: datetime.datetime
         last_deploy_start: Optional[datetime.datetime]
@@ -877,13 +868,10 @@ class ResourceService(protocol.ServerSlice):
         with
             base_ra as (
             SELECT ra.*
-                FROM public.resource as r
-                    INNER JOIN public.resourceaction_resource as jt
-                        ON r.environment = jt.environment
-                        AND r.resource_version_id = jt.resource_version_id
+                FROM public.resourceaction_resource as jt
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
-                    WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action='deploy'
+                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
                     ORDER BY ra.started DESC
             )
         SELECT COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started,
@@ -892,8 +880,7 @@ class ResourceService(protocol.ServerSlice):
         """
 
         async with data.ResourceAction.get_connection() as connection:
-            result_a = await connection.fetchrow(end_query, env.id, resource_id.get_entity_type(), resource_id.get_agent_name(),
-                                                 resource_id.get_attribute_value())
+            result_a = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
 
             if not result_a or result_a["begin_status"] is None:
                 raise BadRequest(
@@ -911,17 +898,54 @@ class ResourceService(protocol.ServerSlice):
         resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
         if resource is None:
             raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
-        return {
-            dependency.resource_str(): [
-                action.to_dto()
-                for action in await get_deploy_actions(
-                    dependency,
-                    first_timestamp=last_deploy_start,
-                    last_timestamp=current_deploy_start,
-                )
-            ]
-            for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
-        }
+
+        args = []
+        def arg_counter(arg):
+            args.append(arg)
+            return len(args)+2
+
+        time_range = f"AND ra.started<${arg_counter(current_deploy_start)}"
+
+        if last_deploy_start:
+            time_range += f" AND ra.started > ${arg_counter(last_deploy_start)}"
+
+        if exclude_change:
+            time_range += f"AND ra.change <> ${arg_counter(exclude_change.value)}"
+
+        get_all_query = f"""
+SELECT jt.resource_id, ra.*
+    FROM public.resourceaction_resource as jt
+    INNER JOIN public.resourceaction as ra
+        ON ra.action_id = jt.resource_action_id
+    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=ANY($2::varchar[]) AND ra.action='deploy' {time_range}
+    ORDER BY ra.started DESC;
+        """
+        async with data.ResourceAction.get_connection() as connection:
+            ids = [Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
+            result_a = await connection.fetch(get_all_query, env.id, ids, *args)
+            collector = {id:[] for id in ids}
+            for record in result_a:
+                fields = dict(record)
+                del fields["resource_id"]
+                collector[record[0]].append(data.ResourceAction(from_postgres=True, **fields).to_dto())
+
+        # out = {
+        #     dependency.resource_str(): [
+        #         action.to_dto()
+        #         for action in await get_deploy_actions(
+        #             dependency,
+        #             first_timestamp=last_deploy_start,
+        #             last_timestamp=current_deploy_start,
+        #         )
+        #     ]
+        #     for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
+        # }
+        #
+        # assert set(collector.keys()) == set(out.keys())
+        # for k in collector.keys():
+        #     assert collector[k] == out[k]
+
+        return collector
 
     @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
     async def resource_did_dependency_change(
@@ -931,8 +955,8 @@ class ResourceService(protocol.ServerSlice):
     ) -> bool:
         # This resource has been deployed before => determine whether it should be redeployed based on events
         return any(
-            action.change != const.Change.nochange
-            for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
+            True
+            for dependency, actions in (await self.get_resource_events_internal(env, resource_id, const.Change.nochange)).items()
             for action in actions
         )
 

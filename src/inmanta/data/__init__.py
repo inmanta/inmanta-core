@@ -4064,7 +4064,8 @@ class ResourceAction(BaseDocument):
                     FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                         ON r.environment = jt.environment
-                        AND r.resource_version_id = jt.resource_version_id
+                        AND r.resource_id = jt.resource_id
+                        AND r.model = jt.resource_version
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
                         WHERE r.environment=$1 AND ra.environment=$1"""

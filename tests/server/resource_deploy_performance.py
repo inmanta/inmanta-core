@@ -36,7 +36,7 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
     Not run by default, because filename doesn't start with test
     """
     n_version = 5
-    n_resources = 1000
+    n_resources = 200
     n_deploys = 5
     dependency_density = 5
 
@@ -111,7 +111,8 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
     key_query = """
     SELECT DISTINCT ra.* FROM public.resource as r INNER JOIN public.resourceaction_resource as jt
                         ON r.environment = jt.environment
-                        AND r.resource_version_id = jt.resource_version_id
+                        AND r.resource_id = jt.resource_id
+                        AND r.model = jt.resource_version
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
                         WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action=$5 ORDER BY started DESC, action_id DESC LIMIT $6"""
@@ -125,7 +126,6 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
     async with ResourceAction.get_connection() as con:
         stmt = await con.prepare(key_query)
         print(json.dumps(await stmt.explain(env_id, resource_type, agent, resource_id_value, ra_action, limit, analyze=True)))
-
 
     query_2 = """
         SELECT r1.resource_version_id, r1.last_non_deploying_status
@@ -146,208 +146,208 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
 """
 Baseline output
     n_version = 5
-    n_resources = 1000
+    n_resources = 200
     n_deploys = 5
 
 
-Version 1, Deploy 1: 0:00:35.797357
-Version 1, Deploy 2: 0:00:59.519614
-Version 1, Deploy 3: 0:00:15.870217
-Version 1, Deploy 4: 0:00:15.929685
-Version 1, Deploy 5: 0:00:16.059511
-Version 2, Deploy 1: 0:00:16.568770
-Version 2, Deploy 2: 0:00:16.433959
-Version 2, Deploy 3: 0:00:16.565516
-Version 2, Deploy 4: 0:00:16.688652
-Version 2, Deploy 5: 0:00:16.779639
-Version 3, Deploy 1: 0:00:17.169906
-Version 3, Deploy 2: 0:00:17.054186
-Version 3, Deploy 3: 0:00:17.268796
-Version 3, Deploy 4: 0:00:17.279419
-Version 3, Deploy 5: 0:00:17.432677
-Version 4, Deploy 1: 0:00:17.649681
-Version 4, Deploy 2: 0:00:17.891368
-Version 4, Deploy 3: 0:00:18.109088
-Version 4, Deploy 4: 0:00:18.345958
-Version 4, Deploy 5: 0:00:19.648016
-Version 5, Deploy 1: 0:00:20.447883
-Version 5, Deploy 2: 0:00:21.587692
-Version 5, Deploy 3: 0:00:21.994172
-Version 5, Deploy 4: 0:00:19.794013
-Version 5, Deploy 5: 0:00:19.878399
+Version 1, Deploy 1: 0:00:17.251966
+Version 1, Deploy 2: 0:00:18.656112
+Version 1, Deploy 3: 0:00:18.559744
+Version 1, Deploy 4: 0:00:18.648354
+Version 1, Deploy 5: 0:00:18.194274
+Version 2, Deploy 1: 0:00:18.522850
+Version 2, Deploy 2: 0:00:18.009620
+Version 2, Deploy 3: 0:00:18.123879
+Version 2, Deploy 4: 0:00:17.988790
+Version 2, Deploy 5: 0:00:18.011786
+Version 3, Deploy 1: 0:00:18.340037
+Version 3, Deploy 2: 0:00:18.232860
+Version 3, Deploy 3: 0:00:18.198341
+Version 3, Deploy 4: 0:00:18.331618
+Version 3, Deploy 5: 0:00:18.341258
+Version 4, Deploy 1: 0:00:18.456327
+Version 4, Deploy 2: 0:00:18.309032
+Version 4, Deploy 3: 0:00:18.540196
+Version 4, Deploy 4: 0:00:18.351061
+Version 4, Deploy 5: 0:00:18.607864
+Version 5, Deploy 1: 0:00:18.831040
+Version 5, Deploy 2: 0:00:18.553836
+Version 5, Deploy 3: 0:00:18.466019
+Version 5, Deploy 4: 0:00:18.778583
+Version 5, Deploy 5: 0:00:18.676939
 {
     "rpc.create_project": {
-        "avg": 0.0018091201782226562,
-        "sum": 0.0018091201782226562,
+        "avg": 0.0019173622131347656,
+        "sum": 0.0019173622131347656,
         "count": 1.0,
-        "max": 0.0018091201782226562,
-        "min": 0.0018091201782226562,
+        "max": 0.0019173622131347656,
+        "min": 0.0019173622131347656,
         "std_dev": 0.0,
-        "15m_rate": 0.0019689466987136695,
-        "5m_rate": 0.0019689466774550114,
-        "1m_rate": 0.0019689466552720645,
-        "mean_rate": 0.001968946585950358,
-        "50_percentile": 0.0018091201782226562,
-        "75_percentile": 0.0018091201782226562,
-        "95_percentile": 0.0018091201782226562,
-        "99_percentile": 0.0018091201782226562,
-        "999_percentile": 0.0018091201782226562
+        "15m_rate": 0.002178158379933426,
+        "5m_rate": 0.0021781583482613134,
+        "1m_rate": 0.002178158316589202,
+        "mean_rate": 0.0021781582532449818,
+        "50_percentile": 0.0019173622131347656,
+        "75_percentile": 0.0019173622131347656,
+        "95_percentile": 0.0019173622131347656,
+        "99_percentile": 0.0019173622131347656,
+        "999_percentile": 0.0019173622131347656
     },
     "rpc.create_environment": {
-        "avg": 0.006681919097900391,
-        "sum": 0.006681919097900391,
+        "avg": 0.00673365592956543,
+        "sum": 0.00673365592956543,
         "count": 1.0,
-        "max": 0.006681919097900391,
-        "min": 0.006681919097900391,
+        "max": 0.00673365592956543,
+        "min": 0.00673365592956543,
         "std_dev": 0.0,
-        "15m_rate": 0.0019689646661410114,
-        "5m_rate": 0.001968964653200723,
-        "1m_rate": 0.0019689646384118214,
-        "mean_rate": 0.0019689646180770823,
-        "50_percentile": 0.006681919097900391,
-        "75_percentile": 0.006681919097900391,
-        "95_percentile": 0.006681919097900391,
-        "99_percentile": 0.006681919097900391,
-        "999_percentile": 0.006681919097900391
+        "15m_rate": 0.0021781812598819176,
+        "5m_rate": 0.002178181242914358,
+        "1m_rate": 0.0021781812202909456,
+        "mean_rate": 0.002178181196536363,
+        "50_percentile": 0.00673365592956543,
+        "75_percentile": 0.00673365592956543,
+        "95_percentile": 0.00673365592956543,
+        "99_percentile": 0.00673365592956543,
+        "999_percentile": 0.00673365592956543
     },
     "rpc.heartbeat": {
-        "avg": 1.0121714825532875,
-        "sum": 495.96402645111084,
-        "count": 490.0,
-        "max": 1.070859670639038,
-        "min": 0.0048482418060302734,
-        "std_dev": 0.04591299312842561,
-        "15m_rate": 0.9648213582831068,
-        "5m_rate": 0.9648213510361143,
-        "1m_rate": 0.9648213442420589,
-        "mean_rate": 0.9648213320127594,
-        "50_percentile": 1.0145505666732788,
-        "75_percentile": 1.0164615511894226,
-        "95_percentile": 1.0206902384757996,
-        "99_percentile": 1.029777452945709,
-        "999_percentile": 1.070859670639038
+        "avg": 1.0068154919120942,
+        "sum": 452.0601558685303,
+        "count": 449.0,
+        "max": 1.1168692111968994,
+        "min": 0.005121707916259766,
+        "std_dev": 0.047799245486186734,
+        "15m_rate": 0.978169104552017,
+        "5m_rate": 0.9781690964229329,
+        "1m_rate": 0.9781690857535102,
+        "mean_rate": 0.978169071019546,
+        "50_percentile": 1.0087072849273682,
+        "75_percentile": 1.0109007358551025,
+        "95_percentile": 1.01389741897583,
+        "99_percentile": 1.022628903388977,
+        "999_percentile": 1.1168692111968994
     },
     "rpc.get_state": {
-        "avg": 0.0033272504806518555,
-        "sum": 0.006654500961303711,
+        "avg": 0.0034018754959106445,
+        "sum": 0.006803750991821289,
         "count": 2.0,
-        "max": 0.005026340484619141,
-        "min": 0.0016281604766845703,
-        "std_dev": 0.0024028761273030903,
-        "15m_rate": 0.003938161664845886,
-        "5m_rate": 0.003938161640811085,
-        "1m_rate": 0.0039381616075321296,
-        "mean_rate": 0.003938161563160191,
-        "50_percentile": 0.0033272504806518555,
-        "75_percentile": 0.005026340484619141,
-        "95_percentile": 0.005026340484619141,
-        "99_percentile": 0.005026340484619141,
-        "999_percentile": 0.005026340484619141
+        "max": 0.005197286605834961,
+        "min": 0.0016064643859863281,
+        "std_dev": 0.0025390947416903,
+        "15m_rate": 0.004357250115262027,
+        "5m_rate": 0.004357250074523288,
+        "1m_rate": 0.0043572500315212865,
+        "mean_rate": 0.004357249963623392,
+        "50_percentile": 0.0034018754959106445,
+        "75_percentile": 0.005197286605834961,
+        "95_percentile": 0.005197286605834961,
+        "99_percentile": 0.005197286605834961,
+        "999_percentile": 0.005197286605834961
     },
     "rpc.heartbeat_reply": {
-        "avg": 0.00041961669921875,
-        "sum": 0.0008392333984375,
+        "avg": 0.000423431396484375,
+        "sum": 0.00084686279296875,
         "count": 2.0,
-        "max": 0.0004527568817138672,
-        "min": 0.0003864765167236328,
-        "std_dev": 4.686729554411416e-05,
-        "15m_rate": 0.003938170820277562,
-        "5m_rate": 0.003938170798091489,
-        "1m_rate": 0.003938170768510059,
-        "mean_rate": 0.003938170733382111,
-        "50_percentile": 0.00041961669921875,
-        "75_percentile": 0.0004527568817138672,
-        "95_percentile": 0.0004527568817138672,
-        "99_percentile": 0.0004527568817138672,
-        "999_percentile": 0.0004527568817138672
+        "max": 0.00046443939208984375,
+        "min": 0.00038242340087890625,
+        "std_dev": 5.799406355099019e-05,
+        "15m_rate": 0.004357261648882298,
+        "5m_rate": 0.004357261617196444,
+        "1m_rate": 0.004357261578720766,
+        "mean_rate": 0.004357261528928712,
+        "50_percentile": 0.000423431396484375,
+        "75_percentile": 0.00046443939208984375,
+        "95_percentile": 0.00046443939208984375,
+        "99_percentile": 0.00046443939208984375,
+        "999_percentile": 0.00046443939208984375
     },
     "rpc.reserve_version": {
-        "avg": 0.0035811424255371093,
-        "sum": 0.017905712127685547,
+        "avg": 0.00258026123046875,
+        "sum": 0.01290130615234375,
         "count": 5.0,
-        "max": 0.00834035873413086,
-        "min": 0.0022764205932617188,
-        "std_dev": 0.0026627248096847507,
-        "15m_rate": 0.009847214204417167,
-        "5m_rate": 0.009847214093446525,
-        "1m_rate": 0.009847213945485673,
-        "mean_rate": 0.009847213705049297,
-        "50_percentile": 0.0024940967559814453,
-        "75_percentile": 0.005423545837402344,
-        "95_percentile": 0.00834035873413086,
-        "99_percentile": 0.00834035873413086,
-        "999_percentile": 0.00834035873413086
+        "max": 0.0033464431762695312,
+        "min": 0.0022335052490234375,
+        "std_dev": 0.0004419698388829314,
+        "15m_rate": 0.010893730722101168,
+        "5m_rate": 0.01089373037691516,
+        "1m_rate": 0.010893730263739423,
+        "mean_rate": 0.010893730088317037,
+        "50_percentile": 0.0024313926696777344,
+        "75_percentile": 0.002939462661743164,
+        "95_percentile": 0.0033464431762695312,
+        "99_percentile": 0.0033464431762695312,
+        "999_percentile": 0.0033464431762695312
     },
     "rpc.put_version": {
-        "avg": 0.19777460098266603,
-        "sum": 0.9888730049133301,
+        "avg": 0.17036948204040528,
+        "sum": 0.8518474102020264,
         "count": 5.0,
-        "max": 0.23319458961486816,
-        "min": 0.18076133728027344,
-        "std_dev": 0.022504158404313097,
-        "15m_rate": 0.009848085613766367,
-        "5m_rate": 0.00984808555364663,
-        "1m_rate": 0.009848085484277704,
-        "mean_rate": 0.009848085368662829,
-        "50_percentile": 0.18417906761169434,
-        "75_percentile": 0.22025370597839355,
-        "95_percentile": 0.23319458961486816,
-        "99_percentile": 0.23319458961486816,
-        "999_percentile": 0.23319458961486816
+        "max": 0.19280791282653809,
+        "min": 0.16378521919250488,
+        "std_dev": 0.012560317158113574,
+        "15m_rate": 0.010895929565054266,
+        "5m_rate": 0.01089592948579926,
+        "1m_rate": 0.010895929372577827,
+        "mean_rate": 0.010895929236712109,
+        "50_percentile": 0.16521859169006348,
+        "75_percentile": 0.17913615703582764,
+        "95_percentile": 0.19280791282653809,
+        "99_percentile": 0.19280791282653809,
+        "999_percentile": 0.19280791282653809
     },
     "rpc.resource_deploy_start": {
-        "avg": 0.031178272523880005,
-        "sum": 779.4568130970001,
-        "count": 25000.0,
-        "max": 0.17364263534545898,
-        "min": 0.0038547515869140625,
-        "std_dev": 0.007585783121374971,
-        "15m_rate": 49.262129709034404,
-        "5m_rate": 49.262129385027336,
-        "1m_rate": 49.2621290378769,
-        "mean_rate": 49.26212843614951,
-        "50_percentile": 0.031554579734802246,
-        "75_percentile": 0.03531104326248169,
-        "95_percentile": 0.0457771062850952,
-        "99_percentile": 0.06364550828933717,
-        "999_percentile": 0.08794155502319337
+        "avg": 0.021494613218307496,
+        "sum": 107.47306609153748,
+        "count": 5000.0,
+        "max": 0.09270977973937988,
+        "min": 0.0059299468994140625,
+        "std_dev": 0.007226247170453662,
+        "15m_rate": 10.900908079421427,
+        "5m_rate": 10.900907988761487,
+        "1m_rate": 10.900907892435303,
+        "mean_rate": 10.90090773944666,
+        "50_percentile": 0.022053956985473633,
+        "75_percentile": 0.025324583053588867,
+        "95_percentile": 0.030008566379547116,
+        "99_percentile": 0.03718157529830933,
+        "999_percentile": 0.07047924280166627
     },
     "rpc.resource_did_dependency_change": {
-        "avg": 0.0711409325504303,
-        "sum": 1778.5233137607574,
-        "count": 25000.0,
-        "max": 1.1705102920532227,
-        "min": 0.004614114761352539,
-        "std_dev": 0.11562718666996809,
-        "15m_rate": 49.266526993194724,
-        "5m_rate": 49.2665266922773,
-        "1m_rate": 49.26652629876991,
-        "mean_rate": 49.26652576637756,
-        "50_percentile": 0.06558024883270264,
-        "75_percentile": 0.07226765155792236,
-        "95_percentile": 0.08944185972213745,
-        "99_percentile": 0.12884723186492922,
-        "999_percentile": 0.1646015202999116
+        "avg": 0.5329061005592346,
+        "sum": 2664.530502796173,
+        "count": 5000.0,
+        "max": 1.4420671463012695,
+        "min": 0.01187586784362793,
+        "std_dev": 0.3085271418389318,
+        "15m_rate": 10.901993256601024,
+        "5m_rate": 10.901993171590409,
+        "1m_rate": 10.901993058242923,
+        "mean_rate": 10.90199290522382,
+        "50_percentile": 0.5023475885391235,
+        "75_percentile": 0.7225408554077148,
+        "95_percentile": 1.0999865174293515,
+        "99_percentile": 1.3155424094200137,
+        "999_percentile": 1.4418114614486695
     },
     "rpc.resource_deploy_done": {
-        "avg": 0.03895042956352234,
-        "sum": 973.7607390880585,
-        "count": 25000.0,
-        "max": 0.244920015335083,
-        "min": 0.004446744918823242,
-        "std_dev": 0.009763166612907406,
-        "15m_rate": 49.271892796323634,
-        "5m_rate": 49.27189244903559,
-        "1m_rate": 49.27189210174755,
-        "mean_rate": 49.27189159239176,
-        "50_percentile": 0.0394594669342041,
-        "75_percentile": 0.043607115745544434,
-        "95_percentile": 0.052709341049194336,
-        "99_percentile": 0.06945180654525775,
-        "999_percentile": 0.15658097243309033
+        "avg": 0.024860311460494996,
+        "sum": 124.30155730247498,
+        "count": 5000.0,
+        "max": 0.08890581130981445,
+        "min": 0.0053920745849609375,
+        "std_dev": 0.008446695116902391,
+        "15m_rate": 10.90502276580904,
+        "5m_rate": 10.90502268075117,
+        "1m_rate": 10.905022578681729,
+        "mean_rate": 10.905022419907045,
+        "50_percentile": 0.02637338638305664,
+        "75_percentile": 0.030859053134918213,
+        "95_percentile": 0.03532253503799438,
+        "99_percentile": 0.03857638597488403,
+        "999_percentile": 0.0857991156578064
     },
     "self.spec.cpu": {
-        "value": 102797
+        "value": 128790
     }
 }
 
