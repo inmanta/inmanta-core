@@ -568,6 +568,7 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
         all inmanta modules.
     """
     top_level_pkg: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
+    # module created by setuptools for custom Finder
     prefix_editable_installed_pkg = "__editable___inmanta_module_"
     if inmanta_module is not None:
         prefix_editable_installed_pkg = f"{prefix_editable_installed_pkg}{inmanta_module.replace('-', '_')}"
