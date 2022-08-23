@@ -611,8 +611,9 @@ async def resource_action_consistency_check():
         post_ra_two = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
-                        ON r.environment = jt.environment
-                        AND r.resource_version_id = jt.resource_version_id
+                         ON r.environment = jt.environment
+                        AND r.resource_id = jt.resource_id
+                        AND r.model = jt.resource_version
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
             """
