@@ -610,6 +610,9 @@ def get_resource_events(
     deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
     order according to their started timestamp.
 
+    This method searches through all versions of this resource.
+    This method should only be called when a deploy is in progress.
+
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource to get events for.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
@@ -631,6 +634,9 @@ def resource_did_dependency_change(
 ) -> bool:
     """
     Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
+
+    This method searches through all versions of this resource.
+    This method should only be called when a deploy is in progress.
 
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource.
