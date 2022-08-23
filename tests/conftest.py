@@ -79,7 +79,6 @@ import traceback
 import uuid
 import venv
 from configparser import ConfigParser
-from types import ModuleType
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
 
 import asyncpg
@@ -437,7 +436,7 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     return f
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
@@ -451,6 +450,7 @@ def deactive_venv():
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
+    old_sys_modules = sys.modules.copy()
 
     yield
 
@@ -464,6 +464,9 @@ def deactive_venv():
     sys.path_hooks.extend(old_path_hooks)
     # Clear cache for sys.path_hooks
     sys.path_importer_cache.clear()
+    sys.modules.clear()
+    sys.modules.update(old_sys_modules)
+    importlib.invalidate_caches()
     pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
@@ -485,17 +488,15 @@ def reset_metrics():
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def clean_reset(create_db, clean_db):
+async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
-    loader.unload_inmanta_plugins()
     default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
-    loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
     data.Environment._settings = default_settings
 
@@ -1477,13 +1478,12 @@ def tmpvenv_active(
 
     yield tmpvenv
 
-    unload_modules_for_path(site_packages)
     # Force refresh build's cache once more
     build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
-def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
     """
     Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
     active one.
@@ -1492,22 +1492,6 @@ def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
     venv: env.VirtualEnv = env.VirtualEnv(str(venv_dir))
     venv.use_virtual_env()
     yield venv
-    unload_modules_for_path(venv.site_packages_dir)
-
-
-def unload_modules_for_path(path: str) -> None:
-    """
-    Unload any modules that are loaded from a given path.
-    """
-
-    def module_in_prefix(module: ModuleType, prefix: str) -> bool:
-        file: Optional[str] = getattr(module, "__file__", None)
-        return file.startswith(prefix) if file is not None else False
-
-    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
-    for mod_name in loaded_modules:
-        del sys.modules[mod_name]
-    importlib.invalidate_caches()
 
 
 @pytest.fixture(scope="session")
