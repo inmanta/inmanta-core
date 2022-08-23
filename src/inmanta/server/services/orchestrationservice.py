@@ -714,6 +714,12 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
+        # validate resources before any side effects take place
+        for r in resources:
+            rid = Id.parse_id(r.id)
+            if rid.get_version() != 0:
+                raise BadRequest("Resources for partial export should not contain version information")
+
         intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
         if intersection:
             raise BadRequest(
@@ -738,10 +744,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # set version on input resources
                 for r in resources:
-                    rid = Id.parse_id(r.id)
-                    if rid.get_version() != 0:
-                        raise BadRequest("Resources for partial export should not contain version information")
-                    r.id = rid.copy(version=version).resource_version_str()
+                    r.id = Id.parse_id(r.id).copy(version=version).resource_version_str()
 
                 current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(
                     env.id, limit=1

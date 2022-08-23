@@ -16,9 +16,11 @@
     Contact: code@inmanta.com
 """
 import uuid
+from typing import Optional
 
 import utils
 from inmanta import data
+from inmanta.protocol.common import Result
 from inmanta.util import get_compiler_version
 
 
@@ -96,6 +98,79 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     assert resource_sets_from_db == expected_resource_sets
 
 
+# TODO: test cases for concurrency control?
+async def test_put_partial_version_allocation(server, client, environment, clienthelper) -> None:
+    """
+    Verify dynamic version allocation behavior for the put_partial endpoint.
+    """
+    # partial without a full to base it on gets rejected with clear error message
+    result = await client.put_partial(
+        tid=environment,
+        resources=[],
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={},
+    )
+    assert result.code == 400
+    assert "partial export requires a base model but no versions have been exported yet" in result.result["message"]
+
+    def resources(version: int) -> list[dict[str, object]]:
+        return [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
+    resource_sets = {
+        "test::Resource[agent1,key=key1]": "set-a",
+    }
+
+    # full export
+    full_version = await clienthelper.get_version()
+    result: Result = await client.put_version(
+        tid=environment,
+        version=full_version,
+        resources=resources(full_version),
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    async def put_partial_simple(version: int = 0, expected_error: Optional[tuple[int, str]] = None) -> Optional[int]:
+        result: Result = await client.put_partial(
+            tid=environment,
+            resources=resources(version),
+            resource_state={},
+            unknowns=[],
+            version_info={},
+            resource_sets=resource_sets,
+        )
+        if expected_error is not None:
+            code, message = expected_error
+            assert result.code == code, result.result
+            assert message in result.result["message"]
+            return None
+        else:
+            assert result.code == 200, result.result
+            return result.result["data"]
+
+    await put_partial_simple(full_version + 1, (400, "Resources for partial export should not contain version information"))
+    assert await put_partial_simple() == full_version + 1
+    assert await put_partial_simple() == full_version + 2
+    # allocate new version without storing a new model
+    await clienthelper.get_version()
+    assert await put_partial_simple() == full_version + 4
+
+
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):
     """
     When a partial compile updates a certain resource set, the entire resource set
@@ -131,9 +206,6 @@ async def test_put_partial_replace_resource_set(server, client, environment, cli
         {
             "key": "key2",
             "value": "value123",
-            # TODO: test cases for concurrency control?
-            # TODO: test case where a version was reserved but never set (skip a version)
-            # TODO: test case where v!=0
             "id": "test::Resource[agent1,key=key2],v=0",
             "send_event": False,
             "purged": False,
