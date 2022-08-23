@@ -873,28 +873,40 @@ class ResourceService(protocol.ServerSlice):
         current_deploy_start: datetime.datetime
         last_deploy_start: Optional[datetime.datetime]
 
-        deploy_actions: Iterator[data.ResourceAction] = iter(await get_deploy_actions(resource_id))
-        try:
-            current_deploy: data.ResourceAction = next(deploy_actions)
-            if current_deploy.status != const.ResourceState.deploying:
+        end_query = """
+        with
+            base_ra as (
+            SELECT ra.*
+                FROM public.resource as r
+                    INNER JOIN public.resourceaction_resource as jt
+                        ON r.environment = jt.environment
+                        AND r.resource_version_id = jt.resource_version_id
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                    WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action='deploy'
+                    ORDER BY ra.started DESC
+            )
+        SELECT COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started,
+               (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
+               (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status
+        """
+
+        async with data.ResourceAction.get_connection() as connection:
+            result_a = await connection.fetchrow(end_query, env.id, resource_id.get_entity_type(), resource_id.get_agent_name(),
+                                                 resource_id.get_attribute_value())
+
+            if not result_a or result_a["begin_status"] is None:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
+                    f" {resource_id_str} has not started deploying yet."
+                )
+            if result_a["begin_status"] != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {current_deploy.status}."
+                    f" for resource {resource_id_str} is {result_a['begin_status']}."
                 )
-            current_deploy_start = current_deploy.started
-        except StopIteration:
-            raise BadRequest(
-                "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                f" {resource_id_str} has not started deploying yet."
-            )
-        try:
-            last_deploy: data.ResourceAction = next(
-                action for action in deploy_actions if action.status == const.ResourceState.deployed
-            )
-            last_deploy_start = last_deploy.started
-        except StopIteration:
-            # This resource hasn't been deployed before: fetch all events
-            last_deploy_start = None
+            current_deploy_start = result_a["begin_started"]
+            last_deploy_start = result_a["started"]
 
         resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
         if resource is None:
