@@ -598,6 +598,7 @@ async def resource_action_consistency_check():
         - both methods produce identical results (i.e. the updates are consistent)
         - both methods are in use (i.e. the queries return at least one record)
     """
+
     async with data.ResourceAction.get_connection() as postgresql_client:
         post_ra_one = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra

@@ -2614,7 +2614,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
     await cm.insert()
     # Add multiple versions of model
-    for i in range(0, 11):
+    for i in range(1, 12):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -2624,7 +2624,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         )
         await cm.insert()
 
-    for i in range(0, 11):
+    for i in range(1, 12):
         res1 = data.Resource.new(
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
@@ -2639,18 +2639,18 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     earliest_action_id = uuid.uuid4()
     resource_action = data.ResourceAction(
         environment=env.id,
-        version=0,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={0}"],
+        version=1,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={1}"],
         action_id=earliest_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time - datetime.timedelta(minutes=1),
     )
     await resource_action.insert()
-    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)])
     await resource_action.save()
 
     action_ids_with_the_same_timestamp = []
-    for i in range(1, 6):
+    for i in range(2, 7):
         action_id = uuid.uuid4()
         action_ids_with_the_same_timestamp.append(action_id)
         resource_action = data.ResourceAction(
@@ -2666,7 +2666,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
         await resource_action.save()
     action_ids_with_the_same_timestamp = sorted(action_ids_with_the_same_timestamp, reverse=True)
     action_ids_with_increasing_timestamps = []
-    for i in range(6, 11):
+    for i in range(7, 12):
         action_id = uuid.uuid4()
         action_ids_with_increasing_timestamps.append(action_id)
         resource_action = data.ResourceAction(
