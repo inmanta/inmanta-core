@@ -1896,7 +1896,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         assert action.messages[0]["level"] == LogLevel.INFO.name
 
     # Get logs for non-existing resource_version_id
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=%1")
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=1")
     assert len(resource_actions) == 0
 
     resource_actions = await data.ResourceAction.get_logs_for_version(env.id, version)

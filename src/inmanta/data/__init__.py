@@ -3800,11 +3800,12 @@ class ResourceAction(BaseDocument):
         SELECT ra.* FROM public.resourceaction as ra
                     INNER JOIN public.resourceaction_resource as jt
                         ON ra.action_id = jt.resource_action_id
-                    WHERE jt.environment=$1 AND jt.resource_version_id = ANY(ARRAY[$2]::varchar[])
+                    WHERE jt.environment=$1 AND jt.resource_id = $2 AND  jt.resource_version = $3
         """
-        values = [cls._get_value(environment), cls._get_value(resource_version_id)]
+        id = Id.parse_id(resource_version_id)
+        values = [cls._get_value(environment), id.resource_str(), id.version]
         if action is not None:
-            query += " AND action=$3"
+            query += " AND action=$4"
             values.append(cls._get_value(action))
         query += " ORDER BY started DESC"
         if limit is not None and limit > 0:
