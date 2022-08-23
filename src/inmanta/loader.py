@@ -567,11 +567,20 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
     :param inmanta_module: Unload the Python modules for a specific inmanta module. If omitted, unloads the Python modules for
         all inmanta modules.
     """
-    top_level: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
+    top_level_pkg: str = f"{const.PLUGINS_PACKAGE}.{inmanta_module}" if inmanta_module is not None else const.PLUGINS_PACKAGE
+    prefix_editable_installed_pkg = "__editable___inmanta_module_"
+    if inmanta_module is not None:
+        prefix_editable_installed_pkg = f"{prefix_editable_installed_pkg}{inmanta_module.replace('-', '_')}"
+
+    def should_unload(key_in_sys_modules_dct: str) -> bool:
+        if key_in_sys_modules_dct == top_level_pkg or key_in_sys_modules_dct.startswith(f"{top_level_pkg}."):
+            return True
+        if key_in_sys_modules_dct.startswith(prefix_editable_installed_pkg):
+            return True
+        return False
+
     loaded_modules: KeysView[str] = sys.modules.keys()
-    modules_to_unload: Sequence[str] = [
-        fq_name for fq_name in loaded_modules if fq_name == top_level or fq_name.startswith(f"{top_level}.")
-    ]
+    modules_to_unload: Sequence[str] = [fq_name for fq_name in loaded_modules if should_unload(fq_name)]
     for k in modules_to_unload:
         del sys.modules[k]
     if modules_to_unload:

@@ -443,6 +443,7 @@ def deactive_venv():
     old_prefix = sys.prefix
     old_path = list(sys.path)
     old_meta_path = sys.meta_path.copy()
+    old_path_hooks = sys.path_hooks.copy()
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
@@ -459,6 +460,10 @@ def deactive_venv():
     # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
     sys.meta_path.clear()
     sys.meta_path.extend(old_meta_path)
+    sys.path_hooks.clear()
+    sys.path_hooks.extend(old_path_hooks)
+    # Clear cache for sys.path_hooks
+    sys.path_importer_cache.clear()
     pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
