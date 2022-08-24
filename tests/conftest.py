@@ -60,7 +60,6 @@ import asyncio
 import concurrent
 import csv
 import datetime
-import importlib.util
 import json
 import logging
 import os
@@ -450,7 +449,6 @@ def deactive_venv():
     old_available_extensions = (
         dict(InmantaBootloader.AVAILABLE_EXTENSIONS) if InmantaBootloader.AVAILABLE_EXTENSIONS is not None else None
     )
-    old_sys_modules = sys.modules.copy()
 
     yield
 
@@ -464,9 +462,6 @@ def deactive_venv():
     sys.path_hooks.extend(old_path_hooks)
     # Clear cache for sys.path_hooks
     sys.path_importer_cache.clear()
-    sys.modules.clear()
-    sys.modules.update(old_sys_modules)
-    importlib.invalidate_caches()
     pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
@@ -978,6 +973,7 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
+        loader.unload_modules_for_path(self.env)
 
     def tear_down_func(self):
         if not self._keep:
@@ -1478,6 +1474,7 @@ def tmpvenv_active(
 
     yield tmpvenv
 
+    loader.unload_modules_for_path(site_packages)
     # Force refresh build's cache once more
     build.env._should_use_virtualenv.cache_clear()
 
@@ -1492,6 +1489,7 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     venv: env.VirtualEnv = env.VirtualEnv(str(venv_dir))
     venv.use_virtual_env()
     yield venv
+    loader.unload_modules_for_path(venv.site_packages_dir)
 
 
 @pytest.fixture(scope="session")

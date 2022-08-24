@@ -585,3 +585,18 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
         del sys.modules[k]
     if modules_to_unload:
         importlib.invalidate_caches()
+
+
+def unload_modules_for_path(path: str) -> None:
+    """
+    Unload any modules that are loaded from a given path (site-packages dir).
+    """
+
+    def module_in_prefix(module: types.ModuleType, prefix: str) -> bool:
+        file: Optional[str] = getattr(module, "__file__", None)
+        return file.startswith(prefix) if file is not None else False
+
+    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
+    for mod_name in loaded_modules:
+        del sys.modules[mod_name]
+    importlib.invalidate_caches()
