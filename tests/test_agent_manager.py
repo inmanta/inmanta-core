@@ -1180,6 +1180,7 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     """
     Ensure that the AutostartedAgentManager doesn't try to start an agent that is paused (inmanta/inmanta-core#4398).
     """
+    caplog.set_level(logging.DEBUG)
     env_id = UUID(environment)
     agent_name = "agent1"
 
@@ -1195,10 +1196,15 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     # Start agent1
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     env = await data.Environment.get_by_id(env_id)
+    assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
     caplog.clear()
     await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+    # Ensure we wait until a primary has been elected for agent1
+    assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
     assert len(autostarted_agent_manager._agent_procs) == 1
     assert "Started new agent with PID" in caplog.text
+    # Ensure no timeout happened
+    assert "took too long to start" not in caplog.text
 
     # Pause agent1
     result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
@@ -1209,3 +1215,5 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
     assert len(autostarted_agent_manager._agent_procs) == 1
     assert "Started new agent with PID" not in caplog.text
+    # Ensure no timeout happened
+    assert "took too long to start" not in caplog.text

@@ -1095,23 +1095,30 @@ class AutostartedAgentManager(ServerSlice):
             A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
             became active in the last 5 seconds.
             """
+            agent_statuses: Dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, set(agents))
+            # Only wait for agents that are not paused
+            expected_agents_in_up_state: Set[str] = {
+                agent_name
+                for agent_name, status in agent_statuses.items()
+                if status is not None and status is not AgentStatus.paused
+            }
+            actual_agents_in_up_state: Set[str] = set()
             timeout_in_sec = 5
-            nr_active_instances = 0
-            expected_nr_active_instances = len(agents)
             now = int(time.time())
 
-            while nr_active_instances < expected_nr_active_instances:
+            while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
                 await asyncio.sleep(0.1)
                 if int(time.time()) - now > timeout_in_sec:
                     raise asyncio.TimeoutError()
-                agent_statuses: List[Tuple[str, bool]] = await self._agent_manager.get_agent_active_status(
-                    tid=env.id, endpoints=agents
-                )
-                new_nr_active_instances = sum(1 for (_, active) in agent_statuses if active)
-                if new_nr_active_instances > nr_active_instances:
+                new_actual_agents_in_up_state = {
+                    agent_name
+                    for agent_name in expected_agents_in_up_state
+                    if (env.id, agent_name) in self._agent_manager.tid_endpoint_to_session
+                }
+                if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
                     # Reset timeout timer because a new instance became active
                     now = int(time.time())
-                nr_active_instances = new_nr_active_instances
+                actual_agents_in_up_state = new_actual_agents_in_up_state
 
         # Wait for all agents to start
         try:
