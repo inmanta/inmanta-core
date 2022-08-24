@@ -64,7 +64,6 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -3964,7 +3963,7 @@ class ResourceAction(BaseDocument):
                 # Also do the join table in the same transaction
                 assert self.resource_version_ids
 
-                parsed_rv = [Id.parse_resource_version_id(id) for id in self.resource_version_ids]
+                parsed_rv = [resources.Id.parse_resource_version_id(id) for id in self.resource_version_ids]
                 # No additional checking of field validity is done here, because the insert above validates all fields
                 await con.execute(
                     "INSERT INTO public.resourceaction_resource "
