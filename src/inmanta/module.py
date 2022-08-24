@@ -62,7 +62,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, root_validator, validator
 
 import inmanta.warnings
 from inmanta import const, env, loader, plugins
@@ -1004,7 +1004,8 @@ class CfgParser(RawParser):
                 install_requires = [r for r in config.get("options", "install_requires").split("\n") if r]
             else:
                 install_requires = []
-            return {**config["metadata"], "install_requires": install_requires}
+            version_tag: Optional[str] = config.get("egg_info", "tag_build", fallback=None)
+            return {**config["metadata"], "install_requires": install_requires, "version_tag": version_tag}
         except configparser.Error as e:
             if isinstance(source, TextIOBase):
                 raise InvalidMetadata(msg=f"Invalid syntax in {source.name}:\n{str(e)}") from e
@@ -1212,6 +1213,21 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
         del values["requires"]
         values["name"] = ModuleV2Source.get_package_name_for(values["name"])
+        version_obj: version.Version = version.Version(values["version"])
+
+        def get_version_tag(v: version.Version) -> Optional[str]:
+            if v.is_devrelease:
+                # drop number part, keep explicit 0 due to setuptools bug: https://github.com/pypa/setuptools/issues/2529
+                return "dev0"
+            if v.is_prerelease:
+                # e.g. rc
+                return v.pre[0]
+            if v.is_postrelease:
+                return "post"
+            return None
+
+        values["version"] = version_obj.base_version
+        values["version_tag"] = get_version_tag(version_obj)
         return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
@@ -1221,7 +1237,8 @@ class ModuleV2Metadata(ModuleMetadata):
     :param name: The name of the python package that is generated when packaging this module.
                  This name should follow the format "inmanta-module-<module-name>"
     :param description: (Optional) The description of the module
-    :param version: The version of the inmanta module.
+    :param version: The version of the inmanta module. Should not contain build tag.
+    :param version_tag: The build tag for this module version, i.e. "dev0"
     :param license: The license for this module
     :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
       freeze_recursive is set to false or not set, the current version of all modules imported directly in any submodule of
@@ -1233,8 +1250,35 @@ class ModuleV2Metadata(ModuleMetadata):
     """
 
     install_requires: List[str]
+    version_tag: Optional[str] = None
 
     _raw_parser: Type[CfgParser] = CfgParser
+
+    @validator("version")
+    @classmethod
+    def is_base_version(cls, v: str) -> str:
+        version_obj: version.Version = version.Version(v)
+        if str(version_obj) != version_obj.base_version:
+            raise ValueError(
+                "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"
+            )
+        return v
+
+    @classmethod
+    def _compose_full_version(cls, v: str, version_tag: Optional[str]) -> version.Version:
+        if version_tag is None:
+            return version.Version(v)
+        normalized_tag: str = version_tag.lstrip(".")
+        return version.Version(f"{v}.{normalized_tag}")
+
+    @validator("version_tag")
+    @classmethod
+    def is_valid_version_tag(cls, v: str) -> str:
+        try:
+            cls._compose_full_version("1.0.0", v)
+        except version.InvalidVersion as e:
+            raise ValueError(f"Version tag {v} is not PEP440 compliant") from e
+        return v
 
     @validator("name")
     @classmethod
@@ -1248,6 +1292,9 @@ class ModuleV2Metadata(ModuleMetadata):
             raise ValueError("Module names should not contain underscores, use '-' instead.")
         return v
 
+    def get_full_version(self) -> version.Version:
+        return self._compose_full_version(self.version, self.version_tag)
+
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
         return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
@@ -1260,9 +1307,14 @@ class ModuleV2Metadata(ModuleMetadata):
 
         if not out.has_section("metadata"):
             out.add_section("metadata")
-
         for k, v in self.dict(exclude_none=True, exclude={"install_requires"}).items():
             out.set("metadata", k, str(v))
+
+        if self.version_tag is not None:
+            if not out.has_section("egg_info"):
+                out.add_section("egg_info")
+            out.set("egg_info", "tag_build", self.version_tag)
+
         return out
 
 
@@ -3002,7 +3054,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             return None
 
     def get_version(self) -> version.Version:
-        return self._version if self._version is not None else super().get_version()
+        return self._version if self._version is not None else self._metadata.get_full_version()
 
     version = property(get_version)
 
