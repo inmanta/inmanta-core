@@ -168,6 +168,11 @@ class ArgumentCollector:
     """
 
     def __init__(self, offset: int = 0, de_duplicate: bool = False) -> None:
+        """
+
+        :param offset: the smallest number already in use, the next one given out will be offset+1
+        :param de_duplicate: if the value is the same, return the same number
+        """
         self.args: list[object] = []
         self.offset = offset
         self.de_duplicate = de_duplicate
