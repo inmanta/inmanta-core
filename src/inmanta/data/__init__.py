@@ -3955,6 +3955,26 @@ class ResourceAction(BaseDocument):
     async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
         return await cls.get_one(action_id=action_id, connection=connection)
 
+    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        async with self.get_connection(connection) as con:
+            async with con.transaction():
+                await super(ResourceAction, self).insert(con)
+
+                # Also do the join table in the same transaction
+                assert self.resource_version_ids
+
+                parsed_rv = [resources.Id.parse_resource_version_id(id) for id in self.resource_version_ids]
+                # No additional checking of field validity is done here, because the insert above validates all fields
+                await con.execute(
+                    "INSERT INTO public.resourceaction_resource "
+                    "(resource_id, resource_version, environment, resource_action_id) "
+                    "SELECT unnest($1::text[]), unnest($2::int[]), $3, $4",
+                    [id.resource_str() for id in parsed_rv],
+                    [id.get_version() for id in parsed_rv],
+                    self.environment,
+                    self.action_id,
+                )
+
     def set_field(self, name: str, value: object) -> None:
         self._updates[name] = value
 
@@ -4006,6 +4026,9 @@ class ResourceAction(BaseDocument):
         """
         if len(self._updates) == 0:
             return
+        assert (
+            "resource_version_ids" not in self._updates
+        ), "Updating the associated resource_version_ids of a ResourceAction is not currently supported"
         await self.update_fields(connection=connection, **self._updates)
         self._updates = {}
 
