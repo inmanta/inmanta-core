@@ -64,6 +64,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
+from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -155,6 +156,30 @@ OrderStr = NewType("OrderStr", str)
 """
     A valid database ordering
 """
+
+
+class ArgumentCollector:
+    """
+    Small helper to make placeholders for query arguments
+
+    args = ArgumentCollector()
+    query = f"SELECT * FROM table WHERE a = {args(a_value)} AND b = {args(b_value)}"
+    con.fetch(query, *args.get_values())
+    """
+
+    def __init__(self, offset: int = 0, de_duplicate: bool = False) -> None:
+        self.args: list[object] = []
+        self.offset = offset
+        self.de_duplicate = de_duplicate
+
+    def __call__(self, entry: object) -> str:
+        if self.de_duplicate and entry in self.args:
+            return "$" + str(self.args.index(entry) + 1 + self.offset)
+        self.args.append(entry)
+        return "$" + str(len(self.args) + self.offset)
+
+    def get_values(self):
+        return self.args
 
 
 class PagingOrder(str, enum.Enum):
@@ -3795,13 +3820,13 @@ class ResourceAction(BaseDocument):
     async def get_log(
         cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
     ) -> List["ResourceAction"]:
-        query = f"""
+        query = """
         SELECT ra.* FROM public.resourceaction as ra
                     INNER JOIN public.resourceaction_resource as jt
                         ON ra.action_id = jt.resource_action_id
                     WHERE jt.environment=$1 AND jt.resource_id = $2 AND  jt.resource_version = $3
         """
-        id = Id.parse_id(resource_version_id)
+        id = resources.Id.parse_id(resource_version_id)
         values = [cls._get_value(environment), id.resource_str(), id.version]
         if action is not None:
             query += " AND action=$4"
@@ -4061,7 +4086,7 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-        query = f"""SELECT DISTINCT ra.*
+        query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                         ON r.environment = jt.environment
@@ -4132,6 +4157,110 @@ class ResourceAction(BaseDocument):
         async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
+
+    @classmethod
+    async def get_resource_events(
+        cls, env: Environment, resource_id: resources.Id, exclude_change: Optional[const.Change] = None
+    ) -> Dict[resources.ResourceIdStr, List["ResourceAction"]]:
+        """
+        Get all events that should be processed by this specific resource, for the current deployment
+
+        This method searches across versions!
+
+        This means:
+        1. assure a deployment is ongoing
+        2. get the time range between the start of this deployment and the last successfull deploy
+        3. get all resources required by this resource
+        4. get all resource actions of type deploy emitted by the resource of step 3 in the time interval of step 2
+
+        :param env: environment to consider
+        :param resource_id: resource to consider, should be in deploying state
+        :param exclude_change: in step 4, exclude all resource actions with this specific type of change
+        """
+
+        # This is bang on the critical path for the agent
+        # Squeeze out as much performance from postgresql as we can
+
+        # steps 1 and 2:
+        # find the interval between the current deploy and the previous successful deploy
+        # also check we are currently deploying
+        # do all of this in one query
+        resource_id_str = resource_id.resource_version_str()
+        current_deploy_start: datetime.datetime
+        last_deploy_start: Optional[datetime.datetime]
+
+        end_query = """
+        with
+            base_ra as (
+            SELECT ra.*
+                FROM public.resourceaction_resource as jt
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
+                    ORDER BY ra.started DESC
+            )
+        SELECT
+            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
+            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
+            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
+        """
+
+        async with cls.get_connection() as connection:
+            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
+
+            if not result or result["begin_status"] is None:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
+                    f" {resource_id_str} has not started deploying yet."
+                )
+            if result["begin_status"] != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_id_str} is {result['begin_status']}."
+                )
+            current_deploy_start = result["begin_started"]
+            last_deploy_start = result["started"]
+
+            # Step3: Get the resource
+            resource: Optional[Resource] = await Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
+            if resource is None:
+                raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
+
+            # Step 4: get the relevant resource actions
+            # Do it in one query for all dependencies
+
+            # Construct the query
+            arg = ArgumentCollector(offset=2)
+
+            # First make the filter
+            filter = f"AND ra.started<{arg(current_deploy_start)}"
+            if last_deploy_start:
+                filter += f" AND ra.started > {arg(last_deploy_start)}"
+            if exclude_change:
+                filter += f"AND ra.change <> {arg(exclude_change.value)}"
+
+            # then the query around it
+            get_all_query = f"""
+    SELECT jt.resource_id, ra.*
+        FROM public.resourceaction_resource as jt
+        INNER JOIN public.resourceaction as ra
+            ON ra.action_id = jt.resource_action_id
+        WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=ANY($2::varchar[]) AND ra.action='deploy' {filter}
+        ORDER BY ra.started DESC;
+            """
+
+            # Convert resource version ids into resource ids
+            ids = [resources.Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
+            # Get the result
+            result = await connection.fetch(get_all_query, env.id, ids, *arg.get_values())
+            # Collect results per resource_id
+            collector = {rid: [] for rid in ids}  # eagerly initialize, we expect one entry per dependency, even when empty
+            for record in result:
+                fields = dict(record)
+                del fields["resource_id"]
+                collector[record[0]].append(ResourceAction(from_postgres=True, **fields))
+
+        return collector
 
     def to_dto(self) -> m.ResourceAction:
         return m.ResourceAction(

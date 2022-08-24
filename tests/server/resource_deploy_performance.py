@@ -115,7 +115,14 @@ async def test_resource_deploy_performance(server, client, clienthelper, environ
                         AND r.model = jt.resource_version
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
-                        WHERE r.environment=$1 AND ra.environment=$1 AND resource_type=$2 AND agent=$3 AND r.resource_id_value = $4::varchar AND ra.action=$5 ORDER BY started DESC, action_id DESC LIMIT $6"""
+                        WHERE
+                            r.environment=$1 AND
+                            ra.environment=$1 AND
+                            resource_type=$2 AND
+                            agent=$3 AND
+                            r.resource_id_value = $4::varchar AND
+                            ra.action=$5
+                        ORDER BY started DESC, action_id DESC LIMIT $6"""
 
     resource_type = "test::Resource"
     agent = "agent1"

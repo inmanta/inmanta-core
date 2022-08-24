@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -849,89 +849,9 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: Id,
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
-        return await self.get_resource_events_internal(env, resource_id)
-
-    async def get_resource_events_internal(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-        exclude_change: Optional[Change] = None
-    ) -> Dict[ResourceIdStr, List[ResourceAction]]:
-
-        # Find the interval between the current deploy and the previous successful deploy
-        resource_id_str = resource_id.resource_version_str()
-        current_deploy_start: datetime.datetime
-        last_deploy_start: Optional[datetime.datetime]
-
-        end_query = """
-        with
-            base_ra as (
-            SELECT ra.*
-                FROM public.resourceaction_resource as jt
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
-                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
-                    ORDER BY ra.started DESC
-            )
-        SELECT
-            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
-            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
-            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
-        """
-
-        async with data.ResourceAction.get_connection() as connection:
-            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
-
-            if not result or result["begin_status"] is None:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                    f" {resource_id_str} has not started deploying yet."
-                )
-            if result["begin_status"] != const.ResourceState.deploying:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {result['begin_status']}."
-                )
-            current_deploy_start = result["begin_started"]
-            last_deploy_start = result["started"]
-
-        # Get the resource
-        resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
-        if resource is None:
-            raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
-
-        arg_values: list[object] = []
-
-        def arg(value: object) -> str:
-            arg_values.append(arg)
-            return "$" + (len(arg_values)+2)
-
-        time_range = f"AND ra.started<{arg(current_deploy_start)}"
-
-        if last_deploy_start:
-            time_range += f" AND ra.started > {arg(last_deploy_start)}"
-
-        if exclude_change:
-            time_range += f"AND ra.change <> {arg(exclude_change.value)}"
-
-        get_all_query = f"""
-SELECT jt.resource_id, ra.*
-    FROM public.resourceaction_resource as jt
-    INNER JOIN public.resourceaction as ra
-        ON ra.action_id = jt.resource_action_id
-    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=ANY($2::varchar[]) AND ra.action='deploy' {time_range}
-    ORDER BY ra.started DESC;
-        """
-        async with data.ResourceAction.get_connection() as connection:
-            ids = [Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
-            result = await connection.fetch(get_all_query, env.id, ids, *arg_values)
-            collector = {rid:[] for rid in ids}
-            for record in result:
-                fields = dict(record)
-                del fields["resource_id"]
-                collector[record[0]].append(data.ResourceAction(from_postgres=True, **fields).to_dto())
-
-        return collector
+        return {
+            k: [ra.to_dto() for ra in v] for k, v in (await data.ResourceAction.get_resource_events(env, resource_id)).items()
+        }
 
     @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
     async def resource_did_dependency_change(
@@ -942,7 +862,9 @@ SELECT jt.resource_id, ra.*
         # This resource has been deployed before => determine whether it should be redeployed based on events
         return any(
             True
-            for dependency, actions in (await self.get_resource_events_internal(env, resource_id, const.Change.nochange)).items()
+            for dependency, actions in (
+                await data.ResourceAction.get_resource_events(env, resource_id, const.Change.nochange)
+            ).items()
             for action in actions
         )
 
