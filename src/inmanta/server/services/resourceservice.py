@@ -857,10 +857,9 @@ class ResourceService(protocol.ServerSlice):
         resource_id: Id,
         exclude_change: Optional[Change] = None
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
-        # TODO optimize
 
+        # Find the interval between the current deploy and the previous successful deploy
         resource_id_str = resource_id.resource_version_str()
-
         current_deploy_start: datetime.datetime
         last_deploy_start: Optional[datetime.datetime]
 
@@ -874,43 +873,46 @@ class ResourceService(protocol.ServerSlice):
                     WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
                     ORDER BY ra.started DESC
             )
-        SELECT COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started,
-               (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
-               (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status
+        SELECT
+            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
+            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
+            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
         """
 
         async with data.ResourceAction.get_connection() as connection:
-            result_a = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
+            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
 
-            if not result_a or result_a["begin_status"] is None:
+            if not result or result["begin_status"] is None:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Resource"
                     f" {resource_id_str} has not started deploying yet."
                 )
-            if result_a["begin_status"] != const.ResourceState.deploying:
+            if result["begin_status"] != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {result_a['begin_status']}."
+                    f" for resource {resource_id_str} is {result['begin_status']}."
                 )
-            current_deploy_start = result_a["begin_started"]
-            last_deploy_start = result_a["started"]
+            current_deploy_start = result["begin_started"]
+            last_deploy_start = result["started"]
 
+        # Get the resource
         resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
         if resource is None:
             raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
 
-        args = []
-        def arg_counter(arg):
-            args.append(arg)
-            return len(args)+2
+        arg_values: list[object] = []
 
-        time_range = f"AND ra.started<${arg_counter(current_deploy_start)}"
+        def arg(value: object) -> str:
+            arg_values.append(arg)
+            return "$" + (len(arg_values)+2)
+
+        time_range = f"AND ra.started<{arg(current_deploy_start)}"
 
         if last_deploy_start:
-            time_range += f" AND ra.started > ${arg_counter(last_deploy_start)}"
+            time_range += f" AND ra.started > {arg(last_deploy_start)}"
 
         if exclude_change:
-            time_range += f"AND ra.change <> ${arg_counter(exclude_change.value)}"
+            time_range += f"AND ra.change <> {arg(exclude_change.value)}"
 
         get_all_query = f"""
 SELECT jt.resource_id, ra.*
@@ -922,28 +924,12 @@ SELECT jt.resource_id, ra.*
         """
         async with data.ResourceAction.get_connection() as connection:
             ids = [Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
-            result_a = await connection.fetch(get_all_query, env.id, ids, *args)
-            collector = {id:[] for id in ids}
-            for record in result_a:
+            result = await connection.fetch(get_all_query, env.id, ids, *arg_values)
+            collector = {rid:[] for rid in ids}
+            for record in result:
                 fields = dict(record)
                 del fields["resource_id"]
                 collector[record[0]].append(data.ResourceAction(from_postgres=True, **fields).to_dto())
-
-        # out = {
-        #     dependency.resource_str(): [
-        #         action.to_dto()
-        #         for action in await get_deploy_actions(
-        #             dependency,
-        #             first_timestamp=last_deploy_start,
-        #             last_timestamp=current_deploy_start,
-        #         )
-        #     ]
-        #     for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
-        # }
-        #
-        # assert set(collector.keys()) == set(out.keys())
-        # for k in collector.keys():
-        #     assert collector[k] == out[k]
 
         return collector
 
