@@ -975,9 +975,9 @@ class SnippetCompilationTest(KeepOnFail):
         self._keep = False
         self.project_dir = tempfile.mkdtemp()
         self.modules_dir = module_dir
-        loader.unload_modules_for_path(self.env)
 
     def tear_down_func(self):
+        loader.unload_modules_for_path(self.env)
         if not self._keep:
             shutil.rmtree(self.project_dir)
         self.project = None
