@@ -862,7 +862,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     await env.insert()
 
     # Add multiple versions of model
-    for i in range(0, 11):
+    for i in range(1, 12):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -871,24 +871,32 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             version_info={},
         )
         await cm.insert()
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.now() + timedelta(minutes=i),
+            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+        )
+        await res1.insert()
 
     # Add resource actions for motd
     motd_first_start_time = datetime.now()
     earliest_action_id = uuid.uuid4()
     resource_action = data.ResourceAction(
         environment=env.id,
-        version=0,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={0}"],
+        version=1,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={1}"],
         action_id=earliest_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time - timedelta(minutes=1),
     )
     await resource_action.insert()
-    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)])
     await resource_action.save()
 
     action_ids_with_the_same_timestamp = []
-    for i in range(1, 6):
+    for i in range(2, 7):
         action_id = uuid.uuid4()
         action_ids_with_the_same_timestamp.append(action_id)
         resource_action = data.ResourceAction(
@@ -915,15 +923,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     await resource_action.insert()
     resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=6)])
     await resource_action.save()
-    for i in range(0, 11):
-        res1 = data.Resource.new(
-            environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
-            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
-        )
-        await res1.insert()
 
     result = await client.get_resource_actions(
         tid=env.id,
