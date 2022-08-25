@@ -1533,8 +1533,6 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "internal"
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: ""})
-    assert result.code == 200
 
     # Start agent
     a = agent.Agent(hostname=agent_name, environment=env_uuid, code_loader=False)
@@ -1553,7 +1551,7 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "localhost"})
     assert result.code == 200
 
-    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from  to localhost" in caplog.text, 10)
+    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from local: to localhost" in caplog.text, 10)
 
     # Pause agent
     result = await client.agent_action(tid=env_uuid, name="internal", action=const.AgentAction.pause.value)
@@ -1561,10 +1559,10 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
 
     # Update agentmap when internal agent is paused
     caplog.clear()
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: ""})
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "local:"})
     assert result.code == 200
 
-    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from localhost to " in caplog.text, 10)
+    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from localhost to local:" in caplog.text, 10)
 
 
 async def test_autostart_clear_environment(server, client, resource_container, environment, no_agent_backoff):
