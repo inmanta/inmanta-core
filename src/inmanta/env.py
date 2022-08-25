@@ -945,7 +945,9 @@ class ActiveEnv(PythonEnvironment):
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
         """
-        Get the location of the init file for a Python module within the active environment.
+        Get the location of the init file for a Python module within the active environment. Returns the file path as observed
+        by Python. For editable installs, this may or may not be a symlink to the actual location (see implementation
+        mechanisms in setuptools docs: https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 
         :return: A tuple of the path and the associated loader, if the module is found.
         """
