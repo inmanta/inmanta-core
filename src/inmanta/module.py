@@ -62,9 +62,10 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, root_validator, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
 import inmanta.warnings
+import packaging.version
 from inmanta import const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
@@ -1251,23 +1252,24 @@ class ModuleV2Metadata(ModuleMetadata):
         return v
 
     @classmethod
-    def _compose_full_version(cls, v: str, version_tag: Optional[str]) -> version.Version:
+    def _compose_full_version(cls, v: str, version_tag: Optional[str]) -> packaging.version.Version:
         if version_tag is None:
             return version.Version(v)
         normalized_tag: str = version_tag.lstrip(".")
         return version.Version(f"{v}.{normalized_tag}")
 
     @classmethod
-    def split_version(cls, v: version.Version) -> tuple[str, Optional[str]]:
+    def split_version(cls, v: packaging.version.Version) -> tuple[str, Optional[str]]:
         """
         Splits a full version in a base version and a tag.
         """
 
-        def get_version_tag(v: version.Version) -> Optional[str]:
+        def get_version_tag(v: packaging.version.Version) -> Optional[str]:
             if v.is_devrelease:
                 return f"dev{v.dev}"
             if v.is_prerelease:
                 # e.g. rc
+                assert v.pre is not None
                 return "%s%s" % (v.pre[0], v.pre[1])
             if v.is_postrelease:
                 return f"post{v.post}"
@@ -1296,7 +1298,7 @@ class ModuleV2Metadata(ModuleMetadata):
             raise ValueError("Module names should not contain underscores, use '-' instead.")
         return v
 
-    def get_full_version(self) -> version.Version:
+    def get_full_version(self) -> packaging.version.Version:
         return self._compose_full_version(self.version, self.version_tag)
 
     @classmethod
