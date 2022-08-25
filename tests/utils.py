@@ -485,9 +485,10 @@ def module_from_template(
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
     if new_version is not None:
-        config["metadata"]["version"] = new_version.base_version
-        if new_version.is_devrelease:
-            config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
+        base, tag = module.ModuleV2Metadata.split_version(new_version)
+        config["metadata"]["version"] = base
+        if tag is not None:
+            config["egg_info"] = {"tag_build": tag}
     if new_name is not None:
         old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
         os.rename(

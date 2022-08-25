@@ -1213,21 +1213,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         install_requires = [ModuleV2Source.get_package_name_for(r) for r in values["requires"]]
         del values["requires"]
         values["name"] = ModuleV2Source.get_package_name_for(values["name"])
-        version_obj: version.Version = version.Version(values["version"])
-
-        def get_version_tag(v: version.Version) -> Optional[str]:
-            if v.is_devrelease:
-                # drop number part, keep explicit 0 due to setuptools bug: https://github.com/pypa/setuptools/issues/2529
-                return "dev0"
-            if v.is_prerelease:
-                # e.g. rc
-                return v.pre[0]
-            if v.is_postrelease:
-                return "post"
-            return None
-
-        values["version"] = version_obj.base_version
-        values["version_tag"] = get_version_tag(version_obj)
+        values["version"], values["version_tag"] = ModuleV2Metadata.split_version(version.Version(values["version"]))
         return ModuleV2Metadata(**values, install_requires=install_requires)
 
 
@@ -1270,6 +1256,24 @@ class ModuleV2Metadata(ModuleMetadata):
             return version.Version(v)
         normalized_tag: str = version_tag.lstrip(".")
         return version.Version(f"{v}.{normalized_tag}")
+
+    @classmethod
+    def split_version(cls, v: version.Version) -> tuple[str, Optional[str]]:
+        """
+        Splits a full version in a base version and a tag.
+        """
+
+        def get_version_tag(v: version.Version) -> Optional[str]:
+            if v.is_devrelease:
+                return f"dev{v.dev}"
+            if v.is_prerelease:
+                # e.g. rc
+                return "%s%s" % (v.pre[0], v.pre[1])
+            if v.is_postrelease:
+                return f"post{v.post}"
+            return None
+
+        return v.base_version, get_version_tag(v)
 
     @validator("version_tag")
     @classmethod
