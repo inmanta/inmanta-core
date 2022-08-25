@@ -19,7 +19,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 ----------------------------
 
-Python version 3.9, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+**Python version 3.9**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -59,10 +59,8 @@ This folder contains a **project.yml**, which looks like this:
         modulepath: libs
         downloadpath: libs
         repo:
-            - type: package
+        - type: package
             url: https://packages.inmanta.com/public/quickstart/python/simple/
-            - type: git
-            url: https://github.com/inmanta/
         install_mode: release
         requires:
 
@@ -216,7 +214,7 @@ In this guide, we will showcase two examples on a small **CLOS** `topology <http
 1. `interface <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ configuration.
 2. `OSPF <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ configuration.
 
-It could be useful to know that **Inmanta** uses the ``gNMI`` protocol to interface with ``SR Linux`` devices.
+It could be useful to know that Inmanta uses the ``gNMI`` protocol to interface with ``SR Linux`` devices.
 
 .. note::
 
