@@ -1,0 +1,8 @@
+description: "The `put_partial` endpoint and `inmanta export --partial` now dynamically allocate a new version."
+sections:
+  minor-improvement: "{{description}}"
+  deprecation-note: "The `put_partial` endpoint (previously marked unstable) no longer accepts a version argument."
+change-type: patch
+destination-branches:
+  - master
+  - iso5
