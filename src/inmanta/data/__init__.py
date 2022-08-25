@@ -5355,7 +5355,6 @@ class ConfigurationModel(BaseDocument):
         result = await cls.get_one(environment=environment, version=version, connection=connection)
         return result
 
-    # TODO: delete?
     @classmethod
     async def get_full_version_base(
         cls,
@@ -5816,6 +5815,9 @@ class Code(BaseDocument):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
+        """
+        Copy all code for one model version to another.
+        """
         query: str = f"""
             INSERT INTO {cls.table_name()} (environment, resource, version, source_refs)
             SELECT environment, resource, $1, source_refs

@@ -139,7 +139,7 @@ class Exporter(object):
         self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
-        # When export starts: None iff partial export
+        # For full export, set as soon as export starts. For partial, set only after export is done.
         self._version: Optional[int] = None
         self._scope = None
         self.failed = False
