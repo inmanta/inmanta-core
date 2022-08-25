@@ -1327,12 +1327,10 @@ class Test(Resource):
 
 @pytest.mark.skipif(
     "inmanta-core" in process_env.get_installed_packages(only_editable=True),
-    reason="Inmanta package protection in env.install_* not compatible with editable core in non-inherited venv."
+    reason="Inmanta package protection in env.install_* not compatible with editable core in non-inherited venv.",
 )
 @pytest.mark.slowtest
-async def test_v2_module_editable_with_links(
-    tmpvenv_active: tuple[py.path.local, py.path.local], modules_v2_dir: str
-) -> None:
+async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local, py.path.local], modules_v2_dir: str) -> None:
     """
     One possible implementation mechanism for editable installs
     (https://setuptools.pypa.io/en/latest/userguide/development_mode.html#how-editable-installations-work) is to use a farm of
