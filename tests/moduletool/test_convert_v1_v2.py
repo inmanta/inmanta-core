@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 
+import py
 import pytest
 from pkg_resources import Requirement
 from pytest import MonkeyPatch
@@ -29,9 +30,10 @@ from pytest import MonkeyPatch
 import toml
 from inmanta import moduletool
 from inmanta.command import CLIException
-from inmanta.module import DummyProject, ModuleV1, ModuleV2Metadata
+from inmanta.module import DummyProject, ModuleV1, ModuleV2, ModuleV2Metadata
 from inmanta.moduletool import ModuleConverter, ModuleVersionException
-from utils import log_contains
+from packaging import version
+from utils import log_contains, v1_module_from_template
 
 
 def test_module_conversion(tmpdir, caplog):
@@ -240,3 +242,33 @@ def test_issue_4373_circular_dependency(tmpdir, modules_dir: str) -> None:
         parser = configparser.ConfigParser()
         parser.read_string(fh.read())
         assert "inmanta-module-module-imports-self" not in parser.get("options", "install_requires")
+
+
+@pytest.mark.parametrize_any(
+    "full_version, base, tag",
+    [
+        ("1.2.3", "1.2.3", None),
+        ("1.2.3.dev0", "1.2.3", "dev0"),
+        # keep explicit 0 because of setuptools bug: https://github.com/pypa/setuptools/issues/2529
+        ("1.2.3.dev", "1.2.3", "dev0"),
+        ("1.2.3rc", "1.2.3", "rc0"),
+        ("1.2.3dev202208241700", "1.2.3", "dev202208241700"),
+        ("1.2.dev", "1.2", "dev0"),
+    ],
+)
+def test_module_conversion_build_tags(tmpdir: py.path.local, modules_dir: str, full_version: str, base: str, tag: str) -> None:
+    """
+    Verify that any versions with at tag of a v1 module are correctly split into respectively the version and tag_build
+    fields of the setup.cfg file.
+    """
+    new_mod_dir: str = str(tmpdir.join("mytaggedmodule"))
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        new_mod_dir,
+        new_name="mytaggedmodule",
+        new_version=version.Version(full_version),
+    )
+    ModuleConverter(ModuleV1(project=DummyProject(), path=new_mod_dir)).convert_in_place()
+    metadata: ModuleV2Metadata = ModuleV2.from_path(new_mod_dir).metadata
+    assert metadata.version == base
+    assert metadata.version_tag == tag

@@ -34,6 +34,8 @@ from inmanta import moduletool
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
+from packaging import version
+from utils import v1_module_from_template
 
 
 def run_module_build_soft(
@@ -233,3 +235,24 @@ def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
     shutil.copytree(module_dir, module_copy_dir)
     path_to_wheel = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True)
     assert re.search(r"\.dev[0-9]{14}", path_to_wheel)
+
+
+@pytest.mark.parametrize_any("explicit", [True, False])
+def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explicit: bool) -> None:
+    """
+    Test whether the functionality to create a development build of a module that already has a dev tag, works correctly.
+    """
+    module_name = "mypretaggedmodule"
+    new_mod_dir: str = str(tmpdir.join(module_name))
+    # start from a v1 module with a tag
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        new_mod_dir,
+        new_name=module_name,
+        new_version=version.Version("1.2.3.dev0"),
+    )
+    path_to_wheel = run_module_build_soft(new_mod_dir, set_path_argument=True, dev_build=explicit)
+    if explicit:
+        assert re.search(r"1.2.3\.dev[0-9]{14}", path_to_wheel)
+    else:
+        assert "1.2.3.dev0" in path_to_wheel
