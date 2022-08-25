@@ -2,6 +2,7 @@ description: "Don't set PYTHONPATH environment variable on venv activation: fixe
 issue-nr: 4713
 sections:
   minor-improvement: "{{description}}"
+change-type: patch
 destination-branches:
   - iso5
   - master
