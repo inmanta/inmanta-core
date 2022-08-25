@@ -1,0 +1,7 @@
+description: Improved editable v2 module compatibility with latest setuptools and PEP660 in edge case scenarios.
+sections:
+  minor-improvement: "{{description}}"
+change-type: patch
+destination-branches:
+  - iso5
+  - master
