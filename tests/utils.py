@@ -18,12 +18,10 @@
 import asyncio
 import configparser
 import datetime
-import inspect
 import json
 import logging
 import os
 import shutil
-import time
 import uuid
 from collections import abc
 from dataclasses import dataclass
@@ -37,7 +35,7 @@ from pydantic.tools import lru_cache
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module
+from inmanta import const, data, env, module, util
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -47,17 +45,16 @@ from libpip2pi.commands import dir2pi
 from packaging import version
 
 
-async def retry_limited(fun, timeout, *args, **kwargs):
-    async def fun_wrapper():
-        if inspect.iscoroutinefunction(fun):
-            return await fun(*args, **kwargs)
-        else:
-            return fun(*args, **kwargs)
-
-    start = time.time()
-    while time.time() - start < timeout and not (await fun_wrapper()):
-        await asyncio.sleep(0.1)
-    if not (await fun_wrapper()):
+async def retry_limited(
+    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    try:
+        await util.retry_limited(fun, timeout, interval, *args, **kwargs)
+    except asyncio.TimeoutError:
         raise AssertionError("Bounded wait failed")
 
 
@@ -488,9 +485,10 @@ def module_from_template(
     config: configparser.ConfigParser = configparser.ConfigParser()
     config.read(config_file)
     if new_version is not None:
-        config["metadata"]["version"] = new_version.base_version
-        if new_version.is_devrelease:
-            config["egg_info"] = {"tag_build": f".dev{new_version.dev}"}
+        base, tag = module.ModuleV2Metadata.split_version(new_version)
+        config["metadata"]["version"] = base
+        if tag is not None:
+            config["egg_info"] = {"tag_build": tag}
     if new_name is not None:
         old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
         os.rename(
@@ -592,3 +590,36 @@ def v1_module_from_template(
 
 def parse_datetime_to_utc(time: str) -> datetime.datetime:
     return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+
+
+async def resource_action_consistency_check():
+    """
+    The resourceaction table is joined to the resource table in two different ways
+    This method asserts that
+        - both methods produce identical results (i.e. the updates are consistent)
+        - both methods are in use (i.e. the queries return at least one record)
+    """
+
+    async with data.ResourceAction.get_connection() as postgresql_client:
+        post_ra_one = await postgresql_client.fetch(
+            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
+                    INNER JOIN public.resource as r
+                    ON r.resource_version_id = ANY(ra.resource_version_ids)
+                    AND r.environment = ra.environment
+            """
+        )
+        all_ra_set = {(r[0], r[1], r[2]) for r in post_ra_one}
+
+        post_ra_two = await postgresql_client.fetch(
+            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resource as r
+                    INNER JOIN public.resourceaction_resource as jt
+                         ON r.environment = jt.environment
+                        AND r.resource_id = jt.resource_id
+                        AND r.model = jt.resource_version
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+            """
+        )
+        assert all_ra_set == {(r[0], r[1], r[2]) for r in post_ra_two}
+
+        assert all_ra_set

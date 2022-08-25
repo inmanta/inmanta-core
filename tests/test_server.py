@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -45,7 +46,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version, hash_file
+from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -653,52 +654,6 @@ async def test_token_without_auth(server, client, environment):
     assert token.code == 400
 
 
-def make_source(collector, filename, module, source, req):
-    myhash = hash_file(source.encode())
-    collector[myhash] = [filename, module, source, req]
-    return collector
-
-
-async def test_code_upload(server, client, agent, environment):
-    """Test upload of a single code definition"""
-    version = (await client.reserve_version(environment)).result["data"]
-
-    resources = [
-        {
-            "group": "root",
-            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
-            "id": "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
-            "owner": "root",
-            "path": "/etc/sysconfig/network",
-            "permissions": 644,
-            "purged": False,
-            "reload": False,
-            "requires": [],
-            "version": version,
-        }
-    ]
-
-    res = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-    )
-    assert res.code == 200
-
-    sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
-    sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
-
-    res = await client.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
-    assert res.code == 200
-
-    res = await agent._client.get_code(tid=environment, id=version, resource="std::File")
-    assert res.code == 200
-    assert res.result["sources"] == sources
-
-
 async def test_batched_code_upload(
     server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
 ):
@@ -731,7 +686,12 @@ async def test_batched_code_upload(
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
 
-            assert info.content == code[2]
+            # fetch the code from the server
+            response = await agent_multi._client.get_file(info.hash)
+            assert response.code == 200
+
+            source_code = base64.b64decode(response.result["content"])
+            assert info.content == source_code
             assert info.requires == code[3]
 
 
@@ -902,7 +862,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     await env.insert()
 
     # Add multiple versions of model
-    for i in range(0, 11):
+    for i in range(1, 12):
         cm = data.ConfigurationModel(
             environment=env.id,
             version=i,
@@ -911,24 +871,32 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             version_info={},
         )
         await cm.insert()
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.now() + timedelta(minutes=i),
+            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
+        )
+        await res1.insert()
 
     # Add resource actions for motd
     motd_first_start_time = datetime.now()
     earliest_action_id = uuid.uuid4()
     resource_action = data.ResourceAction(
         environment=env.id,
-        version=0,
-        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={0}"],
+        version=1,
+        resource_version_ids=[f"std::File[agent1,path=/etc/motd],v={1}"],
         action_id=earliest_action_id,
         action=const.ResourceAction.deploy,
         started=motd_first_start_time - timedelta(minutes=1),
     )
     await resource_action.insert()
-    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=0)])
+    resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)])
     await resource_action.save()
 
     action_ids_with_the_same_timestamp = []
-    for i in range(1, 6):
+    for i in range(2, 7):
         action_id = uuid.uuid4()
         action_ids_with_the_same_timestamp.append(action_id)
         resource_action = data.ResourceAction(
@@ -955,15 +923,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     await resource_action.insert()
     resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=6)])
     await resource_action.save()
-    for i in range(0, 11):
-        res1 = data.Resource.new(
-            environment=env.id,
-            resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
-            status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
-            attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
-        )
-        await res1.insert()
 
     result = await client.get_resource_actions(
         tid=env.id,

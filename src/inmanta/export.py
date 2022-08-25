@@ -88,7 +88,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
 
     for file in res.result["files"]:
         content = code_manager.get_file_content(file)
-        res = conn.upload_file(id=file, content=base64.b64encode(content.encode()).decode("ascii"))
+        res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
