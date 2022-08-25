@@ -58,6 +58,24 @@ async def env_with_logs(client, server, environment):
     msg_timings_idx = 0
     for i in range(1, 10):
         action_id = uuid.uuid4()
+        res1 = data.Resource.new(
+            environment=uuid.UUID(environment),
+            resource_version_id=f"{resource_id_a},v={i}",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/file2"},
+        )
+        await res1.insert()
+
+        res2 = data.Resource.new(
+            environment=uuid.UUID(environment),
+            resource_version_id=f"std::Directory[agent1,path=/tmp/dir2],v={i}",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/file2"},
+        )
+        await res2.insert()
+
         resource_action = data.ResourceAction(
             environment=uuid.UUID(environment),
             version=i,
@@ -291,6 +309,24 @@ async def test_log_without_kwargs(server, client, environment):
         version_info={},
     ).insert()
 
+    res1 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id=f"{resource_id_a},v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res1.insert()
+
+    res2 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2.insert()
+
     resource_action = data.ResourceAction(
         environment=uuid.UUID(environment),
         version=1,
@@ -329,6 +365,24 @@ async def test_log_nested_kwargs(server, client, environment):
         released=True,
         version_info={},
     ).insert()
+
+    res1 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id=f"{resource_id_a},v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res1.insert()
+
+    res2 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2.insert()
 
     resource_action = data.ResourceAction(
         environment=uuid.UUID(environment),
