@@ -1139,8 +1139,6 @@ import sys
 
 # Ensure inheritance from all parent venvs + process their .pth files
 {add_site_dir_statements}
-# Also set the PYTHONPATH environment variable for any subprocess
-os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
         script_as_oneliner = "; ".join(
             [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
@@ -1176,9 +1174,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         sys.real_prefix = sys.prefix
         sys.prefix = base
         self._update_sys_path()
-
-        # Also set the python path environment variable for any subprocess
-        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     def install_from_index(
         self,
