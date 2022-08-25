@@ -416,6 +416,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        partial_base_version: Optional[int] = None,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
@@ -593,6 +594,7 @@ class OrchestrationService(protocol.ServerSlice):
                 version_info=version_info,
                 undeployable=undeployable_ids,
                 skipped_for_undeployable=skip_list,
+                partial_base=partial_base_version,
             )
             await cm.insert(connection=connection)
         except asyncpg.exceptions.UniqueViolationError:
@@ -686,7 +688,6 @@ class OrchestrationService(protocol.ServerSlice):
         await self._trigger_auto_deploy(env, version)
         return 200
 
-    # TODO: tests
     @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
         self,
@@ -732,15 +733,8 @@ class OrchestrationService(protocol.ServerSlice):
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
                 await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
 
-                # Only request a new version once the resource lock has been acquired to prevent races between two
-                # put_partial calls: this way the requested version will never be made stale by another call between now and
-                # when we store the resources.
-                # For this call, treat the lock as a plain Python lock: request the new version outside of the transaction so
-                # as not to block new version requests on code paths other than this one. Being more strict does not
-                # provide stronger gaurantees because a specific type of race, where put_partial is called in
-                # the window between reserve_version and put_version, is unavoidable due to the two-part nature of
-                # put_version (see put_partial docstring and #4416).
-                version: int = await env.get_next_version()
+                # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
+                version: int = await env.get_next_version(connection=con)
 
                 # set version on input resources
                 for r in resources:
@@ -762,7 +756,7 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                 )
                 merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
-                await data.Code.copy_versions(env.id, base_version, version)
+                await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 await self._put_version(
                     env,
@@ -772,6 +766,7 @@ class OrchestrationService(protocol.ServerSlice):
                     unknowns,
                     version_info,
                     merged_resource_sets,
+                    partial_base_version=base_version,
                     connection=con,
                 )
         await self._trigger_auto_deploy(env, version)

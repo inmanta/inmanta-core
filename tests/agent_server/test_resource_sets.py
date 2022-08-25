@@ -15,7 +15,9 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import uuid
+from collections import abc
 from typing import Optional
 
 import utils
@@ -169,6 +171,23 @@ async def test_put_partial_version_allocation(server, client, environment, clien
     # allocate new version without storing a new model
     await clienthelper.get_version()
     assert await put_partial_simple() == full_version + 4
+    model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_version(environment, full_version + 4)
+    assert model is not None
+    assert model.partial_base == full_version + 2
+
+    # test concurrent calls
+    concurrency_base: int = full_version + 5
+    nb_versions: int = 5
+    futures: abc.Sequence[abc.Awaitable[int]] = [
+        put_partial_simple() for _ in range(nb_versions)
+    ]
+    concurrency_versions: abc.Sequence[int] = await asyncio.gather(*futures)
+    expected_versions: list[int] = list(range(concurrency_base, concurrency_base + nb_versions))
+    assert set(concurrency_versions) == set(range(concurrency_base, concurrency_base + nb_versions))
+    for version in concurrency_versions:
+        model = await data.ConfigurationModel.get_version(environment, version)
+        assert model is not None
+        assert model.partial_base == version - 1
 
 
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):
