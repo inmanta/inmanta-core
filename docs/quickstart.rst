@@ -417,7 +417,7 @@ ____________________________________
 
 To deploy the project, we must first register it with the management server by creating a project and an environment. We have covered this earlier at `Create an Inmanta project and an environment`_ section.
 
-Export the ``interafces`` configuration model to the Inmanta server:
+Export the ``interfaces`` configuration model to the Inmanta server:
 
 .. code-block:: sh
 
