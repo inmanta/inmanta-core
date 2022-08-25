@@ -1,0 +1,6 @@
+description: For v1tov2 conversion, split tag from version and put it in tag_build field
+minor-improvement: "{{description}}"
+change-type: patch
+destination-branches:
+  - master
+  - iso5
