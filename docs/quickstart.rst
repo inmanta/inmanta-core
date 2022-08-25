@@ -19,7 +19,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 Prerequisites
 ----------------------------
 
-``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
+Python version 3.9, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
 1. `Install Docker <https://docs.docker.com/install/>`_.
 2. `Install Containerlab <https://containerlab.dev/install/>`_.
@@ -30,7 +30,7 @@ Prerequisites
        mkdir -p ~/.virtualenvs
        python3 -m venv ~/.virtualenvs/srlinux
        source ~/.virtualenvs/srlinux/bin/activate
-       pip install inmanta-core
+       pip install inmanta
 
 4. Clone the `SR Linux examples <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux>`_ repository:
 
@@ -59,14 +59,17 @@ This folder contains a **project.yml**, which looks like this:
         modulepath: libs
         downloadpath: libs
         repo:
-            - https://github.com/inmanta/
+            - type: package
+            url: https://packages.inmanta.com/public/quickstart/python/simple/
+            - type: git
+            url: https://github.com/inmanta/
         install_mode: release
         requires:
 
 
-The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
-The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
-The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
+- The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
+- The ``repo`` setting points to one or more Git repositories containing Inmanta modules.
+- The ``requires`` setting is used to pin versions of modules, otherwise the latest version is used.
 
 1. Install the required modules inside the `SR Linux` folder:
 
@@ -180,7 +183,7 @@ _____________________________________________
 
 A project is a collection of related environments. (e.g. development, testing, production, qa,...). We need to have an environment to manage our infrastructure. An environment is a collection of resources, such as servers, switches, routers, etc.
 
-There are two ways to create a project and an environment:
+There are **two ways** to create a project and an environment:
 
 1. Using Inmanta CLI (**recommended**):
     .. code-block:: sh
@@ -197,7 +200,7 @@ The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file
 2. Using the Web Console: Connect to the Inmanta container http://172.30.0.3:8888/console, click on the `Create new environment` button, provide a name for the project and the environment then click `submit`.
 
 
-If you have chosen the second option; the Web Console, you need to copy the environment ID for later use, either:
+If you have chosen the second option, the Web Console, you need to copy the environment ID for later use, either:
 
  - from the URL, e.g. ec05d6d9-25a4-4141-a92f-38e24a12b721 from the http://172.30.0.3:8888/console/desiredstate?env=ec05d6d9-25a4-4141-a92f-38e24a12b721.
  - or by clicking on the gear icon on the top right of the Web Console, then click on Environment, scroll down all the way to the bottom of the page and copy the environment ID.
@@ -213,11 +216,11 @@ In this guide, we will showcase two examples on a small **CLOS** `topology <http
 1. `interface <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ configuration.
 2. `OSPF <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ configuration.
 
-It could be useful to know **Inmanta** uses the ``gNMI`` protocol to interface with ``SR Linux`` devices.
+It could be useful to know that **Inmanta** uses the ``gNMI`` protocol to interface with ``SR Linux`` devices.
 
 .. note::
 
-    In order to make sure that everything is working correctly, run ``inmanta compile -f main.cf``. This will ensure that the modules are in place and the configuration is valid. If you face any errors at this stage, please contact us.
+    In order to make sure that everything is working correctly, run ``inmanta compile``. This will ensure that the modules are in place and the configuration is valid. If you face any errors at this stage, please contact us.
 
 
 SR Linux interface configuration
