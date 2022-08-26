@@ -199,7 +199,9 @@ C()
     message: str = "No value for attribute __config__::C.n. Assign null instead of leaving unassigned. ({dir}/main.cf:17)"
 
     def match(warning) -> bool:
-        return issubclass(warning.category, CompilerDeprecationWarning) and str(warning.message) == message.format(dir=snippetcompiler.project_dir)
+        return issubclass(warning.category, CompilerDeprecationWarning) and str(warning.message) == message.format(
+            dir=snippetcompiler.project_dir
+        )
 
     with warnings.catch_warnings(record=True) as ws:
         compiler.do_compile()
