@@ -100,7 +100,6 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     assert resource_sets_from_db == expected_resource_sets
 
 
-# TODO: test cases for concurrency control?
 async def test_put_partial_version_allocation(server, client, environment, clienthelper) -> None:
     """
     Verify dynamic version allocation behavior for the put_partial endpoint.

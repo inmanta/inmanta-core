@@ -5164,7 +5164,6 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
-    :param total: The total number of resources
     """
 
     __primary_key__ = ("version", "environment")

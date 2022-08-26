@@ -22,4 +22,4 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     async with connection.transaction():
         # Don't add foreign key to allow for deletion (cleanup) of base version
-        await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN partial_base int NULL;")
+        await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN partial_base int DEFAULT NULL;")
