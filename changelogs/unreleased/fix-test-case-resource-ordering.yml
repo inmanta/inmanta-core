@@ -1,0 +1,5 @@
+description: don't make assumptions about ordering in test querying resources
+change-type: patch
+destination-branches:
+  - master
+  - iso5
