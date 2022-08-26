@@ -139,7 +139,7 @@ class Exporter(object):
         self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
-        # For full export, set as soon as export starts. For partial, set only after export is done.
+        # Actual version (placeholder for partial export) is set as soon as export starts.
         self._version: Optional[int] = None
         self._scope = None
         self.failed = False
@@ -336,8 +336,8 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self, no_commit: bool = False) -> int:
-        if no_commit:
+    def get_version(self, no_commit: bool = False, partial_compile: bool = False) -> int:
+        if no_commit or partial_compile:
             return 0
         tid = cfg_env.get()
         if tid is None:
@@ -372,7 +372,7 @@ class Exporter(object):
         self.types = types
         self.scopes = scopes
 
-        self._version = self.get_version(no_commit) if not partial_compile else None
+        self._version = self.get_version(no_commit, partial_compile)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -423,7 +423,7 @@ class Exporter(object):
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
-        exported_version: int = self._version if self._version is not None else 0
+        exported_version: int = self._version
         if include_status:
             return exported_version, self._resources, self._resource_state, model
         return exported_version, self._resources
@@ -440,8 +440,7 @@ class Exporter(object):
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
 
-        # If self._version is None we use 0 as a placeholder. The actual version will be set on the server
-        resource.set_version(self._version if self._version is not None else 0)
+        resource.set_version(self._version)
 
         if resource.id in self._resources:
             raise CompilerException("Resource %s exists more than once in the configuration model" % resource.id)
