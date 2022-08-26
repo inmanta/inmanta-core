@@ -197,12 +197,14 @@ C()
         % (" = null" if assign else ""),
     )
     message: str = "No value for attribute __config__::C.n. Assign null instead of leaving unassigned. ({dir}/main.cf:17)"
-    with warnings.catch_warnings(record=True) as w:
+
+    def match(warning) -> bool:
+        return issubclass(warning.category, CompilerDeprecationWarning) and str(warning.message) == message.format(dir=snippetcompiler.project_dir)
+
+    with warnings.catch_warnings(record=True) as ws:
         compiler.do_compile()
-        assert len(w) == 0 if assign else 1
-        if not assign:
-            assert issubclass(w[0].category, CompilerDeprecationWarning)
-            assert str(w[0].message) == message.format(dir=snippetcompiler.project_dir)
+        warned: bool = any(match(w) for w in ws)
+        assert warned != assign
 
 
 def test_deprecation_warning_default_constructors(snippetcompiler):
