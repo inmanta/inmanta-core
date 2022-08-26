@@ -662,7 +662,10 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     )
 
     assert result.code == 200, result.result
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)),
+        key=lambda r: r.attributes["key"],
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 9
     assert resource_list[0].attributes == {"key": "key1", "value": "100", "purged": False, "requires": [], "send_event": False}
