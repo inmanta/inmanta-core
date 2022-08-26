@@ -5310,34 +5310,6 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_full_version_base(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> Optional[int]:
-        """
-        Returns the model version for a full export that is the base root of this version. If this is a version for a full
-        export itself, this version is returned. Returns None if the base can not be found, e.g. when it has already been
-        deleted.
-        """
-        query: str = f"""
-            WITH RECURSIVE ancestors(version, base) AS (
-                    VALUES ($1::integer, $1::integer)
-                UNION
-                    SELECT m.version, m.partial_base
-                    FROM ancestors AS a JOIN {cls.table_name()} AS m ON m.environment=$2 AND m.version=a.base
-            )
-            SELECT version FROM ancestors
-            WHERE base IS NULL
-        """
-        return pydantic.parse_obj_as(
-            Optional[int],
-            await cls._fetchval(query, cls._get_value(version), cls._get_value(environment), connection=connection),
-        )
-
-    @classmethod
     async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment

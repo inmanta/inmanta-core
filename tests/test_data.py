@@ -761,53 +761,6 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     assert latest_version.version == 4
 
 
-async def test_model_get_full_export_version(init_dataclasses_and_load_schema) -> None:
-    """
-    Test the behavior of the ConfigurationModel.get_full_version_base() method.
-    """
-    project = data.Project(name="myproject")
-    await project.insert()
-
-    env_one = data.Environment(name="env_one", project=project.id, repo_url="", repo_branch="")
-    await env_one.insert()
-    env_two = data.Environment(name="env_two", project=project.id, repo_url="", repo_branch="")
-    await env_two.insert()
-
-    # full export model 1 -> partial 2
-    await data.ConfigurationModel(environment=env_one.id, version=1, partial_base=None).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=2, partial_base=1).insert()
-    # full export model 3 -> sequential partials 4, 5, 6
-    await data.ConfigurationModel(environment=env_one.id, version=3, partial_base=None).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=4, partial_base=3).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=5, partial_base=4).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=6, partial_base=5).insert()
-    # partial based on older version
-    await data.ConfigurationModel(environment=env_one.id, version=7, partial_base=1).insert()
-    # partial based on version that does not exist anymore
-    await data.ConfigurationModel(environment=env_one.id, version=8, partial_base=0).insert()
-    # invalid (cyclic) bases should be handled gracefully
-    await data.ConfigurationModel(environment=env_one.id, version=9, partial_base=9).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=10, partial_base=11).insert()
-    await data.ConfigurationModel(environment=env_one.id, version=11, partial_base=10).insert()
-    # same version number in other env
-    await data.ConfigurationModel(environment=env_two.id, version=6, partial_base=None).insert()
-
-    # env_one assertions
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 1) == 1
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 2) == 1
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 3) == 3
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 6) == 3
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 7) == 1
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 8) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 9) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 10) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_one.id, 11) is None
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 1000) is None
-
-    # env_two assertions
-    assert await data.ConfigurationModel.get_full_version_base(env_two.id, 6) == 6
-
-
 async def test_model_set_ready(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
