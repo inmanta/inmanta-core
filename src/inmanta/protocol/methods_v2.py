@@ -42,29 +42,33 @@ from .openapi.model import OpenAPI
 )
 def put_partial(
     tid: uuid.UUID,
-    version: int,
     resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
     unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
-) -> None:
+) -> int:
     """
-    Store a new version of the configuration model after a partial recompile.
+    Store a new version of the configuration model after a partial recompile. The partial is applied on top of the latest
+    version. Dynamically acquires a new version and serializes concurrent calls. Python code for the new version is copied
+    from the base version.
 
-    The version number must be obtained through the reserve_version call
-
-    This method is experimental and its interface may receive breaking changes in future releases.
+    Concurrent put_partial calls are safe from race conditions provided that their resource sets are disjunct. A put_version
+    call concurrent with a put_partial is not guaranteed to be safe. It is the caller's responsibility to appropriately
+    serialize them with respect to one another. The caller must ensure the reserve_version + put_version operation is atomic
+    with respect to put_partial. In other words, put_partial must not be called in the window between reserve_version and
+    put_version. If not respected, either the full or the partial export might be immediately stale, and future exports will
+    only be applied on top of the non-stale one.
 
     :param tid: The id of the environment
-    :param version: The version of the configuration model
     :param resource_state: A dictionary with the initial const.ResourceState per resource id
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
     :param **kwargs: The following arguments are supported:
-              * resources: a list of resource objects.
+              * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
+    :return: The newly stored version number.
     """
 
 
