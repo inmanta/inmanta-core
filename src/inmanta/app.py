@@ -509,7 +509,12 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--partial",
         dest="partial_compile",
-        help="Execute a partial export (experimental, may receive breaking changes in future releases).",
+        help=(
+            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
+            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
+            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
+            " the model version."
+        ),
         action="store_true",
         default=False,
     )
