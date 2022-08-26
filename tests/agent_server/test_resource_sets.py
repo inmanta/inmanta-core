@@ -177,11 +177,8 @@ async def test_put_partial_version_allocation(server, client, environment, clien
     # test concurrent calls
     concurrency_base: int = full_version + 5
     nb_versions: int = 5
-    futures: abc.Sequence[abc.Awaitable[int]] = [
-        put_partial_simple() for _ in range(nb_versions)
-    ]
+    futures: abc.Sequence[abc.Awaitable[int]] = [put_partial_simple() for _ in range(nb_versions)]
     concurrency_versions: abc.Sequence[int] = await asyncio.gather(*futures)
-    expected_versions: list[int] = list(range(concurrency_base, concurrency_base + nb_versions))
     assert set(concurrency_versions) == set(range(concurrency_base, concurrency_base + nb_versions))
     for version in concurrency_versions:
         model = await data.ConfigurationModel.get_version(environment, version)
