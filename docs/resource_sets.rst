@@ -1,23 +1,23 @@
 **********************************
 Resource sets and partial compile
 **********************************
-To reduce the time of a compile action, resource sets can be used. Without the use of those, each time a resource is added,
-updated or removed, the entire model is recompiled.
-By using resource sets, the resources that are usually updated together can be grouped in resource sets.
-This way, the time to compile will depend on the size of the targeted resource set. When not using resource sets,
-the time to compile will depend on the size of the entire model.
-This allows to perform certain actions only on the resources of a specific resource set.
-Compiling only some resource sets and not the entire model is called a partial compile.
+Partial compiles provide a way to speed up compilation of small changes to large models. Rather than recompiling the whole
+model, we only recompile a small independent part of it. The resources in this section of the model form a resource set.
 
-While the rest of this document will consider the simple case of manually slimming down the model to allow for faster compiles,
+To make use of partial compiles, the model's resources need to be divided into resource sets. Then, when a change needs to be
+made to a part of the model, it can be trimmed down to contain only those sets that are relevant for the change.  When this
+smaller model is recompiled and exported in partial mode, the changes will be pushed to the server while all other resource
+sets will remain unaffected.
+
+While the rest of this document will consider the simple case of manually trimming down the model to allow for faster compiles,
 the partial compile feature is really mostly useful in combination with additional tooling (e.g. a model generator based on a
 yaml file) or an inmanta extension (e.g. LSM) that provides dynamic entity construction.
 
 Resource sets
 ###########################
 Resource sets are represented in the model by instances of the ``std::ResourceSet`` entity. This entity holds the name
-of the resource set and a list of resources that belong to the resource set.
-The default exporter discovers these ResourceSet instances to determine which resources are part of which resource set.
+of the set and a list of resources that belong to it.
+The default exporter discovers these ``ResourceSet`` instances to determine which resources are part of which set.
 
 The example shown below creates 1000 networks of 5 routers each. Each router is part of its network's resource set.
 
@@ -28,9 +28,9 @@ The example shown below creates 1000 networks of 5 routers each. Each router is 
 Partial compiles
 ###########################
 A partial compile compiles a model that only contains the entities/resources for the resource sets that should be
-updated (and the dependencies of these resources to resources that don't belong to a resource set). It's the
+updated (and the dependencies of these resources others that don't belong to a resource set). It's the
 responsibility of the server to compose a new version of the model using the resources in the previous version of the
-model and the resources that are part of the partial compile.
+model and those that are part of the partial compile.
 
 When a partial export to the server is done, only those resource sets that are present in the partially compiled model will be
 replaced. All resources that belong to other sets will remain unaffected. Resources that aren't part of any resource set are
@@ -83,4 +83,5 @@ Limitations
 * By only doing partial compile it can happen that a shared resource becomes obsolete: several resources that belong to a different resource set can depend on a specific shared resource (not associated with a specific resource set).
   When a partial compile deletes the last resource that was depending on the shared resource, the shared resource will become obsolete, but it is kept as a resource managed by the server because partial compiles cannot delete shared resources.
   To delete shared resources a full compile is needed. A solution to this is to perform scheduled full compiles to garbage-collect these shared resources.
-  To schedule full compiles, the :inmanta.environment-settings:setting:`auto_full_compile` environment setting should be used.
+  To schedule full compiles, the :inmanta.environment-settings:setting:`auto_full_compile` environment setting should be used
+  (e.g. to schedule a daily full compile at 01:00 UTC: `0 1 * * *`).
