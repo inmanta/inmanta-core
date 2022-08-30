@@ -31,12 +31,12 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather, sleep
-from collections import defaultdict
+from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
+from collections import abc, defaultdict
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Awaitable, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -81,6 +81,18 @@ def hash_file(content: bytes) -> str:
     sha1sum.update(content)
 
     return sha1sum.hexdigest()
+
+
+def hash_file_streaming(file_handle: BinaryIO) -> str:
+    h = hashlib.new("sha1")
+    while True:
+        # Reading is buffered, so we can read smaller chunks.
+        chunk = file_handle.read(h.block_size)
+        if not chunk:
+            break
+        h.update(chunk)
+
+    return h.hexdigest()
 
 
 def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
@@ -236,36 +248,47 @@ class Scheduler(object):
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
         self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        # Keep track of tasks that should be awaited before the scheduler is stopped
+        self._await_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
 
-    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
+    def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool = True) -> None:
         """
         Add task that is currently executing to `self._executing_tasks`.
         """
         if action in self._executing_tasks and self._executing_tasks[action]:
             LOGGER.warning("Multiple instances of background task %s are executing simultaneously", action.__name__)
         self._executing_tasks[action].append(task)
+        if not cancel_on_stop:
+            self._await_tasks[action].append(task)
 
     def _notify_done(self, action: TaskMethod, task: asyncio.Task[object]) -> None:
         """
         Called by the callback function of executing task when the task has finished executing.
         """
-        if action in self._executing_tasks:
-            try:
-                self._executing_tasks[action].remove(task)
-            except ValueError:
-                pass
+
+        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task[object]]]) -> None:
+            if action in task_dict:
+                try:
+                    task_dict[action].remove(task)
+                except ValueError:
+                    pass
+
+        for task_dict in [self._executing_tasks, self._await_tasks]:
+            remove_action_from_task_dict(task_dict)
 
     @stable_api
     def add_action(
         self,
         action: TaskMethod,
         schedule: TaskSchedule,
+        cancel_on_stop: bool = True,
     ) -> ScheduledTask:
         """
         Add a new action
 
         :param action: A function to call periodically
         :param schedule: The schedule for this action
+        :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
         """
         assert is_coroutine(action)
 
@@ -290,7 +313,7 @@ class Scheduler(object):
                         action=action(),
                         notify_done_callback=functools.partial(self._notify_done, action),
                     )
-                    self._add_to_executing_tasks(action, task)
+                    self._add_to_executing_tasks(action, task, cancel_on_stop)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -312,7 +335,7 @@ class Scheduler(object):
             del self._scheduled[task]
 
     @stable_api
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
         Stop the scheduler
         """
@@ -328,7 +351,9 @@ class Scheduler(object):
         # Cancel all tasks that are already executing
         for action, tasks in self._executing_tasks.items():
             for task in tasks:
-                task.cancel()
+                if task not in self._await_tasks[action]:
+                    task.cancel()
+        await gather(*[handle for handles in self._await_tasks.values() for handle in handles])
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
@@ -449,11 +474,23 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
     return task
 
 
-async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
+async def retry_limited(
+    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    async def fun_wrapper() -> bool:
+        if inspect.iscoroutinefunction(fun):
+            return await fun(*args, **kwargs)
+        else:
+            return fun(*args, **kwargs)
+
     start = time.time()
-    while time.time() - start < timeout and not fun():
-        await sleep(interval)
-    if not fun():
+    while time.time() - start < timeout and not (await fun_wrapper()):
+        await asyncio.sleep(interval)
+    if not (await fun_wrapper()):
         raise asyncio.TimeoutError()
 
 

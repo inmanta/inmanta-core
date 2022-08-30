@@ -509,7 +509,7 @@ class CompilerService(ServerSlice):
     async def start(self) -> None:
         await super(CompilerService, self).start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -544,7 +544,7 @@ class CompilerService(ServerSlice):
             recompile: TaskMethod = partial(
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
             )
-            self.schedule_cron(recompile, schedule_cron)
+            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
             self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
 
     async def request_recompile(

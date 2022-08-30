@@ -34,9 +34,16 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_PARAM, SLICE_SESSION_MANAGER
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.server import (
+    SLICE_AGENT_MANAGER,
+    SLICE_AUTOSTARTED_AGENT_MANAGER,
+    SLICE_ENVIRONMENT,
+    SLICE_PARAM,
+    SLICE_SESSION_MANAGER,
+)
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.services.environmentservice import EnvironmentService
 from inmanta.util import get_compiler_version
 from utils import (
     UNKWN,
@@ -45,6 +52,7 @@ from utils import (
     assert_equal_ish,
     log_contains,
     log_index,
+    resource_action_consistency_check,
     retry_limited,
     wait_until_logs_are_available,
 )
@@ -215,6 +223,7 @@ async def test_deploy_with_undefined(server, client, resource_container, async_f
         )
 
     await retry_limited(done, 100)
+    await resource_action_consistency_check()
 
 
 async def test_server_restart(
@@ -454,6 +463,7 @@ async def test_spontaneous_repair(
         await asyncio.sleep(0.1)
 
     await verify_deployment_result()
+    await resource_action_consistency_check()
 
 
 async def test_failing_deploy_no_handler(
@@ -717,6 +727,24 @@ async def test_get_set_param(resource_container, environment, client, server):
 
     result = await client.delete_param(tid=environment, id="key10")
     assert result.code == 200
+
+
+async def test_register_setting(environment, client, server):
+    """
+    Test registering a new setting.
+    """
+    new_setting: Setting = Setting(
+        name="a new boolean setting",
+        default=False,
+        typ="bool",
+        validator=convert_boolean,
+        doc="a new setting",
+    )
+    env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
+    await env_slice.register_setting(new_setting)
+    result = await client.get_setting(tid=environment, id="a new boolean setting")
+    assert result.code == 200
+    assert result.result["value"] is False
 
 
 async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
@@ -1102,6 +1130,7 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
 
     logger.info("first version complete")
     await agent.stop()
+    await resource_action_consistency_check()
 
 
 async def test_cross_agent_deps(resource_container, server, client, environment, clienthelper, no_agent_backoff):
@@ -1504,8 +1533,6 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "internal"
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: ""})
-    assert result.code == 200
 
     # Start agent
     a = agent.Agent(hostname=agent_name, environment=env_uuid, code_loader=False)
@@ -1524,7 +1551,7 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "localhost"})
     assert result.code == 200
 
-    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from  to localhost" in caplog.text, 10)
+    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from local: to localhost" in caplog.text, 10)
 
     # Pause agent
     result = await client.agent_action(tid=env_uuid, name="internal", action=const.AgentAction.pause.value)
@@ -1532,10 +1559,10 @@ async def test_autostart_mapping_update_uri(server, client, environment, async_f
 
     # Update agentmap when internal agent is paused
     caplog.clear()
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: ""})
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {agent_name: "local:"})
     assert result.code == 200
 
-    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from localhost to " in caplog.text, 10)
+    await retry_limited(lambda: f"Updating the URI of the endpoint {agent_name} from localhost to local:" in caplog.text, 10)
 
 
 async def test_autostart_clear_environment(server, client, resource_container, environment, no_agent_backoff):

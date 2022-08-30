@@ -321,18 +321,6 @@ class ResourceMinimal(BaseModel):
     class Config:
         extra = Extra.allow
 
-    def incremented_resource_version(self: "ResourceMinimal") -> "ResourceMinimal":
-        """
-        takes a resource and return the same resource with it version incremented
-        (the input resource is modified)
-        """
-        old_res = resources.Id.parse_id(self.id)
-        new_res = resources.Id(
-            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
-        )
-        self.id = new_res.resource_version_str()
-        return self
-
 
 class Resource(BaseModel):
     environment: uuid.UUID
@@ -661,3 +649,12 @@ class Notification(BaseModel):
     uri: str
     read: bool
     cleared: bool
+
+
+class Source(BaseModel):
+    """Model for source code"""
+
+    hash: str
+    is_byte_code: bool
+    module_name: str
+    requirements: List[str]

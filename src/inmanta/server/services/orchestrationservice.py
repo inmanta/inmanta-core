@@ -19,10 +19,11 @@
 import datetime
 import logging
 import uuid
-from collections import defaultdict
+from collections import abc, defaultdict
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
+import asyncpg.connection
 import pydantic
 
 from inmanta import const, data
@@ -130,19 +131,27 @@ class PairedResource:
 
 class PartialUpdateMerger:
     """
-    This class is used to merge the result of a partial compile with the previous resources and resource_sets
+    This class is used to merge the result of a partial compile with previous resources and resource_sets. Takes a partial spec
+    that should be applied on a given base version to form the given new version.
+
+    Any resource version ids this class works with (e.g. within resource objects) already represent the new version. It is the
+    caller's responsibility to ensure this invariant is met for any resource version ids in input objects.
     """
 
     def __init__(
         self,
+        env: data.Environment,
+        base_version: int,
+        new_version: int,
         partial_updates: Sequence[ResourceMinimal],
         resource_sets: Mapping[ResourceIdStr, Optional[str]],
         removed_resource_sets: Sequence[str],
-        env: data.Environment,
     ) -> None:
         self.partial_updates = partial_updates
         self.resource_sets = resource_sets
         self.removed_resource_sets = removed_resource_sets
+        self.base_version: int = base_version
+        self.new_version: int = new_version
         self.env = env
 
     def pair_resources_partial_update_to_old_version(
@@ -151,7 +160,7 @@ class PartialUpdateMerger:
         """
         returns a list of paired resources
 
-        :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set
+        :param old_resources: A dict with as Key an ResourceIdStr and as value a resource and its resource_set.
         """
         paired_resources: List[PairedResource] = []
         for partial_update in self.partial_updates:
@@ -165,18 +174,22 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_old_resources(
-        self,
-    ) -> Dict[ResourceIdStr, ResourceWithResourceSet]:
+    async def _get_base_resources(
+        self, *, connection: asyncpg.connection.Connection
+    ) -> dict[ResourceIdStr, ResourceWithResourceSet]:
         """
-        Makes a call to the DB to get the latest resources in the environment and return a dict
-        where the keys are the Ids of the resources and the values are ResourceWithResourceSete
+        Makes a call to the DB to get the resources for this instance's base version in the environment and return a dict
+        where the keys are the Ids of the resources and the values are ResourceWithResourceSet.
+        Sets the resource objects' version to the new version for the partial export.
         """
-        old_data = await data.Resource.get_resources_in_latest_version(environment=self.env.id)
+        old_data = await data.Resource.get_resources_for_version(
+            environment=self.env.id, version=self.base_version, connection=connection
+        )
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
-            resource: ResourceMinimal = ResourceMinimal(id=res.resource_version_id, **res.attributes)
-            old_resources[res.resource_id] = ResourceWithResourceSet(resource, res.resource_set)
+            new_version_id: Id = Id.parse_id(res.resource_version_id).copy(version=self.new_version)
+            resource: ResourceMinimal = ResourceMinimal(id=new_version_id.resource_version_str(), **res.attributes)
+            old_resources[new_version_id.resource_str()] = ResourceWithResourceSet(resource, res.resource_set)
         return old_resources
 
     def _merge_resources(
@@ -188,13 +201,16 @@ class PartialUpdateMerger:
         resources coming form the partial compile if they don't break any rule:
         - cannot move a resource to another resource set
         - cannot update resources without a resource set.
+
+        :param old_resources: The resources to use as base for the merge. The version for each resource is expected to already
+            be set to the new version for this partial export.
         """
         updated_resource_sets: Set[str] = set(
             res.new_resource.resource_set for res in paired_resources if not res.new_resource.is_shared_resource()
         )
 
         to_keep: Sequence[ResourceMinimal] = [
-            r.resource.incremented_resource_version()
+            r.resource
             for r in old_resources.values()
             if r.resource_set not in self.removed_resource_sets
             and (r.is_shared_resource() or r.resource_set not in updated_resource_sets)
@@ -237,8 +253,19 @@ class PartialUpdateMerger:
         }
         return {**unchanged_resource_sets, **self.resource_sets}
 
-    async def merge_partial_with_old(self) -> Tuple[list[dict[str, object]], Dict[ResourceIdStr, Optional[str]]]:
-        old_resources = await self._get_old_resources()
+    async def apply_partial(
+        self, *, connection: asyncpg.connection.Connection
+    ) -> tuple[list[dict[str, object]], dict[ResourceIdStr, Optional[str]]]:
+        """
+        Applies the partial model's resources on this instance's base version. The caller should acquire appropriate locks on
+        the database connection as defined in the put_partial method definition.
+
+        :param connection: The database connection to use to determine the latest version. Appropriate locks are assumed to be
+            acquired.
+        :return: A tuple of the resources and the resource sets. All resource version ids are set to this instance's new
+            version.
+        """
+        old_resources = await self._get_base_resources(connection=connection)
 
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
@@ -273,7 +300,7 @@ class OrchestrationService(protocol.ServerSlice):
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
-        self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
+        self.schedule(self._purge_versions, opt.server_purge_version_interval.get(), cancel_on_stop=False)
         self.add_background_task(self._purge_versions())
         await super().start()
 
@@ -389,7 +416,10 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
-    ) -> Apireturn:
+        partial_base_version: Optional[int] = None,
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
         """
         :param resources: a list of serialized resources
         :param unknowns: dict with the following structure
@@ -399,7 +429,6 @@ class OrchestrationService(protocol.ServerSlice):
          "source": str
          }
         :param version_info:
-        :return:
         """
 
         if version > env.last_version:
@@ -508,7 +537,9 @@ class OrchestrationService(protocol.ServerSlice):
         resources_to_purge: List[data.Resource] = []
         if not failed and (await env.get(PURGE_ON_DELETE)):
             # search for deleted resources (purge_on_delete)
-            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, list(rv_dict.keys()))
+            resources_to_purge = await data.Resource.get_deleted_resources(
+                env.id, version, list(rv_dict.keys()), connection=connection
+            )
 
             previous_requires = {}
             for res in resources_to_purge:
@@ -563,13 +594,14 @@ class OrchestrationService(protocol.ServerSlice):
                 version_info=version_info,
                 undeployable=undeployable_ids,
                 skipped_for_undeployable=skip_list,
+                partial_base=partial_base_version,
             )
-            await cm.insert()
+            await cm.insert(connection=connection)
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError("The given version is already defined. Versions should be unique.")
 
-        await data.Resource.insert_many(resource_objects)
-        await cm.update_fields(total=cm.total + len(resources_to_purge))
+        await data.Resource.insert_many(resource_objects, connection=connection)
+        await cm.update_fields(total=cm.total + len(resources_to_purge), connection=connection)
 
         for uk in unknowns:
             if "resource" not in uk:
@@ -586,10 +618,10 @@ class OrchestrationService(protocol.ServerSlice):
                 version=version,
                 metadata=uk["metadata"],
             )
-            await up.insert()
+            await up.insert(connection=connection)
 
         for agent in agents:
-            await self.agentmanager_service.ensure_agent_registered(env, agent)
+            await self.agentmanager_service.ensure_agent_registered(env, agent, connection=connection)
 
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
@@ -607,12 +639,22 @@ class OrchestrationService(protocol.ServerSlice):
                 finished=now,
                 messages=[log_line],
             )
-            await ra.insert()
+            await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
 
         self.resource_service.clear_env_cache(env)
 
+    async def _trigger_auto_deploy(
+        self,
+        env: data.Environment,
+        version: int,
+    ) -> None:
+        """
+        Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
+        to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
+        deploying state.
+        """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
@@ -620,8 +662,6 @@ class OrchestrationService(protocol.ServerSlice):
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
-
-        return 200
 
     @handle(methods.put_version, env="tid")
     async def put_version(
@@ -638,20 +678,27 @@ class OrchestrationService(protocol.ServerSlice):
         if not compiler_version:
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
-        return await self._put_version(env, version, resources, resource_state, unknowns, version_info, resource_sets)
+        async with data.Resource.get_connection() as con:
+            async with con.transaction():
+                # Acquire a lock that conflicts with the lock acquired by put_partial.
+                await data.Resource.lock_table(data.TableLockMode.ROW_EXCLUSIVE, connection=con)
+                await self._put_version(
+                    env, version, resources, resource_state, unknowns, version_info, resource_sets, connection=con
+                )
+        await self._trigger_auto_deploy(env, version)
+        return 200
 
     @handle(methods_v2.put_partial, env="tid")
     async def put_partial(
         self,
         env: data.Environment,
-        version: int,
         resources: object,
         resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
         unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
-    ) -> None:
+    ) -> int:
         if resource_state is None:
             resource_state = {}
         if unknowns is None:
@@ -668,6 +715,12 @@ class OrchestrationService(protocol.ServerSlice):
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
 
+        # validate resources before any side effects take place
+        for r in resources:
+            rid = Id.parse_id(r.id)
+            if rid.get_version() != 0:
+                raise BadRequest("Resources for partial export should not contain version information")
+
         intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
         if intersection:
             raise BadRequest(
@@ -675,17 +728,49 @@ class OrchestrationService(protocol.ServerSlice):
                 f"{intersection}"
             )
 
-        merger = PartialUpdateMerger(resources, resource_sets, removed_resource_sets, env)
-        merged_resources, merged_resource_sets = await merger.merge_partial_with_old()
-        await self._put_version(
-            env,
-            version,
-            merged_resources,
-            resource_state,
-            unknowns,
-            version_info,
-            merged_resource_sets,
-        )
+        async with data.Resource.get_connection() as con:
+            async with con.transaction():
+                # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
+                await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
+
+                # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
+                version: int = await env.get_next_version(connection=con)
+
+                # set version on input resources
+                for r in resources:
+                    r.id = Id.parse_id(r.id).copy(version=version).resource_version_str()
+
+                current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(
+                    env.id, limit=1
+                )
+                if not current_versions:
+                    raise BadRequest("A partial export requires a base model but no versions have been exported yet.")
+                base_version: int = current_versions[0].version
+
+                merger = PartialUpdateMerger(
+                    env=env,
+                    base_version=base_version,
+                    new_version=version,
+                    partial_updates=resources,
+                    resource_sets=resource_sets,
+                    removed_resource_sets=removed_resource_sets,
+                )
+                merged_resources, merged_resource_sets = await merger.apply_partial(connection=con)
+                await data.Code.copy_versions(env.id, base_version, version, connection=con)
+
+                await self._put_version(
+                    env,
+                    version,
+                    merged_resources,
+                    resource_state,
+                    unknowns,
+                    version_info,
+                    merged_resource_sets,
+                    partial_base_version=base_version,
+                    connection=con,
+                )
+        await self._trigger_auto_deploy(env, version)
+        return version
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
@@ -694,15 +779,17 @@ class OrchestrationService(protocol.ServerSlice):
         version_id: int,
         push: bool,
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Apireturn:
-        model = await data.ConfigurationModel.get_version(env.id, version_id)
+        model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        await model.update_fields(released=True, result=const.VersionState.deploying)
+        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
         if model.total == 0:
-            await model.mark_done()
+            await model.mark_done(connection=connection)
             return 200, {"model": model}
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
@@ -724,6 +811,7 @@ class OrchestrationService(protocol.ServerSlice):
             messages=[],
             change=const.Change.nochange,
             send_events=False,
+            connection=connection,
         )
 
         skippable = await model.get_skipped_for_undeployable()
@@ -741,18 +829,19 @@ class OrchestrationService(protocol.ServerSlice):
             messages=[],
             change=const.Change.nochange,
             send_events=False,
+            connection=connection,
         )
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id)
-            await self.autostarted_agent_manager._ensure_agents(env, agents)
+            agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+            await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
             for agent in agents:
                 client = self.agentmanager_service.get_agent_client(env.id, agent)
                 if client is not None:
                     if not agent_trigger_method:
-                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD)
+                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
                         incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
                     else:
                         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy

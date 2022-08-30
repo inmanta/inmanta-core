@@ -188,6 +188,8 @@ class Compiler(object):
         project.load()
         statements, blocks = project.get_complete_ast()
 
+        project.log_installed_modules()
+
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
 

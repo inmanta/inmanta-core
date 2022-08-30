@@ -34,14 +34,20 @@ from inmanta import moduletool
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
 from inmanta.moduletool import V2ModuleBuilder
+from packaging import version
+from utils import v1_module_from_template
 
 
 def run_module_build_soft(
-    module_path: str, set_path_argument: bool, output_dir: Optional[str] = None, dev_build: bool = False
+    module_path: str,
+    set_path_argument: bool,
+    output_dir: Optional[str] = None,
+    dev_build: bool = False,
+    byte_code: bool = False,
 ) -> str:
     if not set_path_argument:
         module_path = None
-    return moduletool.ModuleTool().build(module_path, output_dir, dev_build=dev_build)
+    return moduletool.ModuleTool().build(module_path, output_dir, dev_build=dev_build, byte_code=byte_code)
 
 
 def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
@@ -63,13 +69,14 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 
 
 @pytest.mark.parametrize_any(
-    "module_name, is_v2_module, set_path_argument",
+    "module_name, is_v2_module, set_path_argument, byte_code",
     [
-        ("minimalv2module", True, True),
-        ("minimalv2module", True, False),
-        ("elaboratev2module", True, True),
-        ("elaboratev2module", True, False),
-        ("elaboratev1module", False, False),
+        ("minimalv2module", True, True, False),
+        ("minimalv2module", True, False, False),
+        ("elaboratev2module", True, True, False),
+        ("elaboratev2module", True, False, False),
+        ("elaboratev1module", False, False, False),
+        ("elaboratev1module", False, False, True),
     ],
 )
 def test_build_v2_module(
@@ -79,6 +86,7 @@ def test_build_v2_module(
     module_name: str,
     is_v2_module: bool,
     set_path_argument: bool,
+    byte_code: bool,
     monkeypatch: MonkeyPatch,
 ) -> None:
     """
@@ -95,7 +103,7 @@ def test_build_v2_module(
 
     if not set_path_argument:
         monkeypatch.chdir(module_copy_dir)
-    run_module_build_soft(module_copy_dir, set_path_argument)
+    run_module_build_soft(module_copy_dir, set_path_argument, byte_code=byte_code)
 
     dist_dir = os.path.join(module_copy_dir, "dist")
     dist_dir_content = os.listdir(dist_dir)
@@ -107,8 +115,15 @@ def test_build_v2_module(
     with zipfile.ZipFile(wheel_file) as zip:
         zip.extractall(extract_dir)
 
+    if byte_code:
+        assert "linux_x86_64" in wheel_file
+    else:
+        assert "none-any" in wheel_file
+
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
-    assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
+    assert os.path.exists(
+        os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py" if not byte_code else "__init__.pyc")
+    )
     assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
 
     if "elaborate" in module_name:
@@ -116,8 +131,16 @@ def test_build_v2_module(
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
-        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
+        assert os.path.exists(
+            os.path.join(
+                extract_dir, "inmanta_plugins", module_name, "other_module.py" if not byte_code else "other_module.pyc"
+            )
+        )
+        assert os.path.exists(
+            os.path.join(
+                extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py" if not byte_code else "__init__.pyc"
+            )
+        )
 
 
 def test_build_v2_module_set_output_directory(tmpdir, modules_v2_dir: str) -> None:
@@ -212,3 +235,24 @@ def test_create_dev_build_of_v2_module(tmpdir, modules_v2_dir: str) -> None:
     shutil.copytree(module_dir, module_copy_dir)
     path_to_wheel = run_module_build_soft(module_copy_dir, set_path_argument=True, dev_build=True)
     assert re.search(r"\.dev[0-9]{14}", path_to_wheel)
+
+
+@pytest.mark.parametrize_any("explicit", [True, False])
+def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explicit: bool) -> None:
+    """
+    Test whether the functionality to create a development build of a module that already has a dev tag, works correctly.
+    """
+    module_name = "mypretaggedmodule"
+    new_mod_dir: str = str(tmpdir.join(module_name))
+    # start from a v1 module with a tag
+    v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        new_mod_dir,
+        new_name=module_name,
+        new_version=version.Version("1.2.3.dev0"),
+    )
+    path_to_wheel = run_module_build_soft(new_mod_dir, set_path_argument=True, dev_build=explicit)
+    if explicit:
+        assert re.search(r"1.2.3\.dev[0-9]{14}", path_to_wheel)
+    else:
+        assert "1.2.3.dev0" in path_to_wheel

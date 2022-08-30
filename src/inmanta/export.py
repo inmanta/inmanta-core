@@ -25,6 +25,8 @@ import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
+import pydantic
+
 import inmanta.model as model
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
@@ -86,7 +88,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
 
     for file in res.result["files"]:
         content = code_manager.get_file_content(file)
-        res = conn.upload_file(id=file, content=base64.b64encode(content.encode()).decode("ascii"))
+        res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
@@ -137,7 +139,8 @@ class Exporter(object):
         self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
-        self._version = 0
+        # Actual version (placeholder for partial export) is set as soon as export starts.
+        self._version: Optional[int] = None
         self._scope = None
         self.failed = False
 
@@ -333,8 +336,8 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self, no_commit: bool = False) -> int:
-        if no_commit:
+    def get_version(self, no_commit: bool = False, partial_compile: bool = False) -> int:
+        if no_commit or partial_compile:
             return 0
         tid = cfg_env.get()
         if tid is None:
@@ -360,7 +363,7 @@ class Exporter(object):
         resource_sets_to_remove: Optional[Sequence[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState], Optional[dict[str, object]]]]:
         """
-        Run the export functions
+        Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
@@ -368,7 +371,8 @@ class Exporter(object):
 
         self.types = types
         self.scopes = scopes
-        self._version = self.get_version(no_commit)
+
+        self._version = self.get_version(no_commit, partial_compile)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -414,12 +418,15 @@ class Exporter(object):
             if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
-            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
+            self._version = self.commit_resources(
+                self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all
+            )
             LOGGER.info("Committed resources with version %d" % self._version)
 
+        exported_version: int = self._version
         if include_status:
-            return self._version, self._resources, self._resource_state, model
-        return self._version, self._resources
+            return exported_version, self._resources, self._resource_state, model
+        return exported_version, self._resources
 
     def add_resource(self, resource: Resource) -> None:
         """
@@ -484,23 +491,31 @@ class Exporter(object):
 
     def commit_resources(
         self,
-        version: int,
+        version: Optional[int],
         resources: List[Dict[str, str]],
         metadata: Dict[str, str],
         model: Dict,
         partial_compile: bool,
         resource_sets_to_remove: List[str],
-    ) -> None:
+    ) -> int:
         """
         Commit the entire list of resources to the configuration server.
+
+        :return: The version for which resources were committed.
         """
         tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
             raise Exception("The environment for this model should be set!")
 
+        if version is None and not partial_compile:
+            raise Exception("Full export requires version to be set")
+
         conn = protocol.SyncClient("compiler")
-        self.deploy_code(conn, tid, version)
+
+        # partial exports use the same code as the version they're based on
+        if not partial_compile:
+            self.deploy_code(conn, tid, version)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -537,7 +552,6 @@ class Exporter(object):
         if partial_compile:
             result = conn.put_partial(
                 tid=tid,
-                version=version,
                 resources=resources,
                 resource_sets=self._resource_sets,
                 unknowns=unknown_parameters,
@@ -560,6 +574,12 @@ class Exporter(object):
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
+
+        if version is None:
+            assert result.result is not None
+            return pydantic.parse_obj_as(int, result.result["data"])
+        else:
+            return version
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """

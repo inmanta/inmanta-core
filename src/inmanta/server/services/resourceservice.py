@@ -135,7 +135,9 @@ class ResourceService(protocol.ServerSlice):
         self.agentmanager_service = cast("AgentManager", server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
+        self.schedule(
+            data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get(), cancel_on_stop=False
+        )
         await super().start()
 
     async def stop(self) -> None:
@@ -527,6 +529,8 @@ class ResourceService(protocol.ServerSlice):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
+        *,
+        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # can update resource state
         is_resource_state_update = action in STATE_UPDATE
@@ -574,7 +578,7 @@ class ResourceService(protocol.ServerSlice):
                     )
 
         resources: List[data.Resource]
-        async with data.Resource.get_connection() as connection:
+        async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
                 resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
