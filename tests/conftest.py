@@ -80,7 +80,7 @@ import uuid
 import venv
 from configparser import ConfigParser
 from types import ModuleType
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import asyncpg
 import pkg_resources
@@ -108,7 +108,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath
-from inmanta.export import cfg_env, unknown_parameters
+from inmanta.export import cfg_env, unknown_parameters, ResourceDict
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -1126,7 +1126,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         return self._do_export(
             deploy=False,
             include_status=include_status,
@@ -1146,7 +1146,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         """
         helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
@@ -1191,7 +1191,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         return await off_main_thread(
             lambda: self._do_export(
                 deploy=True,

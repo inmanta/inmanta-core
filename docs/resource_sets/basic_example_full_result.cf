@@ -10,7 +10,7 @@ index Network(id)
 
 implementation network_resource_set for Network:
     # The Router resources for a network are all part of the same resource set
-    set = std::ResourceSet(name="network-{{ self.network.id }}")
+    set = std::ResourceSet(name="network-{{ self.id }}")
     for router in self.routers:
         set.resources += router
     end
@@ -32,5 +32,12 @@ implement Network using network_resource_set
 implement Router using router
 
 
-# turns out network 0 only needs one router
+# create network 0 with only one router
 Router(network=Network(id=0), id=0)
+# create 999 networks with 5 routers each
+for i in std::sequence(999, start=1):
+    network = Network(id=i)
+    for j in std::sequence(5):
+        Router(network=network, id=j)
+    end
+end

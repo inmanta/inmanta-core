@@ -220,9 +220,9 @@ class Exporter(object):
                     empty_set = False
                 else:
                     LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        "resource %s is part of ResourceSet %s but will not be exported.",
                         str(resource_in_set),
-                        str(resource_set_instance),
+                        str(resource_set_instance.get_attribute("name").get_value()),
                     )
             if empty_set:
                 self._empty_resource_sets.append(name)
@@ -358,7 +358,7 @@ class Exporter(object):
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
-    ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState], Optional[dict[str, object]]]]:
         """
         Run the export functions
         """

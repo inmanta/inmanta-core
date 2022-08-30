@@ -10,7 +10,7 @@ index Network(id)
 
 implementation network_resource_set for Network:
     # The Router resources for a network are all part of the same resource set
-    set = std::ResourceSet(name="network-{{ self.network.id }}")
+    set = std::ResourceSet(name="network-{{ self.id }}")
     for router in self.routers:
         set.resources += router
     end
