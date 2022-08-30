@@ -76,7 +76,7 @@ Exporting a partial model to the server
 Two arguments can be passed to the ``inmanta export`` command in order to export a partial model to the server:
 
 - ``--partial`` To specify that the model being compiled only contains the resources that need to be updated in relation to the previous version of the model.
-- ``--delete-resource-set <resource-set-name>`` This option, which accepts multiple passes, instructs the model to remove the resource set with the specified name. Only in conjunction with the preceding choice may this option be utilized. Note that utilizing a ``std::ResourceSet`` that includes no resources allows resource sets to be implicitly deleted during a partial compilation.
+- ``--delete-resource-set <resource-set-name>`` This option, which may be used more than once, instructs the model to remove the resource set with the specified name. Only in conjunction with the preceding choice may this option be utilized. Note that utilizing a ``std::ResourceSet`` that includes no resources allows resource sets to be implicitly deleted during a partial compilation.
 
 
 Limitations
