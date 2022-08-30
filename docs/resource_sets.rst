@@ -85,7 +85,7 @@ Two arguments can be passed to the ``inmanta export`` command in order to export
 Limitations
 *************
 
-* The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these restrictions are met.
+* The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these constraints are met.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete because numerous resources from distinct resource sets may depend on the same shared resource (not associated with a specific resource set).
   The shared resource will become obsolete when a partial compile deletes the last resource that depended on it, but it is preserved as a server-managed resource because partial compiles cannot delete shared resources.
   A full compile is required to remove shared resources. Scheduled complete compilations that ``garbage-collect`` these shared resources are one way to fix this.
