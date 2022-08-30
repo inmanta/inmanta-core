@@ -51,8 +51,11 @@ The comparable complete model would seem as follows:
     :caption: main.cf
 
 Keep in mind that each resource set contains a collection of independent resources.
-Since the router instances for other sets do not exist at compilation time, it would be impossible to enforce a router index that was based just on the id and excluded the network.
-The liability of ensuring that resource sets are consistently defined for a set of resources that is distinct (is not part of the partial compile) from other sets remains with the model developer.
+In this example scenario, since the router instances for other sets do not exist at compilation time, it would be impossible to enforce a router index that was based just on the id and excluded the network.
+
+The model developer is accountable for the following: Each resource set in a partial compilation needs to be separate from and independent of the resource sets that aren't included in the partial model.
+When performing partial compilations, this is a crucial assumption. If this condition is not satisfied, partial compilations may end up being incompatible with one another (a full compilation with the identical changes would fail),
+as the index example shows. This can result in undefinable behavior.
 
 
 Constraints and rules
