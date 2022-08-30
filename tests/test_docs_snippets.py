@@ -45,6 +45,7 @@ async def test_docs_snippet_partial_compile(snippetcompiler, server, client, env
     snippets_dir: str = os.path.join(DOCS_DIR, "resource_sets")
     version: int
 
+    # TODO: less hackish approach as in tests/test_export.py::test_resource_set
     def build_model(base: str) -> str:
         """
         Create a model from the base one, adding exportable resources.
