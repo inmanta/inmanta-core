@@ -29,9 +29,9 @@ Partial compiles
 ###########################
 
 When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as their dependencies on additional resources that aren't part of a resource set).
-It is the server's responsibility to create a new version of the model utilizing the resources from the old version and those from the partial compile.
+It is the server's responsibility to create a new version of the desired state utilizing the resources from the old version and those from the partial compile.
 
-Only the resource sets that are present in the partially built model will be replaced when a partial export
+Only the resource sets that are present in the partially compiled model will be replaced when a partial export
 to the server is performed. Other sets' resources won't be impacted in any way.
 Shared resources are those that aren't a part of any resource collection and can always be added.
 
@@ -50,7 +50,7 @@ The comparable complete model would seem as follows:
     :language: inmanta
     :caption: main.cf
 
-Keep in mind that each resource set contains a collection of separate resources.
+Keep in mind that each resource set contains a collection of independent resources.
 Since the router instances for other sets do not exist at compilation time, it would be impossible to enforce a router index that was based just on the id and excluded the network.
 The liability of ensuring that resource sets are consistently defined for a set of resources that is distinct (is not part of the partial compile) from other sets remains with the model developer.
 
@@ -62,7 +62,7 @@ Some restrictions and guidelines were implemented to guarantee that partial comp
 
 * A resource cannot be a part of more than one resource set at once.
 * A resource does not have to be part of a resource set.
-* Resources cannot be migrated using a partial compile to a different resource set. A complete compilation is necessary for this process.
+* Resources cannot be migrated using a partial compile to a different resource set. A full compile is necessary for this process.
 * A resource set that is contained in a partial export must be complete, meaning that all of its resources must be present.
 * Resources that weren't assigned to a specific resource set can never be updated or removed by a partial build. Although, adding resources is allowed.
 * The new version of the model that emerges from a partial compilation should have a dependency graph that is closed within the resource sets that were exported.
@@ -82,9 +82,9 @@ Two arguments can be passed to the ``inmanta export`` command in order to export
 Limitations
 *************
 
-* The compiler cannot verify all constraints that would be verified when a full build is run whenever partial compiles are used. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these restrictions are met.
+* The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these restrictions are met.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete because numerous resources from distinct resource sets may depend on the same shared resource (not associated with a specific resource set).
   The shared resource will become obsolete when a partial compile deletes the last resource that depended on it, but it is preserved as a server-managed resource because partial compiles cannot delete shared resources.
-  A complete compile is required to remove shared resources. Scheduled complete compilations that ``garbage-collect`` these shared resources are one way to fix this.
+  A full compile is required to remove shared resources. Scheduled complete compilations that ``garbage-collect`` these shared resources are one way to fix this.
   The :inmanta.environment-settings:setting:`auto_full_compile` environment setting is used to schedule full compilations.
   As an example, to plan a daily full compile for 01:00 UTC, use the ``auto full compile`` environment setting:  "0 1 * * *".
