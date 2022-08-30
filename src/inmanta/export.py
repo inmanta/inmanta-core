@@ -575,7 +575,7 @@ class Exporter(object):
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
 
-        if version is None:
+        if version == 0:
             assert result.result is not None
             return pydantic.parse_obj_as(int, result.result["data"])
         else:

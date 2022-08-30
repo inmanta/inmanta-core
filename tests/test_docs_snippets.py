@@ -53,7 +53,7 @@ async def test_docs_snippet_partial_compile(snippetcompiler, server, client, env
         resources_addition: str = """
             host = std::Host(name="test", os=std::linux)
 
-            implementation std_resources for Router:
+            implementation std_resource for Router:
                 file = std::ConfigFile(
                     host=host, path="{{ self.network.id }}-{{ self.id }}", content=""
                 )
@@ -61,7 +61,7 @@ async def test_docs_snippet_partial_compile(snippetcompiler, server, client, env
                 set.resources += file
             end
 
-            implement Router using std_resources
+            implement Router using std_resource
         """.strip()
         return "\n".join((base, resources_addition))
 
