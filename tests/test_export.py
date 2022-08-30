@@ -490,6 +490,7 @@ b = Res(name="the_resource_b")
 c = Res(name="the_resource_c")
 d = Res(name="the_resource_d")
 e = Res(name="the_resource_e")
+y = Res(name="the_resource_y")
 z = Res(name="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
@@ -505,6 +506,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_c": "resource_set_1",
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
+            "the_resource_y": None,
             "the_resource_z": None,
         },
     )
@@ -521,6 +523,9 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     a = Res(name="the_resource_a")
     c2 = Res(name="the_resource_c2")
     f = Res(name="the_resource_f")
+    # y is a shared resource, identical to the one in previous compile
+    y = Res(name="the_resource_y")
+    # z is a shared resource not present in this model
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
             """,
@@ -535,6 +540,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_f": "resource_set_4",
+            "the_resource_y": None,
             "the_resource_z": None,
         },
     )
