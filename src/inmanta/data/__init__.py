@@ -105,6 +105,20 @@ class InvalidQueryType(Exception):
         self.message = message
 
 
+class RowLockMode(enum.Enum):
+    """
+    Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
+    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
+    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
+    See relevant data classes' docstrings for appropriate lock orderings.
+    """
+
+    FOR_UPDATE: str = "FOR UPDATE"
+    FOR_NO_KEY_UPDATE: str = "FOR NO KEY UPDATE"
+    FOR_SHARE: str = "FOR SHARE"
+    FOR_KEY_SHARE: str = "FOR KEY SHARE"
+
+
 class RangeOperator(enum.Enum):
     LT = "<"
     LE = "<="
@@ -1369,10 +1383,28 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
+    async def lock_by_id(
+        cls: Type[TBaseDocument],
+        doc_id: uuid.UUID,
+        mode: RowLockMode,
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> None:
+        """
+        Acquire a row-level lock on a single environment. Callers should adhere to a consistent locking order accross
+        transactions.
+        Passing a connection object is mandatory. The connection is expected to be in a transaction.
+        """
+        await cls.get_list(id=doc_id, lock=mode, connection=connection)
+
+    @classmethod
     async def get_one(
-        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query: object
+        cls: Type[TBaseDocument],
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+        **query: object,
     ) -> Optional[TBaseDocument]:
-        results = await cls.get_list(connection=connection, **query)
+        results = await cls.get_list(connection=connection, lock=lock, **query)
         if results:
             return results[0]
         return None
@@ -1419,6 +1451,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1431,6 +1464,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=None,
             **query,
@@ -1444,6 +1478,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         columns: Optional[List[str]] = None,
         **query: object,
@@ -1470,6 +1505,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if offset is not None and offset > 0:
             sql_query += " OFFSET $" + str(len(values) + 1)
             values.append(int(offset))
+        if lock is not None:
+            sql_query += f" {lock.value}"
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
@@ -1483,6 +1520,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1519,6 +1557,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if limit is not None and limit > 0:
             sql_query += " LIMIT $" + str(len(values) + 1)
             values.append(int(limit))
+        if lock is not None:
+            sql_query += f" {lock.value}"
 
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
@@ -2479,6 +2519,7 @@ RETURNING last_version;
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
         **query: object,
@@ -2494,6 +2535,7 @@ RETURNING last_version;
                 limit=limit,
                 offset=offset,
                 no_obj=no_obj,
+                lock=lock,
                 connection=connection,
                 **query,
             )
@@ -2503,6 +2545,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             **query,
         )
@@ -2515,6 +2558,7 @@ RETURNING last_version;
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -2529,6 +2573,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=columns,
             **query,
@@ -3101,8 +3146,14 @@ class Agent(BaseDocument):
         return field_dict
 
     @classmethod
-    async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
-        obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
+    async def get(
+        cls,
+        env: uuid.UUID,
+        endpoint: str,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> "Agent":
+        obj = await cls.get_one(environment=env, name=endpoint, connection=connection, lock=lock)
         return obj
 
     @classmethod
@@ -3125,7 +3176,7 @@ class Agent(BaseDocument):
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
-                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR UPDATE",
                     cls._get_value(env),
                     connection=con,
                 )
@@ -3191,7 +3242,9 @@ class Agent(BaseDocument):
         :param now: Timestamp of this failover
         """
         for (endpoint, sid) in endpoints_with_new_primary:
-            agent = await cls.get(env, endpoint, connection=connection)
+            # Lock mode is required because we will update in this transaction
+            # Deadlocks with cleanup otherwise
+            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
             if agent is None:
                 continue
 
@@ -5285,6 +5338,7 @@ class ConfigurationModel(BaseDocument):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: bool = False,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
@@ -5306,6 +5360,7 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
+        lock_statement = f" {lock.value} " if lock is not None else ""
         query_string = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
@@ -5319,7 +5374,8 @@ class ConfigurationModel(BaseDocument):
                     GROUP BY c.environment, c.version
                     {order_by_statement}
                     {limit_statement}
-                    {offset_statement}"""
+                    {offset_statement}
+                    {lock_statement}"""
         query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
         for record in query_result:
@@ -5850,6 +5906,7 @@ class DryRun(BaseDocument):
             order_by_column=order_by_column,
             order=order,
             columns=["id", "environment", "model", "date", "total", "todo"],
+            lock=None,
             **query,
         )
         return [

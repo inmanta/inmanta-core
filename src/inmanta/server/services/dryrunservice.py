@@ -161,7 +161,9 @@ class DyrunService(protocol.ServerSlice):
 
             query_args["model"] = version
 
-        dryruns = await data.DryRun.get_list(**query_args)
+        dryruns = await data.DryRun.get_list(
+            order_by_column=None, order=None, limit=None, offset=None, no_obj=None, lock=None, connection=None, **query_args
+        )
 
         return (
             200,
