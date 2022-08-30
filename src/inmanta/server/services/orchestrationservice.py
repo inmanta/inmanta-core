@@ -91,10 +91,6 @@ class ResourceWithResourceSet:
         old_resource_dict = other.resource.dict()
         attr_names_new_resource = set(new_resource_dict.keys()).difference({"id", "version"})
         attr_names_old_resource = set(old_resource_dict.keys()).difference({"id", "version"})
-        if attr_names_new_resource != attr_names_old_resource or any(
-            new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
-        ):
-            print(new_resource_dict, old_resource_dict, attr_names_new_resource)
         return attr_names_new_resource != attr_names_old_resource or any(
             new_resource_dict[k] != old_resource_dict[k] for k in attr_names_new_resource
         )
