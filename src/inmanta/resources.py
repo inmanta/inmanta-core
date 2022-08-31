@@ -532,6 +532,12 @@ class Id(object):
 
         self._version = version
 
+    def copy(self, *, version: int) -> "Id":
+        """
+        Creates a copy of this resource id for another model version.
+        """
+        return Id(self.entity_type, self.agent_name, self.attribute, self.attribute_value, version)
+
     def __str__(self) -> str:
         if self._version > 0:
             return self.resource_version_str()
@@ -633,6 +639,15 @@ class Id(object):
         Check whether this object represents a resource version id
         """
         return self.version != 0
+
+    @classmethod
+    def set_version_in_id(cls, id_str: Union[ResourceVersionIdStr, ResourceIdStr], new_version: int) -> ResourceVersionIdStr:
+        """
+        Return a copy of the given id_str with the version number set to new_version.
+        """
+        parsed_id = cls.parse_id(id_str)
+        new_id = parsed_id.copy(version=new_version)
+        return new_id.resource_version_str()
 
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)

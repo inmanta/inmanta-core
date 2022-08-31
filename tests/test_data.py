@@ -1969,6 +1969,13 @@ async def test_code(init_dataclasses_and_load_schema):
     code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})
     await code3.insert()
 
+    # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
+    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+    await data.ConfigurationModel(environment=env2.id, version=code3.version).insert()
+    await data.Code(environment=env2.id, resource="std::File", version=code3.version, source_refs={}).insert()
+    await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
+
     def assert_match_code(code1, code2):
         assert code1 is not None
         assert code2 is not None
@@ -1999,7 +2006,26 @@ async def test_code(init_dataclasses_and_load_schema):
     code = code_list[0]
     assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
     code_list = await data.Code.get_versions(env.id, version + 2)
+    assert len(code_list) == 1
+    assert (code_list[0].environment, code_list[0].resource, code_list[0].version, code_list[0].source_refs) == (
+        code3.environment,
+        code3.resource,
+        code3.version + 1,
+        code3.source_refs,
+    )
+    code_list = await data.Code.get_versions(env.id, version + 3)
     assert len(code_list) == 0
+
+    # env2
+    code_list = await data.Code.get_versions(env2.id, code3.version)
+    assert len(code_list) == 1
+    code_list = await data.Code.get_versions(env2.id, code3.version + 1)
+    assert len(code_list) == 0
+
+    # make sure deleting the base code does not delete the copied code
+    await code3.delete()
+    assert len(await data.Code.get_versions(env.id, code3.version)) == 0
+    assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
 async def test_parameter(init_dataclasses_and_load_schema):

@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,14 +16,10 @@
     Contact: code@inmanta.com
 """
 
-COMPILER_VERSION = "2022.4"
-RUNNING_TESTS = False
-"""
-    This is enabled/disabled by the test suite when tests are run.
-    This variable is used to disable certain features that shouldn't run during tests.
-"""
+from asyncpg import Connection
 
-if __name__ == "__main__":
-    import inmanta.app
 
-    inmanta.app.app()
+async def update(connection: Connection) -> None:
+    async with connection.transaction():
+        # Don't add foreign key to allow for deletion (cleanup) of base version
+        await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN partial_base int DEFAULT NULL;")

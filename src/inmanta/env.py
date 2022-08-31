@@ -935,7 +935,9 @@ class ActiveEnv(PythonEnvironment):
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
         """
-        Get the location of the init file for a Python module within the active environment.
+        Get the location of the init file for a Python module within the active environment. Returns the file path as observed
+        by Python. For editable installs, this may or may not be a symlink to the actual location (see implementation
+        mechanisms in setuptools docs: https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 
         :return: A tuple of the path and the associated loader, if the module is found.
         """
@@ -1137,8 +1139,6 @@ import sys
 
 # Ensure inheritance from all parent venvs + process their .pth files
 {add_site_dir_statements}
-# Also set the PYTHONPATH environment variable for any subprocess
-os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
         script_as_oneliner = "; ".join(
             [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
@@ -1174,9 +1174,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         sys.real_prefix = sys.prefix
         sys.prefix = base
         self._update_sys_path()
-
-        # Also set the python path environment variable for any subprocess
-        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     def install_from_index(
         self,

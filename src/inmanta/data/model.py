@@ -312,26 +312,45 @@ class ResourceMinimal(BaseModel):
     id: ResourceVersionIdStr
 
     @classmethod
+    def create_with_version(cls, new_version: int, id: ResourceIdStr, attributes: Dict[str, object]) -> "ResourceMinimal":
+        """
+        Create a new ResourceMinimal from the given attributes, but ensure that the given version
+        is set on all the fields that hold the version number of the model.
+        """
+        if "requires" not in attributes:
+            raise ValueError("'requires' attribute is missing in kwargs")
+        new_attributes = attributes.copy()
+        new_attributes["version"] = new_version
+        new_attributes["id"] = resources.Id.set_version_in_id(id, new_version)
+        new_attributes["requires"] = [
+            resources.Id.set_version_in_id(r, new_version=new_version) for r in attributes["requires"]
+        ]
+        return cls(**new_attributes)
+
+    def copy_with_new_version(self, new_version: int) -> "ResourceMinimal":
+        """
+        Create a new ResourceMinimal by cloning this ResourceMinimal. The returned object
+        will have the given new_version set on all the fields that hold the version number
+        of the mode.
+        """
+        return self.create_with_version(
+            new_version=new_version,
+            id=resources.Id.parse_id(self.id).resource_str(),
+            attributes={k: v for k, v in self.dict().items() if k != "id"},
+        )
+
+    @classmethod
     @validator("id")
     def id_is_resource_version_id(cls, v):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
 
+    def get_resource_id_str(self) -> ResourceIdStr:
+        return resources.Id.parse_id(self.id).resource_str()
+
     class Config:
         extra = Extra.allow
-
-    def incremented_resource_version(self: "ResourceMinimal") -> "ResourceMinimal":
-        """
-        takes a resource and return the same resource with it version incremented
-        (the input resource is modified)
-        """
-        old_res = resources.Id.parse_id(self.id)
-        new_res = resources.Id(
-            old_res.entity_type, old_res.agent_name, old_res.attribute, old_res.attribute_value, old_res.version + 1
-        )
-        self.id = new_res.resource_version_str()
-        return self
 
 
 class Resource(BaseModel):

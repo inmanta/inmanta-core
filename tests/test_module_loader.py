@@ -27,7 +27,7 @@ import py
 import pytest
 from pkg_resources import Requirement
 
-from inmanta import loader, plugins, resources
+from inmanta import const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
@@ -1323,3 +1323,32 @@ class Test(Resource):
                 assert info.path[-4:] == ".pyc"
 
     assert module_code
+
+
+@pytest.mark.skipif(
+    "inmanta-core" in process_env.get_installed_packages(only_editable=True),
+    reason="Inmanta package protection in env.install_* not compatible with editable core in non-inherited venv.",
+)
+@pytest.mark.slowtest
+async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local, py.path.local], modules_v2_dir: str) -> None:
+    """
+    One possible implementation mechanism for editable installs
+    (https://setuptools.pypa.io/en/latest/userguide/development_mode.html#how-editable-installations-work) is to use a farm of
+    symlinks to the actual source files. Since setuptools is not necessarily aware of a module's non-Python files we need to
+    ensure our module discovery implementation is robust against this. Because setuptools provides no guarantees as to which
+    mechanism is used under which circumstances, we mimic such an editable install here.
+    """
+    module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
+    # start with non-editable install to populate site-packages with appropriate metadata (editable install would create pth
+    # files if a different mechanism is picked so we want to avoid that).
+    process_env.install_from_source([LocalPackagePath(path=module_dir, editable=False)])
+    # replace module dir in site-packages with symlink
+    rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
+    module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)
+    shutil.rmtree(module_dir_site_packages)
+    os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
+
+    # verify that module can be found
+    module: Optional[ModuleV2] = ModuleV2Source([]).get_installed_module(DummyProject(autostd=False), "minimalv2module")
+    assert module is not None
+    assert module.path == module_dir
