@@ -453,7 +453,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
-    # test for #4791
+    # test for #4761
     # without additional constrain, this is not a hard failure
     # except for the unrelated package, which should produce a warning
     env.ActiveEnv.check(in_scope, [])
