@@ -38,15 +38,18 @@ from inmanta.server.services.resourceservice import ResourceService
 def database_name():
     return "inmanta"
 
+
 @pytest.fixture
 async def server_pre_start(server_config, postgresql_client):
     """This fixture is called by the server. Override this fixture to influence server config"""
     orchestrationservice.PERFORM_CLEANUP = False
     await postgresql_client.execute("update public.environment set halted = true;")
 
+
 @pytest.fixture(scope="function")
 async def clean_db(postgresql_pool, postgres_db):
     pass
+
 
 async def test_resource_deploy_performance(server, client):
     result = await client.environment_list()
@@ -54,8 +57,8 @@ async def test_resource_deploy_performance(server, client):
     env_counted = []
     for env in result.result["data"]:
         result = await client.list_desired_state_versions(
-            tid = env["id"],
-            limit = 1,
+            tid=env["id"],
+            limit=1,
         )
         dvs = result.result["data"]
         if dvs:
@@ -65,8 +68,8 @@ async def test_resource_deploy_performance(server, client):
     version, envid = sorted(env_counted)[-1]
 
     result = await client.resource_list(
-        tid = envid,
-        limit = 25,
+        tid=envid,
+        limit=25,
     )
     env = await Environment.get_by_id(envid)
     resource_orchestrator: ResourceService = server.get_slice(SLICE_RESOURCE)
@@ -83,6 +86,14 @@ async def test_resource_deploy_performance(server, client):
             await resource_orchestrator.resource_did_dependency_change(env=env, resource_id=rvid)
 
         with timer("rpc.resource_deploy_done").time():
-            await resource_orchestrator.resource_deploy_done(env=env, resource_id=rvid, action_id=action_id, status=const.ResourceState.deployed, messages=[], changes={}, change=Change.nochange)
+            await resource_orchestrator.resource_deploy_done(
+                env=env,
+                resource_id=rvid,
+                action_id=action_id,
+                status=const.ResourceState.deployed,
+                messages=[],
+                changes={},
+                change=Change.nochange,
+            )
 
     print(json.dumps(global_registry().dump_metrics(), indent=4))

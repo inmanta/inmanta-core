@@ -64,6 +64,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
+from inmanta.data.model import ResourceIdStr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -215,7 +216,7 @@ class ArgumentCollector:
         self.args.append(entry)
         return "$" + str(len(self.args) + self.offset)
 
-    def get_values(self):
+    def get_values(self) -> list[object]:
         return self.args
 
 
@@ -1255,9 +1256,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return getattr(self, name)
         return default_value
 
-    def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
+    def _get_column_names_and_values(self) -> Tuple[List[str], List[object]]:
         column_names: List[str] = []
-        values: List[str] = []
+        values: List[object] = []
         for name, metadata in self.get_field_metadata().items():
             if metadata.ignore:
                 continue
@@ -1336,13 +1337,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
 
         columns = cls.get_field_names()
-        records = []
+        records: list[tuple[object, ...]] = []
         for doc in documents:
             current_record = []
             for col in columns:
                 current_record.append(cls._get_value(doc.__getattribute__(col)))
-            current_record = tuple(current_record)
-            records.append(current_record)
+            records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
@@ -1656,7 +1656,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, [value])
 
     @classmethod
-    def _get_value(cls, value: Any) -> Any:
+    def _get_value(cls, value: object) -> object:
         if isinstance(value, dict):
             return json_encode(value)
 
@@ -4229,7 +4229,7 @@ class ResourceAction(BaseDocument):
                     INNER JOIN public.resourceaction as ra
                         ON ra.action_id = jt.resource_action_id
                         WHERE r.environment=$1 AND ra.environment=$1"""
-        values = [cls._get_value(environment)]
+        values: list[object] = [cls._get_value(environment)]
 
         parameter_index = 2
         if resource_type:
@@ -4295,7 +4295,7 @@ class ResourceAction(BaseDocument):
     @classmethod
     async def get_resource_events(
         cls, env: Environment, resource_id: resources.Id, exclude_change: Optional[const.Change] = None
-    ) -> Dict[resources.ResourceIdStr, List["ResourceAction"]]:
+    ) -> Dict[ResourceIdStr, List["ResourceAction"]]:
         """
         Get all events that should be processed by this specific resource, for the current deployment
 
@@ -4320,8 +4320,12 @@ class ResourceAction(BaseDocument):
         # also check we are currently deploying
         # do all of this in one query
         resource_id_str = resource_id.resource_version_str()
-        current_deploy_start: datetime.datetime
-        last_deploy_start: Optional[datetime.datetime]
+
+        # These two variables are actually of type datetime.datetime
+        # but mypy doesn't know as they come from the DB
+        # mypy also doesn't care, because they go back into the DB
+        current_deploy_start: object
+        last_deploy_start: Optional[object]
 
         end_query = """
         with
@@ -4386,13 +4390,15 @@ class ResourceAction(BaseDocument):
             # Convert resource version ids into resource ids
             ids = [resources.Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
             # Get the result
-            result = await connection.fetch(get_all_query, env.id, ids, *arg.get_values())
+            result2 = await connection.fetch(get_all_query, env.id, ids, *arg.get_values())
             # Collect results per resource_id
-            collector = {rid: [] for rid in ids}  # eagerly initialize, we expect one entry per dependency, even when empty
-            for record in result:
+            collector: Dict[ResourceIdStr, List["ResourceAction"]] = {
+                rid: [] for rid in ids
+            }  # eagerly initialize, we expect one entry per dependency, even when empty
+            for record in result2:
                 fields = dict(record)
                 del fields["resource_id"]
-                collector[record[0]].append(ResourceAction(from_postgres=True, **fields))
+                collector[cast(ResourceIdStr, record[0])].append(ResourceAction(from_postgres=True, **fields))
 
         return collector
 
@@ -4507,14 +4513,10 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        resource_version_ids_statement = ", ".join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
-        (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        values = values + cls._get_value(resource_version_ids)
-        query = (
-            f"SELECT * FROM {cls.table_name()} "
-            f"WHERE {filter_statement} AND resource_version_id IN ({resource_version_ids_statement})"
+        query = f"SELECT * FROM {cls.table_name()} " f"WHERE environment=$1 AND resource_version_id = ANY($2)"
+        resources = await cls.select_query(
+            query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
         )
-        resources = await cls.select_query(query, values, connection=connection)
         return resources
 
     @classmethod
@@ -4685,7 +4687,7 @@ class Resource(BaseDocument):
     @classmethod
     def _get_released_resources_base_query(
         cls, select_clause: str, environment: uuid.UUID, offset: int
-    ) -> Tuple[str, List[object]]:
+    ) -> Tuple[str, object]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
