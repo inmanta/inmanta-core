@@ -1159,8 +1159,6 @@ class AutostartedAgentManager(ServerSlice):
                 if status is not None and status is not AgentStatus.paused
             }
             actual_agents_in_up_state: Set[str] = set()
-            timeout_in_sec = 5
-            log_interval = 1
             started = int(time.time())
             last_new_agent_seen = started
             last_log = started
