@@ -34,7 +34,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Mapping, NamedTuple, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
@@ -74,16 +74,26 @@ class VersionConflict:
 
     :param requirement: The requirement that is unsatisfied.
     :param installed_version: The version that is currently installed. None if the package is not installed.
+    :param owner: The package from which the constraint originates
     """
 
     requirement: Requirement
     installed_version: Optional[version.Version] = None
+    owner: Optional[str] = None
 
     def __str__(self) -> str:
+        owner = ""
+        if self.owner:
+            # Cfr pip
+            # Requirement already satisfied: certifi>=2017.4.17 in /[...]/site-packages
+            # (from requests>=2.23.0->cookiecutter<3,>=1->inmanta-core==7.0.0) (2022.6.15)
+            owner = f" (from {self.owner})"
         if self.installed_version:
-            return f"Incompatibility between constraint {self.requirement} and installed version {self.installed_version}"
+            return (
+                f"Incompatibility between constraint {self.requirement} and installed version {self.installed_version}{owner}"
+            )
         else:
-            return f"Constraint {self.requirement} is not installed"
+            return f"Constraint {self.requirement} is not installed{owner}"
 
 
 class ConflictingRequirements(CompilerException):
@@ -826,13 +836,28 @@ class ActiveEnv(PythonEnvironment):
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
         """
+
+        class OwnedRequirement(NamedTuple):
+            requirement: Requirement
+            owner: Optional[str] = None
+
+            def is_owned_by(self, owners: abc.Set[str]) -> bool:
+                return self.owner is None or self.owner in owners
+
         # all requirements of all packages installed in this environment
-        installed_constraints: abc.Set[Requirement] = frozenset(
-            requirement for dist_info in pkg_resources.working_set for requirement in dist_info.requires()
+        installed_constraints: abc.Set[OwnedRequirement] = frozenset(
+            OwnedRequirement(requirement, dist_info.key)
+            for dist_info in pkg_resources.working_set
+            for requirement in dist_info.requires()
         )
-        inmanta_constraints: abc.Set[Requirement] = frozenset(cls._get_requirements_on_inmanta_package())
-        extra_constraints: abc.Set[Requirement] = frozenset(constraints if constraints is not None else [])
-        all_constraints: abc.Set[Requirement] = installed_constraints | inmanta_constraints | extra_constraints
+        inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
+            OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
+        )
+        extra_constraints: abc.Set[OwnedRequirement] = frozenset(
+            (OwnedRequirement(r) for r in constraints) if constraints is not None else []
+        )
+
+        all_constraints: abc.Set[OwnedRequirement] = installed_constraints | inmanta_constraints | extra_constraints
 
         full_strict_scope: abc.Set[str] = PythonWorkingSet.get_dependency_tree(
             chain(
@@ -841,8 +866,8 @@ class ActiveEnv(PythonEnvironment):
                     if strict_scope is None
                     else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))
                 ),
-                (requirement.key for requirement in inmanta_constraints),
-                (requirement.key for requirement in extra_constraints),
+                (requirement.requirement.key for requirement in inmanta_constraints),
+                (requirement.requirement.key for requirement in extra_constraints),
             )
         )
 
@@ -851,14 +876,16 @@ class ActiveEnv(PythonEnvironment):
         constraint_violations: set[VersionConflict] = set()
         constraint_violations_strict: set[VersionConflict] = set()
         for c in all_constraints:
-            if (c.key not in installed_versions or str(installed_versions[c.key]) not in c) and (
-                not c.marker or (c.marker and c.marker.evaluate())
+            requirement = c.requirement
+            if (requirement.key not in installed_versions or str(installed_versions[requirement.key]) not in requirement) and (
+                not requirement.marker or (requirement.marker and requirement.marker.evaluate())
             ):
                 version_conflict = VersionConflict(
-                    requirement=c,
-                    installed_version=installed_versions.get(c.key, None),
+                    requirement=requirement,
+                    installed_version=installed_versions.get(requirement.key, None),
+                    owner=c.owner,
                 )
-                if c.key in full_strict_scope:
+                if c.is_owned_by(full_strict_scope):
                     constraint_violations_strict.add(version_conflict)
                 else:
                     constraint_violations.add(version_conflict)
