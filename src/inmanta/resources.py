@@ -641,13 +641,13 @@ class Id(object):
         return self.version != 0
 
     @classmethod
-    def update_version_in_rvid(cls, rvid: ResourceVersionIdStr, new_version: int) -> ResourceVersionIdStr:
+    def set_version_in_id(cls, id_str: Union[ResourceVersionIdStr, ResourceIdStr], new_version: int) -> ResourceVersionIdStr:
         """
-        Return a copy of the given rvid with the version number set to new_version.
+        Return a copy of the given id_str with the version number set to new_version.
         """
-        parsed_rvid = cls.parse_id(rvid)
-        new_rvid = parsed_rvid.copy(version=new_version)
-        return new_rvid.resource_version_str()
+        parsed_id = cls.parse_id(id_str)
+        new_id = parsed_id.copy(version=new_version)
+        return new_id.resource_version_str()
 
     entity_type = property(get_entity_type)
     agent_name = property(get_agent_name)

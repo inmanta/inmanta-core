@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple, cast
 
 import asyncpg
 import asyncpg.connection
@@ -85,7 +85,9 @@ class ResourceWithResourceSet:
 
     def get_resource_state_for_new_resource(self) -> const.ResourceState:
         """
-        Return the ResourceState that should be associated with this Resource in the new version of the model.
+        Return the resource state as expected by the `resource_state` argument of the `OrchestrationService._put_version()`
+        method. This method should set the resource state of a resource to undefined when it directly depends on an unknown or
+        available when it doesn't.
         """
         if self.resource_state is ResourceState.undefined:
             return ResourceState.undefined
@@ -150,7 +152,7 @@ class MergedModel:
     """
 
     resources: list[dict[str, object]]
-    resource_states: dict[ResourceIdStr, const.ResourceState]
+    resource_states: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]
     resource_sets: dict[ResourceIdStr, Optional[str]]
     unknowns: List[data.UnknownParameter]
 
@@ -170,10 +172,10 @@ class PartialUpdateMerger:
         base_version: int,
         new_version: int,
         partial_updates: Sequence[ResourceMinimal],
-        resource_states: Dict[ResourceIdStr, ResourceState],
+        resource_states: Mapping[ResourceIdStr, ResourceState],
         resource_sets: Mapping[ResourceIdStr, Optional[str]],
         removed_resource_sets: Sequence[str],
-        unknowns: List[data.UnknownParameter],
+        unknowns: Sequence[data.UnknownParameter],
     ) -> None:
         """
         :param env: The environment in which the partial compile happens.
@@ -229,7 +231,7 @@ class PartialUpdateMerger:
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
             resource: ResourceMinimal = ResourceMinimal.create_with_version(
-                new_version=self.new_version, id=res.resource_version_id, attributes=res.attributes
+                new_version=self.new_version, id=res.resource_id, attributes=res.attributes
             )
             old_resources[resource.get_resource_id_str()] = ResourceWithResourceSet(
                 resource=resource, resource_set=res.resource_set, resource_state=res.status
@@ -300,8 +302,8 @@ class PartialUpdateMerger:
         Merge all relevant, unresolved unknowns from the old version of the model together with the unknowns
         of the partial compile.
         """
-        rids_in_partial_update = [resource_minimal.get_resource_id_str() for resource_minimal in self.partial_updates]
-        rids_not_in_partial_compile = [rid for rid in merged_resources if rid not in rids_in_partial_update]
+        rids_in_partial_update = {resource_minimal.get_resource_id_str() for resource_minimal in self.partial_updates}
+        rids_not_in_partial_compile = {rid for rid in merged_resources if rid not in rids_in_partial_update}
         old_unresolved_unknowns_to_keep = [
             uk.copy(self.new_version)
             for uk in await data.UnknownParameter.get_list(environment=self.env.id, version=self.base_version, resolved=False)
@@ -475,7 +477,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: List[JsonType],
-        resource_state: Dict[ResourceIdStr, const.ResourceState],
+        resource_state: Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: List[data.UnknownParameter],
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
@@ -733,7 +735,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         resources: List[JsonType],
-        resource_state: Dict[ResourceIdStr, const.ResourceState],
+        resource_state: Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
@@ -766,7 +768,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resources: object,
-        resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+        resource_state: Optional[Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
         unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,

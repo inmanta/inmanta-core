@@ -312,9 +312,7 @@ class ResourceMinimal(BaseModel):
     id: ResourceVersionIdStr
 
     @classmethod
-    def create_with_version(
-        cls, new_version: int, id: ResourceVersionIdStr, attributes: Dict[str, object]
-    ) -> "ResourceMinimal":
+    def create_with_version(cls, new_version: int, id: ResourceIdStr, attributes: Dict[str, object]) -> "ResourceMinimal":
         """
         Create a new ResourceMinimal from the given attributes, but ensure that the given version
         is set on all the fields that hold the version number of the model.
@@ -323,9 +321,9 @@ class ResourceMinimal(BaseModel):
             raise ValueError("'requires' attribute is missing in kwargs")
         new_attributes = attributes.copy()
         new_attributes["version"] = new_version
-        new_attributes["id"] = resources.Id.update_version_in_rvid(id, new_version=new_version)
+        new_attributes["id"] = resources.Id.set_version_in_id(id, new_version)
         new_attributes["requires"] = [
-            resources.Id.update_version_in_rvid(r, new_version=new_version) for r in attributes["requires"]
+            resources.Id.set_version_in_id(r, new_version=new_version) for r in attributes["requires"]
         ]
         return cls(**new_attributes)
 
@@ -337,7 +335,7 @@ class ResourceMinimal(BaseModel):
         """
         return self.create_with_version(
             new_version=new_version,
-            id=self.id,
+            id=resources.Id.parse_id(self.id).resource_str(),
             attributes={k: v for k, v in self.dict().items() if k != "id"},
         )
 
