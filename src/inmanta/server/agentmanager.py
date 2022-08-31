@@ -115,6 +115,14 @@ class SessionAction:
         self.timestamp = timestamp
 
 
+# Internal tuning constants
+
+AUTO_STARTED_AGENT_WAIT = 5
+# How long (in seconds) do we wait for autostarted agents. The wait time is reset any time a new instance comes online
+AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL = 1
+# When waiting for an autostarted agent, how long (in seconds) do we wait before we log the wait status
+
+
 class AgentManager(ServerSlice, SessionListener):
     """
     This class contains all server functionality related to the management of agents.
@@ -1060,8 +1068,6 @@ class AutostartedAgentManager(ServerSlice):
         if len(agents) == 0:
             return False
 
-        LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-
         async def is_start_agent_required() -> bool:
             if needsstart:
                 return True
@@ -1077,6 +1083,7 @@ class AutostartedAgentManager(ServerSlice):
                 return False
 
             if await is_start_agent_required():
+                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
                 res = await self.__do_start_agent(agents, env, connection=connection)
                 return res
         return False
@@ -1153,12 +1160,25 @@ class AutostartedAgentManager(ServerSlice):
             }
             actual_agents_in_up_state: Set[str] = set()
             timeout_in_sec = 5
-            now = int(time.time())
+            log_interval = 1
+            started = int(time.time())
+            last_new_agent_seen = started
+            last_log = started
 
             while len(expected_agents_in_up_state) != len(actual_agents_in_up_state):
                 await asyncio.sleep(0.1)
-                if int(time.time()) - now > timeout_in_sec:
+                now = int(time.time())
+                if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
                     raise asyncio.TimeoutError()
+                if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
+                    last_log = now
+                    LOGGER.debug(
+                        "Waiting for agent with PID %s, waited %d seconds, %d/%d instances up",
+                        proc.pid,
+                        now - started,
+                        len(actual_agents_in_up_state),
+                        len(expected_agents_in_up_state),
+                    )
                 new_actual_agents_in_up_state = {
                     agent_name
                     for agent_name in expected_agents_in_up_state
@@ -1166,16 +1186,16 @@ class AutostartedAgentManager(ServerSlice):
                 }
                 if len(new_actual_agents_in_up_state) > len(actual_agents_in_up_state):
                     # Reset timeout timer because a new instance became active
-                    now = int(time.time())
+                    last_new_agent_seen = now
                 actual_agents_in_up_state = new_actual_agents_in_up_state
 
+        LOGGER.debug("Started new agent with PID %s", proc.pid)
         # Wait for all agents to start
         try:
             await _wait_until_agent_instances_are_active()
+            LOGGER.debug("Agent with PID %s is up", proc.pid)
         except asyncio.TimeoutError:
             LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
-
-        LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
 
     async def _make_agent_config(
