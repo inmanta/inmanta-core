@@ -444,7 +444,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     assert "Incompatibility between constraint" not in caplog.text
 
     # Add an unrelated package to the venv, that should not matter
-    # setup for #4791
+    # setup for #4761
     caplog.clear()
     create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
     env.ActiveEnv.check(in_scope, constraints)
