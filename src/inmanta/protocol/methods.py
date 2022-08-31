@@ -536,7 +536,8 @@ def put_version(
     :param tid: The id of the environment
     :param version: The version of the configuration model
     :param resources: A list of all resources in the configuration model (deployable)
-    :param resource_state: A dictionary with the initial const.ResourceState per resource id
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
+                           to undefined when the resource depends on an unknown or available when it doesn't.
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
