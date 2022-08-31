@@ -2,3 +2,5 @@
 description: Fix bugs in the merge logic of a partial compile. 1) Ensure that the version numbers present in the new version of the configuration model are set correctly. 2) Ensure that the resource states and unknowns, that belongs to the partial model, are sent to the server and merged correctly with the old configuration model.
 change-type: patch
 destination-branches: [master, iso5]
+sections:
+  bugfix: "{{description}}"
