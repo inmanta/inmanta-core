@@ -4294,7 +4294,7 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_resource_events(
-        cls, env: Environment, resource_id: resources.Id, exclude_change: Optional[const.Change] = None
+        cls, env: Environment, resource_id: "resources.Id", exclude_change: Optional[const.Change] = None
     ) -> Dict[ResourceIdStr, List["ResourceAction"]]:
         """
         Get all events that should be processed by this specific resource, for the current deployment
