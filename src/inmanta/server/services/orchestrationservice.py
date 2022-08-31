@@ -83,7 +83,7 @@ class ResourceWithResourceSet:
     def get_resource_id_str(self) -> ResourceIdStr:
         return self.resource.get_resource_id_str()
 
-    def get_resource_state_for_new_resource(self) -> const.ResourceState:
+    def get_resource_state_for_new_resource(self) -> Literal[ResourceState.undefined, ResourceState.available]:
         """
         Return the resource state as expected by the `resource_state` argument of the `OrchestrationService._put_version()`
         method. This method should set the resource state of a resource to undefined when it directly depends on an unknown or
@@ -310,7 +310,7 @@ class PartialUpdateMerger:
             # Always keep unknowns not tied to a specific resource
             if not uk.resource_id or uk.resource_id in rids_not_in_partial_compile
         ]
-        return old_unresolved_unknowns_to_keep + self.unknowns
+        return [*old_unresolved_unknowns_to_keep, *self.unknowns]
 
     async def apply_partial(self, *, connection: asyncpg.connection.Connection) -> MergedModel:
         """
