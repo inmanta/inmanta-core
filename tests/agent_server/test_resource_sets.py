@@ -21,10 +21,10 @@ from collections import abc
 from typing import Optional
 
 import utils
-from inmanta import data, const
+from inmanta import const, data
 from inmanta.protocol.common import Result
-from inmanta.util import get_compiler_version
 from inmanta.resources import ResourceIdStr
+from inmanta.util import get_compiler_version
 
 
 async def test_resource_sets_via_put_version(server, client, environment, clienthelper):
@@ -768,13 +768,28 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 9
     assert resource_list[0].attributes == {
-        "key": "key1", "value": "100", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key1",
+        "value": "100",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[1].attributes == {
-        "key": "key2", "value": "200", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key2",
+        "value": "200",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[2].attributes == {
-        "key": "key3", "value": "3", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key3",
+        "value": "3",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[3].attributes == {
         "key": "key4",
@@ -785,19 +800,44 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         "send_event": False,
     }
     assert resource_list[4].attributes == {
-        "key": "key5", "value": "5", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key5",
+        "value": "5",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[5].attributes == {
-        "key": "key6", "value": "6", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key6",
+        "value": "6",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[6].attributes == {
-        "key": "key9", "value": "900", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key9",
+        "value": "900",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[7].attributes == {
-        "key": "key91", "value": "910", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key91",
+        "value": "910",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_list[8].attributes == {
-        "key": "key92", "value": "920", "version": 2, "purged": False, "requires": [], "send_event": False
+        "key": "key92",
+        "value": "920",
+        "version": 2,
+        "purged": False,
+        "requires": [],
+        "send_event": False,
     }
     assert resource_sets_from_db == {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1138,7 +1178,8 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
             "send_event": False,
             "purged": False,
             "requires": [],
-        } for i in range(1, 6)
+        }
+        for i in range(1, 6)
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1243,7 +1284,8 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
             "send_event": False,
             "purged": False,
             "requires": [],
-        } for i in range(1, 5)
+        }
+        for i in range(1, 5)
     ]
     resource_sets = {
         "test::Resource[agent1,key=key1]": "set-a",
@@ -1252,10 +1294,10 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
         "test::Resource[agent1,key=key4]": "set-b",
     }
     unknowns = [
-        {"resource": f"test::Resource[agent1,key=key1]", "parameter": f"unknown_1", "source": "fact"},
-        {"resource": f"test::Resource[agent1,key=key2]", "parameter": f"unknown_2", "source": "fact"},
-        {"resource": "",                                  "parameter": "unknown_3", "source": "fact"},
-        {"resource": f"test::Resource[agent1,key=key4]", "parameter": f"unknown_4", "source": "fact"},
+        {"resource": "test::Resource[agent1,key=key1]", "parameter": "unknown_1", "source": "fact"},
+        {"resource": "test::Resource[agent1,key=key2]", "parameter": "unknown_2", "source": "fact"},
+        {"resource": "", "parameter": "unknown_3", "source": "fact"},
+        {"resource": "test::Resource[agent1,key=key4]", "parameter": "unknown_4", "source": "fact"},
     ]
     result = await client.put_version(
         tid=environment,

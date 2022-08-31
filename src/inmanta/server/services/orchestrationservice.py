@@ -148,6 +148,7 @@ class MergedModel:
     """
     A class containing the result of merging an old version of a configuration model with a partial model.
     """
+
     resources: list[dict[str, object]]
     resource_states: dict[ResourceIdStr, const.ResourceState]
     resource_sets: dict[ResourceIdStr, Optional[str]]
@@ -174,7 +175,17 @@ class PartialUpdateMerger:
         removed_resource_sets: Sequence[str],
         unknowns: List[data.UnknownParameter],
     ) -> None:
-        # TODO: Add docs regarding arguments
+        """
+        :param env: The environment in which the partial compile happens.
+        :param base_version: The version number of the old configuration model from which the resources are merged
+                             together with the resources from the partial compile.
+        :param new_version: The version number of the newly generated configuration model.
+        :param partial_updates: The resources part of the partial compile
+        :param resource_states: The resource states of the resources in the partial compile.
+        :param resource_sets: The resource sets of the resources in the partial compile.
+        :param removed_resource_sets: The resources in these resource sets should be present in the new configuration model.
+        :param unknowns: The unknowns that belong to the partial model.
+        """
         self.partial_updates = partial_updates
         self.resource_states = resource_states
         self.resource_sets = resource_sets
@@ -199,7 +210,7 @@ class PartialUpdateMerger:
             resource_state = self.resource_states.get(key, const.ResourceState.available)
             pair: PairedResource = PairedResource(
                 new_resource=ResourceWithResourceSet(partial_update, resource_set, resource_state),
-                old_resource=old_resources.get(key)
+                old_resource=old_resources.get(key),
             )
             paired_resources.append(pair)
         return paired_resources
@@ -284,7 +295,7 @@ class PartialUpdateMerger:
 
     async def _merge_unknowns(
         self, merged_resources: dict[ResourceIdStr, ResourceWithResourceSet]
-  ) -> List[data.UnknownParameter]:
+    ) -> List[data.UnknownParameter]:
         """
         Merge all relevant, unresolved unknowns from the old version of the model together with the unknowns
         of the partial compile.
@@ -293,17 +304,13 @@ class PartialUpdateMerger:
         rids_not_in_partial_compile = [rid for rid in merged_resources if rid not in rids_in_partial_update]
         old_unresolved_unknowns_to_keep = [
             uk.copy(self.new_version)
-            for uk in await data.UnknownParameter.get_list(
-                environment=self.env.id, version=self.base_version, resolved=False
-            )
+            for uk in await data.UnknownParameter.get_list(environment=self.env.id, version=self.base_version, resolved=False)
             # Always keep unknowns not tight to a specific resource
             if not uk.resource_id or uk.resource_id in rids_not_in_partial_compile
         ]
         return old_unresolved_unknowns_to_keep + self.unknowns
 
-    async def apply_partial(
-        self, *, connection: asyncpg.connection.Connection
-    ) -> MergedModel:
+    async def apply_partial(self, *, connection: asyncpg.connection.Connection) -> MergedModel:
         """
         Applies the partial model's resources on this instance's base version. The caller should acquire appropriate locks on
         the database connection as defined in the put_partial method definition.
