@@ -305,7 +305,7 @@ class PartialUpdateMerger:
         old_unresolved_unknowns_to_keep = [
             uk.copy(self.new_version)
             for uk in await data.UnknownParameter.get_list(environment=self.env.id, version=self.base_version, resolved=False)
-            # Always keep unknowns not tight to a specific resource
+            # Always keep unknowns not tied to a specific resource
             if not uk.resource_id or uk.resource_id in rids_not_in_partial_compile
         ]
         return old_unresolved_unknowns_to_keep + self.unknowns
