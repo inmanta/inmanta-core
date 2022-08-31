@@ -835,8 +835,6 @@ class ActiveEnv(PythonEnvironment):
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
-
-
         """
 
         class OwnedRequirement(NamedTuple):
