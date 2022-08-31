@@ -613,15 +613,19 @@ class MethodProperties(object):
         elif typing_inspect.is_generic_type(arg_type):
             orig = typing_inspect.get_origin(arg_type)
             assert orig is not None  # Make mypy happy
-            if not types.issubclass(orig, (list, dict)):
-                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List or Dict")
+            is_literal_type: bool = typing_inspect.is_literal_type(orig)
+
+            if not is_literal_type and not types.issubclass(orig, (list, dict)):
+                raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} can only be generic List, Dict or Literal")
 
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
                 raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} must be have a subtype plain List or Dict is not allowed."
+                    f"Type {arg_type} of argument {arg} must be have a subtype plain List, Dict or Literal is not allowed."
                 )
-
+            elif is_literal_type:  # A generic Literal
+                if not all(isinstance(a, Enum) for a in args):
+                    raise InvalidMethodDefinition(f"Type {arg_type} of argument {arg} must be an instance of an Enum.")
             elif len(args) == 1:  # A generic list
                 unsubscripted_arg = typing_inspect.get_origin(args[0]) if typing_inspect.get_origin(args[0]) else args[0]
                 assert unsubscripted_arg is not None  # Make mypy happy

@@ -2810,6 +2810,21 @@ class UnknownParameter(BaseDocument):
     metadata: Optional[Dict[str, Any]]
     resolved: bool = False
 
+    def copy(self, new_version: int) -> "UnknownParameter":
+        """
+        Create a new UnknownParameter using this object as a template. The returned object will
+        have the id field unset and the version field set the new_version.
+        """
+        return UnknownParameter(
+            name=self.name,
+            environment=self.environment,
+            source=self.source,
+            resource_id=self.resource_id,
+            version=new_version,
+            metadata=self.metadata,
+            resolved=self.resolved,
+        )
+
 
 class AgentProcess(BaseDocument):
     """
