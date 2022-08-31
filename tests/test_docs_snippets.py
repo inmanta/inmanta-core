@@ -21,20 +21,16 @@ Tests to verify correctness/compatibility of code snippets in the docs.
 """
 
 import os
-import py
 import textwrap
 import uuid
-from collections import defaultdict
-from collections import abc
+from collections import abc, defaultdict
 
+import py
 import pytest
 
 from inmanta import data
 from inmanta.data import model
-from inmanta.export import ResourceDict
-from inmanta.protocol.common import Result
 from utils import v1_module_from_template
-
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -73,7 +69,9 @@ async def test_docs_snippet_partial_compile(
 
                 def get_full_id(exporter: Exporter, obj: DynamicProxy) -> tuple[int, int]:
                     return (Router.get_network_id(exporter, obj), Router.get_router_id(exporter, obj))
-            """.strip("\n")
+            """.strip(
+                "\n"
+            )
         ),
     )
 
