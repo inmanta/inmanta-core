@@ -71,6 +71,7 @@ LOGGER = logging.getLogger(__name__)
 PERFORM_CLEANUP = True
 # Kill switch for cleanup, for use when working with historical data
 
+
 class ResourceWithResourceSet:
     def __init__(
         self,
