@@ -1,4 +1,4 @@
-description: "Fix issue #4761 where the pip consistency check is too strict"
+description: "Fix issue where the pip consistency check is too strict"
 issue-nr: 4761
 change-type: patch
 destination-branches: [master, iso5]
