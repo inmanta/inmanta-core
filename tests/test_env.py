@@ -424,7 +424,6 @@ def test_active_env_check_basic(
     )
 
 
-
 def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
@@ -444,8 +443,8 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
-    # Add an external dependency, that should not matter
-    # trigger #4791
+    # Add an unrelated package to the venv, that should not matter
+    # setup for #4791
     caplog.clear()
     create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
     env.ActiveEnv.check(in_scope, constraints)
@@ -454,6 +453,16 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
+    # test for #4791
+    # without additional constrain, this is not a hard failure
+    # except for the unrelated package, which should produce a warning
+    env.ActiveEnv.check(in_scope, [])
+    assert (
+        "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
+        in caplog.text
+    )
+
+    caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
         env.ActiveEnv.check(in_scope, constraints)
 
