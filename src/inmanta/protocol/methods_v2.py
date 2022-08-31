@@ -19,7 +19,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
@@ -42,7 +42,7 @@ from .openapi.model import OpenAPI
 )
 def put_partial(
     tid: uuid.UUID,
-    resource_state: Optional[Dict[ResourceIdStr, ResourceState]] = None,
+    resource_state: Optional[Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
     unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
@@ -61,7 +61,8 @@ def put_partial(
     only be applied on top of the non-stale one.
 
     :param tid: The id of the environment
-    :param resource_state: A dictionary with the initial const.ResourceState per resource id
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
+                           to undefined when the resource depends on an unknown or available when it doesn't.
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param resource_sets: a dictionary describing which resources belong to which resource set
     :param removed_resource_sets: a list of resource_sets that should be deleted from the model
