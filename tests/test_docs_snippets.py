@@ -82,6 +82,7 @@ async def test_docs_snippet_partial_compile(
         handlers_addition: str = f"""
             import {handler_module_name} as handler
 
+            # add dummy agent attribute for the handler
             Router.agent [1] -- std::AgentConfig
             implementation bind_agent for Router:
                 self.agent = std::AgentConfig[agentname="router_agent"]
