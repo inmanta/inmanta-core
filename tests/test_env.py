@@ -419,8 +419,11 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0"),
-        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0"),
+        expect_test=(
+            False,
+            "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)",
+        ),
+        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)"),
     )
 
 
