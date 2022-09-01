@@ -755,11 +755,11 @@ class ResourceService(protocol.ServerSlice):
 
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-        self.clear_env_cache(env)
+            self.clear_env_cache(env)
 
-        return await data.Resource.get_last_non_deploying_state_for_dependencies(
-            environment=env.id, resource_version_id=resource_id
-        )
+            return await data.Resource.get_last_non_deploying_state_for_dependencies(
+                environment=env.id, resource_version_id=resource_id, connection=connection
+            )
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(

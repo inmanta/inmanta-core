@@ -56,6 +56,7 @@ import dateutil
 import pydantic
 import pydantic.tools
 import typing_inspect
+from asyncpg import Connection
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
@@ -4346,7 +4347,9 @@ class ResourceAction(BaseDocument):
             last_deploy_start = result["started"]
 
             # Step3: Get the resource
-            resource: Optional[Resource] = await Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
+            resource: Optional[Resource] = await Resource.get_one(
+                environment=env.id, resource_version_id=resource_id_str, connection=connection
+            )
             if resource is None:
                 raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
 
@@ -4452,7 +4455,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
-        cls, environment: uuid.UUID, resource_version_id: "resources.Id"
+        cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection]
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
         Return the last state of each dependency of the given resource that was not 'deploying'.
@@ -4475,7 +4478,7 @@ class Resource(BaseDocument):
             cls._get_value(resource_version_id.version),
             resource_version_id.resource_version_str(),
         ]
-        result = await cls._fetch_query(query, *values)
+        result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
