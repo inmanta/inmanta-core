@@ -1257,14 +1257,14 @@ async def test_uninstall_python_packages(
 
     def patch_get_protected_inmanta_packages():
         return [name_protected_pkg]
+
     monkeypatch.setattr(PythonEnvironment, "get_protected_inmanta_packages", patch_get_protected_inmanta_packages)
 
     # Install protected package in venv
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_from_index(
-        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
-        index_urls=[local_module_package_index]
+        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)], index_urls=[local_module_package_index]
     )
     assert name_protected_pkg in venv.get_installed_packages()
 
