@@ -1,0 +1,9 @@
+---
+description: Fix issue that causes an agent restart storm for all agents on an agent process when an agent on that process is paused.
+issue-nr: 4398
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso4]
+sections:
+  bugfix: "{{description}}"
+  minor-improvement: "When the AutostartedAgentManager starts a new agent process, it now uses a dynamic timeout on the time to wait until all agents are active. The AutostartedAgentManager raises a timeout as soon as no new agent has become active in the past five seconds."
