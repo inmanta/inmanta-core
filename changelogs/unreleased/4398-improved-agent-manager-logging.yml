@@ -1,0 +1,6 @@
+---
+description: Improved logging on the agent manager when restarting agents
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  minor-improvement: "{{description}}"
