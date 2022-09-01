@@ -68,7 +68,7 @@ from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
-PERFORM_CLEANUP = True
+PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
