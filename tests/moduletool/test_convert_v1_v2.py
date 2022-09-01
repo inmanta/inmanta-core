@@ -140,8 +140,8 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
     assert os.path.exists(os.path.join(tmpdir, "setup.cfg"))
     assert os.path.exists(os.path.join(tmpdir, "pyproject.toml"))
     assert os.path.exists(os.path.join(tmpdir, "MANIFEST.in"))
+    assert os.path.exists(os.path.join(tmpdir, "requirements.txt"))
 
-    assert not os.path.exists(os.path.join(tmpdir, "requirements.txt"))
     assert not os.path.exists(os.path.join(tmpdir, "module.yml"))
 
     assert os.path.exists(os.path.join(tmpdir, "model", "_init.cf"))
