@@ -141,13 +141,13 @@ def assert_v2_module(module_name, tmpdir, minimal=False):
     assert os.path.exists(os.path.join(tmpdir, "pyproject.toml"))
     assert os.path.exists(os.path.join(tmpdir, "MANIFEST.in"))
 
-    assert not os.path.exists(os.path.join(tmpdir, "requirements.txt"))
     assert not os.path.exists(os.path.join(tmpdir, "module.yml"))
 
     assert os.path.exists(os.path.join(tmpdir, "model", "_init.cf"))
     assert os.path.exists(os.path.join(tmpdir, "inmanta_plugins", module_name, "__init__.py"))
 
     if not minimal:
+        assert os.path.exists(os.path.join(tmpdir, "requirements.txt"))
         assert os.path.exists(os.path.join(tmpdir, "files", "test.txt"))
         assert os.path.exists(os.path.join(tmpdir, "templates", "template.txt.j2"))
         assert os.path.exists(os.path.join(tmpdir, "model", "other.cf"))

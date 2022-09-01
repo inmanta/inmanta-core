@@ -1189,10 +1189,6 @@ class ModuleConverter:
     def _do_update(self, output_directory: str, setup_cfg: ConfigParser, warn_on_merge: bool = False) -> None:
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
-        # remove requirements.txt
-        req = os.path.join(output_directory, "requirements.txt")
-        if os.path.exists(req):
-            os.remove(req)
         # move plugins or create
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
