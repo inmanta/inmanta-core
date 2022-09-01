@@ -605,8 +605,8 @@ implement std::Resource using std::none
     cwd = snippetcompiler.project_dir
 
     msg: str = (
-        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSets std::ResourceSet "
-        f"(instantiated at {cwd}/main.cf:2) but will not be exported."
+        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSet resource_set_1 "
+        f"but will not be exported."
     )
 
     log_sequence = LogSequence(caplog)
