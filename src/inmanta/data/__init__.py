@@ -4288,7 +4288,7 @@ class ResourceAction(BaseDocument):
 
         This means:
         1. assure a deployment is ongoing
-        2. get the time range between the start of this deployment and the last successfull deploy
+        2. get the time range between the start of this deployment and the last successful deploy
         3. get all resources required by this resource
         4. get all resource actions of type deploy emitted by the resource of step 3 in the time interval of step 2
 
