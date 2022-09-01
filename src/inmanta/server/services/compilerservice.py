@@ -272,6 +272,10 @@ class CompileRun(object):
                     return await self._end_stage(returncode=0)
 
             async def update_modules() -> data.Report:
+                # Make sure that no Inmanta packages are installed in the compiler venv
+                python_env = PythonEnvironment(env_path=venv_dir)
+                python_env.uninstall(pkg_names=PythonEnvironment.get_protected_inmanta_packages())
+                # Update modules
                 return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "project", "update"], cwd=project_dir)
 
             async def install_modules() -> data.Report:

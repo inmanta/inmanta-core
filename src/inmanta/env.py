@@ -366,6 +366,16 @@ class PipCommandBuilder:
         ]
 
     @classmethod
+    def compose_uninstall_command(cls, python_path: str, pkg_names: Sequence[str]) -> List[str]:
+        """
+        Return the pip command to uninstall the given python packages.
+
+        :param python_path: The python interpreter to use in the command.
+        :param pkg_names: The names of the python packages that should be uninstalled.
+        """
+        return [python_path, "-m", "pip", "uninstall", "-y", *pkg_names]
+
+    @classmethod
     def compose_list_command(
         cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
     ) -> List[str]:
@@ -537,30 +547,35 @@ class PythonEnvironment:
             requirements=inmanta_requirements,
         )
 
+    def uninstall(self, pkg_names: Sequence[str]) -> None:
+        """
+        Uninstall the given Python packages from this environment.
+        """
+        cmd: List[str] = PipCommandBuilder.compose_uninstall_command(python_path=self.python_path, pkg_names=pkg_names)
+        self._run_command_and_log_output(cmd)
+
+    @classmethod
+    def get_protected_inmanta_packages(cls) -> List[str]:
+        """
+        Returns the list of packages that should not be installed/updated by any operation on a Python environment.
+        """
+        return [
+            # Protect product packages
+            "inmanta",
+            "inmanta-service-orchestrator",
+            # Protect all server extensions
+            *(f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()),
+        ]
+
     @classmethod
     def _get_requirements_on_inmanta_package(cls) -> Sequence[Requirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
-
-        def _is_protected_package(pkg: str) -> bool:
-            """
-            Return true iff the package with name `pkg`, installed in this venv, should not be updated.
-            """
-            if pkg == "inmanta" or pkg == "inmanta-service-orchestrator":
-                # Protect product packages
-                return True
-            pkg_names_installed_extensions = [
-                f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()
-            ]
-            if pkg in pkg_names_installed_extensions:
-                # Protect all server extensions
-                return True
-            return False
-
+        protected_inmanta_packages: List[str] = cls.get_protected_inmanta_packages()
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
+        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
 
     @classmethod
     def _run_command_and_log_output(
