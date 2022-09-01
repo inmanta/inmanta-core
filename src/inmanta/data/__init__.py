@@ -1413,21 +1413,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return None
 
     @classmethod
-    async def lock_by_id(
-        cls: Type[TBaseDocument],
-        doc_id: uuid.UUID,
-        mode: RowLockMode,
-        *,
-        connection: asyncpg.connection.Connection,
-    ) -> None:
-        """
-        Acquire a row-level lock on a single environment. Callers should adhere to a consistent locking order accross
-        transactions.
-        Passing a connection object is mandatory. The connection is expected to be in a transaction.
-        """
-        await cls.get_list(id=doc_id, lock=mode, connection=connection)
-
-    @classmethod
     async def get_one(
         cls: Type[TBaseDocument],
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -4685,9 +4670,7 @@ class Resource(BaseDocument):
         return None
 
     @classmethod
-    def _get_released_resources_base_query(
-        cls, select_clause: str, environment: uuid.UUID, offset: int
-    ) -> Tuple[str, object]:
+    def _get_released_resources_base_query(cls, select_clause: str, environment: uuid.UUID, offset: int) -> Tuple[str, object]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
