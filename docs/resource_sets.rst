@@ -2,7 +2,7 @@
 Resource sets and partial compile
 **********************************
 
-Small updates to large models can be quickly compiled using partial compiles. We merely recompile a tiny, independent portion of the model, as opposed to doing it for the entire model.
+Small updates to large models can be compiled quickly using partial compiles. We merely recompile a tiny, independent portion of the model, as opposed to doing it for the entire model.
 A ``resource set`` is made up of the resources in a specific portion of the model.
 
 The model's resources must be separated into resource sets in order to employ partial compilations. The model can then be shrunk to only include the sets that are important for the change when a modification to a portion of it is required.
