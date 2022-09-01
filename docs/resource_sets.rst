@@ -88,6 +88,6 @@ Limitations
 * The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these constraints are met.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete.
   The shared resource will become obsolete when a partial compile deletes the last resource that depended on it, but it is preserved as a server-managed resource because partial compiles cannot delete shared resources.
-  A full compile is required to remove shared resources. Scheduled complete compilations that ``garbage-collect`` these shared resources are one way to fix this.
+  A full compile is required to remove shared resources. Scheduled full compilations that ``garbage-collect`` these shared resources are one way to fix this.
   The :inmanta.environment-settings:setting:`auto_full_compile` environment setting is used to schedule full compilations.
-  As an example, to plan a daily full compile for 01:00 UTC, use the ``auto full compile`` environment setting:  "0 1 * * *".
+  As an example, to plan a daily full compile for 01:00 UTC, use the ``auto_full_compile`` environment setting:  ``0 1 * * *``.
