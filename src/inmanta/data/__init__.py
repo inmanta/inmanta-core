@@ -4498,7 +4498,7 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        query = f"SELECT * FROM {cls.table_name()} " f"WHERE environment=$1 AND resource_version_id = ANY($2)"
+        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2)"
         resources = await cls.select_query(
             query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
         )
