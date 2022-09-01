@@ -1,0 +1,8 @@
+---
+description: Make the compiler service remove inmanta packages from the compiler venv on update
+issue-nr: 4718
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  upgrade-note: "It's required to update-and-recompile on each Inmanta project on the server after an upgrade"
