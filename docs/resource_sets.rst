@@ -15,7 +15,7 @@ the partial compile feature is actually most useful in conjunction with addition
 Resource sets
 ###########################
 
-Instances of the ``std::ResourceSet`` entity serve as the model's representation of resource sets. The name of the set and a list of its resources are held by this object.
+Instances of the ``std::ResourceSet`` entity serve as the model's representation of resource sets. The name of the set and a list of its resources are held by this entity.
 These ``ResourceSet`` instances are found by the default exporter to ascertain which resources belong to which set.
 
 In the example below, 1000 networks of 5 routers each are created. Each router is part of its network's resource set.
