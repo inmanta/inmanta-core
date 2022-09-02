@@ -790,7 +790,7 @@ def test_pip_extra_index_env(
     and that it is not changed in the active env.
 
     The installation fails with an ModuleNotFoundException
-    as the index https://pypi.org/simple is needed to install lorem~=0.0.1
+    as the index https://pypi.org/simple is needed to install lorem~=0.0.1,
     but it is only present in the active env in PIP_EXTRA_INDEX_URL which is not know by the
     subprocess doing the pip install.
     """
