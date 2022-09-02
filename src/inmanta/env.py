@@ -522,7 +522,6 @@ class PythonEnvironment:
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
-
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
         self._run_pip_install_command(
@@ -606,8 +605,6 @@ class PythonEnvironment:
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
         """
-        print("===================")
-        print(env_vars)
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
