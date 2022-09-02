@@ -790,7 +790,8 @@ def test_pip_extra_index_env(
     but that it is not changed in the active env.
 
     The installation fails as the index https://pypi.org/simple is needed to install lorem~=0.0.1
-    but it is only present in the active env in PIP_EXTRA_INDEX_URL
+    but it is only present in the active env in PIP_EXTRA_INDEX_URL which is not know by the
+    subprocess doing the pip install.
     """
     os.environ["PIP_EXTRA_INDEX_URL"] = "https://pypi.org/simple"
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
