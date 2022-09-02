@@ -1,0 +1,6 @@
+---
+description: make sure that the index present in PIP_EXTRA_INDEX_URL is not leaked to the pip install_from_index
+issue-nr: 4723
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso5]
