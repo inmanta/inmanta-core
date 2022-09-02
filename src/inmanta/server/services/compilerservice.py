@@ -43,7 +43,7 @@ from inmanta import config, const, data, protocol, server
 from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
-from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv, PipCommandBuilder
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -271,11 +271,19 @@ class CompileRun(object):
                 else:
                     return await self._end_stage(returncode=0)
 
+            async def uninstall_protected_inmanta_packages() -> data.Report:
+                """
+                Ensure that no protected Inmanta packages are installed in the compiler venv.
+                """
+                cmd: List[str] = PipCommandBuilder.compose_uninstall_command(
+                    python_path=PythonEnvironment.get_python_path_for_env_path(venv_dir),
+                    pkg_names=PythonEnvironment.get_protected_inmanta_packages(),
+                )
+                return await self._run_compile_stage(
+                    name="Uninstall inmanta packages from the compiler venv", cmd=cmd, cwd=project_dir
+                )
+
             async def update_modules() -> data.Report:
-                # Make sure that no Inmanta packages are installed in the compiler venv
-                python_env = PythonEnvironment(env_path=venv_dir)
-                python_env.uninstall(pkg_names=PythonEnvironment.get_protected_inmanta_packages())
-                # Update modules
                 return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "project", "update"], cwd=project_dir)
 
             async def install_modules() -> data.Report:
@@ -334,6 +342,7 @@ class CompileRun(object):
                         # only pull changes if there is an upstream branch
                         if await self.get_upstream_branch():
                             yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                        yield uninstall_protected_inmanta_packages()
                         yield update_modules()
                 else:
                     if not repo_url:

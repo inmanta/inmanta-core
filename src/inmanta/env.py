@@ -557,13 +557,6 @@ class PythonEnvironment:
             requirements=inmanta_requirements,
         )
 
-    def uninstall(self, pkg_names: Sequence[str]) -> None:
-        """
-        Uninstall the given Python packages from this environment.
-        """
-        cmd: List[str] = PipCommandBuilder.compose_uninstall_command(python_path=self.python_path, pkg_names=pkg_names)
-        self._run_command_and_log_output(cmd)
-
     @classmethod
     def get_protected_inmanta_packages(cls) -> List[str]:
         """

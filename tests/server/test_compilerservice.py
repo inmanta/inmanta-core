@@ -1279,5 +1279,7 @@ async def test_uninstall_python_packages(
     await run_compile_with_force_update()
 
     # Assert no compilation failed
-    for r in await data.Report.get_list():
-        assert r.returncode == 0
+    reports = await data.Report.get_list(name="Uninstall inmanta packages from the compiler venv")
+    # The uninstall is executed on update. The first compile is not an update
+    assert len(reports) == 2
+    assert all(r.returncode == 0 for r in reports)
