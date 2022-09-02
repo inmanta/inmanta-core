@@ -359,9 +359,6 @@ class PipCommandBuilder:
             if index_urls
             else ["--no-index"]
         )
-        print("===============================================================================================Flo")
-        print(index_urls)
-        print(index_args)
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
         return [
@@ -523,6 +520,9 @@ class PythonEnvironment:
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
+
+        os.environ["PIP_EXTRA_INDEX_URL"] = ""
+
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
         self._run_pip_install_command(
