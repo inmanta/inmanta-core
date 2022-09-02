@@ -789,7 +789,8 @@ def test_pip_extra_index_env(
     Test that PIP_EXTRA_INDEX_URL is not set in the subprocess doing an install_from_index
     but that it is not changed in the active env.
 
-    The installation fails as the index https://pypi.org/simple is needed to install lorem~=0.0.1
+    The installation fails with ad ModuleNotFoundException
+    as the index https://pypi.org/simple is needed to install lorem~=0.0.1
     but it is only present in the active env in PIP_EXTRA_INDEX_URL which is not know by the
     subprocess doing the pip install.
     """
