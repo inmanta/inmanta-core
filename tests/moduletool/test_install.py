@@ -780,6 +780,48 @@ def test_project_install_requirement_not_loaded(
     assert message in (rec.message for rec in caplog.records)
 
 
+def test_pip_extra_index_env(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+) -> None:
+    """
+    Test that PIP_EXTRA_INDEX_URL is empty in the env when doing an install_from_index
+    """
+    os.environ["PIP_EXTRA_INDEX_URL"] = "index"
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        publish_index=index,
+    )
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
+        """,
+        autostd=False,
+        install_project=False,
+        python_package_sources=[index.url, "https://pypi.org/simple"],
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1]
+        ],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    assert os.getenv("PIP_EXTRA_INDEX_URL") == "index"
+    ProjectTool().execute("install", [])
+    assert os.getenv("PIP_EXTRA_INDEX_URL") == ""
+
+
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]

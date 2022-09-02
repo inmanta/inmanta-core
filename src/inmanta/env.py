@@ -520,7 +520,7 @@ class PythonEnvironment:
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
-
+        print("=================1===============")
         os.environ["PIP_EXTRA_INDEX_URL"] = ""
 
         constraint_files = constraint_files if constraint_files is not None else []
