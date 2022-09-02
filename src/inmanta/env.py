@@ -360,6 +360,7 @@ class PipCommandBuilder:
             else ["--no-index"]
         )
         print("===============================================================================================Flo")
+        print(index_urls)
         print(index_args)
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
