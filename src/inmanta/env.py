@@ -469,7 +469,9 @@ class PythonEnvironment:
             constraints_files=constraints_files,
             requirements_files=requirements_files,
         )
-        return_code, full_output = self.run_command_and_stream_output(cmd)
+        process_env = os.environ.copy()
+        del process_env["PIP_EXTRA_INDEX_URL"]
+        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -520,8 +522,6 @@ class PythonEnvironment:
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
-
-        os.environ["PIP_EXTRA_INDEX_URL"] = ""
 
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
@@ -606,6 +606,8 @@ class PythonEnvironment:
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
         """
+        print("===================")
+        print(env_vars)
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
