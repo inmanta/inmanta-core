@@ -20,7 +20,7 @@ import datetime
 import json
 import logging
 import uuid
-from typing import Any, Awaitable, Callable, Dict, Union
+from typing import Any, Awaitable, Callable, Dict, List, Union
 
 import pytest
 from pkg_resources import parse_version
@@ -211,7 +211,7 @@ NOISY_LOGGERS = [
 ]
 
 
-def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
+def assert_no_warning(caplog, loggers_to_allow: List[str] = NOISY_LOGGERS):
     """
     Assert there are no warning, except from the list of loggers to allow
     """
