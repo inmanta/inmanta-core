@@ -780,21 +780,24 @@ def test_project_install_requirement_not_loaded(
     assert message in (rec.message for rec in caplog.records)
 
 
+@pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL"])
 def test_pip_extra_index_env(
     tmpdir: py.path.local,
     modules_v2_dir: str,
     snippetcompiler_clean,
+    monkeypatch,
+    env_var,
 ) -> None:
     """
-    Test that PIP_EXTRA_INDEX_URL is not set in the subprocess doing an install_from_index
+    Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
     and that it is not changed in the active env.
 
     The installation fails with an ModuleNotFoundException
     as the index https://pypi.org/simple is needed to install lorem~=0.0.1,
-    but it is only present in the active env in PIP_EXTRA_INDEX_URL which is not know by the
+    but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL which is not know by the
     subprocess doing the pip install.
     """
-    os.environ["PIP_EXTRA_INDEX_URL"] = "https://pypi.org/simple"
+    monkeypatch.setenv(env_var, "https://pypi.org/simple")
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
     # prepare v2 modules
@@ -823,10 +826,10 @@ def test_pip_extra_index_env(
 
     # install project
     os.chdir(module.Project.get().path)
-    assert os.getenv("PIP_EXTRA_INDEX_URL") == "https://pypi.org/simple"
+    assert os.getenv(env_var) == "https://pypi.org/simple"
     with pytest.raises(ModuleNotFoundException):
         ProjectTool().execute("install", [])
-    assert os.getenv("PIP_EXTRA_INDEX_URL") == "https://pypi.org/simple"
+    assert os.getenv(env_var) == "https://pypi.org/simple"
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
