@@ -1,0 +1,6 @@
+---
+description: change tox.ini file to store the output ou mypy into a file
+change-type: patch
+destination-branches: [master, iso5, iso4]
+issue-nr: 1291
+issue-repo: irt
