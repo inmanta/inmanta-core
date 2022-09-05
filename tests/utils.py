@@ -20,7 +20,7 @@ import datetime
 import json
 import logging
 import uuid
-from typing import Any, Awaitable, Callable, Dict, Union
+from typing import Any, Awaitable, Callable, Dict, List, Union
 
 import pytest
 from pkg_resources import parse_version
@@ -203,6 +203,20 @@ class LogSequence(object):
 
     def no_more_errors(self):
         self.assert_not("", logging.ERROR, "")
+
+
+NOISY_LOGGERS = [
+    "inmanta.config",  # Option deprecations
+    "inmanta.util",  # cancel background tasks
+]
+
+
+def assert_no_warning(caplog, loggers_to_allow: List[str] = NOISY_LOGGERS):
+    """
+    Assert there are no warning, except from the list of loggers to allow
+    """
+    for record in caplog.records:
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
 
 
 def configure(unused_tcp_port, database_name, database_port):
