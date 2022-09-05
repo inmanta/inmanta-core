@@ -26,6 +26,7 @@ import uuid
 from asyncio import Semaphore
 from typing import AsyncIterator, List, Optional, Tuple
 
+import pkg_resources
 import pytest
 from pytest import approx
 
@@ -34,6 +35,7 @@ import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
+from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -1208,3 +1210,62 @@ async def test_notification_on_failed_pull_during_compile(
     )
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]
+
+
+async def test_uninstall_python_packages(
+    environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch, local_module_package_index: str
+) -> None:
+    """
+    Verify that the compiler service removes protected packages installed in the compiler venv before starting
+    """
+    env: data.Environment = await environment_factory.create_environment("")
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    async def run_compile_with_force_update() -> None:
+        compile_db_record = data.Compile(
+            remote_id=uuid.uuid4(),
+            environment=env.id,
+            force_update=True,
+        )
+        await compile_db_record.insert()
+
+        cr = CompileRun(compile_db_record, project_work_dir)
+        await cr.run()
+
+    # Make the compiler service create the venv
+    await run_compile_with_force_update()
+    venv_path = os.path.join(project_work_dir, ".env")
+    assert os.path.exists(venv_path)
+
+    # Make inmanta-module-elaboratev2module a protected package
+    name_protected_pkg = "inmanta-module-elaboratev2module"
+
+    def patch_get_protected_inmanta_packages():
+        return [name_protected_pkg]
+
+    monkeypatch.setattr(PythonEnvironment, "get_protected_inmanta_packages", patch_get_protected_inmanta_packages)
+
+    # Install protected package in venv
+    venv = PythonEnvironment(env_path=venv_path)
+    assert name_protected_pkg not in venv.get_installed_packages()
+    venv.install_from_index(
+        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)], index_urls=[local_module_package_index]
+    )
+    assert name_protected_pkg in venv.get_installed_packages()
+
+    # Run a new compile
+    await run_compile_with_force_update()
+
+    # Verify that the protected package was removed
+    assert name_protected_pkg not in venv.get_installed_packages()
+
+    # Run a new compile without any protected packages installed in the
+    # venv of the compiler service.
+    await run_compile_with_force_update()
+
+    # Assert no compilation failed
+    reports = await data.Report.get_list(name="Uninstall inmanta packages from the compiler venv")
+    # The uninstall is executed on update. The first compile is not an update
+    assert len(reports) == 2
+    assert all(r.returncode == 0 for r in reports)
