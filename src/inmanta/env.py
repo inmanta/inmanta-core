@@ -469,10 +469,12 @@ class PythonEnvironment:
             constraints_files=constraints_files,
             requirements_files=requirements_files,
         )
+
+        # if index_urls are set, only use those. Otherwise, use the one from the environment
         process_env = os.environ.copy()
-        if "PIP_EXTRA_INDEX_URL" in process_env:
+        if index_urls is not None and "PIP_EXTRA_INDEX_URL" in process_env:
             del process_env["PIP_EXTRA_INDEX_URL"]
-        if "PIP_INDEX_URL" in process_env:
+        if "PIP_INDEX_URL" in process_env and index_urls is not None:
             del process_env["PIP_INDEX_URL"]
         return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=process_env)
 

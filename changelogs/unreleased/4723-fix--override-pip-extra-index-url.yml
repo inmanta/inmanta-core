@@ -1,6 +1,8 @@
 ---
-description: make sure that the index present in PIP_EXTRA_INDEX_URL is not leaked to the pip install_from_index
+description: make sure that the index present in PIP_INDEX_URL or PIP_EXTRA_INDEX_URL is not leaked to pip when using install_from_index
 issue-nr: 4723
 issue-repo: inmanta-core
 change-type: patch
 destination-branches: [master, iso5]
+sections:
+  bugfix: "{{description}}"
