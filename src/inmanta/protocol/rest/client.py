@@ -27,11 +27,13 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResp
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
+from opentelemetry import trace
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 class RESTClient(RESTBase):
@@ -115,35 +117,36 @@ class RESTClient(RESTBase):
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
-        try:
-            request = HTTPRequest(
-                url=url,
-                method=base_request.method,
-                headers=headers,
-                body=body,
-                connect_timeout=self.connection_timout,
-                request_timeout=self.request_timeout,
-                ca_certs=ca_certs,
-                decompress_response=True,
-            )
-            client = AsyncHTTPClient()
-            response = await client.fetch(request)
-        except HTTPError as e:
-            if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
-                try:
-                    result = self._decode(e.response.body)
-                except ValueError:
-                    result = {}
-                return common.Result(code=e.code, result=result)
+        with tracer.start_as_current_span("rpc." + str(properties.function.__name__), kind=trace.SpanKind.SERVER):
+            try:
+                request = HTTPRequest(
+                    url=url,
+                    method=base_request.method,
+                    headers=headers,
+                    body=body,
+                    connect_timeout=self.connection_timout,
+                    request_timeout=self.request_timeout,
+                    ca_certs=ca_certs,
+                    decompress_response=True,
+                )
+                client = AsyncHTTPClient()
+                response = await client.fetch(request)
+            except HTTPError as e:
+                if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
+                    try:
+                        result = self._decode(e.response.body)
+                    except ValueError:
+                        result = {}
+                    return common.Result(code=e.code, result=result)
 
-            return common.Result(code=e.code, result={"message": str(e)})
-        except CancelledError:
-            raise
-        except Exception as e:
-            LOGGER.exception("Failed to send request")
-            return common.Result(code=500, result={"message": str(e)})
+                return common.Result(code=e.code, result={"message": str(e)})
+            except CancelledError:
+                raise
+            except Exception as e:
+                LOGGER.exception("Failed to send request")
+                return common.Result(code=500, result={"message": str(e)})
 
-        return self._decode_response(response)
+            return self._decode_response(response)
 
     def _decode_response(self, response: HTTPResponse):
         content_type = response.headers.get(common.CONTENT_TYPE, None)

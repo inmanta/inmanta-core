@@ -36,7 +36,6 @@ from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
-
 from opentelemetry import trace
 
 tracer = trace.get_tracer(__name__)

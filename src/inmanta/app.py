@@ -53,7 +53,7 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol
+from inmanta import const, module, moduletool, protocol, tracing
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -64,7 +64,6 @@ from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
-from inmanta import tracing
 
 try:
     import rpdb
