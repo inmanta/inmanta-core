@@ -474,8 +474,9 @@ class PythonEnvironment:
         process_env = os.environ.copy()
         if index_urls is not None and "PIP_EXTRA_INDEX_URL" in process_env:
             del process_env["PIP_EXTRA_INDEX_URL"]
-        if "PIP_INDEX_URL" in process_env and index_urls is not None:
+        if index_urls is not None and "PIP_INDEX_URL" in process_env:
             del process_env["PIP_INDEX_URL"]
+
         return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:

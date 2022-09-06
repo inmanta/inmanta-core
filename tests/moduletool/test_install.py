@@ -781,7 +781,7 @@ def test_project_install_requirement_not_loaded(
 
 
 @pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL"])
-def test_pip_extra_index_env(
+def test_install_from_index_dont_leak_pip_index(
     tmpdir: py.path.local,
     modules_v2_dir: str,
     snippetcompiler_clean,
@@ -793,22 +793,22 @@ def test_pip_extra_index_env(
     and that it is not changed in the active env.
 
     The installation fails with an ModuleNotFoundException
-    as the index https://pypi.org/simple is needed to install lorem~=0.0.1,
+    as the index .custom-index is needed to install v2mod1,
     but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL which is not know by the
     subprocess doing the pip install.
     """
-    monkeypatch.setenv(env_var, "https://pypi.org/simple")
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
 
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     # prepare v2 modules
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
     v2mod1: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod1"),
         new_name="v2mod1",
-        new_requirements=[Requirement.parse("lorem~=0.0.1")],
         publish_index=index,
     )
+
+    monkeypatch.setenv(env_var, index.url)
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
@@ -817,7 +817,7 @@ def test_pip_extra_index_env(
         """,
         autostd=False,
         install_project=False,
-        python_package_sources=[index.url],
+        python_package_sources=["unknown"],
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod1]
@@ -826,10 +826,10 @@ def test_pip_extra_index_env(
 
     # install project
     os.chdir(module.Project.get().path)
-    assert os.getenv(env_var) == "https://pypi.org/simple"
+    assert os.getenv(env_var) == index.url
     with pytest.raises(ModuleNotFoundException):
         ProjectTool().execute("install", [])
-    assert os.getenv(env_var) == "https://pypi.org/simple"
+    assert os.getenv(env_var) == index.url
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
