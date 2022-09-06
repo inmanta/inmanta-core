@@ -22,13 +22,13 @@ from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
 
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
 from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint

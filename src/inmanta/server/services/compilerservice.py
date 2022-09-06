@@ -54,7 +54,10 @@ from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
+from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+tracer = trace.get_tracer(__name__)
 RETURNCODE_INTERNAL_ERROR = -1
 
 LOGGER: Logger = logging.getLogger(__name__)
@@ -307,7 +310,9 @@ class CompileRun(object):
                 python_path = PythonEnvironment.get_python_path_for_env_path(venv_dir)
                 assert os.path.exists(python_path)
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
-                return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
+                with tracer.start_as_current_span(f"compile stage {stage_name}"):
+                    TraceContextTextMapPropagator().inject(env)
+                    return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
             async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
                 """

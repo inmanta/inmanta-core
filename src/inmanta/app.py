@@ -64,6 +64,8 @@ from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
+from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 try:
     import rpdb
@@ -71,6 +73,8 @@ except ImportError:
     rpdb = None
 
 LOGGER = logging.getLogger("inmanta")
+
+tracer = trace.get_tracer(__name__)
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -832,21 +836,26 @@ def app() -> None:
             if helpmsg is not None:
                 print(helpmsg)
 
-    try:
-        options.func(options)
-    except ShowUsageException as e:
-        print(e.args[0], file=sys.stderr)
-        parser.print_usage()
-    except CLIException as e:
-        report(e)
-        sys.exit(e.exitcode)
-    except Exception as e:
-        report(e)
-        sys.exit(1)
-    except KeyboardInterrupt as e:
-        report(e)
-        sys.exit(1)
-    sys.exit(0)
+    ctx = None
+    if "traceparent" in os.environ:
+        ctx = TraceContextTextMapPropagator().extract(carrier=os.environ["traceparent"])
+
+    with tracer.start_as_current_span(f"cmd {options.func}", context=ctx):
+        try:
+            options.func(options)
+        except ShowUsageException as e:
+            print(e.args[0], file=sys.stderr)
+            parser.print_usage()
+        except CLIException as e:
+            report(e)
+            sys.exit(e.exitcode)
+        except Exception as e:
+            report(e)
+            sys.exit(1)
+        except KeyboardInterrupt as e:
+            report(e)
+            sys.exit(1)
+        sys.exit(0)
 
 
 if __name__ == "__main__":
