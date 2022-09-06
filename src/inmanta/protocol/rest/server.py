@@ -25,6 +25,7 @@ from json import JSONDecodeError
 from typing import Dict, List, MutableMapping, Optional, Sequence, Union
 
 import tornado
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from pyformance import timer
 from tornado import httpserver, iostream, routing, web
 
@@ -126,7 +127,11 @@ class RESTHandler(tornado.web.RequestHandler):
         if not self._transport.running:
             return
 
-        with tracer.start_as_current_span("rpc." + call_config.method_name, kind=trace.SpanKind.SERVER):
+        ctx = None
+        if "traceparent" in self.request.headers:
+            ctx = TraceContextTextMapPropagator().extract(carrier=self.request.headers)
+
+        with tracer.start_as_current_span("rpc." + call_config.method_name, kind=trace.SpanKind.SERVER, context=ctx):
             with timer("rpc." + call_config.method_name).time():
                 self._transport.start_request()
                 try:

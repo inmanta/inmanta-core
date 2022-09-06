@@ -22,6 +22,7 @@ from asyncio import CancelledError
 from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
 
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
@@ -117,7 +118,8 @@ class RESTClient(RESTBase):
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
-        with tracer.start_as_current_span("rpc." + str(properties.function.__name__), kind=trace.SpanKind.SERVER):
+        with tracer.start_as_current_span("rpc." + str(properties.function.__name__), kind=trace.SpanKind.CLIENT) as span:
+            TraceContextTextMapPropagator().inject(headers)
             try:
                 request = HTTPRequest(
                     url=url,
