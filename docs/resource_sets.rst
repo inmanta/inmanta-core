@@ -61,7 +61,7 @@ as the index example shows. This can result in undefinable behavior.
 Constraints and rules
 ************************
 
-Some restrictions and guidelines were implemented to guarantee that partial compilations function properly:
+Some restrictions were implemented to guarantee that partial compilations function properly:
 
 * A resource cannot be a part of more than one resource set at once.
 * A resource does not have to be part of a resource set.
@@ -71,6 +71,8 @@ Some restrictions and guidelines were implemented to guarantee that partial comp
 * The new version of the model that emerges from a partial compilation should have a dependency graph that is closed within the resource sets that were exported.
   i.e., it should not depend on any resource sets other than those that were exported.
 * Multiple resource sets may be updated simultaneously via a partial build.
+
+TODO: link to new section
 
 
 Exporting a partial model to the server
@@ -91,3 +93,50 @@ Limitations
   A full compile is required to remove shared resources. Scheduled full compilations that ``garbage-collect`` these shared resources are one way to fix this.
   The :inmanta.environment-settings:setting:`auto_full_compile` environment setting is used to schedule full compilations.
   As an example, to plan a daily full compile for 01:00 UTC, use the ``auto_full_compile`` environment setting:  ``0 1 * * *``.
+
+
+TODO: mention this in the document's introduction?
+
+Modeling guidelines
+###################
+This section will introduce some guidelines for developing models for use with the partial compilation feature. These present
+a generic method that is safe to use with partial compiles. While diverging from these guidelines where they are overly
+restrictive for your use case does not guarantee an incompatible model, it should always be done conciously and with extreme
+care to respect the `Constraints and rules`_.
+
+For simplicity, we will assume a model where each set of independent resources is ultimately defined by a single top-level
+entity, which we will refer to as the "service" or "service entity" (as in ``LSM``). While the same concepts apply to the
+use case where a set of independent resources is defined by more than one service entity, the guidelines currently do not
+cover that use case.
+
+TODO: see how trivial it would be to extend to the multi-service use case
+TODO: "On a high level" -> remove?
+TODO: should I simplify and just talk about resources rather than generic nodes?
+
+On a high level, to allow safe use of partial compiles, it is imperative that each service's refinements (through
+implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a
+shared node should be considered shared and any resources in it must not be part of a resource set. All shared resources should
+be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes
+should generally be considered owned by the service and all their resources be part of the service's resource set. For more
+details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can
+not intersect on owned nodes, see the `Ownership`_ section.
+
+Ownership
+*********
+A resource can safely be considered owned by a service instance if it could never be created by another service instance. There
+are two main mechanisms that can be used to provide this guarantee. One is the use of indexes on appropriate locations, the
+other is the use of some external distributor of unique values (e.g. a plugin to generate a UUID or to allocate values in an
+inventory).
+
+TODO: indexes, do they even suffice now that we don't check on the API level yet? For core-only custom check is always required
+TODO: when using inventory, responsibility for uniqueness is shifted to inventory
+TODO: which values need to be unique?
+
+
+TODO: section about ownership: indexes vs inventory
+TODO: example model (running example? mention assumption that resource id is netid+rid) + trees + highlight tree if there would be an index on Router id + that's where inventory comes into play
+
+
+TODO: can we be more concrete? Should the section introduction mention that we go from high level to concrete?
+
+TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
