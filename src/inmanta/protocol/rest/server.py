@@ -37,6 +37,11 @@ from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
 from inmanta.types import ReturnTypes
 
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+
+
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
@@ -122,56 +127,57 @@ class RESTHandler(tornado.web.RequestHandler):
         if not self._transport.running:
             return
 
-        with timer("rpc." + call_config.method_name).time():
-            self._transport.start_request()
-            try:
-                message = self._transport._decode(self.request.body)
-                LOGGER.debug(f"HTTP version of request: {self.request.version}")
-                if message is None:
-                    message = {}
-
-                for key, value in self.request.query_arguments.items():
-                    if len(value) == 1:
-                        message[key] = value[0].decode("latin-1")
-                    else:
-                        message[key] = [v.decode("latin-1") for v in value]
-
-                request_headers = self.request.headers
-                auth_token = self.get_auth_token(request_headers)
-
-                auth_enabled = server_enable_auth.get()
-                if not auth_enabled or auth_token is not None:
-                    result = await self._transport._execute_call(
-                        kwargs, http_method, call_config, message, request_headers, auth_token
-                    )
-                    self.respond(result.body, result.headers, result.status_code)
-                else:
-                    raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
-
-            except JSONDecodeError as e:
-                error_message = f"The request body couldn't be decoded as a JSON: {e}"
-                LOGGER.info(error_message, exc_info=True)
-                self.respond({"message": error_message}, {}, 400)
-
-            except ValueError:
-                LOGGER.exception("An exception occured")
-                self.respond({"message": "Unable to decode request body"}, {}, 400)
-
-            except exceptions.BaseHttpException as e:
-                self.respond(e.to_body(), {}, e.to_status())
-
-            except CancelledError:
-                self.respond({"message": "Request is cancelled on the server"}, {}, 500)
-
-            finally:
+        with tracer.start_as_current_span("rpc." + call_config.method_name):
+            with timer("rpc." + call_config.method_name).time():
+                self._transport.start_request()
                 try:
-                    await self.finish()
-                except iostream.StreamClosedError:
-                    # The connection has been closed already.
-                    pass
-                except Exception:
-                    LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
-                self._transport.end_request()
+                    message = self._transport._decode(self.request.body)
+                    LOGGER.debug(f"HTTP version of request: {self.request.version}")
+                    if message is None:
+                        message = {}
+
+                    for key, value in self.request.query_arguments.items():
+                        if len(value) == 1:
+                            message[key] = value[0].decode("latin-1")
+                        else:
+                            message[key] = [v.decode("latin-1") for v in value]
+
+                    request_headers = self.request.headers
+                    auth_token = self.get_auth_token(request_headers)
+
+                    auth_enabled = server_enable_auth.get()
+                    if not auth_enabled or auth_token is not None:
+                        result = await self._transport._execute_call(
+                            kwargs, http_method, call_config, message, request_headers, auth_token
+                        )
+                        self.respond(result.body, result.headers, result.status_code)
+                    else:
+                        raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+
+                except JSONDecodeError as e:
+                    error_message = f"The request body couldn't be decoded as a JSON: {e}"
+                    LOGGER.info(error_message, exc_info=True)
+                    self.respond({"message": error_message}, {}, 400)
+
+                except ValueError:
+                    LOGGER.exception("An exception occured")
+                    self.respond({"message": "Unable to decode request body"}, {}, 400)
+
+                except exceptions.BaseHttpException as e:
+                    self.respond(e.to_body(), {}, e.to_status())
+
+                except CancelledError:
+                    self.respond({"message": "Request is cancelled on the server"}, {}, 500)
+
+                finally:
+                    try:
+                        await self.finish()
+                    except iostream.StreamClosedError:
+                        # The connection has been closed already.
+                        pass
+                    except Exception:
+                        LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
+                    self._transport.end_request()
 
     async def head(self, *args: str, **kwargs: str) -> None:
         if args:
