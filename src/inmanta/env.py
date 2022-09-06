@@ -1058,7 +1058,7 @@ class VirtualEnv(ActiveEnv):
         super(VirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
-        self.__using_venv: bool = False
+        self._using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
@@ -1123,13 +1123,13 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python = self.python_path
 
     def is_using_virtual_env(self) -> bool:
-        return self.__using_venv
+        return self._using_venv
 
     def use_virtual_env(self) -> None:
         """
         Activate the virtual environment.
         """
-        if self.__using_venv:
+        if self._using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
 
         self.init_env()
@@ -1139,7 +1139,7 @@ class VirtualEnv(ActiveEnv):
         # patch up pkg
         self.notify_change()
 
-        self.__using_venv = True
+        self._using_venv = True
 
     def _write_pip_binary(self) -> None:
         """
@@ -1219,14 +1219,14 @@ import sys
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
             requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
@@ -1237,9 +1237,45 @@ import sys
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
+
+
+class ReentrantVirtualEnv(VirtualEnv):
+    """
+    A virtual env that can be de-activated and re-activated
+
+    This allows faster reloading due to improved caching of the working set
+
+    This is intended for use in testcases to require a lot of venv switching
+    """
+
+    def __init__(self, env_path: str) -> None:
+        super(ReentrantVirtualEnv, self).__init__(env_path)
+        self.working_set = None
+
+    def deactivate(self):
+        self._using_venv = False
+        self.working_set = pkg_resources.working_set
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        if self._using_venv:
+            # We are in use, just ignore double activation
+            return
+
+        if not self.working_set:
+            # First run
+            super().use_virtual_env()
+        else:
+            # Later run
+            self._activate_that()
+            mock_process_env(python_path=self.python_path)
+            pkg_resources.working_set = self.working_set
+            self._using_venv = True
 
 
 class VenvCreationFailedError(Exception):

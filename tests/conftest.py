@@ -105,7 +105,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, ReentrantVirtualEnv
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
@@ -961,6 +961,7 @@ class SnippetCompilationTest(KeepOnFail):
         self.libs = tempfile.mkdtemp()
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
+        self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -981,6 +982,7 @@ class SnippetCompilationTest(KeepOnFail):
         if not self._keep:
             shutil.rmtree(self.project_dir)
         self.project = None
+        self.venv.deactivate()
 
     def keep(self):
         self._keep = True
@@ -1041,7 +1043,7 @@ class SnippetCompilationTest(KeepOnFail):
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
         self.project.use_virtual_env()

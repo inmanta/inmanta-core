@@ -1709,7 +1709,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         path: str,
         autostd: bool = True,
         main_file: str = "main.cf",
-        venv_path: Optional[str] = None,
+        venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
         attach_cf_cache: bool = True,
         strict_deps_check: Optional[bool] = None,
     ) -> None:
@@ -1760,8 +1760,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if venv_path is None:
             self.virtualenv = env.process_env
         else:
-            venv_path = os.path.abspath(venv_path)
-            self.virtualenv = env.VirtualEnv(venv_path)
+            if isinstance(venv_path, env.VirtualEnv):
+                self.virtualenv = venv_path
+            else:
+                venv_path = os.path.abspath(venv_path)
+                self.virtualenv = env.VirtualEnv(venv_path)
 
         self.loaded = False
         self.modules: Dict[str, Module] = {}
