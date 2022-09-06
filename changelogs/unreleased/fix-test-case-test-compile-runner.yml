@@ -1,0 +1,4 @@
+---
+description: Take into account new compile stage (stage_name='Uninstall inmanta packages from the compiler venv') in test case test_compile_runner
+change-type: patch
+destination-branches: [master, iso5]
