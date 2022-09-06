@@ -64,6 +64,7 @@ from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
+from inmanta import tracing
 
 try:
     import rpdb
