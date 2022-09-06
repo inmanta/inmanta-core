@@ -127,7 +127,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if not self._transport.running:
             return
 
-        with tracer.start_as_current_span("rpc." + call_config.method_name):
+        with tracer.start_as_current_span("rpc." + call_config.method_name, kind=trace.SpanKind.SERVER):
             with timer("rpc." + call_config.method_name).time():
                 self._transport.start_request()
                 try:
