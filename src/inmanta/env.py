@@ -470,8 +470,9 @@ class PythonEnvironment:
             requirements_files=requirements_files,
         )
 
-        # if index_urls are set, only use those. Otherwise, use the one from the environment
         sub_env = os.environ.copy()
+
+        # if index_urls are set, only use those. Otherwise, use the one from the environment
         if index_urls is not None:
             # setting this env_var to os.devnull disables the loading of all pip configuration files
             sub_env["PIP_CONFIG_FILE"] = os.devnull
