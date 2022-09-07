@@ -29,7 +29,7 @@ from asyncpg.pool import Pool
 
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import QueryType
+from inmanta.data import ArgumentCollector, QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
 from utils import resource_action_consistency_check
 
@@ -1896,7 +1896,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         assert action.messages[0]["level"] == LogLevel.INFO.name
 
     # Get logs for non-existing resource_version_id
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=%1")
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent11,path=/etc/motd],v=1")
     assert len(resource_actions) == 0
 
     resource_actions = await data.ResourceAction.get_logs_for_version(env.id, version)
@@ -2908,3 +2908,29 @@ def test_validate_combined_filter():
     )
     assert combined_filter == "status IS NOT NULL AND status = ANY ($1) AND NOT (status = ANY ($2))"
     assert values == [["deployed", "orphaned"], ["deploying"]]
+
+
+def test_arg_collector():
+    args = ArgumentCollector()
+    assert args("a") == "$1"
+    assert args("a") == "$2"
+    assert args("b") == "$3"
+    assert args.get_values() == ["a", "a", "b"]
+
+    args = ArgumentCollector(offset=2)
+    assert args("a") == "$3"
+    assert args("a") == "$4"
+    assert args("b") == "$5"
+    assert args.get_values() == ["a", "a", "b"]
+
+    args = ArgumentCollector(de_duplicate=True)
+    assert args("a") == "$1"
+    assert args("a") == "$1"
+    assert args("b") == "$2"
+    assert args.get_values() == ["a", "b"]
+
+    args = ArgumentCollector(de_duplicate=True, offset=3)
+    assert args("a") == "$4"
+    assert args("a") == "$4"
+    assert args("b") == "$5"
+    assert args.get_values() == ["a", "b"]
