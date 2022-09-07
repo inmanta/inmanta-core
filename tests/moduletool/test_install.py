@@ -720,36 +720,52 @@ def test_project_install_incompatible_dependencies(
     warnings.
     """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-
     # prepare v2 modules
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
-    v2mod1: module.ModuleV2Metadata = module_from_template(
+
+    v2mod1_1: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
-        os.path.join(str(tmpdir), "v2mod1"),
+        os.path.join(str(tmpdir), "v2mod1_1"),
         new_name="v2mod1",
-        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        new_version=version.Version("1.0.0"),
         publish_index=index,
     )
+
+    v2mod1_2: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1_2"),
+        new_name="v2mod1",
+        new_version=version.Version("2.0.0"),
+        publish_index=index,
+    )
+
     v2mod2: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod2"),
         new_name="v2mod2",
-        new_requirements=[Requirement.parse("lorem~=0.1.1")],
+        new_requirements=[Requirement.parse("inmanta-module-v2mod1~=1.0.0")],
+        publish_index=index,
+    )
+    v2mod3: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod3"),
+        new_name="v2mod3",
+        new_requirements=[Requirement.parse("inmanta-module-v2mod1~=2.0.0")],
         publish_index=index,
     )
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         f"""
-        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
         import {module.ModuleV2.get_name_from_metadata(v2mod2)}
+        import {module.ModuleV2.get_name_from_metadata(v2mod3)}
         """,
         autostd=False,
         install_project=False,
-        python_package_sources=[index.url, "https://pypi.org/simple"],
+        python_package_sources=[index.url],
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
-            for metadata in [v2mod1, v2mod2]
+            for metadata in [v2mod2, v2mod3]
         ],
     )
 
@@ -757,7 +773,10 @@ def test_project_install_incompatible_dependencies(
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
+    assert (
+        "inmanta-module-v2mod1~=1.0.0 and inmanta-module-v2mod1~=2.0.0 because these package versions have conflicting "
+        "dependencies" in e.value.msg
+    )
 
 
 def test_project_install_requirement_not_loaded(
