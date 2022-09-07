@@ -479,7 +479,19 @@ class PythonEnvironment:
             constraints_files=constraints_files,
             requirements_files=requirements_files,
         )
-        return_code, full_output = self.run_command_and_stream_output(cmd)
+
+        sub_env = os.environ.copy()
+
+        # if index_urls are set, only use those. Otherwise, use the one from the environment
+        if index_urls is not None:
+            # setting this env_var to os.devnull disables the loading of all pip configuration files
+            sub_env["PIP_CONFIG_FILE"] = os.devnull
+        if index_urls is not None and "PIP_EXTRA_INDEX_URL" in sub_env:
+            del sub_env["PIP_EXTRA_INDEX_URL"]
+        if index_urls is not None and "PIP_INDEX_URL" in sub_env:
+            del sub_env["PIP_INDEX_URL"]
+
+        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -1114,7 +1126,6 @@ class VirtualEnv(ActiveEnv):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         if not os.path.exists(self._path_pth_file):
-
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()

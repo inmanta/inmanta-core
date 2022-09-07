@@ -780,6 +780,66 @@ def test_project_install_requirement_not_loaded(
     assert message in (rec.message for rec in caplog.records)
 
 
+@pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_CONFIG_FILE"])
+def test_install_from_index_dont_leak_pip_index(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    env_var,
+) -> None:
+    """
+    Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
+    and that it is not changed in the active env. also test that the pip configuration file is not used.
+
+    The installation fails with an ModuleNotFoundException
+    as the index .custom-index is needed to install v2mod1,
+    but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL/config file which is not know by the
+    subprocess doing the pip install.
+    """
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    if env_var == "PIP_CONFIG_FILE":
+        pip_config_file = os.path.join(tmpdir, "pip.conf")
+        with open(pip_config_file, "w+", encoding="utf-8") as f:
+            f.write("[global]\n")
+            f.write("timeout = 60\n")
+            f.write("extra-index-url =" + index.url + "\n")
+        monkeypatch.setenv(env_var, pip_config_file)
+    else:
+        monkeypatch.setenv(env_var, index.url)
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source.
+        python_package_sources=["unknown"],
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1]
+        ],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+    with pytest.raises(ModuleNotFoundException):
+        ProjectTool().execute("install", [])
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+
+
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
