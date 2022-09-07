@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -755,11 +755,11 @@ class ResourceService(protocol.ServerSlice):
 
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
-        self.clear_env_cache(env)
+            self.clear_env_cache(env)
 
-        return await data.Resource.get_last_non_deploying_state_for_dependencies(
-            environment=env.id, resource_version_id=resource_id
-        )
+            return await data.Resource.get_last_non_deploying_state_for_dependencies(
+                environment=env.id, resource_version_id=resource_id, connection=connection
+            )
 
     @handle(methods_v2.get_resource_actions, env="tid")
     async def get_resource_actions(
@@ -851,64 +851,8 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: Id,
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
-        resource_id_str = resource_id.resource_version_str()
-
-        async def get_deploy_actions(
-            resource_id: Id,
-            first_timestamp: Optional[datetime.datetime] = None,
-            last_timestamp: Optional[datetime.datetime] = None,
-            limit: int = 1000,
-        ) -> List[data.ResourceAction]:
-            return await data.ResourceAction.query_resource_actions(
-                environment=env.id,
-                resource_type=resource_id.get_entity_type(),
-                agent=resource_id.get_agent_name(),
-                resource_id_value=resource_id.get_attribute_value(),
-                first_timestamp=first_timestamp,
-                last_timestamp=last_timestamp,
-                action=const.ResourceAction.deploy,
-                limit=limit,
-            )
-
-        current_deploy_start: datetime.datetime
-        last_deploy_start: Optional[datetime.datetime]
-
-        deploy_actions: Iterator[data.ResourceAction] = iter(await get_deploy_actions(resource_id))
-        try:
-            current_deploy: data.ResourceAction = next(deploy_actions)
-            if current_deploy.status != const.ResourceState.deploying:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {current_deploy.status}."
-                )
-            current_deploy_start = current_deploy.started
-        except StopIteration:
-            raise BadRequest(
-                "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                f" {resource_id_str} has not started deploying yet."
-            )
-        try:
-            last_deploy: data.ResourceAction = next(
-                action for action in deploy_actions if action.status == const.ResourceState.deployed
-            )
-            last_deploy_start = last_deploy.started
-        except StopIteration:
-            # This resource hasn't been deployed before: fetch all events
-            last_deploy_start = None
-
-        resource: Optional[data.Resource] = await data.Resource.get_one(environment=env.id, resource_version_id=resource_id_str)
-        if resource is None:
-            raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
         return {
-            dependency.resource_str(): [
-                action.to_dto()
-                for action in await get_deploy_actions(
-                    dependency,
-                    first_timestamp=last_deploy_start,
-                    last_timestamp=current_deploy_start,
-                )
-            ]
-            for dependency in (Id.parse_id(req) for req in resource.attributes["requires"])
+            k: [ra.to_dto() for ra in v] for k, v in (await data.ResourceAction.get_resource_events(env, resource_id)).items()
         }
 
     @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
@@ -919,8 +863,10 @@ class ResourceService(protocol.ServerSlice):
     ) -> bool:
         # This resource has been deployed before => determine whether it should be redeployed based on events
         return any(
-            action.change != const.Change.nochange
-            for dependency, actions in (await self.get_resource_events(env, resource_id)).items()
+            True
+            for dependency, actions in (
+                await data.ResourceAction.get_resource_events(env, resource_id, const.Change.nochange)
+            ).items()
             for action in actions
         )
 

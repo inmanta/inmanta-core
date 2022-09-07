@@ -1,0 +1,7 @@
+description: Performance improvements for the resource_did_dependency_change endpoint
+issue-nr: 4402
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"
+
