@@ -68,6 +68,9 @@ from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
+PERFORM_CLEANUP: bool = True
+# Kill switch for cleanup, for use when working with historical data
+
 
 class ResourceWithResourceSet:
     def __init__(
@@ -365,8 +368,9 @@ class OrchestrationService(protocol.ServerSlice):
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
 
     async def start(self) -> None:
-        self.schedule(self._purge_versions, opt.server_purge_version_interval.get(), cancel_on_stop=False)
-        self.add_background_task(self._purge_versions())
+        if PERFORM_CLEANUP:
+            self.schedule(self._purge_versions, opt.server_purge_version_interval.get(), cancel_on_stop=False)
+            self.add_background_task(self._purge_versions())
         await super().start()
 
     async def _purge_versions(self) -> None:
