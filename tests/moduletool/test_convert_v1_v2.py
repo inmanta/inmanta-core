@@ -124,6 +124,18 @@ def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
     path = os.path.normpath(os.path.join(__file__, os.pardir, os.pardir, "data", "modules", module_name))
     shutil.copytree(path, tmpdir)
     monkeypatch.chdir(tmpdir)
+
+    # Check that v1tov2 conversions are rejected when a setup.py file is present
+    setup_py_path = os.path.join(tmpdir, "setup.py")
+    with open(setup_py_path, "a"):
+        # create empty setup.py
+        pass
+    with pytest.raises(CLIException) as excinfo:
+        moduletool.ModuleTool().v1tov2(None)
+    message = f"Cannot convert v1 module at {tmpdir} to v2 because a setup.py file is present. Please remove/rename this file"
+    assert message in excinfo.value.args
+    os.remove(setup_py_path)
+
     moduletool.ModuleTool().v1tov2(None)
     assert_v2_module(module_name, tmpdir)
 
