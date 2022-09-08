@@ -1,0 +1,5 @@
+---
+description: rewrite test to fix security issue with pypi index.
+issue-nr: 4795
+change-type: patch
+destination-branches: [master, iso5]
