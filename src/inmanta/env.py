@@ -1242,42 +1242,6 @@ import sys
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 
 
-class ReentrantVirtualEnv(VirtualEnv):
-    """
-    A virtual env that can be de-activated and re-activated
-
-    This allows faster reloading due to improved caching of the working set
-
-    This is intended for use in testcases to require a lot of venv switching
-    """
-
-    def __init__(self, env_path: str) -> None:
-        super(ReentrantVirtualEnv, self).__init__(env_path)
-        self.working_set = None
-
-    def deactivate(self):
-        self._using_venv = False
-        self.working_set = pkg_resources.working_set
-
-    def use_virtual_env(self) -> None:
-        """
-        Activate the virtual environment.
-        """
-        if self._using_venv:
-            # We are in use, just ignore double activation
-            return
-
-        if not self.working_set:
-            # First run
-            super().use_virtual_env()
-        else:
-            # Later run
-            self._activate_that()
-            mock_process_env(python_path=self.python_path)
-            pkg_resources.working_set = self.working_set
-            self._using_venv = True
-
-
 class VenvCreationFailedError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)
