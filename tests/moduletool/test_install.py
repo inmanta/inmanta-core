@@ -431,7 +431,7 @@ def test_project_install_logs(
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
-        f"""
+        """
         """,
         autostd=False,
         install_project=False,
