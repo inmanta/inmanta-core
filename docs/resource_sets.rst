@@ -119,7 +119,26 @@ shared node should be considered shared and any resources in it must not be part
 be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes
 should generally be considered owned by the service and all their resources be part of the service's resource set. For more
 details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can
-not intersect on owned nodes, see the `Ownership`_ section.
+not intersect on owned nodes, see the `Ownership`_ subsection.
+
+Service instance uniqueness
+***************************
+With full compiles, indexes serve as the identity of a service instance. The compiler then validates that no conflicting
+service instances can exist. With partial compiles this validation is lost because only one service instance will be present
+in the model. However, it is still crucial that such conflicts do not exist. Put simply, we need to make sure that a partial
+compile succeeds only if a full compile would succeed as well. This subsection deals solely with the uniqueness of service
+instances. The `Ownership`_ subsection then deals with safe refinements into resources.
+
+To ensure service instance definitions are distinct, the model must make sure to do appropriate validation on the full set of
+definitions. When doing a partial compile, the model must verify that the service instance it is compiling for, has a different
+identity from any of the previously defined service instances. This can be achieved by externally checking against some sort of
+inventory that there are no matches for any set of input attributes that identify the instance.
+
+The current implementation of partial compiles does not provide any helpers for this verification. It is the responsibility of
+the model developer or the tool/exetnsion that does the export to ensure that no two service instances can be created that are
+considered to have the same identity by the model.
+
+# TODO: example
 
 Ownership
 *********
@@ -128,12 +147,10 @@ are two main mechanisms that can be used to provide this guarantee. One is the u
 other is the use of some external distributor of unique values (e.g. a plugin to generate a UUID or to allocate values in an
 inventory).
 
-TODO: indexes, do they even suffice now that we don't check on the API level yet? For core-only custom check is always required
+TODO: elaborate: which values need to be unique? How do you achieve this with indexes and/or allocation?
 TODO: when using inventory, responsibility for uniqueness is shifted to inventory
-TODO: which values need to be unique?
 
 
-TODO: section about ownership: indexes vs inventory
 TODO: example model (running example? mention assumption that resource id is netid+rid) + trees + highlight tree if there would be an index on Router id + that's where inventory comes into play
 
 
