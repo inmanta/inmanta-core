@@ -34,6 +34,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
+from inmanta.env import VenvCreationFailedError
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -45,6 +46,24 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         "on the python package repository.",
         allow_module_level=True,
     )
+
+
+def test_venv_empty_string(tmpdir):
+    """test that an exception is raised if the venv path is an empty string"""
+    with pytest.raises(VenvCreationFailedError) as e:
+        env.VirtualEnv("")
+    assert e.value.msg == "The env_path cannot be an empty string."
+
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
+    env_dir2 = tmpdir.mkdir("env2").strpath
+    venv2 = env.VirtualEnv(env_dir2)
+    venv2.env_path = ""
+    with pytest.raises(Exception) as e:
+        venv2.use_virtual_env()
+    assert e.value.args[0] == "The env_path cannot be an empty string."
 
 
 def test_basic_install(tmpdir):

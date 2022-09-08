@@ -1074,6 +1074,9 @@ class VirtualEnv(ActiveEnv):
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
+        if self.env_path == "":
+            raise VenvCreationFailedError("The env_path cannot be an empty string.")
+
     def exists(self) -> bool:
         """
         Returns True iff the venv exists on disk.
@@ -1142,6 +1145,8 @@ class VirtualEnv(ActiveEnv):
         """
         if self.__using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
+        if self.env_path == "":
+            raise Exception("The env_path cannot be an empty string.")
 
         self.init_env()
         self._activate_that()
