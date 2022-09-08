@@ -443,11 +443,11 @@ def test_project_install_logs(
     caplog.set_level(logging.INFO)
     ProjectTool().execute("install", [])
     log_sequence = LogSequence(caplog)
-    count = 0
+    count_verifying_project = 0
     for msg in log_sequence.caplog.messages:
         if msg == "verifying project":
-            count += 1
-    assert count == 1
+            count_verifying_project += 1
+    assert count_verifying_project == 1
 
 
 @pytest.mark.parametrize_any(
