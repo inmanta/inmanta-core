@@ -132,9 +132,7 @@ def test_module_conversion_in_place_cli(tmpdir, monkeypatch: MonkeyPatch):
         pass
     with pytest.raises(CLIException) as excinfo:
         moduletool.ModuleTool().v1tov2(None)
-    message = (
-        f"Cannot convert v1 module at {tmpdir} to v2 because a setup.py file is present." " Please remove/rename this file"
-    )
+    message = f"Cannot convert v1 module at {tmpdir} to v2 because a setup.py file is present. Please remove/rename this file"
     assert message in excinfo.value.args
     os.remove(setup_py_path)
 
