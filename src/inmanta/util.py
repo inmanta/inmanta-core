@@ -280,7 +280,7 @@ class Scheduler(object):
     def add_action(
         self,
         action: TaskMethod,
-        schedule: TaskSchedule,
+        schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
     ) -> ScheduledTask:
         """
@@ -296,9 +296,15 @@ class Scheduler(object):
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
             return
 
-        schedule.log(action)
+        schedule_typed: TaskSchedule
+        if isinstance(schedule, int):
+            schedule_typed = IntervalSchedule(schedule)
+        else:
+            schedule_typed = schedule
 
-        task_spec: ScheduledTask = ScheduledTask(action, schedule)
+        schedule_typed.log(action)
+
+        task_spec: ScheduledTask = ScheduledTask(action, schedule_typed)
         if task_spec in self._scheduled:
             # start fresh to respect initial delay, if set
             self.remove(task_spec)
@@ -318,10 +324,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(schedule.get_next_delay(), action_function)
+                    ihandle = IOLoop.current().call_later(schedule_typed.get_next_delay(), action_function)
                     self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(schedule.get_initial_delay(), action_function)
+        handle = IOLoop.current().call_later(schedule_typed.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
         return task_spec
 
