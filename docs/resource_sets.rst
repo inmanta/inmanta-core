@@ -109,9 +109,9 @@ entity, which we will refer to as the "service" or "service entity" (as in ``LSM
 use case where a set of independent resources is defined by more than one service entity, the guidelines currently do not
 cover that use case.
 
-TODO: see how trivial it would be to extend to the multi-service use case
+TODO: check how trivial it would be to extend to the multi-service use case
 TODO: "On a high level" -> remove?
-TODO: should I simplify and just talk about resources rather than generic nodes?
+TODO: should I simplify and just talk about resources rather than generic nodes? Less accurate but also less abstract
 
 On a high level, to allow safe use of partial compiles, it is imperative that each service's refinements (through
 implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a
@@ -135,10 +135,8 @@ identity from any of the previously defined service instances. This can be achie
 inventory that there are no matches for any set of input attributes that identify the instance.
 
 The current implementation of partial compiles does not provide any helpers for this verification. It is the responsibility of
-the model developer or the tool/exetnsion that does the export to ensure that no two service instances can be created that are
+the model developer or the tool/extension that does the export to ensure that no two service instances can be created that are
 considered to have the same identity by the model.
-
-# TODO: example
 
 Ownership
 *********
@@ -147,13 +145,116 @@ are two main mechanisms that can be used to provide this guarantee. One is the u
 other is the use of some external distributor of unique values (e.g. a plugin to generate a UUID or to allocate values in an
 inventory).
 
-TODO: elaborate: which values need to be unique? How do you achieve this with indexes and/or allocation?
-TODO: when using inventory, responsibility for uniqueness is shifted to inventory
+In either case, the goal is to make sure that any object that is marked as owned by a service instance, is unique to that
+instance. In the index case we do so by making sure the object's identity is in fact completely derived from the identity of
+the service instance. In the case where unique values are externally produced/allocated, responsibility for uniqueness falls
+to the plugin that produces the values.
 
+Generally, for every index on a set of attributes of an owned resource, at least one of the fields must be either derived from
+the identity of the service instance, or allocated in a safe manner by a plugin as described above. The same goes for every
+pair of resource id and agent. If the former constraint is not met, a full compile might fail, while if the latter is not met,
+the export will be rejected because two services are trying to configure the same resources.
 
-TODO: example model (running example? mention assumption that resource id is netid+rid) + trees + highlight tree if there would be an index on Router id + that's where inventory comes into play
+For example, consider the example model from before. If two networks with two routers each would be created, they would result
+in two disjunct resource sets, as pictured below.
 
+.. digraph::  resource_sets
+    :caption: Two valid services with their resource sets
 
-TODO: can we be more concrete? Should the section introduction mention that we go from high level to concrete?
+    subgraph cluster_shared {
+        AgentConfig;
+        label = "Shared resources";
+        labelloc = "bottom";
+    }
+
+    subgraph cluster_service0 {
+        "Network(id=0)" [shape=rectangle];
+        "Network(id=0)" -> subgraph cluster_resources0 {
+            "Router(nid=0, id=0)";
+            "Router(nid=0, id=1)";
+            label = "Resource set 0";
+            labelloc = "bottom";
+        }
+        "Network(id=0)" -> AgentConfig;
+        color = "lightgrey";
+        label = "service 0";
+        labelloc = "top";
+    }
+    subgraph cluster_service1 {
+        "Network(id=1)" [shape=rectangle];
+        "Network(id=1)" -> subgraph cluster_resources1 {
+            "Router(nid=1, id=0)";
+            "Router(nid=1, id=1)";
+            label = "Resource set 1";
+            labelloc = "bottom";
+        }
+        "Network(id=1)" -> AgentConfig;
+        color = "lightgrey";
+        label = "service 1";
+        labelloc = "top";
+    }
+
+Now suppose the index on ``Router`` did not include the network instance. In that case the identity of a ``Router`` instance
+would no longer be derived from the identity of its ``Network`` instance. It would then be possible to end up with two networks
+that refine to the same router objects as shown below. The resource sets are clearly no longer disjunct.
+
+.. digraph:: resource_sets_invalid
+    :caption: Two invalid services with a resource set conflict
+
+    subgraph cluster_shared {
+        AgentConfig;
+        label = "Shared resources";
+        labelloc = "bottom";
+    }
+
+    "Network(id=0)" [shape=rectangle];
+    "Network(id=1)" [shape=rectangle];
+    { "Network(id=0)" "Network(id=1)" }-> subgraph cluster_resources0 {
+        "Router(id=0)";
+        "Router(id=1)";
+        label = "Resource set 0/1?";
+        labelloc = "bottom";
+    }
+    { "Network(id=0)" "Network(id=1)" } -> AgentConfig;
+
+Instead of the index ``Router(network, id)`` we could also use an allocation plugin to determine the id of a router. Suppose
+we add such a plugin that allocates a unique value in some external inventory, then the index is no longer required for correct
+behavior:
+
+.. digraph::  resource_sets
+    :caption: Two valid services with their resource sets, using allocation
+
+    subgraph cluster_shared {
+        AgentConfig;
+        label = "Shared resources";
+        labelloc = "bottom";
+    }
+
+    subgraph cluster_service0 {
+        "Network(id=0)" [shape=rectangle];
+        "Network(id=0)" -> subgraph cluster_resources0 {
+            "Router(id=269)";
+            "Router(id=694)";
+            label = "Resource set 0";
+            labelloc = "bottom";
+        }
+        "Network(id=0)" -> AgentConfig;
+        color = "lightgrey";
+        label = "service 0";
+        labelloc = "top";
+    }
+    subgraph cluster_service1 {
+        "Network(id=1)" [shape=rectangle];
+        "Network(id=1)" -> subgraph cluster_resources1 {
+            "Router(id=31)";
+            "Router(id=712)";
+            label = "Resource set 1";
+            labelloc = "bottom";
+        }
+        "Network(id=1)" -> AgentConfig;
+        color = "lightgrey";
+        label = "service 1";
+        labelloc = "top";
+    }
 
 TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
