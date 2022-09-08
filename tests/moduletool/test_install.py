@@ -39,7 +39,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import LogSequence, PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -416,6 +416,38 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     )
     ModuleTool().install(editable=False, path=module_path)
     assert not model_file_installed()
+
+
+def test_project_install_logs(
+    snippetcompiler_clean,
+    tmpdir: py.path.local,
+    modules_dir: str,
+    modules_v2_dir: str,
+    caplog,
+) -> None:
+    """
+    Verify the logs of a project install
+    """
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        """,
+        autostd=False,
+        install_project=False,
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    caplog.clear()
+    caplog.set_level(logging.INFO)
+    ProjectTool().execute("install", [])
+    log_sequence = LogSequence(caplog)
+    count = 0
+    for msg in log_sequence.caplog.messages:
+        if msg == "verifying project":
+            count += 1
+    assert count == 1
 
 
 @pytest.mark.parametrize_any(
