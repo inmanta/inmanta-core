@@ -2220,6 +2220,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         Verifies the integrity of the loaded project, with respect to both inter-module requirements and the Python environment.
         """
+        LOGGER.info("verifying project")
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
         self.verify_python_requires()
@@ -2245,7 +2246,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         :raises CompilerException: When one or more of the requirements of the project is not satisfied.
         """
-        LOGGER.info("verifying project")
         requirements: Dict[str, List[InmantaModuleRequirement]] = self.collect_requirements()
 
         exc_message = ""
