@@ -1183,6 +1183,13 @@ class ModuleConverter:
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
             raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
+        if os.path.exists(os.path.join(output_directory, "setup.py")):
+            raise CLIException(
+                f"Cannot convert v1 module at {output_directory} to v2 because a setup.py file is present."
+                " Please remove/rename this file",
+                exitcode=1,
+            )
+
         setup_cfg = self.get_setup_cfg(output_directory, warn_on_merge=True)
         self._do_update(output_directory, setup_cfg, warn_on_merge=True)
 
