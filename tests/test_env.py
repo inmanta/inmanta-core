@@ -34,7 +34,6 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
-from inmanta.env import VenvCreationFailedError
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
