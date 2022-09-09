@@ -1996,14 +1996,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                result: List[Union[Record, TBaseDocument]] = []
-                async for record in con.cursor(query, *values):
-                    if no_obj:
-                        result.append(record)
-                    else:
-                        result.append(cls(from_postgres=True, **record))
-                return result
+            result: List[Union[Record, TBaseDocument]] = []
+            for record in await con.fetch(query, *values):
+                if no_obj:
+                    result.append(record)
+                else:
+                    result.append(cls(from_postgres=True, **record))
+            return result
 
     def to_dict(self) -> JsonType:
         """
@@ -3957,8 +3956,7 @@ class ResourceAction(BaseDocument):
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
         async with cls.get_connection() as con:
-            async with con.transaction():
-                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+            return [cls(**dict(record), from_postgres=True) for record in await con.fetch(query, *values)]
 
     @classmethod
     async def get_logs_for_version(
@@ -3977,8 +3975,7 @@ class ResourceAction(BaseDocument):
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
         async with cls.get_connection() as con:
-            async with con.transaction():
-                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+            return [cls(**dict(record), from_postgres=True) for record in await con.fetch(query, *values)]
 
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
@@ -4276,8 +4273,7 @@ class ResourceAction(BaseDocument):
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
 
         async with cls.get_connection() as con:
-            async with con.transaction():
-                return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
+            return [cls(**record, from_postgres=True) for record in await con.fetch(query, *values)]
 
     @classmethod
     async def get_resource_events(
@@ -4553,13 +4549,12 @@ class Resource(BaseDocument):
 
         result = []
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    resource = cls(from_postgres=True, **record)
-                    # The constraints on the attributes field are checked in memory.
-                    # This prevents injection attacks.
-                    if util.is_sub_dict(attributes, resource.attributes):
-                        result.append(resource)
+            for record in await con.fetch(query, *values):
+                resource = cls(from_postgres=True, **record)
+                # The constraints on the attributes field are checked in memory.
+                # This prevents injection attacks.
+                if util.is_sub_dict(attributes, resource.attributes):
+                    result.append(resource)
         return result
 
     @classmethod
@@ -4600,20 +4595,19 @@ class Resource(BaseDocument):
         values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
         async with cls.get_connection() as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    resource_id = record["resource_id"]
-                    parsed_id = resources.Id.parse_id(resource_id)
-                    result.append(
-                        {
-                            "resource_id": resource_id,
-                            "resource_type": parsed_id.entity_type,
-                            "agent": record["latest_agent"],
-                            "latest_version": record["latest_version"],
-                            "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
-                            "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
-                        }
-                    )
+            for record in await con.fetch(query, *values):
+                resource_id = record["resource_id"]
+                parsed_id = resources.Id.parse_id(resource_id)
+                result.append(
+                    {
+                        "resource_id": resource_id,
+                        "resource_type": parsed_id.entity_type,
+                        "agent": record["latest_agent"],
+                        "latest_version": record["latest_version"],
+                        "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
+                        "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
+                    }
+                )
         return result
 
     @classmethod
@@ -4634,17 +4628,16 @@ class Resource(BaseDocument):
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list = []
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    if no_obj:
-                        record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
-                        record["id"] = record["resource_version_id"]
-                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
-                        record["resource_type"] = parsed_id.entity_type
-                        resources_list.append(record)
-                    else:
-                        resources_list.append(cls(from_postgres=True, **record))
+            for record in await con.fetch(query, *values):
+                if no_obj:
+                    record = dict(record)
+                    record["attributes"] = json.loads(record["attributes"])
+                    record["id"] = record["resource_version_id"]
+                    parsed_id = resources.Id.parse_id(record["resource_version_id"])
+                    record["resource_type"] = parsed_id.entity_type
+                    resources_list.append(record)
+                else:
+                    resources_list.append(cls(from_postgres=True, **record))
         return resources_list
 
     @classmethod
@@ -4900,12 +4893,11 @@ class Resource(BaseDocument):
         versions = set()
         latest_version = None
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, cls._get_value(environment)):
-                    version = record["version"]
-                    versions.add(version)
-                    if latest_version is None:
-                        latest_version = version
+            for record in await con.fetch(query, cls._get_value(environment)):
+                version = record["version"]
+                versions.add(version)
+                if latest_version is None:
+                    latest_version = version
 
         LOGGER.debug("  All released versions: %s", versions)
         LOGGER.debug("  Latest released version: %s", latest_version)
@@ -4954,16 +4946,15 @@ class Resource(BaseDocument):
             values.append(cls._get_value(current_version))
 
             async with cls.get_connection(connection) as con:
-                async with con.transaction():
-                    async for obj in con.cursor(query, *values):
-                        # if a resource is part of a released version and it is deployed (this last condition is actually enough
-                        # at the moment), we have found the last status of the resource. If it was not purged in that version,
-                        # add it to the should purge list.
-                        if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                            attributes = json.loads(str(obj["attributes"]))
-                            if not attributes["purged"]:
-                                should_purge.append(cls(from_postgres=True, **obj))
-                            break
+                for obj in await con.fetch(query, *values):
+                    # if a resource is part of a released version and it is deployed (this last condition is actually enough
+                    # at the moment), we have found the last status of the resource. If it was not purged in that version,
+                    # add it to the should purge list.
+                    if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
+                        attributes = json.loads(str(obj["attributes"]))
+                        if not attributes["purged"]:
+                            should_purge.append(cls(from_postgres=True, **obj))
+                        break
 
         return should_purge
 
@@ -5546,9 +5537,8 @@ class ConfigurationModel(BaseDocument):
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
         result = []
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, *values):
-                    result.append(record["agent"])
+            for record in await con.fetch(query, *values):
+                result.append(record["agent"])
         return result
 
     @classmethod
