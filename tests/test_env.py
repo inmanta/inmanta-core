@@ -48,7 +48,7 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     )
 
 
-def test_venv_empty_string(tmpdir):
+def test_venv_pyton_env_empty_string(tmpdir):
     """test that an exception is raised if the venv path is an empty string"""
     with pytest.raises(ValueError) as e:
         env.VirtualEnv("")
@@ -63,6 +63,14 @@ def test_venv_empty_string(tmpdir):
     venv2.env_path = ""
     with pytest.raises(Exception) as e:
         venv2.use_virtual_env()
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(python_path="")
+    assert e.value.args[0] == "The python_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(env_path="")
     assert e.value.args[0] == "The env_path cannot be an empty string."
 
 

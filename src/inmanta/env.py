@@ -425,16 +425,15 @@ class PythonEnvironment:
         if env_path is not None:
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
+            if not self.env_path:
+                raise ValueError("The env_path cannot be an empty string.")
         else:
             assert python_path is not None
             self.python_path = python_path
             self.env_path = self.get_env_path_for_python_path(self.python_path)
+            if not self.python_path:
+                raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
-
-        if not self.env_path:
-            raise ValueError("The env_path cannot be an empty string.")
-        if not self.python_path:
-            raise ValueError("The python_path cannot be an empty string.")
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
