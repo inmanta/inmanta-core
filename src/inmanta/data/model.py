@@ -151,6 +151,9 @@ class CompileRunBase(BaseModel):
     partial: bool = False
     removed_resource_sets: list[str] = []
 
+    notify_failed_compile: bool = False
+    failed_compile_message: str = ""
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]

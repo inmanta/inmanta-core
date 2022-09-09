@@ -570,6 +570,8 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
+        notify_failed_compile: bool = False,
+        failed_compile_message: str = "",
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -600,6 +602,8 @@ class CompilerService(ServerSlice):
             environment_variables=env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
+            notify_failed_compile=notify_failed_compile,
+            failed_compile_message=failed_compile_message,
         )
         await compile.insert()
         await self._queue(compile)

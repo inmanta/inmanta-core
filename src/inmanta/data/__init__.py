@@ -3482,6 +3482,8 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param notify_failed_compile: if true use the notification service to notify that a compile has failed
+    :param failed_compile_message: message option to use when notify_failed_compile is used
     """
 
     __primary_key__ = ("id",)
@@ -3510,6 +3512,9 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    notify_failed_compile: bool = False
+    failed_compile_message: str = ""
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
