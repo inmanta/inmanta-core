@@ -46,6 +46,8 @@ from inmanta.util import (
     TaskMethod,
     stable_depth_first,
 )
+from opentelemetry import trace
+tracer = trace.get_tracer(__name__)
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager
@@ -80,16 +82,17 @@ class ReturnClient(Client):
     async def _call(
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
     ) -> common.Result:
-        call_spec = method_properties.build_call(args, kwargs)
-        try:
-            if method_properties.timeout:
-                return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
-            else:
-                return_value = await self.session.put_call(call_spec)
-        except asyncio.CancelledError:
-            return common.Result(code=500, result={"message": "Call timed out"})
+        with tracer.start_as_current_span(f"return_rpc.{method_properties.function.__name__}"):
+            call_spec = method_properties.build_call(args, kwargs)
+            try:
+                if method_properties.timeout:
+                    return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
+                else:
+                    return_value = await self.session.put_call(call_spec)
+            except asyncio.CancelledError:
+                return common.Result(code=500, result={"message": "Call timed out"})
 
-        return common.Result(code=return_value["code"], result=return_value["result"])
+            return common.Result(code=return_value["code"], result=return_value["result"])
 
 
 # Server Side

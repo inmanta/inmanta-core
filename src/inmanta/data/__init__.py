@@ -1940,9 +1940,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
         async with cls.get_connection(connection) as con:
-            async with con.transaction():
                 result: List[Union[Record, TBaseDocument]] = []
-                async for record in con.cursor(query, *values):
+                for record in await con.fetch(query, *values):
                     if no_obj:
                         result.append(record)
                     else:
@@ -3885,8 +3884,7 @@ class ResourceAction(BaseDocument):
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
         async with cls.get_connection() as con:
-            async with con.transaction():
-                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
+            return [cls(**dict(record), from_postgres=True) for record in await con.fetch(query, *values)]
 
     @classmethod
     async def get_logs_for_version(
