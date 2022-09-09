@@ -1084,7 +1084,7 @@ class VirtualEnv(ActiveEnv):
         super(VirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
-        self.__using_venv: bool = False
+        self._using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
@@ -1148,13 +1148,13 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python = self.python_path
 
     def is_using_virtual_env(self) -> bool:
-        return self.__using_venv
+        return self._using_venv
 
     def use_virtual_env(self) -> None:
         """
         Activate the virtual environment.
         """
-        if self.__using_venv:
+        if self._using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
         if not self.env_path:
             raise Exception("The env_path cannot be an empty string.")
@@ -1166,7 +1166,7 @@ class VirtualEnv(ActiveEnv):
         # patch up pkg
         self.notify_change()
 
-        self.__using_venv = True
+        self._using_venv = True
 
     def _write_pip_binary(self) -> None:
         """
@@ -1246,14 +1246,14 @@ import sys
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
             requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
@@ -1264,7 +1264,7 @@ import sys
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 
