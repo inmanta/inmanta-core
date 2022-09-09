@@ -21,10 +21,9 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-
     ALTER TABLE public.compile
         ADD COLUMN notify_failed_compile boolean DEFAULT FALSE,
-        ADD COLUMN failed_compile_message varchar DEFAULT "";
+        ADD COLUMN failed_compile_message varchar DEFAULT '';
     """
     async with connection.transaction():
         await connection.execute(schema)
