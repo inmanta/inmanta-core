@@ -23,8 +23,8 @@ async def update(connection: Connection) -> None:
     schema = """
 
     ALTER TABLE public.compile
-        ADD COLUMN partial boolean DEFAULT FALSE,
-        ADD COLUMN removed_resource_sets varchar[] DEFAULT array[]::varchar[];
+        ADD COLUMN notify_failed_compile boolean DEFAULT FALSE,
+        ADD COLUMN failed_compile_message varchar DEFAULT "";
     """
     async with connection.transaction():
         await connection.execute(schema)
