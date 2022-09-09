@@ -432,9 +432,9 @@ class PythonEnvironment:
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
 
         if not self.env_path:
-            raise VenvCreationFailedError("The env_path cannot be an empty string.")
+            raise ValueError("The env_path cannot be an empty string.")
         if not self.python_path:
-            raise VenvCreationFailedError("The python_path cannot be an empty string.")
+            raise ValueError("The python_path cannot be an empty string.")
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -1078,9 +1078,6 @@ class VirtualEnv(ActiveEnv):
         self.__using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
-
-        if not self.env_path:
-            raise ValueError("The env_path cannot be an empty string.")
 
     def exists(self) -> bool:
         """
