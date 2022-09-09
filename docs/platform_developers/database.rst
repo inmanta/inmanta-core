@@ -2,12 +2,12 @@
 Database Schema Management
 **************************
 
-In some situation a change to the database schema is required. To perform these database schema
-migration, we implemented a migration tool and associated testing framework. This page describes how to create a new
+In some situation, a change to the database schema is required. To perform these database schema
+migrations, we implemented a migration tool and associated testing framework. This page describes how to create a new
 version of the database schema and test the migration script.
 
 
-Definition new schema version
+New schema version definition
 #############################
 
 The version number of the database schema evolves independently from any other versioned Inmanta element
@@ -73,13 +73,13 @@ The example below shows a test for the above-mentioned database migration script
     :linenos:
 
     # File: tests/db/test_v202101010_to_v202102220.py
-    @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202101010.sql"))
+    @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v202101010.sql"))
     async def test_add_new_column_to_test_table(
         migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
         get_columns_in_db_table: abc.Callable[[str], list[str]],
     ) -> None:
         """
-        Verify that the database migration script v202102220.py correctly add the column new_column to the table test.
+        Verify that the database migration script v202102220.py correctly adds the column new_column to the table test.
         """
         # Assert state before migration
         assert "new_column" not in await get_columns_in_db_table(table_name="test")
