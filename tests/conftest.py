@@ -119,6 +119,9 @@ from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 
+from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
@@ -135,6 +138,9 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_reso
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
 initial_cwd = os.getcwd()
+
+
+tracer = trace.get_tracer(__name__)
 
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
@@ -197,6 +203,11 @@ def pytest_runtest_setup(item: "pytest.Item"):
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
 
+
+@pytest.fixture(scope="function", autouse=True)
+def tracing(request: pytest.FixtureRequest):
+    with tracer.start_as_current_span(f"pytest {request.node.name}"):
+        yield
 
 @pytest.fixture(scope="session")
 def postgres_db(request: pytest.FixtureRequest):
@@ -1020,16 +1031,17 @@ class SnippetCompilationTest(KeepOnFail):
                                            Inmanta project.
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         """
-        self.setup_for_snippet_external(
-            snippet,
-            add_to_module_path,
-            python_package_sources,
-            project_requires,
-            python_requires,
-            install_mode,
-            relation_precedence_rules,
-        )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        with tracer.start_as_current_span("setup_for_snippet"):
+            self.setup_for_snippet_external(
+                snippet,
+                add_to_module_path,
+                python_package_sources,
+                project_requires,
+                python_requires,
+                install_mode,
+                relation_precedence_rules,
+            )
+            return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
     def _load_project(
         self,
@@ -1039,17 +1051,21 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
     ):
-        loader.PluginModuleFinder.reset()
-        self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
-        )
-        Project.set(self.project)
-        self.project.use_virtual_env()
-        self._patch_process_env()
-        self._install_v2_modules(install_v2_modules)
-        if install_project:
-            self.project.install_modules()
-        return self.project
+        with tracer.start_as_current_span("load project"):
+            loader.PluginModuleFinder.reset()
+            self.project = Project(
+                self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+            )
+            Project.set(self.project)
+            with tracer.start_as_current_span("use virtual env"):
+                self.project.use_virtual_env()
+                self._patch_process_env()
+            with tracer.start_as_current_span("install module"):
+                print("Install module!!!!")
+                self._install_v2_modules(install_v2_modules)
+                if install_project:
+                    self.project.install_modules()
+            return self.project
 
     def _patch_process_env(self) -> None:
         """

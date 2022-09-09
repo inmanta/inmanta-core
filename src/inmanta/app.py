@@ -840,7 +840,7 @@ def app() -> None:
     if "traceparent" in os.environ:
         ctx = TraceContextTextMapPropagator().extract(carrier=os.environ["traceparent"])
 
-    with tracer.start_as_current_span(f"cmd {options.func}", context=ctx):
+    with tracer.start_as_current_span(f"cmd {options.func.__name__}", context=ctx):
         try:
             options.func(options)
         except ShowUsageException as e:

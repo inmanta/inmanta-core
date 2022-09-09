@@ -261,6 +261,9 @@ class SessionEndpoint(Endpoint, CallTarget):
             pass
 
     async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
+        """ Take a method call that has been transformed from a REST call into a json resource and dispatch it internally. The
+        result is then returned using the heartbeat return
+        """
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
