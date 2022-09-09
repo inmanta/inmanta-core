@@ -38,3 +38,4 @@ opentelemetry-sdk
 opentelemetry-exporter-otlp-proto-http
 opentelemetry-instrumentation-asyncpg
 opentelemetry-instrumentation-tornado
+otel-extensions

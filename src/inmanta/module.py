@@ -61,6 +61,7 @@ from typing import (
 import more_itertools
 import pkg_resources
 import yaml
+from otel_extensions import instrumented
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
@@ -1857,6 +1858,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
+    @instrumented(span_name="Project.install_modules")
     def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
         Installs all modules, both v1 and v2.

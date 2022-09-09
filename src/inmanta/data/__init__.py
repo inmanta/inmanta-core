@@ -57,6 +57,7 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg.protocol import Record
+from otel_extensions import instrumented
 
 import inmanta.db.versions
 from crontab import CronTab
@@ -6056,7 +6057,7 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
-
+@instrumented(span_name="database connect")
 async def connect(
     host: str,
     port: int,

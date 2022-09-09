@@ -43,6 +43,7 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 from libpip2pi.commands import dir2pi
 from packaging import version
+from otel_extensions import instrumented
 
 
 async def retry_limited(
@@ -365,6 +366,7 @@ class PipIndex:
         dir2pi(argv=["dir2pi", self.artifact_dir])
 
 
+@instrumented(span_name="create_python_package")
 def create_python_package(
     name: str,
     pkg_version: version.Version,
@@ -450,7 +452,7 @@ author = Inmanta <code@inmanta.com>
             builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
         publish_index.publish()
 
-
+@instrumented(span_name="module_from_template")
 def module_from_template(
     source_dir: str,
     dest_dir: Optional[str] = None,
