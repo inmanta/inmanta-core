@@ -755,7 +755,7 @@ def test_project_install_incompatible_dependencies(
     # prepare v2 modules
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
 
-    module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod1_1"),
         new_name="v2mod1",
@@ -763,7 +763,7 @@ def test_project_install_incompatible_dependencies(
         publish_index=index,
     )
 
-    module.ModuleV2Metadata = module_from_template(
+    module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod1_2"),
         new_name="v2mod1",
