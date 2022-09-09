@@ -105,7 +105,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
@@ -957,11 +957,48 @@ async def off_main_thread(func):
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
+class ReentrantVirtualEnv(VirtualEnv):
+    """
+    A virtual env that can be de-activated and re-activated
+
+    This allows faster reloading due to improved caching of the working set
+
+    This is intended for use in testcases to require a lot of venv switching
+    """
+
+    def __init__(self, env_path: str) -> None:
+        super(ReentrantVirtualEnv, self).__init__(env_path)
+        self.working_set = None
+
+    def deactivate(self):
+        self._using_venv = False
+        self.working_set = pkg_resources.working_set
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        if self._using_venv:
+            # We are in use, just ignore double activation
+            return
+
+        if not self.working_set:
+            # First run
+            super().use_virtual_env()
+        else:
+            # Later run
+            self._activate_that()
+            mock_process_env(python_path=self.python_path)
+            pkg_resources.working_set = self.working_set
+            self._using_venv = True
+
+
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
+        self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -982,6 +1019,7 @@ class SnippetCompilationTest(KeepOnFail):
         if not self._keep:
             shutil.rmtree(self.project_dir)
         self.project = None
+        self.venv.deactivate()
 
     def keep(self):
         self._keep = True
@@ -1042,7 +1080,7 @@ class SnippetCompilationTest(KeepOnFail):
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
         self.project.use_virtual_env()
