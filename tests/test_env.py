@@ -453,6 +453,7 @@ def test_active_env_check_basic(
     )
 
 
+@pytest.mark.slowtest
 def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.

@@ -51,6 +51,7 @@ async def migrate_v3_to_v4(hard_clean_db, hard_clean_db_post, postgresql_client:
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.slowtest
 async def test_db_migration(migrate_v3_to_v4, postgresql_client: Connection):
     for table_name in ["form", "formrecord", "resourceversionid"]:
         assert not await does_table_exist(postgresql_client, table_name)
