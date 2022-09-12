@@ -61,7 +61,7 @@ as the index example shows. This can result in undefinable behavior.
 Constraints and rules
 ************************
 
-Some restrictions were implemented to guarantee that partial compilations function properly:
+When using partial compiles, the following rules have to be followed:
 
 * A resource cannot be a part of more than one resource set at once.
 * A resource does not have to be part of a resource set.
@@ -99,27 +99,17 @@ TODO: mention this in the document's introduction?
 
 Modeling guidelines
 ###################
-This section will introduce some guidelines for developing models for use with the partial compilation feature. These present
-a generic method that is safe to use with partial compiles. While diverging from these guidelines where they are overly
-restrictive for your use case does not guarantee an incompatible model, it should always be done conciously and with extreme
-care to respect the `Constraints and rules`_.
+This section will introduce some guidelines for developing models for use with the partial compilation feature. Take extreme care when not following these guidelines and keep in mind the `Constraints and rules`_.
 
-For simplicity, we will assume a model where each set of independent resources is ultimately defined by a single top-level
-entity, which we will refer to as the "service" or "service entity" (as in ``LSM``). While the same concepts apply to the
-use case where a set of independent resources is defined by more than one service entity, the guidelines currently do not
-cover that use case.
+In this guide, we only cover models where each set of independent resources is defined by a single top-level
+entity, which we will refer to as the "service" or "service entity" (as in ``LSM``).
 
 TODO: check how trivial it would be to extend to the multi-service use case
 TODO: "On a high level" -> remove?
 TODO: should I simplify and just talk about resources rather than generic nodes? Less accurate but also less abstract
 
-On a high level, to allow safe use of partial compiles, it is imperative that each service's refinements (through
-implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a
-shared node should be considered shared and any resources in it must not be part of a resource set. All shared resources should
-be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes
-should generally be considered owned by the service and all their resources be part of the service's resource set. For more
-details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can
-not intersect on owned nodes, see the `Ownership`_ subsection.
+On a high level, to allow safe use of partial compiles, each service must be the sole owner if its resources and shared resources must be identical across service instances. More precisely: each service's refinements (through
+implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of a resource set. All shared resources should be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part of the service's resource set. For more details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can not intersect on owned nodes, see the `Ownership`_ subsection.
 
 Service instance uniqueness
 ***************************
@@ -152,7 +142,7 @@ to the plugin that produces the values.
 
 Generally, for every index on a set of attributes of an owned resource, at least one of the fields must be either derived from
 the identity of the service instance, or allocated in a safe manner by a plugin as described above. The same goes for every
-pair of resource id and agent. If the former constraint is not met, a full compile might fail, while if the latter is not met,
+pair of resource id and agent. If the first constraint is not met, a full compile might fail, while if the second is not met,
 the export will be rejected because two services are trying to configure the same resources.
 
 For example, consider the example model from before. If two networks with two routers each would be created, they would result
