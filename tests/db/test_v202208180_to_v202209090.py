@@ -16,16 +16,16 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Awaitable, Callable, List
-
+from collections import abc
+from typing import List
 import pytest
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202208180.sql"))
 async def test_added_resource_set_column(
-    migrate_db_from: Callable[[], Awaitable[None]],
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
+    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[List[str]]],
 ) -> None:
     """
     Test the database migration script that adds the `notify_failed_compile` and 'failed_compile_message' column to the database.
