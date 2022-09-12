@@ -140,11 +140,6 @@ In order to connect to `SR Linux` containers, there are two options:
    ssh admin@clab-srlinux-leaf1
    ssh admin@clab-srlinux-leaf2
 
-Then enter the `configuration mode` by typing:
-
-.. code-block:: sh
-
-    enter candidate
 
 The output should look something like this:
 
@@ -156,6 +151,14 @@ The output should look something like this:
 
     --{ running }--[  ]--
     A:spine#
+
+
+Optionally, you can enter the `configuration mode` by typing:
+
+.. code-block:: sh
+
+    enter candidate
+
 
 Exit the session by typing:
 
