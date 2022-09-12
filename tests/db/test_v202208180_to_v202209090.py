@@ -46,6 +46,6 @@ async def test_added_resource_set_column(
     compiles = await postgresql_client.fetch("SELECT * FROM public.compile;")
     for c in compiles:
         assert "notify_failed_compile" in c
-        assert c["failed_compile_message"] is False
-        assert "notify_failed_compile" in c
+        assert c["notify_failed_compile"] is False
+        assert "failed_compile_message" in c
         assert c["failed_compile_message"] == ""
