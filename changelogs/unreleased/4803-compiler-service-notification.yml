@@ -1,0 +1,7 @@
+description: configure notification behavior for compile request
+change-type: minor
+destination-branches: [master, iso5]
+issue-nr: 4803
+sections: {
+  minor-improvement: "{{description}}"
+}
