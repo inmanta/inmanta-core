@@ -28,7 +28,7 @@ async def test_added_resource_set_column(
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
 ) -> None:
     """
-    Test the database migration script that adds the `resource_set` column to the database.
+    Test the database migration script that adds the `notify_failed_compile` and 'failed_compile_message' column to the database.
 
     """
 
