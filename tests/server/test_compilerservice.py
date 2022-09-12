@@ -1180,7 +1180,6 @@ async def test_notification_failed_compile_with_message(server, client, environm
     async def notification_logged() -> bool:
         result = await client.list_notifications(env.id)
         assert result.code == 200
-        print(result.result["data"])
         return len(result.result["data"]) > 0
 
     await retry_limited(notification_logged, timeout=10)
@@ -1213,7 +1212,6 @@ async def test_notification_on_failed_exporting_compile(server, client, environm
     async def notification_logged() -> bool:
         result = await client.list_notifications(env.id)
         assert result.code == 200
-        print(result.result["data"])
         return len(result.result["data"]) > 0
 
     await retry_limited(notification_logged, timeout=10)
