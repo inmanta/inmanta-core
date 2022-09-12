@@ -108,8 +108,77 @@ TODO: check how trivial it would be to extend to the multi-service use case
 TODO: "On a high level" -> remove?
 TODO: should I simplify and just talk about resources rather than generic nodes? Less accurate but also less abstract
 
-On a high level, to allow safe use of partial compiles, each service must be the sole owner if its resources and shared resources must be identical across service instances. More precisely: each service's refinements (through
+To safely make use of partial compiles, each service must be the sole owner if its resources and shared resources must be
+identical across service instances. The graph below pictures both a valid and an invalid service for partial compiles. The
+valid one results in fully separate resource sets for each instance, while the invalid one has resources that overlap between
+instances. Additionally, the shared resource for the valid service is consistent, but the invalid service tries to create a
+resource with the same id, yet a different value. The invalid service can thus not be allowed for partial compiles because of
+the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single service
+instance.
+
+TODO: rewrite this paragraph
+
+More precisely: each service's refinements (through
 implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of a resource set. All shared resources should be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part of the service's resource set. For more details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can not intersect on owned nodes, see the `Ownership`_ subsection.
+
+TODO: add bad shared to the model as well
+
+.. digraph:: resource_sets_generic
+    :caption: A good and a bad service for partial compiles.
+
+    subgraph cluster_good_service {
+        "GoodService(id=0)" [shape=rectangle];
+        "GoodService(id=1)" [shape=rectangle];
+        "GoodService(id=0)" -> subgraph cluster_resources_good0 {
+            "Resource(id=0)";
+            "Resource(id=1)";
+            color = "lightgrey";
+            label = "Resource set for GoodService(id=0)";
+            labelloc = "bottom";
+        }
+        "GoodService(id=1)" -> subgraph cluster_resources_good1 {
+            "Resource(id=2)";
+            "Resource(id=3)";
+            label = "Resource set for GoodService(id=1)";
+            labelloc = "bottom";
+        }
+        { "GoodService(id=0)" "GoodService(id=1)" } -> {
+            "SharedResource(id=0, value=0)";
+             # force second row to limit rendered width
+            #rank = sink;
+        }
+        color = "green";
+        label = "good service for partial compiles";
+        labelloc = "top";
+        rank = source;
+    }
+
+    subgraph cluster_bad_service {
+        "BadService(id=0)" [shape=rectangle];
+        "BadService(id=1)" [shape=rectangle];
+        { "BadService(id=0)", "BadService(id=1)" } -> subgraph cluster_resources_bad {
+            "Resource(id=4)";
+            "Resource(id=5)";
+            color = "lightgrey";
+            label = "Resource set for both BadService(id=0) and BadService(id=1) -> not isolated";
+            labelloc = "bottom";
+        }
+        {
+            "SharedResource(id=1, value=0)";
+            "SharedResource(id=1, value=1)";
+            # force second row to limit rendered width
+            #rank = sink;
+        }
+        "BadService(id=0)" -> "SharedResource(id=1, value=0)";
+        "BadService(id=1)" -> "SharedResource(id=1, value=1)";
+
+        color = "red";
+        label = "bad service for partial compiles";
+        labelloc = "top";
+        rank = sink;
+    }
+
+    "SharedResource(id=0, value=0)" -> "BadService(id=0)" [tail=cluster_bad_service, style=invis];
 
 Service instance uniqueness
 ***************************
@@ -148,7 +217,9 @@ the export will be rejected because two services are trying to configure the sam
 For example, consider the example model from before. If two networks with two hosts each would be created, they would result
 in two disjunct resource sets, as pictured below.
 
-.. digraph::  resource_sets
+TODO: in all these graphs, the edge is actually from Host -> AgentConfig rather than Network -> AgentConfig
+
+.. digraph:: resource_sets_example
     :caption: Two valid services with their resource sets
 
     subgraph cluster_shared {
@@ -188,7 +259,7 @@ Now suppose the index on ``Host`` did not include the network instance. In that 
 would no longer be derived from the identity of its ``Network`` instance. It would then be possible to end up with two networks
 that refine to the same host objects as shown below. The resource sets are clearly no longer disjunct.
 
-.. digraph:: resource_sets_invalid
+.. digraph:: resource_sets_example_invalid
     :caption: Two invalid services with a resource set conflict
 
     subgraph cluster_shared {
@@ -211,7 +282,7 @@ Instead of the index ``Host(network, id)`` we could also use an allocation plugi
 we add such a plugin that allocates a unique value in some external inventory, then the index is no longer required for correct
 behavior:
 
-.. digraph::  resource_sets
+.. digraph:: resource_sets_example_allocation
     :caption: Two valid services with their resource sets, using allocation
 
     subgraph cluster_shared {
