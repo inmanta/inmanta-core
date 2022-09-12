@@ -18,7 +18,7 @@ Resource sets
 Instances of the ``std::ResourceSet`` entity serve as the model's representation of resource sets. The name of the set and a list of its resources are held by this entity.
 These ``ResourceSet`` instances are found by the default exporter to ascertain which resources belong to which set.
 
-In the example below, 1000 networks of 5 routers each are created. Each router is part of its network's resource set.
+In the example below, 1000 networks of 5 hosts each are created. Each host is part of its network's resource set.
 
 .. literalinclude:: resource_sets/basic_example_full.cf
     :language: inmanta
@@ -42,7 +42,7 @@ The resources from the prior example would be updated by a partial export for th
     :language: inmanta
     :caption: main.cf
 
-As a result, network 0 would be changed to only have one router (the other resources are removed), but the other networks
+As a result, network 0 would be changed to only have one host (the other resources are removed), but the other networks
 would continue to function as they had before (because their resource set was not present in the partial export).
 The comparable complete model would seem as follows:
 
@@ -51,7 +51,7 @@ The comparable complete model would seem as follows:
     :caption: main.cf
 
 Keep in mind that each resource set contains a collection of independent resources.
-In this example scenario, since the router instances for other sets do not exist at compilation time, it would be impossible to enforce a router index that was based just on the id and excluded the network.
+In this example scenario, since the host instances for other sets do not exist at compilation time, it would be impossible to enforce a host index that was based just on the id and excluded the network.
 
 The model developer is accountable for the following: Each resource set in a partial compilation needs to be separate from and independent of the resource sets that aren't included in the partial model.
 When performing partial compilations, this is a crucial assumption. If this condition is not satisfied, partial compilations may end up being incompatible with one another (a full compilation with the identical changes would fail),
@@ -145,7 +145,7 @@ the identity of the service instance, or allocated in a safe manner by a plugin 
 pair of resource id and agent. If the first constraint is not met, a full compile might fail, while if the second is not met,
 the export will be rejected because two services are trying to configure the same resources.
 
-For example, consider the example model from before. If two networks with two routers each would be created, they would result
+For example, consider the example model from before. If two networks with two hosts each would be created, they would result
 in two disjunct resource sets, as pictured below.
 
 .. digraph::  resource_sets
@@ -160,8 +160,8 @@ in two disjunct resource sets, as pictured below.
     subgraph cluster_service0 {
         "Network(id=0)" [shape=rectangle];
         "Network(id=0)" -> subgraph cluster_resources0 {
-            "Router(nid=0, id=0)";
-            "Router(nid=0, id=1)";
+            "Host(nid=0, id=0)";
+            "Host(nid=0, id=1)";
             label = "Resource set 0";
             labelloc = "bottom";
         }
@@ -173,8 +173,8 @@ in two disjunct resource sets, as pictured below.
     subgraph cluster_service1 {
         "Network(id=1)" [shape=rectangle];
         "Network(id=1)" -> subgraph cluster_resources1 {
-            "Router(nid=1, id=0)";
-            "Router(nid=1, id=1)";
+            "Host(nid=1, id=0)";
+            "Host(nid=1, id=1)";
             label = "Resource set 1";
             labelloc = "bottom";
         }
@@ -184,9 +184,9 @@ in two disjunct resource sets, as pictured below.
         labelloc = "top";
     }
 
-Now suppose the index on ``Router`` did not include the network instance. In that case the identity of a ``Router`` instance
+Now suppose the index on ``Host`` did not include the network instance. In that case the identity of a ``Host`` instance
 would no longer be derived from the identity of its ``Network`` instance. It would then be possible to end up with two networks
-that refine to the same router objects as shown below. The resource sets are clearly no longer disjunct.
+that refine to the same host objects as shown below. The resource sets are clearly no longer disjunct.
 
 .. digraph:: resource_sets_invalid
     :caption: Two invalid services with a resource set conflict
@@ -200,14 +200,14 @@ that refine to the same router objects as shown below. The resource sets are cle
     "Network(id=0)" [shape=rectangle];
     "Network(id=1)" [shape=rectangle];
     { "Network(id=0)" "Network(id=1)" }-> subgraph cluster_resources0 {
-        "Router(id=0)";
-        "Router(id=1)";
+        "Host(id=0)";
+        "Host(id=1)";
         label = "Resource set 0/1?";
         labelloc = "bottom";
     }
     { "Network(id=0)" "Network(id=1)" } -> AgentConfig;
 
-Instead of the index ``Router(network, id)`` we could also use an allocation plugin to determine the id of a router. Suppose
+Instead of the index ``Host(network, id)`` we could also use an allocation plugin to determine the id of a host. Suppose
 we add such a plugin that allocates a unique value in some external inventory, then the index is no longer required for correct
 behavior:
 
@@ -223,8 +223,8 @@ behavior:
     subgraph cluster_service0 {
         "Network(id=0)" [shape=rectangle];
         "Network(id=0)" -> subgraph cluster_resources0 {
-            "Router(id=269)";
-            "Router(id=694)";
+            "Host(id=269)";
+            "Host(id=694)";
             label = "Resource set 0";
             labelloc = "bottom";
         }
@@ -236,8 +236,8 @@ behavior:
     subgraph cluster_service1 {
         "Network(id=1)" [shape=rectangle];
         "Network(id=1)" -> subgraph cluster_resources1 {
-            "Router(id=31)";
-            "Router(id=712)";
+            "Host(id=31)";
+            "Host(id=712)";
             label = "Resource set 1";
             labelloc = "bottom";
         }

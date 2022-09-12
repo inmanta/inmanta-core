@@ -1,36 +1,36 @@
 entity Network:
     """
-    A network consisting of routers. Each network is modelled fully independent from others.
+    A network consisting of hosts. Each network is modelled fully independent from others.
     """
     int id
 end
-Network.routers [0:] -- Router.network [1]
+Network.hosts [0:] -- Host.network [1]
 
 index Network(id)
 
 implementation network_resource_set for Network:
-    # The Router resources for a network are all part of the same resource set
+    # The Host resources for a network are all part of the same resource set
     set = std::ResourceSet(name="network-{{ self.id }}")
-    for router in self.routers:
-        set.resources += router
+    for host in self.hosts:
+        set.resources += host
     end
 end
 
 
-entity Router extends std::Resource:
+entity Host extends std::Resource:
     int id
 end
-index Router(network, id)
+index Host(network, id)
 
-implementation router for Router:
+implementation host for Host:
     # Resource that doesn't belong to any resource set and is shared
-    std::AgentConfig(autostart=true, agentname="router_agent")
+    std::AgentConfig(autostart=true, agentname="host_agent")
 end
 
 
 implement Network using network_resource_set
-implement Router using router
+implement Host using host
 
 
-# turns out network 0 only needs one router
-Router(network=Network(id=0), id=0)
+# turns out network 0 only needs one host
+Host(network=Network(id=0), id=0)
