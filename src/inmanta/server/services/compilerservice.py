@@ -48,7 +48,7 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_NOTIFICATION, SLICE_SERVER, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
@@ -65,6 +65,18 @@ class CompileStateListener(object):
     @abc.abstractmethod
     async def compile_done(self, compile: data.Compile) -> None:
         """Receive notification of all completed compiles
+
+        1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
+        than CancelledError)
+        2- Notification are delivered out-of-band (i.e. the next compile can already start, multiple notifications can be in
+        flight at any given time, out-of-order delivery is possible but highly unlikely)
+        3- Notification are cancelled upon shutdown
+        """
+        pass
+
+    @abc.abstractmethod
+    async def compile_failed(self, compile: data.Compile) -> None:
+        """Receive notification of the compilerService
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
         than CancelledError)
@@ -493,7 +505,6 @@ class CompilerService(ServerSlice):
     """
 
     _env_folder: str
-    notification_service: "Notification"
 
     def __init__(self) -> None:
         super(CompilerService, self).__init__(SLICE_COMPILER)
@@ -509,14 +520,13 @@ class CompilerService(ServerSlice):
         self.listeners.append(listener)
 
     def get_dependencies(self) -> List[str]:
-        return [SLICE_DATABASE, SLICE_NOTIFICATION]
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
         return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerService, self).prestart(server)
-        self.notification_service = cast("Notification", server.get_slice(SLICE_NOTIFICATION))
         state_dir: str = opt.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
@@ -651,10 +661,13 @@ class CompilerService(ServerSlice):
             else:
                 del self._recompiles[environment]
 
-    async def _notify_listeners(self, compile: data.Compile) -> None:
+    async def _notify_listeners(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
         async def notify(listener: CompileStateListener) -> None:
             try:
-                await listener.compile_done(compile)
+                if notify_failed_compile:
+                    await listener.compile_failed(compile)
+                else:
+                    await listener.compile_done(compile)
             except CancelledError:
                 """Propagate Cancel"""
                 raise
@@ -753,13 +766,8 @@ class CompilerService(ServerSlice):
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         if compile.notify_failed_compile and not success:
-            await self.notification_service.notify(
-                compile.environment,
-                title="Compile failed",
-                message=compile.failed_compile_message,
-                severity=const.NotificationSeverity.error,
-                uri=f"/api/v2/compilereport/{compile.id}",
-            )
+            self.add_background_task(self._notify_listeners(compile, True))
+
         version = runner.version
 
         end = datetime.datetime.now().astimezone()

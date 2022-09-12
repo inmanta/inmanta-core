@@ -87,6 +87,15 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
 
+    async def compile_failed(self, compile: data.Compile) -> None:
+        await self.notify(
+            compile.environment,
+            title="Compile request failed",
+            message=compile.failed_compile_message,
+            severity=const.NotificationSeverity.error,
+            uri=f"/api/v2/compilereport/{compile.id}",
+        )
+
     async def notify(
         self,
         environment: uuid.UUID,
