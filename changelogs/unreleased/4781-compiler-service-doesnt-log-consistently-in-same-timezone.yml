@@ -1,6 +1,6 @@
 ---
 description: The compiler service now logs the requested time of a recompile using a consistent timezone
 change-type: patch
-destination-branches: [master, iso5]
+destination-branches: [master, iso5, iso4]
 sections:
   bugfix: "{{description}}"
