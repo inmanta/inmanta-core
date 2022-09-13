@@ -17,9 +17,11 @@
 """
 import asyncio
 import datetime
+import enum
 import logging
 import time
 import uuid
+from collections import abc
 from typing import Dict, List, Optional
 
 import asyncpg
@@ -27,6 +29,7 @@ import pytest
 from asyncpg import Connection, ForeignKeyViolationError
 from asyncpg.pool import Pool
 
+import utils
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
@@ -100,6 +103,36 @@ async def test_postgres_client(postgresql_client):
     await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
     records = await postgresql_client.fetch("SELECT * FROM test")
     assert len(records) == 0
+
+
+async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> None:
+    """
+    Verify that enumeration fields defined in data document objects match values defined in the db schema.
+    """
+    all_db_document_classes: abc.Set[Type[data.BaseDocument]] = (
+        utils.get_all_subclasses(data.BaseDocument) - {data.BaseDocument}
+    )
+    for cls in all_db_document_classes:
+        enums: abc.Mapping[str, data.Field] = {
+            name: field
+            for name, field in cls.get_field_metadata().items()
+            if issubclass(field.field_type, enum.Enum)
+        }
+        for enum_column, field in enums.items():
+            db_enum_values: abc.Sequence[asyncpg.Record] = await cls._fetch_query(
+                f"""
+                SELECT enumlabel
+                FROM pg_enum
+                INNER JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+                INNER JOIN information_schema.columns c ON pg_type.typname = c.udt_name
+                WHERE table_schema='public' AND table_name=$1 AND column_name=$2
+                """,
+                cls._get_value(cls.table_name()),
+                cls._get_value(enum_column),
+            )
+            for record in db_enum_values:
+                # verify that all db-defined values can be parsed by the field definition object
+                assert isinstance(field._from_db_single(enum_column, record["enumlabel"]), enum.Enum)
 
 
 async def test_project(init_dataclasses_and_load_schema):

@@ -25,7 +25,7 @@ import shutil
 import uuid
 from collections import abc
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, Optional, Sequence, Union, Type, TypeVar
 
 import pytest
 import yaml
@@ -43,6 +43,16 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 from libpip2pi.commands import dir2pi
 from packaging import version
+
+
+T = TypeVar("T")
+
+
+def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
+    """
+    Returns all loaded subclasses of any depth for a given class. Includes the class itself.
+    """
+    return {cls}.union(*(get_all_subclasses(sub) for sub in cls.__subclasses__()))
 
 
 async def retry_limited(

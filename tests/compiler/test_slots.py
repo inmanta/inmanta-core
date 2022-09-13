@@ -20,6 +20,7 @@ from collections.abc import Iterator, Set
 from itertools import chain
 from typing import List, Type, TypeVar
 
+import utils
 from inmanta.ast import Anchor, LocatableString, Location, Range
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Namespace
@@ -98,20 +99,13 @@ def test_slots_ast():
     """
     Verify that all AST nodes below RequiresEmitStatement and all location objects use slots.
     """
-    for ast_node_cls in chain(get_all_subclasses(RequiresEmitStatement), get_all_subclasses(Location)):
+    for ast_node_cls in chain(utils.get_all_subclasses(RequiresEmitStatement), utils.get_all_subclasses(Location)):
         if inspect.isabstract(ast_node_cls):
             continue
         assert_slotted(create_instance(ast_node_cls))
 
 
 T = TypeVar("T", bound=Statement)
-
-
-def get_all_subclasses(cls: Type[T]) -> Set[Type[T]]:
-    """
-    Returns all subclasses of any depth for a given class. Includes the class itself.
-    """
-    return {cls}.union(*(get_all_subclasses(sub) for sub in cls.__subclasses__()))
 
 
 def create_instance(cls: Type[T]) -> T:
