@@ -724,6 +724,7 @@ class CompilerService(ServerSlice):
                 wait,
             )
         else:
+            assert compile.requested is not None  # Make mypy happy
             LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested.astimezone())
         await asyncio.sleep(wait)
 
