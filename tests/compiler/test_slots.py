@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import inspect
-from collections.abc import Iterator, Set
+from collections import abc
 from itertools import chain
 from typing import List, Type, TypeVar
 
@@ -138,7 +138,7 @@ class DummyArgument:
     Dummy class that mocks behavior of common constructor arguments to allow batch construction of dummy objects.
     """
 
-    def __iter__(self) -> Iterator["DummyArgument"]:
+    def __iter__(self) -> abc.Iterator["DummyArgument"]:
         return iter(())
 
     def get_anchors(self) -> List[Anchor]:

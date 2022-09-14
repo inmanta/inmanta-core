@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import asyncpg
 import datetime
 import os
 import uuid
@@ -24,6 +23,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Type
 
+import asyncpg
 import pytest
 
 from inmanta import const, data
@@ -41,7 +41,9 @@ def mock_enum(monkeypatch) -> None:
     old_instancecheck: abc.Callable[[Type[Type[Enum]], object], bool] = enum_meta.__instancecheck__
     monkeypatch.setattr(
         # accept MockEnum anywhere any specific enum is expected
-        enum_meta, "__instancecheck__", lambda cls, instance: old_instancecheck(cls, instance) or isinstance(instance, MockEnum)
+        enum_meta,
+        "__instancecheck__",
+        lambda cls, instance: old_instancecheck(cls, instance) or isinstance(instance, MockEnum),
     )
 
 
@@ -80,12 +82,8 @@ async def test_enum_shrink(
     monkeypatch.setattr(data.ResourceAction, "insert", data.BaseDocument.insert)
 
     # Insert some known documents so we can verify correct conversion of existing values
-    pre_actions: abc.Mapping[str, uuid.UUID] = {
-        state: uuid.uuid4() for state in all_states_pre
-    }
-    pre_resources: abc.Mapping[str, uuid.UUID] = {
-        state: uuid.uuid4() for state in all_states_pre
-    }
+    pre_actions: abc.Mapping[str, uuid.UUID] = {state: uuid.uuid4() for state in all_states_pre}
+    pre_resources: abc.Mapping[str, uuid.UUID] = {state: uuid.uuid4() for state in all_states_pre}
     for state, action_id in pre_actions.items():
         action: data.ResourceAction = data.ResourceAction(
             environment=db_environment.id,
@@ -133,7 +131,9 @@ async def test_enum_shrink(
     for state, resource_id in pre_resources.items():
         resource: data.Resource = await data.Resource.get_one(resource_id=str(resource_id), connection=postgresql_client)
         assert resource.status == (state if state != "processing_events" else "deploying")
-        assert resource.last_non_deploying_status == (state if state in (non_deploying_states_pre - {"processing_events"}) else "available")
+        assert resource.last_non_deploying_status == (
+            state if state in (non_deploying_states_pre - {"processing_events"}) else "available"
+        )
 
     # verify old enum types no longer exist
     old_enums_exist_post: abc.Sequence[asyncpg.Record] = await postgresql_client.fetchrow(

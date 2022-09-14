@@ -25,7 +25,7 @@ import shutil
 import uuid
 from collections import abc
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Union, Type, TypeVar
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
 import pytest
 import yaml
@@ -43,7 +43,6 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 from libpip2pi.commands import dir2pi
 from packaging import version
-
 
 T = TypeVar("T")
 

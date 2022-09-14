@@ -22,7 +22,7 @@ import logging
 import time
 import uuid
 from collections import abc
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Type
 
 import asyncpg
 import pytest
@@ -109,18 +109,16 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     """
     Verify that enumeration fields defined in data document objects match values defined in the db schema.
     """
-    all_db_document_classes: abc.Set[Type[data.BaseDocument]] = (
-        utils.get_all_subclasses(data.BaseDocument) - {data.BaseDocument}
-    )
+    all_db_document_classes: abc.Set[Type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
+        data.BaseDocument
+    }
     for cls in all_db_document_classes:
         enums: abc.Mapping[str, data.Field] = {
-            name: field
-            for name, field in cls.get_field_metadata().items()
-            if issubclass(field.field_type, enum.Enum)
+            name: field for name, field in cls.get_field_metadata().items() if issubclass(field.field_type, enum.Enum)
         }
         for enum_column, field in enums.items():
             db_enum_values: abc.Sequence[asyncpg.Record] = await cls._fetch_query(
-                f"""
+                """
                 SELECT enumlabel
                 FROM pg_enum
                 INNER JOIN pg_type ON pg_enum.enumtypid = pg_type.oid

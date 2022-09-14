@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
-import asyncpg
 import uuid
 from collections import abc
 
+import asyncpg
 import pytest
 
 from inmanta import data

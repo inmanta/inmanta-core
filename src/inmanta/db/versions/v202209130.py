@@ -17,11 +17,11 @@
 """
 
 import typing
-from asyncpg import Connection
 from collections import abc
 from dataclasses import dataclass
 from typing import Optional
 
+from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
@@ -29,16 +29,16 @@ async def update(connection: Connection) -> None:
     Recreate resource state types without the processing_events state.
     """
     resource_state_values: abc.Sequence[str] = [
-        'unavailable',
-        'skipped',
-        'dry',
-        'deployed',
-        'failed',
-        'deploying',
-        'available',
-        'cancelled',
-        'undefined',
-        'skipped_for_undefined',
+        "unavailable",
+        "skipped",
+        "dry",
+        "deployed",
+        "failed",
+        "deploying",
+        "available",
+        "cancelled",
+        "undefined",
+        "skipped_for_undefined",
     ]
     await replace_enum_type(
         EnumDefinition(
@@ -75,7 +75,7 @@ class EnumDefinition:
     name: str
     values: abc.Sequence[str]
     deleted_values: abc.Mapping[str, Optional[str]]  # deleted values mapped to new value if any currently exist
-    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]] # columns with defaults
+    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]  # columns with defaults
 
 
 async def replace_enum_type(new_type: EnumDefinition, *, connection: Connection) -> None:
@@ -90,9 +90,8 @@ async def replace_enum_type(new_type: EnumDefinition, *, connection: Connection)
         f"""
         ALTER TYPE {new_type.name} RENAME TO {temp_name};
         CREATE TYPE {new_type.name} AS ENUM(%s);
-        """ % (
-            ", ".join(f"'{v}'" for v in new_type.values),
-        )
+        """
+        % (", ".join(f"'{v}'" for v in new_type.values))
     )
     for table, columns in new_type.columns.items():
         for column, default in columns:
