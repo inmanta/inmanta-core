@@ -38,6 +38,7 @@ class DeprecatedResourceState(str, Enum):
     """
     Deprecated resource states kept for backwards compatibility.
     """
+
     # deprecated in iso5
     processing_events = "processing_events"
 
