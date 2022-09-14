@@ -4447,7 +4447,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
