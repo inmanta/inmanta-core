@@ -147,5 +147,3 @@ async def test_enum_shrink(
         [record["id"] for record in old_enum_id_records_pre],
     )
     assert not old_enums_exist_post["exists"]
-    # TODO: anything else?
-    # TODO: mypy diff

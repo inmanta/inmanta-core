@@ -28,7 +28,7 @@ async def update(connection: Connection) -> None:
     """
     Recreate resource state types without the processing_events state.
     """
-    resource_state_values: abc.Sequence = [
+    resource_state_values: abc.Sequence[str] = [
         'unavailable',
         'skipped',
         'dry',
