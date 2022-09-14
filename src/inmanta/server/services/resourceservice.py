@@ -523,7 +523,7 @@ class ResourceService(protocol.ServerSlice):
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
-        status: Union[const.ResourceState, const.DeprecatedResourceState],
+        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         change: const.Change,
@@ -532,8 +532,10 @@ class ResourceService(protocol.ServerSlice):
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
-        def convert_legacy_state(status: Union[const.ResourceState, const.DeprecatedResourceState]) -> const.ResourceState:
-            if isinstance(status, const.ResourceState):
+        def convert_legacy_state(
+            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
+        ) -> Optional[const.ResourceState]:
+            if status is None or isinstance(status, const.ResourceState):
                 return status
             if status == const.DeprecatedResourceState.processing_events:
                 return const.ResourceState.deploying

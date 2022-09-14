@@ -451,7 +451,7 @@ def resource_action_update(
     action: const.ResourceAction,
     started: datetime.datetime = None,
     finished: datetime.datetime = None,
-    status: Union[const.ResourceState, const.DeprecatedResourceState] = None,
+    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
     messages: list = [],
     changes: dict = {},
     change: const.Change = None,
