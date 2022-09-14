@@ -21,7 +21,7 @@ import uuid
 from collections import abc
 from dataclasses import dataclass
 from enum import Enum
-from typing import Type
+from typing import Optional, Type
 
 import asyncpg
 import pytest
@@ -60,7 +60,7 @@ async def test_enum_shrink(
     Test the database migration script that removes the `processing_events` value from the resource state enums.
     """
 
-    all_states_pre: abc.Set = {
+    all_states_pre: abc.Set[str] = {
         "unavailable",
         "skipped",
         "dry",
@@ -126,17 +126,18 @@ async def test_enum_shrink(
 
     # Assert value conversion after running the DB migration script
     for state, action_id in pre_actions.items():
-        action: data.ResourceAction = await data.ResourceAction.get_by_id(action_id, connection=postgresql_client)
+        action = await data.ResourceAction.get_by_id(action_id, connection=postgresql_client)
         assert action.status == (state if state != "processing_events" else "deploying")
     for state, resource_id in pre_resources.items():
-        resource: data.Resource = await data.Resource.get_one(resource_id=str(resource_id), connection=postgresql_client)
+        resource = await data.Resource.get_one(resource_id=str(resource_id), connection=postgresql_client)
+        assert resource is not None
         assert resource.status == (state if state != "processing_events" else "deploying")
         assert resource.last_non_deploying_status == (
             state if state in (non_deploying_states_pre - {"processing_events"}) else "available"
         )
 
     # verify old enum types no longer exist
-    old_enums_exist_post: abc.Sequence[asyncpg.Record] = await postgresql_client.fetchrow(
+    old_enums_exist_post: Optional[asyncpg.Record] = await postgresql_client.fetchrow(
         """
         SELECT EXISTS(
             SELECT 1
@@ -146,4 +147,5 @@ async def test_enum_shrink(
         """,
         [record["id"] for record in old_enum_id_records_pre],
     )
+    assert old_enums_exist_post is not None
     assert not old_enums_exist_post["exists"]
