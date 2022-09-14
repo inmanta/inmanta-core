@@ -1,0 +1,7 @@
+description: Fixed inconsistency and backwards compatibility for deprecated processing_events resource state
+change-type: patch
+sections:
+  bugfix: "Fixed minor backwards incompatibility of the resource action database schema and `resource_action_update` endoint"
+destination-branches:
+  - master
+  - iso5
