@@ -66,7 +66,7 @@ from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, valid
 
 import inmanta.warnings
 import packaging.version
-from inmanta import const, env, loader, plugins, RUNNING_TESTS
+from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
