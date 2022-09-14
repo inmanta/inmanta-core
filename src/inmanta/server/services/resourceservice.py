@@ -523,6 +523,7 @@ class ResourceService(protocol.ServerSlice):
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
+        # TODO: accept "processing_events" for backwards compatibility, then add changelog entry
         status: const.ResourceState,
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
