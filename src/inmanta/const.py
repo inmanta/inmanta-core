@@ -34,6 +34,14 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+class DeprecatedResourceState(str, Enum):
+    """
+    Deprecated resource states kept for backwards compatibility.
+    """
+    # deprecated in iso5
+    processing_events = "processing_events"
+
+
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
