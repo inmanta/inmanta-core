@@ -69,7 +69,6 @@ class ColumnDefinition(typing.NamedTuple):
     default: Optional[str]
 
 
-# TODO: db dump
 # TODO: check if this needs to be ported to iso4
 @dataclass(frozen=True)
 class EnumDefinition:
