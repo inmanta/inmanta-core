@@ -1011,9 +1011,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
+        if connection is not None:
+            return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:

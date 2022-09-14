@@ -16,21 +16,67 @@
     Contact: code@inmanta.com
 """
 
+import typing
 from asyncpg import Connection
 from collections import abc
 from dataclasses import dataclass
 from typing import Optional
 
 
+
+async def update(connection: Connection) -> None:
+    """
+    Recreate resource state types without the processing_events state.
+    """
+    resource_state_values: abc.Sequence = [
+        'unavailable',
+        'skipped',
+        'dry',
+        'deployed',
+        'failed',
+        'deploying',
+        'available',
+        'cancelled',
+        'undefined',
+        'skipped_for_undefined',
+    ]
+    await replace_enum_type(
+        EnumDefinition(
+            name="resourcestate",
+            values=resource_state_values,
+            deleted_values={"processing_events": "deploying"},
+            columns={
+                "public.resource": [ColumnDefinition(name="status", default="available")],
+                "public.resourceaction": [ColumnDefinition(name="status", default="available")],
+            },
+        ),
+        connection=connection,
+    )
+    await replace_enum_type(
+        EnumDefinition(
+            name="non_deploying_resource_state",
+            values=[v for v in resource_state_values if v != "deploying"],
+            # migrate values to be safe even though processing_events state was actually unreachable in practice for this type
+            deleted_values={"processing_events": "available"},
+            columns={"public.resource": [ColumnDefinition(name="last_non_deploying_status", default="available")]},
+        ),
+        connection=connection,
+    )
+
+
+class ColumnDefinition(typing.NamedTuple):
+    name: str
+    default: Optional[str]
+
+
+# TODO: db dump
 # TODO: check if this needs to be ported to iso4
 @dataclass(frozen=True)
 class EnumDefinition:
     name: str
     values: abc.Sequence[str]
-    # TODO: test all old values are correctly mapped: only deleted one is changed
-    # TODO: verify no processing_events/deploying present
     deleted_values: abc.Mapping[str, Optional[str]]  # deleted values mapped to new value if any currently exist
-    columns: abc.Mapping[str, abc.Sequence[tuple[str, Optional[str]]]] # columns with defaults
+    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]] # columns with defaults
 
 
 async def replace_enum_type(new_type: EnumDefinition, *, connection: Connection) -> None:
@@ -60,44 +106,3 @@ async def replace_enum_type(new_type: EnumDefinition, *, connection: Connection)
             )
             await connection.execute(f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT '{default}'")
     await connection.execute(f"DROP TYPE {temp_name}")
-
-
-
-async def update(connection: Connection) -> None:
-    """
-    Recreate resource state types without the processing_events state.
-    """
-    resource_state_values: abc.Sequence = [
-        'unavailable',
-        'skipped',
-        'dry',
-        'deployed',
-        'failed',
-        'deploying',
-        'available',
-        'cancelled',
-        'undefined',
-        'skipped_for_undefined',
-    ]
-    await replace_enum_type(
-        EnumDefinition(
-            name="resourcestate",
-            values=resource_state_values,
-            deleted_values={"processing_events": "deploying"},
-            columns={
-                "public.resource": [("status", "available")],
-                "public.resourceaction": [("status", "available")],
-            },
-        ),
-        connection=connection,
-    )
-    await replace_enum_type(
-        EnumDefinition(
-            name="non_deploying_resource_state",
-            values=[v for v in resource_state_values if v != "deploying"],
-            # migrate values to be safe even though processing_events state was actually unreachable in practice for this type
-            deleted_values={"processing_events": "available"},
-            columns={"public.resource": [("last_non_deploying_status", "available")]},
-        ),
-        connection=connection,
-    )
