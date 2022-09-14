@@ -3936,8 +3936,8 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(

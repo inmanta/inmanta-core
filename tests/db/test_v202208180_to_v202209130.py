@@ -40,6 +40,7 @@ def mock_enum(monkeypatch) -> None:
     enum_meta: Type[Type[Enum]] = type(Enum)
     old_instancecheck: abc.Callable[[Type[Type[Enum]], object], bool] = enum_meta.__instancecheck__
     monkeypatch.setattr(
+        # accept MockEnum anywhere any specific enum is expected
         enum_meta, "__instancecheck__", lambda cls, instance: old_instancecheck(cls, instance) or isinstance(instance, MockEnum)
     )
 
@@ -68,6 +69,8 @@ async def test_enum_shrink(
         "cancelled",
         "undefined",
         "skipped_for_undefined",
+        # include processing_events to verify it gets converted correctly
+        "processing_events",
     }
     non_deploying_states_pre = all_states_pre - {"deploying"}
 
@@ -111,9 +114,38 @@ async def test_enum_shrink(
         )
         await resource.insert(connection=postgresql_client)
 
+    old_enum_id_records_pre: abc.Sequence[asyncpg.Record] = await postgresql_client.fetch(
+        """
+        SELECT oid as id
+        FROM pg_type
+        WHERE typname=ANY('{"resourcestate", "non_deploying_resource_state"}')
+        """
+    )
+    assert len(old_enum_id_records_pre) == 2
+
     # Migrate DB schema
     await migrate_db_from()
 
-    # Assert state after running the DB migration script
-    # TODO: assert old type is correctly cleaned up
-    # TODO: for each pre action and resource assert new value is appropriate
+    # Assert value conversion after running the DB migration script
+    for state, action_id in pre_actions.items():
+        action: data.ResourceAction = await data.ResourceAction.get_by_id(action_id, connection=postgresql_client)
+        assert action.status == (state if state != "processing_events" else "deploying")
+    for state, resource_id in pre_resources.items():
+        resource: data.Resource = await data.Resource.get_one(resource_id=str(resource_id), connection=postgresql_client)
+        assert resource.status == (state if state != "processing_events" else "deploying")
+        assert resource.last_non_deploying_status == (state if state in (non_deploying_states_pre - {"processing_events"}) else "available")
+
+    # verify old enum types no longer exist
+    old_enums_exist_post: abc.Sequence[asyncpg.Record] = await postgresql_client.fetchrow(
+        """
+        SELECT EXISTS(
+            SELECT 1
+            FROM pg_type
+            WHERE oid=ANY($1::oid[])
+        )
+        """,
+        [record["id"] for record in old_enum_id_records_pre],
+    )
+    assert not old_enums_exist_post["exists"]
+    # TODO: anything else?
+    # TODO: mypy diff
