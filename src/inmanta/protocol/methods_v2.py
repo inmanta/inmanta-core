@@ -19,15 +19,58 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
+from inmanta.types import PrimitiveTypes
 
+from ..data.model import ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
+
+
+@typedmethod(
+    path="/version/partial",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.compiler],
+    api_version=2,
+    varkw=True,
+)
+def put_partial(
+    tid: uuid.UUID,
+    resource_state: Optional[Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
+    unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
+    resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[List[str]] = None,
+    **kwargs: object,  # bypass the type checking for the resources and version_info argument
+) -> int:
+    """
+    Store a new version of the configuration model after a partial recompile. The partial is applied on top of the latest
+    version. Dynamically acquires a new version and serializes concurrent calls. Python code for the new version is copied
+    from the base version.
+
+    Concurrent put_partial calls are safe from race conditions provided that their resource sets are disjunct. A put_version
+    call concurrent with a put_partial is not guaranteed to be safe. It is the caller's responsibility to appropriately
+    serialize them with respect to one another. The caller must ensure the reserve_version + put_version operation is atomic
+    with respect to put_partial. In other words, put_partial must not be called in the window between reserve_version and
+    put_version. If not respected, either the full or the partial export might be immediately stale, and future exports will
+    only be applied on top of the non-stale one.
+
+    :param tid: The id of the environment
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
+                           to undefined when the resource depends on an unknown or available when it doesn't.
+    :param unknowns: A list of unknown parameters that caused the model to be incomplete
+    :param resource_sets: a dictionary describing which resources belong to which resource set
+    :param removed_resource_sets: a list of resource_sets that should be deleted from the model
+    :param **kwargs: The following arguments are supported:
+              * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
+              * version_info: Model version information
+    :return: The newly stored version number.
+    """
 
 
 # Method for working with projects
@@ -572,6 +615,9 @@ def get_resource_events(
     deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
     order according to their started timestamp.
 
+    This method searches through all versions of this resource.
+    This method should only be called when a deploy is in progress.
+
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource to get events for.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
@@ -593,6 +639,9 @@ def resource_did_dependency_change(
 ) -> bool:
     """
     Returns True iff this resources' events indicate a change in its dependencies since the resource's last deployment.
+
+    This method searches through all versions of this resource.
+    This method should only be called when a deploy is in progress.
 
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource.
@@ -1219,4 +1268,22 @@ def update_notification(
     :param cleared: Whether the notification has been cleared
     :return: The updated notification
     :raise NotFound: When the referenced environment or notification is not found
+    """
+
+
+@typedmethod(
+    path="/code/<version>",
+    operation="GET",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[model.Source]:
+    """
+    Get the code for the given version and the given resource
+    :param tid: The id of the environment
+    :param version: The id of the model version
+    :param resource_type: The type name of the resource
+    :raises NotFound: Raised when the version or type is not found
     """

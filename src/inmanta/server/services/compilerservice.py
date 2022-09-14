@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import traceback
 import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
+from collections.abc import Mapping
+from functools import partial
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -41,17 +43,17 @@ from inmanta import config, const, data, protocol, server
 from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
-from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_TRANSPORT
+from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
 from inmanta.server.validate_filter import CompileReportFilterValidator, InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
-from inmanta.util import ensure_directory_exist
+from inmanta.util import TaskMethod, ensure_directory_exist
 
 RETURNCODE_INTERNAL_ERROR = -1
 
@@ -269,8 +271,20 @@ class CompileRun(object):
                 else:
                     return await self._end_stage(returncode=0)
 
+            async def uninstall_protected_inmanta_packages() -> data.Report:
+                """
+                Ensure that no protected Inmanta packages are installed in the compiler venv.
+                """
+                cmd: List[str] = PipCommandBuilder.compose_uninstall_command(
+                    python_path=PythonEnvironment.get_python_path_for_env_path(venv_dir),
+                    pkg_names=PythonEnvironment.get_protected_inmanta_packages(),
+                )
+                return await self._run_compile_stage(
+                    name="Uninstall inmanta packages from the compiler venv", cmd=cmd, cwd=project_dir
+                )
+
             async def update_modules() -> data.Report:
-                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "modules", "update"], cwd=project_dir)
+                return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "project", "update"], cwd=project_dir)
 
             async def install_modules() -> data.Report:
                 return await run_compile_stage_in_venv(
@@ -328,6 +342,7 @@ class CompileRun(object):
                         # only pull changes if there is an upstream branch
                         if await self.get_upstream_branch():
                             yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                        yield uninstall_protected_inmanta_packages()
                         yield update_modules()
                 else:
                     if not repo_url:
@@ -373,6 +388,14 @@ class CompileRun(object):
                 "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
+
+            if self.request.partial:
+                cmd.append("--partial")
+
+            if self.request.removed_resource_sets is not None:
+                for resource_set in self.request.removed_resource_sets:
+                    cmd.append("--delete-resource-set")
+                    cmd.append(resource_set)
 
             if not self.request.do_export:
                 f = NamedTemporaryFile()
@@ -476,6 +499,7 @@ class CompilerService(ServerSlice):
         self._recompiles: Dict[uuid.UUID, Task] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: List[CompileStateListener] = []
+        self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         return {"task_queue": await data.Compile.get_next_compiles_count(), "listeners": len(self.listeners)}
@@ -487,7 +511,7 @@ class CompilerService(ServerSlice):
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
-        return [SLICE_TRANSPORT]
+        return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super(CompilerService, self).prestart(server)
@@ -498,7 +522,7 @@ class CompilerService(ServerSlice):
     async def start(self) -> None:
         await super(CompilerService, self).start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -513,20 +537,52 @@ class CompilerService(ServerSlice):
         except Exception:
             LOGGER.error("The following exception occurred while cleaning up old compiler reports", exc_info=True)
 
+    def schedule_full_compile(self, env: data.Environment, schedule_cron: str) -> None:
+        """
+        Schedules full compiles for a single environment. Overrides any previously enabled schedule for this environment.
+
+        :param env: The environment to schedule full compiles for
+        :param schedule_cron: The cron expression for the schedule, may be an empty string to disable full compile scheduling.
+        """
+        # remove old schedule if it exists
+        if env.id in self._scheduled_full_compiles:
+            self.remove_cron(*self._scheduled_full_compiles[env.id])
+            del self._scheduled_full_compiles[env.id]
+        # set up new schedule
+        if schedule_cron:
+            metadata: Dict[str, str] = {
+                "type": "schedule",
+                "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
+            }
+            recompile: TaskMethod = partial(
+                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
+            )
+            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
+            self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
+
     async def request_recompile(
         self,
         env: data.Environment,
         force_update: bool,
         do_export: bool,
         remote_id: uuid.UUID,
-        metadata: JsonType = {},
-        env_vars: Dict[str, str] = {},
+        metadata: Optional[JsonType] = None,
+        env_vars: Optional[Mapping[str, str]] = None,
+        partial: bool = False,
+        removed_resource_sets: Optional[List[str]] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :return: the compile id of the requested compile and any warnings produced during the request
         """
+        if removed_resource_sets is None:
+            removed_resource_sets = []
+        if metadata is None:
+            metadata = {}
+        if env_vars is None:
+            env_vars = {}
+
         server_compile: bool = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
@@ -542,6 +598,8 @@ class CompilerService(ServerSlice):
             force_update=force_update,
             metadata=metadata,
             environment_variables=env_vars,
+            partial=partial,
+            removed_resource_sets=removed_resource_sets,
         )
         await compile.insert()
         await self._queue(compile)
@@ -553,7 +611,9 @@ class CompilerService(ServerSlice):
         Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
-        return c.to_dto().json(include={"environment", "started", "do_export", "environment_variables"})
+        return c.to_dto().json(
+            include={"environment", "started", "do_export", "environment_variables", "partial", "removed_resource_sets"}
+        )
 
     async def _queue(self, compile: data.Compile) -> None:
         async with self._global_lock:

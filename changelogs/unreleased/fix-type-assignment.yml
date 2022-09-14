@@ -1,0 +1,5 @@
+description: fixed accidental assignment to type
+change-type: patch
+destination-branches:
+  - iso5
+  - master

@@ -1,4 +1,5 @@
 include inmanta_plugins/elaboratev2module/setup.cfg
+include inmanta_plugins/elaboratev2module/py.typed
 recursive-include inmanta_plugins/elaboratev2module/model *.cf
 graft inmanta_plugins/elaboratev2module/files
 graft inmanta_plugins/elaboratev2module/templates

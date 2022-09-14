@@ -1,0 +1,3 @@
+description: fixes some failures that started to fail due to changes to how dependencies and constraints are enforced
+change-type: patch
+destination-branches: [master, iso5]

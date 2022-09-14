@@ -27,7 +27,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from tornado import ioloop
 from tornado.concurrent import Future
@@ -42,10 +42,10 @@ from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
-from inmanta.protocol import SessionEndpoint, methods, methods_v2
+from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import NamedLock, add_future
+from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -533,7 +533,7 @@ class AgentInstance(object):
         # init
         self._cache = AgentCache()
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
-        self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
+        self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
 
@@ -638,13 +638,14 @@ class AgentInstance(object):
             )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
-    def _enable_time_trigger(self, action: Callable[[], Awaitable[None]], interval: int, splay: int) -> None:
-        self.process._sched.add_action(action, interval, splay)
-        self._time_triggered_actions.add(action)
+    def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
+        schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
+        self.process._sched.add_action(action, schedule)
+        self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
 
     def _disable_time_triggers(self) -> None:
-        for action in self._time_triggered_actions:
-            self.process._sched.remove(action)
+        for task in self._time_triggered_actions:
+            self.process._sched.remove(task)
         self._time_triggered_actions.clear()
 
     def notify_ready(
@@ -1199,16 +1200,25 @@ class Agent(SessionEndpoint):
                 # clear cache, for retry on failure
                 self._last_loaded[rt] = -1
 
-                result: protocol.Result = await self._client.get_code(environment, version, rt)
+                result: protocol.Result = await self._client.get_source_code(environment, version, rt)
                 if result.code == 200 and result.result is not None:
                     try:
+                        sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
-                        await self._install(
-                            [
-                                (ModuleSource(name, content, hash_value), requires)
-                                for hash_value, (path, name, content, requires) in result.result["sources"].items()
-                            ]
-                        )
+                        requirements = set()
+                        sources = []
+                        for source in result.result["data"]:
+                            sources.append(
+                                ModuleSource(
+                                    name=source["module_name"],
+                                    is_byte_code=source["is_byte_code"],
+                                    hash_value=source["hash"],
+                                    _client=sync_client,
+                                )
+                            )
+                            requirements.update(source["requirements"])
+
+                        await self._install(sources, list(requirements))
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
@@ -1217,15 +1227,14 @@ class Agent(SessionEndpoint):
 
         return failed_to_load
 
-    async def _install(self, modules: List[Tuple[ModuleSource, List[str]]]) -> None:
+    async def _install(self, sources: list[ModuleSource], requirements: Sequence[str]) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
             loop = asyncio.get_event_loop()
-            for module, module_requires in modules:
-                await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires)
-            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, (source for source, _ in modules))
+            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
+            await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:

@@ -23,10 +23,12 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
+from pydantic import Extra, validator
 from pydantic.fields import ModelField
 
+import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const
+from inmanta import const, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -146,6 +148,9 @@ class CompileRunBase(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
+    partial: bool = False
+    removed_resource_sets: list[str] = []
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]
@@ -196,6 +201,23 @@ class AttributeStateChange(BaseModel):
 
     current: Optional[Any] = None
     desired: Optional[Any] = None
+
+    @validator("current", "desired")
+    @classmethod
+    def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
+        """
+        Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
+        """
+        try:
+            protocol.common.json_encode(v)
+        except TypeError:
+            if inmanta.RUNNING_TESTS:
+                # Fail the test when the value is not serializable
+                raise Exception(f"Failed to serialize attribute {v}")
+            else:
+                # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                return str(v)
+        return v
 
 
 EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
@@ -282,10 +304,59 @@ class ModelVersionInfo(BaseModel):
     model: Optional[JsonType]
 
 
+class ResourceMinimal(BaseModel):
+    """
+    Represents a resource object as it comes in over the API. Provides strictly required validation only.
+    """
+
+    id: ResourceVersionIdStr
+
+    @classmethod
+    def create_with_version(cls, new_version: int, id: ResourceIdStr, attributes: Dict[str, object]) -> "ResourceMinimal":
+        """
+        Create a new ResourceMinimal from the given attributes, but ensure that the given version
+        is set on all the fields that hold the version number of the model.
+        """
+        if "requires" not in attributes:
+            raise ValueError("'requires' attribute is missing in kwargs")
+        new_attributes = attributes.copy()
+        new_attributes["version"] = new_version
+        new_attributes["id"] = resources.Id.set_version_in_id(id, new_version)
+        new_attributes["requires"] = [
+            resources.Id.set_version_in_id(r, new_version=new_version) for r in attributes["requires"]
+        ]
+        return cls(**new_attributes)
+
+    def copy_with_new_version(self, new_version: int) -> "ResourceMinimal":
+        """
+        Create a new ResourceMinimal by cloning this ResourceMinimal. The returned object
+        will have the given new_version set on all the fields that hold the version number
+        of the mode.
+        """
+        return self.create_with_version(
+            new_version=new_version,
+            id=resources.Id.parse_id(self.id).resource_str(),
+            attributes={k: v for k, v in self.dict().items() if k != "id"},
+        )
+
+    @classmethod
+    @validator("id")
+    def id_is_resource_version_id(cls, v):
+        if resources.Id.is_resource_version_id(v):
+            return v
+        raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+
+    def get_resource_id_str(self) -> ResourceIdStr:
+        return resources.Id.parse_id(self.id).resource_str()
+
+    class Config:
+        extra = Extra.allow
+
+
 class Resource(BaseModel):
     environment: uuid.UUID
     model: int
-    resource_id: ResourceVersionIdStr
+    resource_id: ResourceIdStr
     resource_type: ResourceType
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
@@ -609,3 +680,12 @@ class Notification(BaseModel):
     uri: str
     read: bool
     cleared: bool
+
+
+class Source(BaseModel):
+    """Model for source code"""
+
+    hash: str
+    is_byte_code: bool
+    module_name: str
+    requirements: List[str]

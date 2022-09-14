@@ -102,8 +102,11 @@ implement Test using i
 
 Test()
         """,
-        "Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at {dir}/main.cf:13)`)"
-        " (reported in self.n ({dir}/main.cf:8))",
+        "Could not set attribute `m` on instance `__config__::Test (instantiated at {dir}/main.cf:13)` (reported in self.m ="
+        " self.n ({dir}/main.cf:8))"
+        "\ncaused by:"
+        "\n  Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at"
+        " {dir}/main.cf:13)`) (reported in self.m = self.n ({dir}/main.cf:8))",
     )
 
 

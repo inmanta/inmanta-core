@@ -1,0 +1,6 @@
+---
+description: Add support for partial compiles in CompilerService.
+issue-nr: 4273
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso5]

@@ -32,6 +32,7 @@ from inmanta.ast import (
     KeyException,
     LocatableString,
     Location,
+    OptionalValueException,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
@@ -317,6 +318,11 @@ class SetAttributeHelper(ExecutionUnit):
         except AttributeException as e:
             e.set_statement(self.stmt, False)
             raise
+        except OptionalValueException as e:
+            # OptionalValueException has only its instance as statement, override with more accurate statement and location
+            e.set_statement(self.stmt, True)
+            e.location = self.stmt.location
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
         except RuntimeException as e:
             e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
@@ -385,10 +391,14 @@ class MapLookup(ReferenceStatement):
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
         mapv = self.themap.execute(requires, resolver, queue)
+        if isinstance(mapv, Unknown):
+            return Unknown(self)
         if not isinstance(mapv, dict):
             raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
 
         keyv = self.key.execute(requires, resolver, queue)
+        if isinstance(keyv, Unknown):
+            return Unknown(self)
         if not isinstance(keyv, str):
             raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
 

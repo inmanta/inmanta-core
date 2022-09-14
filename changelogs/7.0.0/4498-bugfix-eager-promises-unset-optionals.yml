@@ -1,0 +1,7 @@
+description: "Fixed bug in eager promises on unset optional relations"
+change-type: patch
+# This feature has not been released yet so the bug was never end-user visible
+sections: {}
+destination-branches:
+  - master
+  - iso5

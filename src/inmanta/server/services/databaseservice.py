@@ -19,6 +19,8 @@ import logging
 from typing import Dict, List, Optional
 
 import asyncpg
+from pyformance import gauge
+from pyformance.meters import CallbackGauge
 
 from inmanta import data
 from inmanta.server import SLICE_DATABASE
@@ -38,14 +40,18 @@ class DatabaseService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        self.start_monitor()
         await self.connect_database()
         # Schedule cleanup agentprocess and agentinstance tables
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
-            self.schedule(self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0)
+            self.schedule(
+                self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
+            )
 
     async def stop(self) -> None:
         await self.disconnect_database()
+
         self._pool = None
         await super().stop()
 
@@ -87,12 +93,25 @@ class DatabaseService(protocol.ServerSlice):
             "host": opt.db_host.get(),
         }
         if self._pool is not None:
-            status["max_pool"] = self._pool._maxsize
-            status["open_connections"] = (
-                len([x for x in self._pool._holders if x._con is not None and not x._con.is_closed()]),
-            )
+            status["max_pool"] = self._pool.get_max_size()
+            status["open_connections"] = self._pool.get_size()
+            status["free_connections"] = self._pool.get_idle_size()
 
         return status
+
+    def start_monitor(self) -> None:
+        """Attach to monitoring system"""
+        gauge(
+            "db.connected",
+            CallbackGauge(
+                callback=lambda: 1 if (self._pool is not None and not self._pool._closing and not self._pool._closed) else 0
+            ),
+        )
+        gauge("db.max_pool", CallbackGauge(callback=lambda: self._pool.get_max_size() if self._pool is not None else 0))
+        gauge("db.open_connections", CallbackGauge(callback=lambda: self._pool.get_size() if self._pool is not None else 0))
+        gauge(
+            "db.free_connections", CallbackGauge(callback=lambda: self._pool.get_idle_size() if self._pool is not None else 0)
+        )
 
     async def get_connection_status(self) -> bool:
         if self._pool is not None and not self._pool._closing and not self._pool._closed:

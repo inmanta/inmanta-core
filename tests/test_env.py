@@ -30,13 +30,12 @@ from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
 import py
-import pydantic
 import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
 from packaging import version
-from utils import LogSequence
+from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     pytest.skip(
@@ -46,6 +45,32 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         "on the python package repository.",
         allow_module_level=True,
     )
+
+
+def test_venv_pyton_env_empty_string(tmpdir):
+    """test that an exception is raised if the venv path is an empty string"""
+    with pytest.raises(ValueError) as e:
+        env.VirtualEnv("")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
+    env_dir2 = tmpdir.mkdir("env2").strpath
+    venv2 = env.VirtualEnv(env_dir2)
+    venv2.env_path = ""
+    with pytest.raises(Exception) as e:
+        venv2.use_virtual_env()
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(python_path="")
+    assert e.value.args[0] == "The python_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(env_path="")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
 
 
 def test_basic_install(tmpdir):
@@ -240,13 +265,12 @@ def test_process_env_install_from_index_conflicting_reqs(
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
         env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
-    assert "conflicting dependencies" in e.value.args[0]
+    assert "conflicting dependencies" in e.value.msg
     assert package_name not in env.process_env.get_installed_packages()
 
 
 @pytest.mark.parametrize("editable", [True, False])
 def test_process_env_install_from_source(
-    tmpdir: py.path.local,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     editable: bool,
@@ -254,20 +278,13 @@ def test_process_env_install_from_source(
     """
     Install a package from source into the process_env. Make sure the editable option actually results in an editable install.
     """
-    venv_dir, python_path = tmpvenv_active
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.process_env.get_installed_packages()
     env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
     assert package_name in env.process_env.get_installed_packages()
     if editable:
-        assert any(
-            package["name"] == package_name
-            for package in pydantic.parse_raw_as(
-                List[Dict[str, str]],
-                subprocess.check_output([python_path, "-m", "pip", "list", "--editable", "--format", "json"]).decode(),
-            )
-        )
+        assert package_name in env.process_env.get_installed_packages(only_editable=True)
 
 
 # v1 plugin loader overrides loader paths so verify that it doesn't interfere with env.process_env installs
@@ -385,7 +402,7 @@ build-backend = "setuptools.build_meta"
 def test_active_env_check_basic(
     caplog,
     tmpdir: str,
-    tmpvenv_active: str,
+    tmpvenv_active_inherit: str,
 ) -> None:
     """
     Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
@@ -395,12 +412,31 @@ def test_active_env_check_basic(
     in_scope_test: Pattern[str] = re.compile("test-package-.*")
     in_scope_nonext: Pattern[str] = re.compile("nonexistant-package")
 
+    error_msg: str = "Incompatibility between constraint"
+
     def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+        """
+        verify what the check method for 2 different scopes: for an existing package and a non existing one.
+
+        param: expect_test: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
+        in the logs.
+        param: expect_nonext: Tuple with as first value a bool and as second value a string. The bool is true if the execution
+        will not raise an error, false if it will raise an error. The second argument is the warning message that can be find
+        in the logs.
+        """
         for in_scope, expect in [(in_scope_test, expect_test), (in_scope_nonext, expect_nonext)]:
             caplog.clear()
-            assert env.ActiveEnv.check(in_scope) == expect[0]
-            if not expect[0]:
-                assert expect[1] in {rec.message for rec in caplog.records}
+            if expect[0]:
+                env.ActiveEnv.check(in_scope)
+                if expect[1] == "":
+                    assert error_msg not in {rec.message for rec in caplog.records}
+                else:
+                    assert expect[1] in {rec.message for rec in caplog.records}
+            else:
+                with pytest.raises(env.ConflictingRequirements) as e:
+                    env.ActiveEnv.check(in_scope)
+                assert expect[1] in e.value.get_message()
 
     assert_all_checks()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
@@ -409,11 +445,15 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0")
+        expect_test=(
+            False,
+            "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)",
+        ),
+        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)"),
     )
 
 
-def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
+def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
     """
@@ -421,26 +461,39 @@ def test_active_env_check_constraints(caplog, tmpvenv_active: str) -> None:
     in_scope: Pattern[str] = re.compile("test-package-.*")
     constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
-    def check_log(version: Optional[version.Version]) -> None:
-        assert f"Incompatibility between constraint test-package-one~=1.0 and installed version {version}" in {
-            rec.message for rec in caplog.records
-        }
-
-    assert env.ActiveEnv.check(in_scope)
+    env.ActiveEnv.check(in_scope)
 
     caplog.clear()
-    assert not env.ActiveEnv.check(in_scope, constraints)
-    check_log(None)
+    with pytest.raises(env.ConflictingRequirements):
+        env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
     create_install_package("test-package-one", version.Version("1.0.0"), [])
-    assert env.ActiveEnv.check(in_scope, constraints)
+    env.ActiveEnv.check(in_scope, constraints)
+    assert "Incompatibility between constraint" not in caplog.text
+
+    # Add an unrelated package to the venv, that should not matter
+    # setup for #4761
+    caplog.clear()
+    create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
+    env.ActiveEnv.check(in_scope, constraints)
+    assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
-    assert not env.ActiveEnv.check(in_scope, constraints)
-    check_log(v)
+    # test for #4761
+    # without additional constrain, this is not a hard failure
+    # except for the unrelated package, which should produce a warning
+    env.ActiveEnv.check(in_scope, [])
+    assert (
+        "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
+        in caplog.text
+    )
+
+    caplog.clear()
+    with pytest.raises(env.ConflictingRequirements):
+        env.ActiveEnv.check(in_scope, constraints)
 
 
 def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> None:
@@ -456,7 +509,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     match = re.search(
         r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
         r"package versions have conflicting dependencies",
-        excinfo.value.args[0],
+        excinfo.value.msg,
     )
     assert match is not None
 
@@ -487,7 +540,11 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
 
     pip_binary = os.path.join(os.path.dirname(venv.python_path), "pip")
     # Ensure that the pip command doesn't raise an exception
-    result = subprocess.check_output([pip_binary, "list", "--format", "json"], timeout=10, encoding="utf-8")
+    result = subprocess.check_output(
+        [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
+        timeout=10,
+        encoding="utf-8",
+    )
     parsed_output = json.loads(result)
     # Ensure inheritance works correctly
     assert "inmanta-core" in [elem["name"] for elem in parsed_output]
@@ -543,3 +600,38 @@ def test_basic_logging(tmpdir, caplog):
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
         log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+
+
+def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that the `ActiveEnv.are_installed()` method doesn't go into an infinite loop when there is a circular dependency
+    involving an extra.
+
+    Dependency loop:
+        pkg[optional]
+           -> dep[optional]
+               -> pkg[optional]
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-pkg": [Requirement.parse("dep[optional-dep]")],
+        },
+    )
+    create_python_package(
+        name="dep",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "dep"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
+        },
+    )
+
+    requirements = [Requirement.parse("pkg[optional-pkg]")]
+    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    assert tmpvenv_active_inherit.are_installed(requirements=requirements)

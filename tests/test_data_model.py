@@ -24,8 +24,8 @@ from enum import Enum
 import pydantic
 import pytest
 
-from inmanta import const, types
-from inmanta.data.model import BaseModel, LogLine
+from inmanta import const, resources, types
+from inmanta.data.model import BaseModel, LogLine, ResourceMinimal
 from inmanta.protocol.common import json_encode
 
 
@@ -109,3 +109,28 @@ def test_timezone_aware_fields_in_pydantic_object():
     assert timestamp.tzinfo is None
     test = Test(timestamp=timestamp)
     assert test.timestamp.tzinfo is not None
+
+
+def test_resource_minimal_create_from_version():
+    """
+    Test whether the `ResourceMinimal.create_with_version()` works correctly.
+    """
+    res_id_str = "res::Resource[agent1,id_attr=val],v=11"
+    initial_attributes = {
+        "id": res_id_str,
+        "attr1": "val",
+        "version": 11,
+        "requires": ["res::Resource[agent1,id_attr=dep1],v=11", "res::Resource[agent1,id_attr=dep2],v=11"],
+    }
+    resource_minimal = ResourceMinimal.create_with_version(
+        new_version=12,
+        id=resources.Id.parse_id(res_id_str).resource_version_str(),
+        attributes=initial_attributes,
+    )
+    expected_serialization = {
+        "id": "res::Resource[agent1,id_attr=val],v=12",
+        "attr1": "val",
+        "version": 12,
+        "requires": ["res::Resource[agent1,id_attr=dep1],v=12", "res::Resource[agent1,id_attr=dep2],v=12"],
+    }
+    assert resource_minimal.dict() == expected_serialization

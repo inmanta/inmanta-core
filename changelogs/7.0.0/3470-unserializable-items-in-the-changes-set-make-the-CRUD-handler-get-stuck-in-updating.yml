@@ -1,0 +1,7 @@
+description: Fix bug that fails the CRUDHandler when a changed attribute is of type set.
+issue-nr: 3470
+change-type: patch
+destination-branches: [iso4, iso5, master]
+sections: {
+  bugfix: "{{description}}"
+}

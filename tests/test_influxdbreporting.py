@@ -17,10 +17,11 @@
 """
 import asyncio
 import re
+from typing import Type
 
 import pytest
 import tornado
-from pyformance import gauge, timer
+from pyformance import gauge, global_registry, timer
 from tornado.httpserver import HTTPServer
 from tornado.web import url
 
@@ -159,3 +160,42 @@ async def test_timing():
     await asyncio.sleep(0.01)
     assert mr.count == base + 1
     mr.stop()
+
+
+async def test_available_metrics(server):
+    metrics = global_registry().dump_metrics()
+
+    types: dict[str, list[Type]] = {}
+    # Ensure type consistency
+    for metric in metrics.values():
+        for key, value in metric.items():
+            if key in types:
+                # don't use isinstance, because bool is int in python, but not for influxdb
+                assert type(value) in types[key], f"inconsistent types for {key}: {type(value)} and {types[key]}"
+            else:
+                base_type = type(value)
+                # https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
+                # Floats - by default, InfluxDB assumes all numerical field values are floats.
+                if base_type == int or base_type == float:
+                    base_types = [int, float]
+                else:
+                    base_types = [base_type]
+                types[key] = base_types
+
+    assert metrics["db.connected"]["value"]
+    assert "db.max_pool" in metrics
+    assert "db.open_connections" in metrics
+    assert "db.free_connections" in metrics
+    assert "self.spec.cpu" in metrics
+
+    # ensure it doesn't crash when the server is down
+    await server.stop()
+    metrics = global_registry().dump_metrics()
+
+    assert metrics["db.max_pool"]["value"] == 0
+    assert not metrics["db.connected"]["value"]
+
+
+async def test_safeness_if_server_down():
+    # ensure it works is there is no server
+    global_registry().dump_metrics()

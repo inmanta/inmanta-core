@@ -34,8 +34,14 @@ def compile_ids(compile_objects):
 @pytest.fixture
 async def env_with_compile_reports(client, environment):
     compile_requested_timestamps = []
+
     for i in range(8):
-        requested = datetime.datetime.strptime(f"2021-09-09T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+        """
+        Make sure the timestamp on these reports is not older than 7 days, otherwise they might
+        get automatically cleaned up by the server process that cleans up old compiles.
+        hours=-i ensures they are returned in ascending chronological order
+        """
+        requested = datetime.datetime.now().astimezone(datetime.timezone.utc) - datetime.timedelta(days=5, hours=-i)
         compile_requested_timestamps.append(requested)
         await data.Compile(
             id=uuid.uuid4(),

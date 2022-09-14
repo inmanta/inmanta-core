@@ -1,0 +1,6 @@
+[build-system]
+requires = ["jinja2"]
+build-backend = "setuptools.other"
+
+[tool.black]
+line-length = 128

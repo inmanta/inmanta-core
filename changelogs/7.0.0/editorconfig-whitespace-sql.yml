@@ -1,0 +1,6 @@
+description: Set up .editorconfig to not trim newlines in sql files
+change-type: patch
+destination-branches:
+  - master
+  - iso5
+  - iso4

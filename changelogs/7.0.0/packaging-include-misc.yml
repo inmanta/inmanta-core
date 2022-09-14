@@ -1,0 +1,6 @@
+description: include misc dir in sdist package for RPM build
+change-type: patch
+destination-branches:
+  - iso4
+  - iso5
+  - master

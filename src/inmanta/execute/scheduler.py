@@ -46,6 +46,8 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     RelationAttributeVariable,
     Resolver,
+    ResultVariableProxy,
+    VariableABC,
     Waiter,
 )
 from inmanta.execute.tracking import ModuleTracker
@@ -320,16 +322,23 @@ class Scheduler(object):
 
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
+
+        def resolve_proxies(variable: Optional[VariableABC]) -> Optional[VariableABC]:
+            if variable is None or not isinstance(variable, ResultVariableProxy):
+                return variable
+            return resolve_proxies(variable.variable)
+
         # Determine drvs that should be frozen to break the cycle
         freeze_candidates: List[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                if isinstance(rv, DelayedResultVariable):
-                    if rv.hasValue:
+                real_rv: Optional[VariableABC] = resolve_proxies(rv)
+                if isinstance(real_rv, DelayedResultVariable):
+                    if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
                         continue
-                    if rv.get_waiting_providers() > 0 and rv.get_progress_potential() > 0:
-                        freeze_candidates.append(rv)
+                    if real_rv.get_waiting_providers() > 0 and real_rv.get_progress_potential() > 0:
+                        freeze_candidates.append(real_rv)
 
         if not freeze_candidates:
             return False
@@ -466,7 +475,7 @@ class Scheduler(object):
                     next_rv.freeze()
 
         now = time.time()
-        LOGGER.info(
+        LOGGER.debug(
             "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
             i,
             len(basequeue),

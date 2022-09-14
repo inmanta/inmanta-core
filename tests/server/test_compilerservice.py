@@ -26,6 +26,7 @@ import uuid
 from asyncio import Semaphore
 from typing import AsyncIterator, List, Optional, Tuple
 
+import pkg_resources
 import pytest
 from pytest import approx
 
@@ -34,6 +35,7 @@ import inmanta.data.model as model
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
+from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -414,22 +416,24 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 4
+    assert len(stages) == 5
     assert compile.version is None
 
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 4
+    assert len(stages) == 5
     assert compile.version is None
 
     # Ensure that the pip binary created in the venv of the compiler service works correctly
@@ -525,6 +529,72 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
+@pytest.mark.slowtest
+async def test_server_partial_compile(server, client, environment, monkeypatch):
+    """
+    Test a partial_compile on the server
+    """
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write("")
+    env = await data.Environment.get_by_id(environment)
+    compilerslice: CompilerService = server.get_slice(SLICE_COMPILER)
+    remote_id1 = uuid.uuid4()
+
+    async def wait_for_report() -> bool:
+        report = await client.get_report(compile_id)
+        if report.code != 200:
+            return False
+        return report.result["report"]["completed"] is not None
+
+    def verify_command_report(report: dict, expected: str) -> bool:
+        """
+        verify that the expected string is present in the command field of the 'Recompiling configuration model' report
+        """
+        reports = report.result["report"]["reports"]
+        report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
+        return expected in report["command"]
+
+    # # Do a compile
+    compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert not verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial")
+    assert not verify_command_report(report, "--removed_resource_sets")
+
+    # Do a partial compile with removed resource_sets
+    compile_id, _ = await compilerslice.request_recompile(
+        env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
+    )
+
+    await retry_limited(wait_for_report, 10)
+    report = await client.get_report(compile_id)
+    assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
+
+
+@pytest.mark.slowtest
 async def test_server_recompile(server, client, environment, monkeypatch):
     """
     Test a recompile on the server and verify recompile triggers
@@ -598,9 +668,46 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # update the parameter to a new value
     await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
-    versions = await wait_for_version(client, environment, 3)
     logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, 3)
     assert versions["count"] == 3
+
+    # set a full compile schedule
+    async def schedule_soon() -> None:
+        soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+        cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
+        await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+
+    async def is_compiling() -> None:
+        return (await client.is_compiling(environment)).code == 200
+
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 4")
+    versions = await wait_for_version(client, environment, 4)
+    assert versions["count"] == 4
+
+    # override existing schedule
+    await schedule_soon()
+    await retry_limited(is_compiling, 3)
+    logger.info("wait for 5")
+    versions = await wait_for_version(client, environment, 5)
+    assert versions["count"] == 5
+
+    # delete schedule, verify it is cancelled
+    await schedule_soon()
+    await client.environment_setting_delete(environment, id="auto_full_compile")
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
+
+    # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
+    recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
+    cron_recent: str = "%d %d %d * * *" % (recent.second, recent.minute, recent.hour)
+    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    with pytest.raises(AssertionError, match="Bounded wait failed"):
+        await retry_limited(is_compiling, 4)
+    assert (await client.list_versions(environment)).result["count"] == 5
 
     # clear the environment
     state_dir = server_config.state_dir.get()
@@ -820,10 +927,8 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "handled": True,
         "version": 1,
     }
-    await Compile(**old_compile).insert()
     compile_id_new = uuid.uuid4()
     new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
-    await Compile(**new_compile).insert()
 
     report1 = {
         "id": uuid.UUID("2baa0175-9169-40c5-a546-64d646f62da6"),
@@ -843,8 +948,14 @@ async def old_and_new_compile_report(server_with_frequent_cleanups, environment_
         "name": "Recompiling configuration model",
         "compile": compile_id_new,
     }
-    await Report(**report1).insert()
-    await Report(**report2).insert()
+
+    async with Compile.get_connection() as con:
+        async with con.transaction():
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+            await Report(**report1).insert(connection=con)
+            await Report(**report2).insert(connection=con)
+
     yield compile_id_old, compile_id_new
 
 
@@ -1115,3 +1226,62 @@ async def test_notification_on_failed_pull_during_compile(
     )
     assert compile_failed_notification
     assert str(compile_id) in compile_failed_notification["uri"]
+
+
+async def test_uninstall_python_packages(
+    environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch, local_module_package_index: str
+) -> None:
+    """
+    Verify that the compiler service removes protected packages installed in the compiler venv before starting
+    """
+    env: data.Environment = await environment_factory.create_environment("")
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    async def run_compile_with_force_update() -> None:
+        compile_db_record = data.Compile(
+            remote_id=uuid.uuid4(),
+            environment=env.id,
+            force_update=True,
+        )
+        await compile_db_record.insert()
+
+        cr = CompileRun(compile_db_record, project_work_dir)
+        await cr.run()
+
+    # Make the compiler service create the venv
+    await run_compile_with_force_update()
+    venv_path = os.path.join(project_work_dir, ".env")
+    assert os.path.exists(venv_path)
+
+    # Make inmanta-module-elaboratev2module a protected package
+    name_protected_pkg = "inmanta-module-elaboratev2module"
+
+    def patch_get_protected_inmanta_packages():
+        return [name_protected_pkg]
+
+    monkeypatch.setattr(PythonEnvironment, "get_protected_inmanta_packages", patch_get_protected_inmanta_packages)
+
+    # Install protected package in venv
+    venv = PythonEnvironment(env_path=venv_path)
+    assert name_protected_pkg not in venv.get_installed_packages()
+    venv.install_from_index(
+        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)], index_urls=[local_module_package_index]
+    )
+    assert name_protected_pkg in venv.get_installed_packages()
+
+    # Run a new compile
+    await run_compile_with_force_update()
+
+    # Verify that the protected package was removed
+    assert name_protected_pkg not in venv.get_installed_packages()
+
+    # Run a new compile without any protected packages installed in the
+    # venv of the compiler service.
+    await run_compile_with_force_update()
+
+    # Assert no compilation failed
+    reports = await data.Report.get_list(name="Uninstall inmanta packages from the compiler venv")
+    # The uninstall is executed on update. The first compile is not an update
+    assert len(reports) == 2
+    assert all(r.returncode == 0 for r in reports)

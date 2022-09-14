@@ -1,0 +1,4 @@
+description: "fix deprecation warning for setuptools"
+change-type: patch
+destination-branches: [iso5, master]
+issue-nr: 4388

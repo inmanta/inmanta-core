@@ -1,0 +1,4 @@
+description: Fix some test that are failing due to changes in the env check.
+change-type: patch
+destination-branches:
+  - master

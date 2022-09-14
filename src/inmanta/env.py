@@ -27,17 +27,21 @@ import subprocess
 import sys
 import tempfile
 import venv
+from collections import abc
 from dataclasses import dataclass
+from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, TypeVar
+from typing import Any, Dict, Iterator, List, Mapping, NamedTuple, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
-from pkg_resources import DistInfoDistribution, Requirement
+from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
+import inmanta.module
 from inmanta import const
+from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
@@ -59,21 +63,228 @@ class PackageNotFound(Exception):
     pass
 
 
-class ConflictingRequirements(Exception):
+class PipInstallError(Exception):
     pass
+
+
+@dataclass(eq=True, frozen=True)
+class VersionConflict:
+    """
+    Represents a version conflict that exists in a Python environment.
+
+    :param requirement: The requirement that is unsatisfied.
+    :param installed_version: The version that is currently installed. None if the package is not installed.
+    :param owner: The package from which the constraint originates
+    """
+
+    requirement: Requirement
+    installed_version: Optional[version.Version] = None
+    owner: Optional[str] = None
+
+    def __str__(self) -> str:
+        owner = ""
+        if self.owner:
+            # Cfr pip
+            # Requirement already satisfied: certifi>=2017.4.17 in /[...]/site-packages
+            # (from requests>=2.23.0->cookiecutter<3,>=1->inmanta-core==7.0.0) (2022.6.15)
+            owner = f" (from {self.owner})"
+        if self.installed_version:
+            return (
+                f"Incompatibility between constraint {self.requirement} and installed version {self.installed_version}{owner}"
+            )
+        else:
+            return f"Constraint {self.requirement} is not installed{owner}"
+
+
+class ConflictingRequirements(CompilerException):
+    """
+    Conflict reporting
+
+    Can be used in two ways:
+    - if we don't know the exact conflicts (detected by e.g. pip), the messages is used
+    - if we have detailed conflict info, the message is derived from it
+
+    """
+
+    def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
+
+        CompilerException.__init__(self, msg=message)
+        self.conflicts = conflicts
+
+    def get_message(self) -> str:
+        # The message has three potential parts
+        # First the advices, derived from the conflicts, if present
+        # Then the message, if present
+        # Then the individual conflicts, if present
+        out = []
+
+        advices = self.get_advice()
+        if advices:
+            out.append(advices)
+
+        if self.msg:
+            out.append(self.msg)
+
+        conflicts = self.get_conflicts_string()
+        if conflicts:
+            out.append(conflicts)
+
+        return "\n".join(out)
+
+    def get_conflicts_string(self) -> Optional[str]:
+        if not self.conflicts:
+            return None
+        msg = ""
+        for current_conflict in sorted(self.conflicts, key=lambda x: x.requirement.key):
+            msg += f"\n\t* {current_conflict}"
+        return msg
+
+    def has_missing(self) -> bool:
+        """Does the set of conflicts contain any missing dependency?"""
+        if not self.conflicts:
+            return False
+        return any(conflict.installed_version is None for conflict in self.conflicts)
+
+    def get_advice(self) -> Optional[str]:
+        """
+        Derive an end-user centric message from the conflicts
+        """
+        if self.conflicts is None:
+            return None
+        if self.has_missing():
+            return "Not all required python packages are installed run 'inmanta project install' to resolve this"
+        else:
+            return (
+                "A dependency conflict exists, this is either because some modules are stale, incompatible "
+                "or because pip can not find a correct combination of packages. To resolve this, "
+                "first try `inmanta project update` to ensure no modules are stale. "
+                "Second, try adding additional constraints to the requirements.txt file of "
+                "the inmanta project to help pip resolve this problem. After every change, run `inmanta project update`"
+            )
+
+
+req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class PythonWorkingSet:
     @classmethod
-    def get_packages_in_working_set(cls) -> Dict[str, version.Version]:
+    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
+        """
+        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
+        """
+        if isinstance(requirements[0], str):
+            return [Requirement.parse(r) for r in requirements]
+        else:
+            return requirements
+
+    @classmethod
+    def are_installed(cls, requirements: req_list) -> bool:
+        """
+        Return True iff the given requirements are installed in this workingset.
+        """
+        if not requirements:
+            return True
+        installed_packages: Dict[str, version.Version] = cls.get_packages_in_working_set()
+
+        def _are_installed_recursive(
+            reqs: Sequence[Requirement],
+            seen_requirements: Sequence[Requirement],
+            contained_in_extra: Optional[str] = None,
+        ) -> bool:
+            """
+            Recursively check the given reqs are installed in this working set
+
+            :param reqs: The requirements that should be checked.
+            :param seen_requirements: An accumulator that contains all the requirements that were check in
+                                      previous iterators. It prevents infinite loops when the dependency
+                                      graph contains circular dependencies.
+            :param contained_in_extra: The name of the extra that trigger a new recursive call. On the first
+                                       iteration of this method this value is None.
+            """
+            for r in reqs:
+                if r in seen_requirements:
+                    continue
+                # Requirements created by the `Distribution.requires()` method have the extra, the Requirement was created from,
+                # set as a marker. The line below makes sure that the "extra" marker matches. The marker is not set by
+                # `Distribution.requires()` when the package is installed in editable mode, but setting it always doesn't make
+                # the marker evaluation fail.
+                environment_marker_evaluation = {"extra": contained_in_extra} if contained_in_extra else None
+                if r.marker and not r.marker.evaluate(environment=environment_marker_evaluation):
+                    # The marker of the requirement doesn't apply on this environment
+                    continue
+                if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
+                    return False
+                if r.extras:
+                    for extra in r.extras:
+                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        if distribution is None:
+                            return False
+                        pkgs_required_by_extra: Set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
+                            distribution.requires(extras=())
+                        )
+                        if not _are_installed_recursive(
+                            reqs=list(pkgs_required_by_extra),
+                            seen_requirements=list(seen_requirements) + list(reqs),
+                            contained_in_extra=extra,
+                        ):
+                            return False
+            return True
+
+        reqs_as_requirements: Sequence[Requirement] = cls._get_as_requirements_type(requirements)
+        return _are_installed_recursive(reqs_as_requirements, seen_requirements=[])
+
+    @classmethod
+    def get_packages_in_working_set(cls, inmanta_modules_only: bool = False) -> Dict[str, version.Version]:
         """
         Return all packages present in `pkg_resources.working_set` together with the version of the package.
+
+        :param inmanta_modules_only: Only return inmanta modules from the working set
         """
-        return {dist_info.key: version.Version(dist_info.version) for dist_info in pkg_resources.working_set}
+        return {
+            dist_info.key: version.Version(dist_info.version)
+            for dist_info in pkg_resources.working_set
+            if not inmanta_modules_only or dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
+        }
 
     @classmethod
     def rebuild_working_set(cls) -> None:
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+    @classmethod
+    def get_dependency_tree(cls, dists: abc.Iterable[str]) -> abc.Set[str]:
+        """
+        Returns the full set of all dependencies (both direct and transitive) for the given distributions. Includes the
+        distributions themselves.
+        If one of the distributions or its dependencies is not installed, it is still included in the set but its dependencies
+        are not.
+
+        :param dists: The keys for the distributions to get the dependency tree for.
+        """
+        # create dict for O(1) lookup
+        installed_distributions: abc.Mapping[str, Distribution] = {
+            dist_info.key: dist_info for dist_info in pkg_resources.working_set
+        }
+
+        def _get_tree_recursive(dists: abc.Iterable[str], acc: abc.Set[str] = frozenset()) -> abc.Set[str]:
+            """
+            :param acc: Accumulator for requirements that have already been recursed on.
+            """
+            return reduce(_get_tree_recursive_single, dists, acc)
+
+        def _get_tree_recursive_single(acc: abc.Set[str], dist: str) -> abc.Set[str]:
+            if dist in acc:
+                return acc
+
+            if dist not in installed_distributions:
+                return acc | {dist}
+
+            # recurse on direct dependencies
+            return _get_tree_recursive(
+                (requirement.key for requirement in installed_distributions[dist].requires()),
+                acc=acc | {dist},
+            )
+
+        return _get_tree_recursive(dists)
 
 
 @dataclass
@@ -165,6 +376,16 @@ class PipCommandBuilder:
         ]
 
     @classmethod
+    def compose_uninstall_command(cls, python_path: str, pkg_names: Sequence[str]) -> List[str]:
+        """
+        Return the pip command to uninstall the given python packages.
+
+        :param python_path: The python interpreter to use in the command.
+        :param pkg_names: The names of the python packages that should be uninstalled.
+        """
+        return [python_path, "-m", "pip", "uninstall", "-y", *pkg_names]
+
+    @classmethod
     def compose_list_command(
         cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
     ) -> List[str]:
@@ -180,7 +401,9 @@ class PipCommandBuilder:
             "-m",
             "pip",
             "list",
-            *(["--format", format.value] if format else []),
+            # we disable pip-version check to prevent the json format from getting other output
+            # deeply confusing issue: https://github.com/pypa/pip/issues/10715
+            *(["--disable-pip-version-check", "--no-python-version-warning", "--format", format.value] if format else []),
             *(["--editable"] if only_editable else []),
         ]
 
@@ -202,10 +425,14 @@ class PythonEnvironment:
         if env_path is not None:
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
+            if not self.env_path:
+                raise ValueError("The env_path cannot be an empty string.")
         else:
             assert python_path is not None
             self.python_path = python_path
             self.env_path = self.get_env_path_for_python_path(self.python_path)
+            if not self.python_path:
+                raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
 
     @classmethod
@@ -245,33 +472,50 @@ class PythonEnvironment:
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
     ) -> None:
-        try:
-            cmd: List[str] = PipCommandBuilder.compose_install_command(
-                python_path=python_path,
-                requirements=requirements,
-                paths=paths,
-                index_urls=index_urls,
-                upgrade=upgrade,
-                upgrade_strategy=upgrade_strategy,
-                allow_pre_releases=allow_pre_releases,
-                constraints_files=constraints_files,
-                requirements_files=requirements_files,
-            )
-            self._run_command_and_log_output(cmd, stderr=subprocess.PIPE)
-        except CalledProcessError as e:
-            stderr: str = e.stderr.decode()
-            not_found: List[str] = [
-                requirement.project_name
-                for requirement in requirements
-                if f"No matching distribution found for {requirement.project_name}" in stderr
-            ]
+        cmd: List[str] = PipCommandBuilder.compose_install_command(
+            python_path=python_path,
+            requirements=requirements,
+            paths=paths,
+            index_urls=index_urls,
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            allow_pre_releases=allow_pre_releases,
+            constraints_files=constraints_files,
+            requirements_files=requirements_files,
+        )
+
+        sub_env = os.environ.copy()
+
+        # if index_urls are set, only use those. Otherwise, use the one from the environment
+        if index_urls is not None:
+            # setting this env_var to os.devnull disables the loading of all pip configuration files
+            sub_env["PIP_CONFIG_FILE"] = os.devnull
+        if index_urls is not None and "PIP_EXTRA_INDEX_URL" in sub_env:
+            del sub_env["PIP_EXTRA_INDEX_URL"]
+        if index_urls is not None and "PIP_INDEX_URL" in sub_env:
+            del sub_env["PIP_INDEX_URL"]
+
+        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
+
+        if return_code != 0:
+            not_found: List[str] = []
+            conflicts: List[str] = []
+            for line in full_output:
+                m = re.search(r"No matching distribution found for ([\S]+)", line)
+                if m:
+                    # Add missing package name to not_found list
+                    not_found.append(m.group(1))
+
+                if "versions have conflicting dependencies" in line:
+                    conflicts.append(line)
             if not_found:
                 raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
-            if "versions have conflicting dependencies" in stderr:
-                raise ConflictingRequirements(stderr)
-            raise e
-        except Exception:
-            raise
+            if conflicts:
+                raise ConflictingRequirements("\n".join(conflicts))
+            raise PipInstallError(
+                f"Process {cmd} exited with return code {return_code}."
+                "Increase the verbosity level with the -v option for more information."
+            )
 
     @classmethod
     def get_env_path_for_python_path(cls, python_path: str) -> str:
@@ -298,6 +542,7 @@ class PythonEnvironment:
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
@@ -310,6 +555,7 @@ class PythonEnvironment:
             upgrade=upgrade,
             allow_pre_releases=allow_pre_releases,
             constraints_files=[*constraint_files],
+            upgrade_strategy=upgrade_strategy,
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
@@ -327,29 +573,28 @@ class PythonEnvironment:
             requirements=inmanta_requirements,
         )
 
-    def _get_requirements_on_inmanta_package(self) -> Sequence[Requirement]:
+    @classmethod
+    def get_protected_inmanta_packages(cls) -> List[str]:
+        """
+        Returns the list of packages that should not be installed/updated by any operation on a Python environment.
+        """
+        return [
+            # Protect product packages
+            "inmanta",
+            "inmanta-service-orchestrator",
+            # Protect all server extensions
+            *(f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()),
+        ]
+
+    @classmethod
+    def _get_requirements_on_inmanta_package(cls) -> Sequence[Requirement]:
         """
         Returns the content of the requirement file that should be supplied to each `pip install` invocation
         to make sure that no Inmanta packages gets overridden.
         """
-
-        def _is_protected_package(pkg: str) -> bool:
-            """
-            Return true iff the package with name `pkg`, installed in this venv, should not be updated.
-            """
-            if pkg == "inmanta" or pkg == "inmanta-service-orchestrator":
-                # Protect product packages
-                return True
-            pkg_names_installed_extensions = [
-                f"inmanta-{ext_name}" for ext_name in InmantaBootloader.get_available_extensions().keys()
-            ]
-            if pkg in pkg_names_installed_extensions:
-                # Protect all server extensions
-                return True
-            return False
-
+        protected_inmanta_packages: List[str] = cls.get_protected_inmanta_packages()
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if _is_protected_package(pkg)]
+        return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
 
     @classmethod
     def _run_command_and_log_output(
@@ -374,6 +619,36 @@ class PythonEnvironment:
             LOGGER.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
+    @staticmethod
+    def run_command_and_stream_output(
+        cmd: List[str], shell: bool = False, timeout: float = 10, env_vars: Optional[Mapping[str, str]] = None
+    ) -> Tuple[int, List[str]]:
+        """
+        Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
+        of the sub-process.
+        """
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=shell,
+            env=env_vars,
+        )
+
+        full_output: List[str] = []
+
+        assert process.stdout is not None  # Make mypy happy
+
+        for line in process.stdout:
+            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+            output = line.decode().strip()
+            full_output.append(output)
+            LOGGER.debug(output)
+
+        return_code = process.wait(timeout=timeout)
+
+        return return_code, full_output
+
 
 @contextlib.contextmanager
 def requirements_txt_file(content: str) -> Iterator[str]:
@@ -381,9 +656,6 @@ def requirements_txt_file(content: str) -> Iterator[str]:
         fd.write(content)
         fd.flush()
         yield fd.name
-
-
-req_list = TypeVar("req_list", Sequence[str], Sequence[Requirement])
 
 
 class ActiveEnv(PythonEnvironment):
@@ -407,31 +679,11 @@ class ActiveEnv(PythonEnvironment):
         """
         return
 
-    @classmethod
-    def _get_as_requirements_type(cls, requirements: req_list) -> Sequence[Requirement]:
-        """
-        Convert requirements from Union[Sequence[str], Sequence[Requirement]] to Sequence[Requirement]
-        """
-        if isinstance(requirements[0], str):
-            return [Requirement.parse(r) for r in requirements]
-        else:
-            return requirements
-
     def are_installed(self, requirements: req_list) -> bool:
         """
-        Return True iff the given requirements are installed in this venv.
+        Return True iff the given requirements are installed in this environment.
         """
-        if not requirements:
-            return True
-        reqs_as_requirements: Sequence[Requirement] = self._get_as_requirements_type(requirements)
-        installed_packages: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        for r in reqs_as_requirements:
-            if r.marker and not r.marker.evaluate():
-                # The marker of the requirement doesn't apply on this environment
-                continue
-            if r.key not in installed_packages or str(installed_packages[r.key]) not in r:
-                return False
-        return True
+        return PythonWorkingSet.are_installed(requirements)
 
     def install_from_index(
         self,
@@ -440,11 +692,14 @@ class ActiveEnv(PythonEnvironment):
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
         try:
-            super(ActiveEnv, self).install_from_index(requirements, index_urls, upgrade, allow_pre_releases, constraint_files)
+            super(ActiveEnv, self).install_from_index(
+                requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
+            )
         finally:
             self.notify_change()
 
@@ -596,9 +851,104 @@ class ActiveEnv(PythonEnvironment):
                 raise
 
     @classmethod
-    def check(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
+    def get_constraint_violations_for_check(
+        cls,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[List[Requirement]] = None,
+    ) -> Tuple[Set[VersionConflict], Set[VersionConflict]]:
+        """
+        Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
+        in that order.
+        """
+
+        class OwnedRequirement(NamedTuple):
+            requirement: Requirement
+            owner: Optional[str] = None
+
+            def is_owned_by(self, owners: abc.Set[str]) -> bool:
+                return self.owner is None or self.owner in owners
+
+        # all requirements of all packages installed in this environment
+        installed_constraints: abc.Set[OwnedRequirement] = frozenset(
+            OwnedRequirement(requirement, dist_info.key)
+            for dist_info in pkg_resources.working_set
+            for requirement in dist_info.requires()
+        )
+        inmanta_constraints: abc.Set[OwnedRequirement] = frozenset(
+            OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
+        )
+        extra_constraints: abc.Set[OwnedRequirement] = frozenset(
+            (OwnedRequirement(r) for r in constraints) if constraints is not None else []
+        )
+
+        all_constraints: abc.Set[OwnedRequirement] = installed_constraints | inmanta_constraints | extra_constraints
+
+        full_strict_scope: abc.Set[str] = PythonWorkingSet.get_dependency_tree(
+            chain(
+                (
+                    []
+                    if strict_scope is None
+                    else (dist_info.key for dist_info in pkg_resources.working_set if strict_scope.fullmatch(dist_info.key))
+                ),
+                (requirement.requirement.key for requirement in inmanta_constraints),
+                (requirement.requirement.key for requirement in extra_constraints),
+            )
+        )
+
+        installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
+
+        constraint_violations: set[VersionConflict] = set()
+        constraint_violations_strict: set[VersionConflict] = set()
+        for c in all_constraints:
+            requirement = c.requirement
+            if (requirement.key not in installed_versions or str(installed_versions[requirement.key]) not in requirement) and (
+                not requirement.marker or (requirement.marker and requirement.marker.evaluate())
+            ):
+                version_conflict = VersionConflict(
+                    requirement=requirement,
+                    installed_version=installed_versions.get(requirement.key, None),
+                    owner=c.owner,
+                )
+                if c.is_owned_by(full_strict_scope):
+                    constraint_violations_strict.add(version_conflict)
+                else:
+                    constraint_violations.add(version_conflict)
+
+        return constraint_violations, constraint_violations_strict
+
+    @classmethod
+    def check(
+        cls,
+        strict_scope: Optional[Pattern[str]] = None,
+        constraints: Optional[List[Requirement]] = None,
+    ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
+
+        :param strict_scope: A full pattern representing the package names that are considered in scope for the installed
+            packages compatibility check. strict_scope packages' dependencies will also be considered for conflicts.
+            Any conflicts for packages that do not match this pattern will only raise a warning.
+            The pattern is matched against an all-lowercase package name.
+        :param constraints: In addition to checking for compatibility within the environment, also verify that the environment's
+            packages meet the given constraints. All listed packages are expected to be installed.
+        """
+        constraint_violations, constraint_violations_strict = cls.get_constraint_violations_for_check(strict_scope, constraints)
+
+        if len(constraint_violations_strict) != 0:
+            raise ConflictingRequirements(
+                "",  # The exception has a detailed list of constraint_violations, so it can make its own message
+                constraint_violations_strict,
+            )
+
+        for violation in constraint_violations:
+            LOGGER.warning("%s", violation)
+
+    @classmethod
+    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[List[Requirement]] = None) -> bool:
+        """
+        Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
+        in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
+        when the `--no-strict-deps-check` commandline option is provided.
 
         :param in_scope: A full pattern representing the package names that are considered in scope for the installed packages'
             compatibility check. Only in scope packages' dependencies will be considered for conflicts. The pattern is matched
@@ -607,6 +957,9 @@ class ActiveEnv(PythonEnvironment):
             packages meet the given constraints. All listed packages are expected to be installed.
         :return: True iff the check succeeds.
         """
+        constraint_violations_non_strict, constraint_violations_strict = cls.get_constraint_violations_for_check(
+            in_scope, constraints
+        )
 
         dist_info: DistInfoDistribution
         # add all requirements of all in scope packages installed in this environment
@@ -618,20 +971,24 @@ class ActiveEnv(PythonEnvironment):
         )
 
         installed_versions: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
-        constraint_violations: List[Tuple[Requirement, Optional[version.Version]]] = [
-            (constraint, installed_versions.get(constraint.key, None))
+        constraint_violations: Set[VersionConflict] = set(
+            VersionConflict(constraint, installed_versions.get(constraint.key, None))
             for constraint in all_constraints
             if constraint.key not in installed_versions or str(installed_versions[constraint.key]) not in constraint
-        ]
+        )
 
-        for constraint, v in constraint_violations:
-            LOGGER.warning("Incompatibility between constraint %s and installed version %s", constraint, v)
+        all_violations = constraint_violations_non_strict | constraint_violations_strict | constraint_violations
+        for violation in all_violations:
+            LOGGER.warning("%s", violation)
+
         return len(constraint_violations) == 0
 
     @classmethod
     def get_module_file(cls, module: str) -> Optional[Tuple[Optional[str], Loader]]:
         """
-        Get the location of the init file for a Python module within the active environment.
+        Get the location of the init file for a Python module within the active environment. Returns the file path as observed
+        by Python. For editable installs, this may or may not be a symlink to the actual location (see implementation
+        mechanisms in setuptools docs: https://setuptools.pypa.io/en/latest/userguide/development_mode.html).
 
         :return: A tuple of the path and the associated loader, if the module is found.
         """
@@ -717,7 +1074,7 @@ class VirtualEnv(ActiveEnv):
         super(VirtualEnv, self).__init__(env_path=env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
-        self.__using_venv: bool = False
+        self._using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
@@ -773,7 +1130,6 @@ class VirtualEnv(ActiveEnv):
             LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         if not os.path.exists(self._path_pth_file):
-
             # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
             self._write_pip_binary()
             self._write_pth_file()
@@ -782,14 +1138,16 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python = self.python_path
 
     def is_using_virtual_env(self) -> bool:
-        return self.__using_venv
+        return self._using_venv
 
     def use_virtual_env(self) -> None:
         """
         Activate the virtual environment.
         """
-        if self.__using_venv:
+        if self._using_venv:
             raise Exception(f"Already using venv {self.env_path}.")
+        if not self.env_path:
+            raise Exception("The env_path cannot be an empty string.")
 
         self.init_env()
         self._activate_that()
@@ -798,7 +1156,7 @@ class VirtualEnv(ActiveEnv):
         # patch up pkg
         self.notify_change()
 
-        self.__using_venv = True
+        self._using_venv = True
 
     def _write_pip_binary(self) -> None:
         """
@@ -833,8 +1191,6 @@ import sys
 
 # Ensure inheritance from all parent venvs + process their .pth files
 {add_site_dir_statements}
-# Also set the PYTHONPATH environment variable for any subprocess
-os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         """
         script_as_oneliner = "; ".join(
             [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
@@ -871,9 +1227,6 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         sys.prefix = base
         self._update_sys_path()
 
-        # Also set the python path environment variable for any subprocess
-        os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
-
     def install_from_index(
         self,
         requirements: List[Requirement],
@@ -881,19 +1234,16 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
-            requirements,
-            index_urls,
-            upgrade,
-            allow_pre_releases,
-            constraint_files,
+            requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
         )
 
     def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
@@ -904,7 +1254,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(sys.path)
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
     ) -> None:
-        if not self.__using_venv:
+        if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
 

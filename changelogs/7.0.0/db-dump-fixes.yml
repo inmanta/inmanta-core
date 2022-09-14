@@ -1,0 +1,7 @@
+description: fixed naming of db dumps and test cases to be consistent with schema version
+change-type: patch
+issue-repo: irt
+issue-nr: 1195
+destination-branches:
+  - master
+  - iso5

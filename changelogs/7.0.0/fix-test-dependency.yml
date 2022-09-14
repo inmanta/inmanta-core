@@ -1,0 +1,5 @@
+description: Fixed test failure about conflicting dependencies
+change-type: patch
+destination-branches:
+  - iso5
+  - master
