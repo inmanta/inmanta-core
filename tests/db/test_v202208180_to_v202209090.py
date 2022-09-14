@@ -31,7 +31,6 @@ async def test_added_resource_set_column(
     """
     Test the database migration script that adds the `notify_failed_compile` and 'failed_compile_message' column to the
     database.
-
     """
 
     # Assert state before running the DB migration script
