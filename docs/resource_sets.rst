@@ -145,9 +145,10 @@ service instance.
     }
     { "GoodService(id=0)" "GoodService(id=1)" } -> subgraph cluster_resources_good_shared {
         "SharedResource(id=0, value=0)";
+        color="green";
+        fontcolor="grey";
         label = "Shared and consistent among all service instances";
         labelloc = "bottom";
-        color="green";
     }
 
     # force rendering on multiple ranks
@@ -175,9 +176,10 @@ service instance.
     subgraph cluster_resources_bad_shared {
         "SharedResource(id=1, value=0)";
         "SharedResource(id=1, value=1)";
+        color = "red";
+        fontcolor="grey";
         label = "Shared resources' values are not consistent"
         labelloc = "bottom";
-        color = "red";
     }
     "BadService(id=0)" -> "SharedResource(id=1, value=0)";
     "BadService(id=1)" -> "SharedResource(id=1, value=1)";
