@@ -104,81 +104,98 @@ This section will introduce some guidelines for developing models for use with t
 In this guide, we only cover models where each set of independent resources is defined by a single top-level
 entity, which we will refer to as the "service" or "service entity" (as in ``LSM``).
 
-TODO: check how trivial it would be to extend to the multi-service use case
-TODO: "On a high level" -> remove?
-TODO: should I simplify and just talk about resources rather than generic nodes? Less accurate but also less abstract
-
 To safely make use of partial compiles, each service must be the sole owner if its resources and shared resources must be
-identical across service instances. The graph below pictures both a valid and an invalid service for partial compiles. The
-valid one results in fully separate resource sets for each instance, while the invalid one has resources that overlap between
-instances. Additionally, the shared resource for the valid service is consistent, but the invalid service tries to create a
-resource with the same id, yet a different value. The invalid service can thus not be allowed for partial compiles because of
-the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single service
-instance.
+identical across service instances. The graphs below picture respectively a valid and an invalid service for partial compiles.
+The valid one results in fully separate resource sets for each instance, while the invalid one has resources that overlap
+between instances. Additionally, the shared resource for the valid service is consistent, but the invalid service tries to
+create a resource with the same id, yet a different value. The invalid service can thus not be allowed for partial compiles
+because of the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single
+service instance.
 
-TODO: rewrite this paragraph
+.. digraph:: resource_sets_good
+    :caption: A good service for partial compiles.
 
-More precisely: each service's refinements (through
-implementations) form a tree that can only intersect between service instances on shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of a resource set. All shared resources should be consistent between any two service instances that might create the object (see `Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part of the service's resource set. For more details on what it means to own a a child node in the tree (e.g. a resource) and how to ensure two service instance's trees can not intersect on owned nodes, see the `Ownership`_ subsection.
-
-TODO: add bad shared to the model as well
-
-.. digraph:: resource_sets_generic
-    :caption: A good and a bad service for partial compiles.
-
-    subgraph cluster_good_service {
+    subgraph cluster_service_good0 {
         "GoodService(id=0)" [shape=rectangle];
-        "GoodService(id=1)" [shape=rectangle];
         "GoodService(id=0)" -> subgraph cluster_resources_good0 {
             "Resource(id=0)";
             "Resource(id=1)";
-            color = "lightgrey";
+            color = "grey";
+            fontcolor = "grey";
             label = "Resource set for GoodService(id=0)";
             labelloc = "bottom";
         }
+        label = "Owned by GoodService(id=0)";
+        labelloc = "top";
+        color="green";
+    }
+    subgraph cluster_service_good1 {
+        "GoodService(id=1)" [shape=rectangle];
         "GoodService(id=1)" -> subgraph cluster_resources_good1 {
             "Resource(id=2)";
             "Resource(id=3)";
+            color = "grey";
+            fontcolor = "grey";
             label = "Resource set for GoodService(id=1)";
             labelloc = "bottom";
         }
-        { "GoodService(id=0)" "GoodService(id=1)" } -> {
-            "SharedResource(id=0, value=0)";
-             # force second row to limit rendered width
-            #rank = sink;
-        }
-        color = "green";
-        label = "good service for partial compiles";
+        label = "Owned by GoodService(id=1)";
         labelloc = "top";
-        rank = source;
+        color="green";
+    }
+    { "GoodService(id=0)" "GoodService(id=1)" } -> subgraph cluster_resources_good_shared {
+        "SharedResource(id=0, value=0)";
+        label = "Shared and consistent among all service instances";
+        labelloc = "bottom";
+        color="green";
     }
 
-    subgraph cluster_bad_service {
+    # force rendering on multiple ranks
+    {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"]
+
+
+.. digraph:: resource_sets_generic_bad
+    :caption: A bad service for partial compiles.
+
+    subgraph cluster_services_bad {
         "BadService(id=0)" [shape=rectangle];
         "BadService(id=1)" [shape=rectangle];
         { "BadService(id=0)", "BadService(id=1)" } -> subgraph cluster_resources_bad {
             "Resource(id=4)";
             "Resource(id=5)";
-            color = "lightgrey";
-            label = "Resource set for both BadService(id=0) and BadService(id=1) -> not isolated";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Not a valid resource set";
             labelloc = "bottom";
         }
-        {
-            "SharedResource(id=1, value=0)";
-            "SharedResource(id=1, value=1)";
-            # force second row to limit rendered width
-            #rank = sink;
-        }
-        "BadService(id=0)" -> "SharedResource(id=1, value=0)";
-        "BadService(id=1)" -> "SharedResource(id=1, value=1)";
-
-        color = "red";
-        label = "bad service for partial compiles";
+        label = "Services' \"owned\" resources overlap";
         labelloc = "top";
-        rank = sink;
+        color = "red";
     }
+    subgraph cluster_resources_bad_shared {
+        "SharedResource(id=1, value=0)";
+        "SharedResource(id=1, value=1)";
+        label = "Shared resources' values are not consistent"
+        labelloc = "bottom";
+        color = "red";
+    }
+    "BadService(id=0)" -> "SharedResource(id=1, value=0)";
+    "BadService(id=1)" -> "SharedResource(id=1, value=1)";
 
-    "SharedResource(id=0, value=0)" -> "BadService(id=0)" [tail=cluster_bad_service, style=invis];
+    # force rendering on multiple ranks
+    {"Resource(id=4)" "Resource(id=5)"} -> {"SharedResource(id=1, value=0)" "SharedResource(id=1, value=1)"} [style="invis"]
+
+
+TODO: clean up other graphs to look similar to this one
+
+
+Formally, each service's refinements (through implementations) form a tree that may only intersect between service instances on
+shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of
+a resource set. All shared resources should be consistent between any two service instances that might create the object (see
+`Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part
+of the service's resource set. For more details on what it means to own a resource (or any child node in the tree) and how
+to ensure two service instance's trees can not intersect on owned nodes, see the `Ownership`_ subsection.
+
 
 Service instance uniqueness
 ***************************
