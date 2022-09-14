@@ -1,4 +1,4 @@
-description: configure notification behavior for compile request
+description: Added options to compiler service to configure notification behavior
 change-type: minor
 destination-branches: [master, iso5]
 issue-nr: 4803
