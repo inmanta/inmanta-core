@@ -34,13 +34,6 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
-NonDeployingResourceState = Enum(
-    "NonDeployingResourceState",
-    names=((state.name, state.value) for state in ResourceState if state != ResourceState.deploying),
-    type=str,
-)
-
-
 class NonDeployingResourceState(str, Enum):
     unavailable = ResourceState.unavailable.value
     skipped = ResourceState.skipped.value
