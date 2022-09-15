@@ -130,10 +130,8 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
             )
             # verify the db enum and the Python enum have the exact same values
             assert set(field.field_type) == {
-                field._from_db_single(enum_column, record["enumlabel"])
-                for record in db_enum_values
+                field._from_db_single(enum_column, record["enumlabel"]) for record in db_enum_values
             }
-
 
 
 async def test_project(init_dataclasses_and_load_schema):
