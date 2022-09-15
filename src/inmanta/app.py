@@ -60,7 +60,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
-from inmanta.export import ModelExporter, cfg_env
+from inmanta.export import cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -612,12 +612,6 @@ def export(options: argparse.Namespace) -> None:
 
     if exp is not None:
         raise exp
-
-    if options.model:
-        modelexporter = ModelExporter(types)
-        with open("testdump.json", "w", encoding="utf-8") as fh:
-            print(yaml.dump(modelexporter.export_all()))
-            json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
         conn = protocol.SyncClient("compiler")
