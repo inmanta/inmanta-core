@@ -3514,7 +3514,7 @@ class Compile(BaseDocument):
     partial: bool = False
     removed_resource_sets: list[str] = []
 
-    notify_failed_compile: bool = False
+    notify_failed_compile: Optional[bool] = None
     failed_compile_message: str = ""
 
     @classmethod
