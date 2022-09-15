@@ -44,6 +44,7 @@ from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.export import Exporter
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -570,6 +571,7 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
+        exporter_plugin: Optional[Exporter] = None
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
