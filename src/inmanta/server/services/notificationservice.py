@@ -63,14 +63,22 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
     async def _cleanup(self) -> None:
         await data.Notification.clean_up_notifications()
 
-    async def compile_done(self, compile: data.Compile) -> None:
+    async def compile_done(self, compile: data.Compile, notify_failed_compile: bool) -> None:
         if not compile.success:
             compile_report = await data.Compile.get_report(compile_id=compile.id)
             reports = compile_report["reports"] if compile_report else []
             failed_pull_stage = next(
                 (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
-            if failed_pull_stage:
+            if notify_failed_compile:
+                await self.notify(
+                    compile.environment,
+                    title="Compile request failed",
+                    message=compile.failed_compile_message,
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif failed_pull_stage:
                 await self.notify(
                     compile.environment,
                     title="Pulling updates during compile failed",
@@ -86,15 +94,6 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
-
-    async def compile_failed(self, compile: data.Compile) -> None:
-        await self.notify(
-            compile.environment,
-            title="Compile request failed",
-            message=compile.failed_compile_message,
-            severity=const.NotificationSeverity.error,
-            uri=f"/api/v2/compilereport/{compile.id}",
-        )
 
     async def notify(
         self,

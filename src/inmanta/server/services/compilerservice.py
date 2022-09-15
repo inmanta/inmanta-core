@@ -63,20 +63,8 @@ COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
 class CompileStateListener(object):
     @abc.abstractmethod
-    async def compile_done(self, compile: data.Compile) -> None:
+    async def compile_done(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
         """Receive notification of all completed compiles
-
-        1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
-        than CancelledError)
-        2- Notification are delivered out-of-band (i.e. the next compile can already start, multiple notifications can be in
-        flight at any given time, out-of-order delivery is possible but highly unlikely)
-        3- Notification are cancelled upon shutdown
-        """
-        pass
-
-    @abc.abstractmethod
-    async def compile_failed(self, compile: data.Compile) -> None:
-        """Receive notification of the compilerService
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
         than CancelledError)
@@ -664,10 +652,7 @@ class CompilerService(ServerSlice):
     async def _notify_listeners(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
         async def notify(listener: CompileStateListener) -> None:
             try:
-                if notify_failed_compile:
-                    await listener.compile_failed(compile)
-                else:
-                    await listener.compile_done(compile)
+                await listener.compile_done(compile, notify_failed_compile)
             except CancelledError:
                 """Propagate Cancel"""
                 raise
