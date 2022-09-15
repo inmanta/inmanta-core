@@ -47,7 +47,6 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
-import yaml
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
