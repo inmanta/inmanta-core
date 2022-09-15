@@ -63,7 +63,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
     async def _cleanup(self) -> None:
         await data.Notification.clean_up_notifications()
 
-    async def compile_done(self, compile: data.Compile, notify_failed_compile: bool) -> None:
+    async def compile_done(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
         if not compile.success:
             compile_report = await data.Compile.get_report(compile_id=compile.id)
             reports = compile_report["reports"] if compile_report else []
