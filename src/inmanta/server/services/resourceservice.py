@@ -682,7 +682,7 @@ class ResourceService(protocol.ServerSlice):
                     is updated correctly when the `status` field of a resource is updated.
                     """
                     if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = kwargs["status"]
+                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
                     await resource.update_fields(**kwargs, connection=connection)
 
                 if is_resource_state_update:
