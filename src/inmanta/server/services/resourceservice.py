@@ -490,7 +490,10 @@ class ResourceService(protocol.ServerSlice):
                     self.clear_env_cache(env)
 
                 await resource.update_fields(
-                    last_deploy=finished, status=status, last_non_deploying_status=status, connection=connection
+                    last_deploy=finished,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    connection=connection,
                 )
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:

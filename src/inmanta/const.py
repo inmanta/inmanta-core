@@ -34,16 +34,23 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+NonDeployingResourceState = Enum(
+    "NonDeployingResourceState",
+    names=((state.name, state.value) for state in ResourceState if state != ResourceState.deploying),
+    type=str,
+)
+
+
 class NonDeployingResourceState(str, Enum):
-    unavailable = "unavailable"
-    skipped = "skipped"
-    dry = "dry"
-    deployed = "deployed"
-    failed = "failed"
-    available = "available"
-    cancelled = "cancelled"
-    undefined = "undefined"
-    skipped_for_undefined = "skipped_for_undefined"
+    unavailable = ResourceState.unavailable.value
+    skipped = ResourceState.skipped.value
+    dry = ResourceState.dry.value
+    deployed = ResourceState.deployed.value
+    failed = ResourceState.failed.value
+    available = ResourceState.available.value
+    cancelled = ResourceState.cancelled.value
+    undefined = ResourceState.undefined.value
+    skipped_for_undefined = ResourceState.skipped_for_undefined.value
 
 
 class DeprecatedResourceState(str, Enum):
