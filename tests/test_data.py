@@ -2834,28 +2834,28 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
-        last_non_deploying_status=const.ResourceState.available,
+        last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
-        last_non_deploying_status=const.ResourceState.failed,
+        last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
-        last_non_deploying_status=const.ResourceState.available,
+        last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r4_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -2883,35 +2883,35 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.skipped,
-        last_non_deploying_status=const.ResourceState.skipped,
+        last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
-        last_non_deploying_status=const.ResourceState.failed,
+        last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r2_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r3_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r5_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
