@@ -18,7 +18,6 @@
 
 import argparse
 import base64
-import itertools
 import logging
 import os
 import time
@@ -27,22 +26,19 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 
 import pydantic
 
-import inmanta.model as model
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
-from inmanta.ast.attribute import Attribute, RelationAttribute
+from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.execute.runtime import Instance, ResultVariable
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute.runtime import Instance
+from inmanta.execute.util import Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType
-from inmanta.util import get_compiler_version, groupby, hash_file
+from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -361,7 +357,7 @@ class Exporter(object):
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState], Optional[dict[str, object]]]]:
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
@@ -403,29 +399,18 @@ class Exporter(object):
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        model: Optional[Dict[str, Any]] = {}
-
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-            if types is not None and model_export:
-                if len(self._resources) > 0 or len(unknown_parameters) > 0:
-                    model = ModelExporter(types).export_all()
-                    with open(self.options.json + ".types", "wb+") as fd:
-                        fd.write(protocol.json_encode(model).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
-            model = None
-            if types is not None and model_export:
-                model = ModelExporter(types).export_all()
-
             self._version = self.commit_resources(
-                self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all
+                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
         exported_version: int = self._version
         if include_status:
-            return exported_version, self._resources, self._resource_state, model
+            return exported_version, self._resources, self._resource_state
         return exported_version, self._resources
 
     def add_resource(self, resource: Resource) -> None:
@@ -494,7 +479,6 @@ class Exporter(object):
         version: Optional[int],
         resources: List[Dict[str, str]],
         metadata: Dict[str, str],
-        model: Dict,
         partial_compile: bool,
         resource_sets_to_remove: List[str],
     ) -> int:
@@ -542,7 +526,7 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {const.EXPORT_META_DATA: metadata, "model": model}
+        version_info = {const.EXPORT_META_DATA: metadata}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
@@ -667,4 +651,3 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))  # type: ignore
-
