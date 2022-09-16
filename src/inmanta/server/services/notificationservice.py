@@ -70,7 +70,9 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             failed_pull_stage = next(
                 (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
-            if compile.notify_failed_compile:
+            if compile.notify_failed_compile == False:
+                return
+            elif compile.notify_failed_compile:
                 await self.notify(
                     compile.environment,
                     title="Compilation failed",
@@ -78,23 +80,22 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
-            else:
-                if failed_pull_stage:
-                    await self.notify(
-                        compile.environment,
-                        title="Pulling updates during compile failed",
-                        message=failed_pull_stage["errstream"],
-                        severity=const.NotificationSeverity.error,
-                        uri=f"/api/v2/compilereport/{compile.id}",
-                    )
-                elif compile.do_export:
-                    await self.notify(
-                        compile.environment,
-                        title="Compilation failed",
-                        message="An exporting compile has failed",
-                        severity=const.NotificationSeverity.error,
-                        uri=f"/api/v2/compilereport/{compile.id}",
-                    )
+            elif failed_pull_stage:
+                await self.notify(
+                    compile.environment,
+                    title="Pulling updates during compile failed",
+                    message=failed_pull_stage["errstream"],
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif compile.do_export:
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message="An exporting compile has failed",
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
 
     async def notify(
         self,
