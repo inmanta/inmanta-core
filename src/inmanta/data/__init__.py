@@ -3994,7 +3994,7 @@ class ResourceAction(BaseDocument):
     ) -> Tuple[str, List[object]]:
         # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
         # characters in the query
-        resource_id = resource_id.replace("%", "#%").replace("_", "#_") + "%"
+        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
 
         query = f"""{select_clause}
                     FROM
@@ -4234,7 +4234,7 @@ class ResourceAction(BaseDocument):
         if attribute and attribute_value:
             # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
             # and _ characters in the query
-            escaped_value = attribute_value.replace("%", "#%").replace("_", "#_") + "%"
+            escaped_value = attribute_value.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
             query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#' "
             values.append(cls._get_value(attribute))
             values.append(cls._get_value(escaped_value))
@@ -4794,7 +4794,6 @@ class Resource(BaseDocument):
             db_query = f"""SELECT * FROM ({db_query}) AS matching_records
                         ORDER BY matching_records.{order_by_column} {order}, matching_records.resource_version_id {order}"""
 
-        print(db_query, values)
         resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
         resource_records = cast(Iterable[Record], resource_records)
 
