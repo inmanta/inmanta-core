@@ -3992,6 +3992,10 @@ class ResourceAction(BaseDocument):
         resource_id: m.ResourceIdStr,
         offset: int,
     ) -> Tuple[str, List[object]]:
+        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
+        # characters in the query
+        resource_id = resource_id.replace("%", "#%").replace("_", "#_") + "%"
+
         query = f"""{select_clause}
                     FROM
                     (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
@@ -3999,7 +4003,7 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
+                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
                     """
         values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
