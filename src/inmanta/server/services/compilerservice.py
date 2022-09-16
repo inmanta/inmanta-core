@@ -649,10 +649,10 @@ class CompilerService(ServerSlice):
             else:
                 del self._recompiles[environment]
 
-    async def _notify_listeners(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
+    async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
             try:
-                await listener.compile_done(compile, notify_failed_compile)
+                await listener.compile_done(compile)
             except CancelledError:
                 """Propagate Cancel"""
                 raise
@@ -749,9 +749,6 @@ class CompilerService(ServerSlice):
         # set force_update == True iff any compile request has force_update == True
         compile_data: Optional[model.CompileData]
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
-
-        if compile.notify_failed_compile and not success:
-            self.add_background_task(self._notify_listeners(compile, True))
 
         version = runner.version
 

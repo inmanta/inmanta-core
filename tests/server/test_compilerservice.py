@@ -137,7 +137,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.seen = []
             self.preseen = []
 
-        async def compile_done(self, compile: data.Compile, notify_failed_compile: bool = False):
+        async def compile_done(self, compile: data.Compile):
             self.preseen.append(compile)
             print("Got compile done for ", compile.remote_id)
             async with self.lock:
