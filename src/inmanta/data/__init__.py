@@ -120,7 +120,7 @@ class TableLockMode(enum.Enum):
     """
 
     ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
 
@@ -3992,6 +3992,10 @@ class ResourceAction(BaseDocument):
         resource_id: m.ResourceIdStr,
         offset: int,
     ) -> Tuple[str, List[object]]:
+        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
+        # characters in the query
+        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+
         query = f"""{select_clause}
                     FROM
                     (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
@@ -3999,7 +4003,7 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
+                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
                     """
         values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
@@ -4228,9 +4232,12 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
+            # and _ characters in the query
+            escaped_value = attribute_value.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#' "
             values.append(cls._get_value(attribute))
-            values.append(cls._get_value(attribute_value))
+            values.append(cls._get_value(escaped_value))
             parameter_index += 2
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
