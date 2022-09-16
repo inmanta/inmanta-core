@@ -104,10 +104,15 @@ This section will introduce some guidelines for developing models for use with t
 In this guide, we only cover models where each set of independent resources is defined by a single top-level
 entity, which we will refer to as the "service" or "service entity" (as in ``LSM``).
 
-To safely make use of partial compiles, each service must be the sole owner if its resources and shared resources must be
+When building an inmanta model all potential instances of a service entity must refine to compatible (low level) config.
+In the model this config is represented by the resources. Therefore these guidelines will focus on creating valid and
+compatible resources. With well-designed resources, valid and compatible config will follow.
+
+To safely make use of partial compiles, each service must be the sole owner of its resources and any shared resources must be
 identical across service instances. The graphs below picture respectively a valid and an invalid service for partial compiles.
-The valid one results in fully separate resource sets for each instance, while the invalid one has resources that overlap
-between instances. Additionally, the shared resource for the valid service is consistent, but the invalid service tries to
+Each arrow represents a refinement: one entity creating another in one of its implementations. The valid service results in
+fully separate resource sets for each instance, while the invalid one has resources that overlap
+between instances. Additionally, the shared resource for the valid service is consistent, but the invalid service attempts to
 create a resource with the same id, yet a different value. The invalid service can thus not be allowed for partial compiles
 because of the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single
 service instance.
@@ -191,7 +196,7 @@ service instance.
 TODO: clean up other graphs to look similar to this one
 
 
-Formally, each service's refinements (through implementations) form a tree that may only intersect between service instances on
+In conclusion, each service's refinements (through implementations) form a tree that may only intersect between service instances on
 shared nodes. The whole subtree below such a shared node should be considered shared and any resources in it must not be part of
 a resource set. All shared resources should be consistent between any two service instances that might create the object (see
 `Constraints and rules`_). All other nodes should generally be considered owned by the service and all their resources be part
