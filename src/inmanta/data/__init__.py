@@ -120,7 +120,7 @@ class TableLockMode(enum.Enum):
     """
 
     ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
 
@@ -4232,9 +4232,10 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            escaped_value = attribute_value.replace("%", "#%").replace("_", "#_") + "%"
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#') > 0 "
             values.append(cls._get_value(attribute))
-            values.append(cls._get_value(attribute_value))
+            values.append(cls._get_value(escaped_value))
             parameter_index += 2
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
