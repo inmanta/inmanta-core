@@ -838,7 +838,7 @@ def app() -> None:
 
     ctx = None
     if "traceparent" in os.environ:
-        ctx = TraceContextTextMapPropagator().extract(carrier=os.environ["traceparent"])
+        ctx = TraceContextTextMapPropagator().extract(carrier=os.environ)
 
     with tracer.start_as_current_span(f"cmd {options.func.__name__}", context=ctx):
         try:
