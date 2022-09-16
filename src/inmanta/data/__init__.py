@@ -4232,6 +4232,8 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
+            # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
+            # and _ characters in the query
             escaped_value = attribute_value.replace("%", "#%").replace("_", "#_") + "%"
             query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#') > 0 "
             values.append(cls._get_value(attribute))
