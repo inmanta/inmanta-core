@@ -99,7 +99,10 @@ TODO: mention this in the document's introduction?
 
 Modeling guidelines
 ###################
-This section will introduce some guidelines for developing models for use with the partial compilation feature. Take extreme care when not following these guidelines and keep in mind the `Constraints and rules`_.
+This section will introduce some guidelines for developing models for use with the partial compilation feature.
+Take extreme care when not following these guidelines and keep in mind the `Constraints and rules`_. The purpose of these
+guidelines is to present a modelling approach to safely make use of partial compiles. In essence, this boils down to developing
+the model so that a partial compile only succeeds if a full one would as well.
 
 In this guide, we only cover models where each set of independent resources is defined by a single top-level
 entity, which we will refer to as the "service" or "service entity" (as in ``LSM``).
@@ -206,20 +209,55 @@ to ensure two service instance's trees can not intersect on owned nodes, see the
 
 Service instance uniqueness
 ***************************
-With full compiles, indexes serve as the identity of a service instance. The compiler then validates that no conflicting
+With full compiles, indexes serve as the identity of a service instance in the model. The compiler then validates that no conflicting
 service instances can exist. With partial compiles this validation is lost because only one service instance will be present
 in the model. However, it is still crucial that such conflicts do not exist. Put simply, we need to make sure that a partial
-compile succeeds only if a full compile would succeed as well. This subsection deals solely with the uniqueness of service
+compile succeeds only when a full compile would succeed as well. This subsection deals solely with the uniqueness of service
 instances. The `Ownership`_ subsection then deals with safe refinements into resources.
 
 To ensure service instance definitions are distinct, the model must make sure to do appropriate validation on the full set of
-definitions. When doing a partial compile, the model must verify that the service instance it is compiling for, has a different
+definitions. When doing a partial compile, the model must verify that the service instance it is compiling for has a different
 identity from any of the previously defined service instances. This can be achieved by externally checking against some sort of
 inventory that there are no matches for any set of input attributes that identify the instance.
 
 The current implementation of partial compiles does not provide any helpers for this verification. It is the responsibility of
 the model developer or the tool/extension that does the export to ensure that no two service instances can be created that are
 considered to have the same identity by the model.
+
+For example, suppose we modify the example model to take input from a simple yaml file:
+
+.. code-block:: inmanta
+
+    for network_def in mymodule::read_from_yaml():
+        network = Network(id=network_def["id"])
+        for host in network["hosts"]:
+            network.hosts += Host(id=host["id"])
+        end
+    end
+
+
+.. code-block:: yaml
+
+    networks:
+        - id: 0
+          routers:
+            - id: 0
+        - id: 1
+          routers:
+            - id: 0
+            - id: 1
+            - id: 2
+            - id: 3
+            - id: 4
+        - id: 0
+          routers:
+            - id: 0
+            - id: 1
+
+
+The ``read_from_yaml()`` plugin would have to verify that no two networks with the same id are defined. After this validation,
+if doing a partial, it may return a list with only the relevant network. TODO
+
 
 Ownership
 *********
