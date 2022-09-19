@@ -1295,13 +1295,22 @@ async def test_compiler_service_export_with_specified_exporter_plugin(compilerse
     await env.insert()
 
     u1 = uuid.uuid4()
-    await compilerservice.request_recompile(
-        env=env, force_update=False, do_export=False, remote_id=u1, exporter_plugin="test_exp22orter"
+    id1 = await compilerservice.request_recompile(
+        # env=env, force_update=False, do_export=False, remote_id=u1, exporter_plugin="test_exporter"
+        env=env, force_update=False, do_export=False, remote_id=u1
     )
-    await compilerservice.request_recompile(
-        env=env, force_update=False, do_export=True, remote_id=u1, exporter_plugin="test_exp22orter"
-    )
+    # u2 = uuid.uuid4()
+    # id2 = await compilerservice.request_recompile(
+    #     env=env, force_update=False, do_export=True, remote_id=u2, exporter_plugin="test_exporter"
+    # )
+
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
     results = await data.Compile.get_by_remote_id(env.id, u1)
     assert results[0].remote_id == u1
 
-    pass
+
