@@ -70,7 +70,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             failed_pull_stage = next(
                 (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
-            if compile.notify_failed_compile == False:
+            if compile.notify_failed_compile is False:
                 return
             elif compile.notify_failed_compile and compile.failed_compile_message is not None:
                 # Use specific message provided in request

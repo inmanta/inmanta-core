@@ -1158,7 +1158,7 @@ async def test_compileservice_api(client, environment):
     ["a custom message", None],
 )
 async def test_notification_failed_compile_with_message(
-    server, client, environment_factory: EnvironmentFactory, message
+    server, client, environment_factory: EnvironmentFactory, message: Optional[str]
 ) -> None:
     compilerservice = server.get_slice(SLICE_COMPILER)
 

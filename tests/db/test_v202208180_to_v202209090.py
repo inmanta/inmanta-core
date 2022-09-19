@@ -22,7 +22,7 @@ from typing import List
 import pytest
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202208180.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v202208180.sql"))
 async def test_added_resource_set_column(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,
@@ -45,8 +45,9 @@ async def test_added_resource_set_column(
     assert "failed_compile_message" in (await get_columns_in_db_table("compile"))
 
     compiles = await postgresql_client.fetch("SELECT * FROM public.compile;")
+    assert compiles
     for c in compiles:
         assert "notify_failed_compile" in c
-        assert c["notify_failed_compile"] is False
+        assert c["notify_failed_compile"] is None
         assert "failed_compile_message" in c
         assert c["failed_compile_message"] == ""
