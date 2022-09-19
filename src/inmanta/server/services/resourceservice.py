@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -490,7 +490,10 @@ class ResourceService(protocol.ServerSlice):
                     self.clear_env_cache(env)
 
                 await resource.update_fields(
-                    last_deploy=finished, status=status, last_non_deploying_status=status, connection=connection
+                    last_deploy=finished,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    connection=connection,
                 )
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
@@ -523,7 +526,7 @@ class ResourceService(protocol.ServerSlice):
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
-        status: const.ResourceState,
+        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         change: const.Change,
@@ -532,6 +535,18 @@ class ResourceService(protocol.ServerSlice):
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        def convert_legacy_state(
+            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
+        ) -> Optional[const.ResourceState]:
+            if status is None or isinstance(status, const.ResourceState):
+                return status
+            if status == const.DeprecatedResourceState.processing_events:
+                return const.ResourceState.deploying
+            else:
+                raise BadRequest(f"Unsupported deprecated resources state {status.value}")
+
+        status = convert_legacy_state(status)
+
         # can update resource state
         is_resource_state_update = action in STATE_UPDATE
         # this ra is finishing
@@ -667,7 +682,7 @@ class ResourceService(protocol.ServerSlice):
                     is updated correctly when the `status` field of a resource is updated.
                     """
                     if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = kwargs["status"]
+                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
                     await resource.update_fields(**kwargs, connection=connection)
 
                 if is_resource_state_update:
