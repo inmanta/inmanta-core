@@ -120,7 +120,7 @@ class TableLockMode(enum.Enum):
     """
 
     ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
 
@@ -3996,6 +3996,10 @@ class ResourceAction(BaseDocument):
         resource_id: m.ResourceIdStr,
         offset: int,
     ) -> Tuple[str, List[object]]:
+        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
+        # characters in the query
+        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+
         query = f"""{select_clause}
                     FROM
                     (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
@@ -4003,7 +4007,7 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
+                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
                     """
         values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
@@ -4232,9 +4236,12 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
+            # and _ characters in the query
+            escaped_value = attribute_value.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#' "
             values.append(cls._get_value(attribute))
-            values.append(cls._get_value(attribute_value))
+            values.append(cls._get_value(escaped_value))
             parameter_index += 2
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
@@ -4987,25 +4994,7 @@ class Resource(BaseDocument):
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status,
-        /* Split up the requires array to its elements and find the latest released version of
-            the resources to get their status, and build a single json object from them */
-        (SELECT JSON_OBJECT_AGG(substring(req.requires from '(.*),v='), s.status) as requires_status
-            FROM
-                (SELECT JSONB_ARRAY_ELEMENTS_TEXT(resource.attributes->'requires') as requires
-                    FROM resource
-                    WHERE resource_id = latest.resource_id and model = latest.model)
-                    as req
-                    INNER JOIN
-                        (SELECT DISTINCT ON (resource_id) resource_id, resource.environment, {status_subquery}
-                        FROM resource
-                        INNER JOIN configurationmodel cm
-                        ON resource.model = cm.version AND resource.environment = cm.environment
-                        WHERE resource.environment = $1 AND cm.released = TRUE
-                        ORDER BY resource_id, model desc
-                        ) as s
-                    ON substring(req.requires from '(.*),v=') = s.resource_id AND s.environment = $1
-                )
+        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -5030,6 +5019,20 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
+        attributes = json.loads(record["attributes"])
+        requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
+
+        # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
+        # fields requires to calculate the status for each resource record, before it is filtered
+        status_query = f"""
+        SELECT DISTINCT ON (resource_id) resource_id, {status_subquery}
+        FROM resource
+        INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
+        WHERE resource.environment = $1 AND cm.released = TRUE AND resource_id = ANY($2)
+        ORDER BY resource_id, model DESC;
+        """
+        status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
+
         return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
             resource_type=record["resource_type"],
@@ -5039,9 +5042,9 @@ class Resource(BaseDocument):
             last_deploy=record["latest_deploy"],
             first_generated_time=record["first_generated_time"],
             first_generated_version=record["first_model"],
-            attributes=json.loads(record["attributes"]),
+            attributes=attributes,
             status=record["status"],
-            requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
+            requires_status={record["resource_id"]: record["status"] for record in status_result},
         )
 
     @classmethod

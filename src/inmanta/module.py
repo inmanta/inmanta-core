@@ -66,7 +66,7 @@ from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, valid
 
 import inmanta.warnings
 import packaging.version
-from inmanta import const, env, loader, plugins
+from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -2806,7 +2806,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
                 )
             raise
 
-        if self.name != os.path.basename(self._path):
+        # Only show the warning when we are not running tests. Especially on jenkins the directory of the module often does not
+        # have the correct name.
+        if self.name != os.path.basename(self._path) and not RUNNING_TESTS:
             LOGGER.warning(
                 "The name in the module file (%s) does not match the directory name (%s)",
                 self.name,
