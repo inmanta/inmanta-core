@@ -26,12 +26,21 @@ import pytest
 async def test_added_resource_set_column(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,
+    monkeypatch,
     get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[List[str]]],
 ) -> None:
     """
     Test the database migration script that adds the `notify_failed_compile` and 'failed_compile_message' column to the
     database.
     """
+
+    async def substitute_func():
+        # monkeypatch the cleanup function to keep data in compile table (by default data older than 7 days is removed)
+        return
+
+    from inmanta.server.services.compilerservice import CompilerService
+
+    monkeypatch.setattr(CompilerService, "_cleanup", substitute_func)
 
     # Assert state before running the DB migration script
     assert "notify_failed_compile" not in (await get_columns_in_db_table("compile"))

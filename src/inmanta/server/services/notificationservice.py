@@ -72,7 +72,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             )
             if compile.notify_failed_compile is False:
                 return
-            elif compile.notify_failed_compile and compile.failed_compile_message is not None:
+            elif compile.notify_failed_compile and compile.failed_compile_message:
                 # Use specific message provided in request
                 await self.notify(
                     compile.environment,
