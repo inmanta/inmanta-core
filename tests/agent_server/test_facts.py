@@ -235,7 +235,7 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
             await asyncio.sleep(0.1)
             result = await client.get_param(environment, "fact", rid)
 
-        assert result.code == result_code
+        assert result.code == result_code, result.result
         return result
 
     result = await client.put_version(

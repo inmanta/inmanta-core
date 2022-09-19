@@ -1011,9 +1011,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
+        if connection is not None:
+            return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -3934,8 +3936,8 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(
@@ -4452,7 +4454,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
