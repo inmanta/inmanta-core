@@ -38,7 +38,6 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
 .. toctree::
     :maxdepth: 3
 
-    quickstart
     install
     dashboard
     architecture
