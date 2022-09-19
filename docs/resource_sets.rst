@@ -122,10 +122,10 @@ create a resource with the same id, yet a different value. The invalid service c
 because of the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single
 service instance.
 
-.. digraph:: resource_sets_good
+.. digraph:: resource_sets_generic_good
     :caption: A good service for partial compiles.
 
-    subgraph cluster_service_good0 {
+    subgraph cluster_services {
         "GoodService(id=0)" [shape=rectangle];
         "GoodService(id=0)" -> subgraph cluster_resources_good0 {
             "Resource(id=0)";
@@ -165,15 +165,18 @@ service instance.
     {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"];
 
 
-.. digraph:: resource_sets_generic_bad
-    :caption: A bad service for partial compiles.
+TODO: update text to match split bad examples
 
-    subgraph cluster_services_bad {
+
+.. digraph:: resource_sets_generic_bad_owned
+    :caption: A bad service for partial compiles: no owned resources
+
+    subgraph cluster_services {
         "BadService(id=0)" [shape=rectangle];
         "BadService(id=1)" [shape=rectangle];
         { "BadService(id=0)", "BadService(id=1)" } -> subgraph cluster_resources_bad {
-            "Resource(id=4)";
-            "Resource(id=5)";
+            "Resource(id=0)";
+            "Resource(id=1)";
             color = "grey";
             fontcolor = "grey";
             label = "Not a valid resource set";
@@ -183,19 +186,59 @@ service instance.
         labelloc = "top";
         color = "red";
     }
+    { "BadService(id=0)" "BadService(id=1)" } -> subgraph cluster_resources_good_shared {
+        "SharedResource(id=0, value=0)";
+        color = "green";
+        fontcolor = "grey";
+        label = "Shared and consistent among all service instances"
+        labelloc = "bottom";
+    }
+
+
+.. digraph:: resource_sets_generic_bad_shared
+    :caption: A bad service for partial compiles: conflicting shared resources
+
+    subgraph cluster_services {
+        "BadService(id=0)" [shape=rectangle];
+        "BadService(id=0)" -> subgraph cluster_resources_good0 {
+            "Resource(id=0)";
+            "Resource(id=1)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set for BadService(id=0)";
+            labelloc = "bottom";
+        }
+        label = "Owned by BadService(id=0)";
+        labelloc = "top";
+        color = "green";
+    }
+    subgraph cluster_service_good1 {
+        "BadService(id=1)" [shape=rectangle];
+        "BadService(id=1)" -> subgraph cluster_resources_good1 {
+            "Resource(id=2)";
+            "Resource(id=3)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set for BadService(id=1)";
+            labelloc = "bottom";
+        }
+        label = "Owned by BadService(id=1)";
+        labelloc = "top";
+        color = "green";
+    }
     subgraph cluster_resources_bad_shared {
-        "SharedResource(id=1, value=0)";
-        "SharedResource(id=1, value=1)";
+        "SharedResource(id=0, value=0)";
+        "SharedResource(id=0, value=1)";
         color = "red";
         fontcolor = "grey";
         label = "Shared resources' values are not consistent"
         labelloc = "bottom";
     }
-    "BadService(id=0)" -> "SharedResource(id=1, value=0)";
-    "BadService(id=1)" -> "SharedResource(id=1, value=1)";
+    "BadService(id=0)" -> "SharedResource(id=0, value=0)";
+    "BadService(id=1)" -> "SharedResource(id=0, value=1)";
 
     # force rendering on multiple ranks
-    {"Resource(id=4)" "Resource(id=5)"} -> {"SharedResource(id=1, value=0)" "SharedResource(id=1, value=1)"} [style="invis"];
+    {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"];
 
 
 In conclusion, each service's refinements (through implementations) form a tree that may only intersect between service instances on
