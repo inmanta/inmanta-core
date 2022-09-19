@@ -17,16 +17,19 @@
 """
 import asyncio
 import datetime
+import enum
 import logging
 import time
 import uuid
-from typing import Dict, List, Optional
+from collections import abc
+from typing import Dict, List, Optional, Type
 
 import asyncpg
 import pytest
 from asyncpg import Connection, ForeignKeyViolationError
 from asyncpg.pool import Pool
 
+import utils
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
@@ -100,6 +103,35 @@ async def test_postgres_client(postgresql_client):
     await postgresql_client.execute("DELETE FROM test WHERE test.id = " + str(first_record["id"]))
     records = await postgresql_client.fetch("SELECT * FROM test")
     assert len(records) == 0
+
+
+async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> None:
+    """
+    Verify that enumeration fields defined in data document objects match values defined in the db schema.
+    """
+    all_db_document_classes: abc.Set[Type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
+        data.BaseDocument
+    }
+    for cls in all_db_document_classes:
+        enums: abc.Mapping[str, data.Field] = {
+            name: field for name, field in cls.get_field_metadata().items() if issubclass(field.field_type, enum.Enum)
+        }
+        for enum_column, field in enums.items():
+            db_enum_values: abc.Sequence[asyncpg.Record] = await cls._fetch_query(
+                """
+                SELECT enumlabel
+                FROM pg_enum
+                INNER JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+                INNER JOIN information_schema.columns c ON pg_type.typname = c.udt_name
+                WHERE table_schema='public' AND table_name=$1 AND column_name=$2
+                """,
+                cls._get_value(cls.table_name()),
+                cls._get_value(enum_column),
+            )
+            # verify the db enum and the Python enum have the exact same values
+            assert set(field.field_type) == {
+                field._from_db_single(enum_column, record["enumlabel"]) for record in db_enum_values
+            }
 
 
 async def test_project(init_dataclasses_and_load_schema):
@@ -2802,28 +2834,28 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
-        last_non_deploying_status=const.ResourceState.available,
+        last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
-        last_non_deploying_status=const.ResourceState.failed,
+        last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
-        last_non_deploying_status=const.ResourceState.available,
+        last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r4_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -2851,35 +2883,35 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.skipped,
-        last_non_deploying_status=const.ResourceState.skipped,
+        last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.failed,
-        last_non_deploying_status=const.ResourceState.failed,
+        last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r2_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r3_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
         attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r5_v2,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
