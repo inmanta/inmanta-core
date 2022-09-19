@@ -3484,7 +3484,7 @@ class Compile(BaseDocument):
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
     :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
         By default, notifications are enabled only for exporting compiles.
-    :param failed_compile_message: message option to use when a notification for a failed compile is created
+    :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     """
 
     __primary_key__ = ("id",)
