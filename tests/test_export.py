@@ -182,7 +182,7 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         """
     )
     config.Config.set("unknown_handler", "default", "prune-resource")
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3
     assert len([x for x in status.values() if x == const.ResourceState.available]) == 2
@@ -256,7 +256,7 @@ import exp
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
 
@@ -269,7 +269,7 @@ import exp
 a = exp::Test2(mydict={"a": null}, mylist=["a",null])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
     json_dict = snippetcompiler.get_exported_json()
@@ -288,7 +288,7 @@ a = exp::Test2(mydict={"a": tests::unknown()}, mylist=["a"])
 b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 2
     assert status["exp::Test2[agenta,name=ida]"] == ResourceState.undefined

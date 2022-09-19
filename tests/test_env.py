@@ -47,6 +47,32 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     )
 
 
+def test_venv_pyton_env_empty_string(tmpdir):
+    """test that an exception is raised if the venv path is an empty string"""
+    with pytest.raises(ValueError) as e:
+        env.VirtualEnv("")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
+    env_dir2 = tmpdir.mkdir("env2").strpath
+    venv2 = env.VirtualEnv(env_dir2)
+    venv2.env_path = ""
+    with pytest.raises(Exception) as e:
+        venv2.use_virtual_env()
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(python_path="")
+    assert e.value.args[0] == "The python_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(env_path="")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+
 def test_basic_install(tmpdir):
     """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
     env_dir1 = tmpdir.mkdir("env1").strpath
