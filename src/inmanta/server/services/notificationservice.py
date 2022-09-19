@@ -72,11 +72,12 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             )
             if compile.notify_failed_compile == False:
                 return
-            elif compile.notify_failed_compile:
+            elif compile.notify_failed_compile and compile.failed_compile_message is not None:
+                # Use specific message provided in request
                 await self.notify(
                     compile.environment,
                     title="Compilation failed",
-                    message=compile.failed_compile_message if compile.failed_compile_message else "A compile has failed",
+                    message=compile.failed_compile_message,
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
@@ -93,6 +94,15 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     compile.environment,
                     title="Compilation failed",
                     message="An exporting compile has failed",
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif compile.notify_failed_compile:
+                # Send notification with generic message as fallback
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message="A compile has failed",
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
