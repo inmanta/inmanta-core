@@ -63,7 +63,7 @@ COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
 class CompileStateListener(object):
     @abc.abstractmethod
-    async def compile_done(self, compile: data.Compile, notify_failed_compile: bool = False) -> None:
+    async def compile_done(self, compile: data.Compile) -> None:
         """Receive notification of all completed compiles
 
         1- Notifications are delivered at least once (retry until all listeners have returned or raise an exception other
