@@ -102,12 +102,13 @@ The most important elements of the test case are the following:
 * Line 15: Verifies whether the migration script correctly added the column ``new_column`` to the table test.
 
 Each commit that creates a new database version should also add a database dump for that new version to the
-``tests/db/dumps/`` directory. Generating this dump can be done using the ``tests/db/dump_tool.py`` script. This script
-does the following:
+``tests/db/dumps/`` directory. Generating this dump can be done using the ``tests/db/dump_tool.py`` script. This
+script does the following:
 
 1. Start an Inmanta server using the latest database schema available in ``inmanta.db.versions`` package.
 2. Execute some API calls against the server to populate the database tables with some dummy data.
 3. Dump the content of the database to ``tests/db/dumps/v<latest_version>.sql``.
 
+The actions to be taken after generating a new dump file are described in the docstring of the ``dump_tool.py`` file.
 If a new table or column is added using a database migration script, the developer should make sure to adjust the
 ``dump_tool.py`` script with the necessary API calls to populate the table or column if required.
