@@ -3482,6 +3482,7 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param exporter_plugin: Specific exporter plugin to use
     """
 
     __primary_key__ = ("id",)
@@ -3510,6 +3511,8 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    exporter_plugin: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3826,6 +3829,7 @@ class Compile(BaseDocument):
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
+            exporter_plugin=self.exporter_plugin,
         )
 
 

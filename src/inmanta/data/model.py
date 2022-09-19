@@ -151,6 +151,8 @@ class CompileRunBase(BaseModel):
     partial: bool = False
     removed_resource_sets: list[str] = []
 
+    exporter_plugin: Optional[str] = None
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]

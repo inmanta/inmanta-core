@@ -44,7 +44,6 @@ from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
-from inmanta.export import Exporter
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -390,6 +389,10 @@ class CompileRun(object):
                 compile_data_json_file.name,
             ]
 
+            if self.request.exporter_plugin:
+                cmd.append("--export-plugin")
+                cmd.append(self.request.exporter_plugin)
+
             if self.request.partial:
                 cmd.append("--partial")
 
@@ -571,7 +574,7 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
-        exporter_plugin: Optional[Exporter] = None
+        exporter_plugin: Optional[str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
@@ -602,6 +605,7 @@ class CompilerService(ServerSlice):
             environment_variables=env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
+            exporter_plugin=exporter_plugin,
         )
         await compile.insert()
         await self._queue(compile)
