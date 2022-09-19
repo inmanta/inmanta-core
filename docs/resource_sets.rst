@@ -1,3 +1,5 @@
+TODO: this appears as a top-level document
+
 **********************************
 Resource sets and partial compile
 **********************************
@@ -13,7 +15,7 @@ the partial compile feature is actually most useful in conjunction with addition
 
 
 Resource sets
-###########################
+=============
 
 Instances of the ``std::ResourceSet`` entity serve as the model's representation of resource sets. The name of the set and a list of its resources are held by this entity.
 These ``ResourceSet`` instances are found by the default exporter to ascertain which resources belong to which set.
@@ -26,7 +28,7 @@ In the example below, 1000 networks of 5 hosts each are created. Each host is pa
 
 
 Partial compiles
-###########################
+================
 
 When a model is partially compiled, it only includes the entities and resources for the resource sets that need to be changed (as well as their dependencies on additional resources that aren't part of a resource set).
 It is the server's responsibility to create a new version of the desired state utilizing the resources from the old version and those from the partial compile.
@@ -59,7 +61,7 @@ as the index example shows. This can result in undefinable behavior.
 
 
 Constraints and rules
-************************
+---------------------
 
 When using partial compiles, the following rules have to be followed:
 
@@ -76,7 +78,7 @@ TODO: link to new section
 
 
 Exporting a partial model to the server
-******************************************************
+---------------------------------------
 
 Two arguments can be passed to the ``inmanta export`` command in order to export a partial model to the server:
 
@@ -85,7 +87,7 @@ Two arguments can be passed to the ``inmanta export`` command in order to export
 
 
 Limitations
-*************
+-----------
 
 * The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these constraints are met.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete.
@@ -98,7 +100,7 @@ Limitations
 TODO: mention this in the document's introduction?
 
 Modeling guidelines
-###################
+===================
 This section will introduce some guidelines for developing models for use with the partial compilation feature.
 Take extreme care when not following these guidelines and keep in mind the `Constraints and rules`_. The purpose of these
 guidelines is to present a modelling approach to safely make use of partial compiles. In essence, this boils down to developing
@@ -135,7 +137,7 @@ service instance.
         }
         label = "Owned by GoodService(id=0)";
         labelloc = "top";
-        color="green";
+        color = "green";
     }
     subgraph cluster_service_good1 {
         "GoodService(id=1)" [shape=rectangle];
@@ -149,18 +151,18 @@ service instance.
         }
         label = "Owned by GoodService(id=1)";
         labelloc = "top";
-        color="green";
+        color = "green";
     }
     { "GoodService(id=0)" "GoodService(id=1)" } -> subgraph cluster_resources_good_shared {
         "SharedResource(id=0, value=0)";
-        color="green";
-        fontcolor="grey";
+        color = "green";
+        fontcolor = "grey";
         label = "Shared and consistent among all service instances";
         labelloc = "bottom";
     }
 
     # force rendering on multiple ranks
-    {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"]
+    {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"];
 
 
 .. digraph:: resource_sets_generic_bad
@@ -185,7 +187,7 @@ service instance.
         "SharedResource(id=1, value=0)";
         "SharedResource(id=1, value=1)";
         color = "red";
-        fontcolor="grey";
+        fontcolor = "grey";
         label = "Shared resources' values are not consistent"
         labelloc = "bottom";
     }
@@ -193,10 +195,7 @@ service instance.
     "BadService(id=1)" -> "SharedResource(id=1, value=1)";
 
     # force rendering on multiple ranks
-    {"Resource(id=4)" "Resource(id=5)"} -> {"SharedResource(id=1, value=0)" "SharedResource(id=1, value=1)"} [style="invis"]
-
-
-TODO: clean up other graphs to look similar to this one
+    {"Resource(id=4)" "Resource(id=5)"} -> {"SharedResource(id=1, value=0)" "SharedResource(id=1, value=1)"} [style="invis"];
 
 
 In conclusion, each service's refinements (through implementations) form a tree that may only intersect between service instances on
@@ -208,9 +207,9 @@ to ensure two service instance's trees can not intersect on owned nodes, see the
 
 
 Service instance uniqueness
-***************************
+---------------------------
 With full compiles, indexes serve as the identity of a service instance in the model. The compiler then validates that no conflicting
-service instances can exist. With partial compiles this validation is lost because only one service instance will be present
+service instances exist. With partial compiles this validation is lost because only one service instance will be present
 in the model. However, it is still crucial that such conflicts do not exist. Put simply, we need to make sure that a partial
 compile succeeds only when a full compile would succeed as well. This subsection deals solely with the uniqueness of service
 instances. The `Ownership`_ subsection then deals with safe refinements into resources.
@@ -256,11 +255,12 @@ For example, suppose we modify the example model to take input from a simple yam
 
 
 The ``read_from_yaml()`` plugin would have to verify that no two networks with the same id are defined. After this validation,
-if doing a partial, it may return a list with only the relevant network. TODO
+if doing a partial, it may return a list with only the relevant network in it. For the yaml given above validation would fail
+because two routers with the same id are defined.
 
 
 Ownership
-*********
+---------
 A resource can safely be considered owned by a service instance if it could never be created by another service instance. There
 are two main mechanisms that can be used to provide this guarantee. One is the use of indexes on appropriate locations, the
 other is the use of some external distributor of unique values (e.g. a plugin to generate a UUID or to allocate values in an
@@ -271,6 +271,16 @@ instance. In the index case we do so by making sure the object's identity is in 
 the service instance. In the case where unique values are externally produced/allocated, responsibility for uniqueness falls
 to the plugin that produces the values.
 
+Ownership through indexes
+^^^^^^^^^^^^^^^^^^^^^^^^^
+As stated above, during partial compiles indexes alone can not serve as a uniqueness guarantee because each compile only
+contains a single service instance. And yet, indexes can still be used as a mechanism to guarantee ownership: e.g. if a value
+for a resource's index is uniquely derived from the identity of its service instance, this in itself is a guarantee that no
+other service instance could result in this same resource. In other words, rather than count on the stand-alone identity aspect
+of the index, we will make sure the identity is fully defined by the service instance's identity (or an external inventory).
+This, coupled with the `Service instance uniqueness`_ guarantee ensures that the refinement trees will not intersect. This in
+turn allows us to conclude that the partial compile behavior will be the same as the full compile behavior.
+
 Generally, for every index on a set of attributes of an owned resource, at least one of the fields must be either derived from
 the identity of the service instance, or allocated in a safe manner by a plugin as described above. The same goes for every
 pair of resource id and agent. If the first constraint is not met, a full compile might fail, while if the second is not met,
@@ -279,13 +289,13 @@ the export will be rejected because two services are trying to configure the sam
 For example, consider the example model from before. If two networks with two hosts each would be created, they would result
 in two disjunct resource sets, as pictured below.
 
-TODO: in all these graphs, the edge is actually from Host -> AgentConfig rather than Network -> AgentConfig
-
 .. digraph:: resource_sets_example
-    :caption: Two valid services with their resource sets
+    :caption: Two valid service instances with their resource sets
 
     subgraph cluster_shared {
         AgentConfig;
+        color = "green";
+        fontcolor = "grey";
         label = "Shared resources";
         labelloc = "bottom";
     }
@@ -295,11 +305,12 @@ TODO: in all these graphs, the edge is actually from Host -> AgentConfig rather 
         "Network(id=0)" -> subgraph cluster_resources0 {
             "Host(nid=0, id=0)";
             "Host(nid=0, id=1)";
-            label = "Resource set 0";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set for Network 0";
             labelloc = "bottom";
         }
-        "Network(id=0)" -> AgentConfig;
-        color = "lightgrey";
+        color = "green";
         label = "service 0";
         labelloc = "top";
     }
@@ -308,47 +319,66 @@ TODO: in all these graphs, the edge is actually from Host -> AgentConfig rather 
         "Network(id=1)" -> subgraph cluster_resources1 {
             "Host(nid=1, id=0)";
             "Host(nid=1, id=1)";
-            label = "Resource set 1";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set for Network 1";
             labelloc = "bottom";
         }
-        "Network(id=1)" -> AgentConfig;
-        color = "lightgrey";
+        color = "green";
         label = "service 1";
         labelloc = "top";
     }
+
+    # force rendering on multiple ranks
+    {"Host(nid=0, id=0)" "Host(nid=0, id=1)" "Host(nid=1, id=0)" "Host(nid=1, id=1)"} -> "AgentConfig";
 
 Now suppose the index on ``Host`` did not include the network instance. In that case the identity of a ``Host`` instance
 would no longer be derived from the identity of its ``Network`` instance. It would then be possible to end up with two networks
 that refine to the same host objects as shown below. The resource sets are clearly no longer disjunct.
 
 .. digraph:: resource_sets_example_invalid
-    :caption: Two invalid services with a resource set conflict
+    :caption: Two invalid service instances with a resource set conflict
 
     subgraph cluster_shared {
         AgentConfig;
+        color = "green";
+        fontcolor = "grey";
         label = "Shared resources";
         labelloc = "bottom";
     }
 
-    "Network(id=0)" [shape=rectangle];
-    "Network(id=1)" [shape=rectangle];
-    { "Network(id=0)" "Network(id=1)" }-> subgraph cluster_resources0 {
-        "Host(id=0)";
-        "Host(id=1)";
-        label = "Resource set 0/1?";
-        labelloc = "bottom";
+    subgraph cluster_bad {
+        "Network(id=0)" [shape=rectangle];
+        "Network(id=1)" [shape=rectangle];
+        { "Network(id=0)" "Network(id=1)" }-> subgraph cluster_resources0 {
+            "Host(id=0)";
+            "Host(id=1)";
+            color = "grey"
+            fontcolor = "grey"
+            label = "Resource set 0/1?";
+            labelloc = "bottom";
+        }
+        color = "red";
+        label = "intersecting services";
+        labelloc = "top";
     }
-    { "Network(id=0)" "Network(id=1)" } -> AgentConfig;
+    { "Host(id=0)" "Host(id=1)" } -> AgentConfig;
+
+
+Ownership through allocation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Instead of the index ``Host(network, id)`` we could also use an allocation plugin to determine the id of a host. Suppose
 we add such a plugin that allocates a unique value in some external inventory, then the index is no longer required for correct
-behavior:
+behavior because the allocator guarantees uniqueness for the host id:
 
 .. digraph:: resource_sets_example_allocation
     :caption: Two valid services with their resource sets, using allocation
 
     subgraph cluster_shared {
         AgentConfig;
+        color = "green";
+        fontcolor = "grey";
         label = "Shared resources";
         labelloc = "bottom";
     }
@@ -358,11 +388,12 @@ behavior:
         "Network(id=0)" -> subgraph cluster_resources0 {
             "Host(id=269)";
             "Host(id=694)";
+            color = "grey";
+            fontcolor = "grey";
             label = "Resource set 0";
             labelloc = "bottom";
         }
-        "Network(id=0)" -> AgentConfig;
-        color = "lightgrey";
+        color = "green";
         label = "service 0";
         labelloc = "top";
     }
@@ -371,13 +402,19 @@ behavior:
         "Network(id=1)" -> subgraph cluster_resources1 {
             "Host(id=31)";
             "Host(id=712)";
+            color = "grey";
+            fontcolor = "grey";
             label = "Resource set 1";
             labelloc = "bottom";
         }
-        "Network(id=1)" -> AgentConfig;
-        color = "lightgrey";
+        color = "green";
         label = "service 1";
         labelloc = "top";
     }
 
+    # force rendering on multiple ranks
+    {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "AgentConfig";
+
 TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
+TODO: review comments
+TODO: double check commits do not include png/pdf
