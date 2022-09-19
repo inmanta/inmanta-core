@@ -570,7 +570,7 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
-        notify_failed_compile: bool = False,
+        notify_failed_compile: Optional[bool] = None,
         failed_compile_message: str = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
