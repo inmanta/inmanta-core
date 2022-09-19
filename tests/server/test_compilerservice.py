@@ -566,7 +566,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         report = [x for x in reports if x["name"] == "Recompiling configuration model"][0]
         return expected in report["command"]
 
-    # # Do a compile
+    # Do a compile
     compile_id, _ = await compilerslice.request_recompile(env, force_update=False, do_export=False, remote_id=remote_id1)
 
     await retry_limited(wait_for_report, 10)
@@ -1285,3 +1285,23 @@ async def test_uninstall_python_packages(
     # The uninstall is executed on update. The first compile is not an update
     assert len(reports) == 2
     assert all(r.returncode == 0 for r in reports)
+
+
+async def test_compiler_service_export_with_specified_exporter_plugin(compilerservice: CompilerService, caplog):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    u1 = uuid.uuid4()
+    await compilerservice.request_recompile(
+        env=env, force_update=False, do_export=False, remote_id=u1, exporter_plugin="test_exp22orter"
+    )
+    await compilerservice.request_recompile(
+        env=env, force_update=False, do_export=True, remote_id=u1, exporter_plugin="test_exp22orter"
+    )
+    results = await data.Compile.get_by_remote_id(env.id, u1)
+    assert results[0].remote_id == u1
+
+    pass
