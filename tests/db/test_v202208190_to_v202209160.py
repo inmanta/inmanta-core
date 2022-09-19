@@ -22,13 +22,13 @@ import pytest
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202208190.sql"))
-async def test_added_resource_set_column(
+async def test_added_exporter_plugin(
     migrate_db_from: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
     get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
 ) -> None:
     """
-    Test the database migration script that adds the `resource_set` column to the database.
+    Test the database migration script that adds the `exporter_plugin` column to the database.
 
     """
 
