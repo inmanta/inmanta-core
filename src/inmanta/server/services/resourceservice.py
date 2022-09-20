@@ -496,9 +496,7 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-        self.add_background_task(
-            data.ConfigurationModel.mark_done_if_done(env.id, resource.model)
-        )
+                await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
 
         waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
         for agent, resource_id in waiting_agents:
@@ -672,7 +670,6 @@ class ResourceService(protocol.ServerSlice):
                         kwargs["last_non_deploying_status"] = kwargs["status"]
                     await resource.update_fields(**kwargs, connection=connection)
 
-                mark_done = False
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
@@ -701,11 +698,7 @@ class ResourceService(protocol.ServerSlice):
                                     environment=env.id, resource_id=res.resource_id, connection=connection
                                 )
 
-                        mark_done = True
-        if mark_done:
-            self.add_background_task(
-                data.ConfigurationModel.mark_done_if_done(env.id, model_version)
-            )
+                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
 
         if is_resource_state_update and is_resource_action_finished:
             waiting_agents = set(
