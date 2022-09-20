@@ -57,6 +57,7 @@ else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
+LOGGER_PIP = logging.getLogger("inmanta.pip")
 
 
 class PackageNotFound(Exception):
@@ -495,7 +496,7 @@ class PythonEnvironment:
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
 
-        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
+        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env, is_pip=True)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -621,7 +622,11 @@ class PythonEnvironment:
 
     @staticmethod
     def run_command_and_stream_output(
-        cmd: List[str], shell: bool = False, timeout: float = 10, env_vars: Optional[Mapping[str, str]] = None
+        cmd: List[str],
+        shell: bool = False,
+        timeout: float = 10,
+        env_vars: Optional[Mapping[str, str]] = None,
+        is_pip: Optional[bool] = None,
     ) -> Tuple[int, List[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
@@ -638,12 +643,12 @@ class PythonEnvironment:
         full_output: List[str] = []
 
         assert process.stdout is not None  # Make mypy happy
-
+        logger = LOGGER if not is_pip else LOGGER_PIP
         for line in process.stdout:
             # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
             output = line.decode().strip()
             full_output.append(output)
-            LOGGER.debug(output)
+            logger.debug(output)
 
         return_code = process.wait(timeout=timeout)
 
