@@ -504,8 +504,8 @@ class ModuleSource(Generic[TModule]):
         if header:
             LOGGER.debug(header)
         if version_snapshot:
-            for mod, version in version_snapshot.items():
-                LOGGER.debug(f"{mod}: {version}")
+            for mod, v in version_snapshot.items():
+                LOGGER.debug(f"{mod}: {v}")
 
     def _log_snapshot_difference(
         self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
