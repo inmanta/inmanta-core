@@ -4,7 +4,7 @@ Resource sets and partial compile
 
 .. warning::
 
-    This is an advanced feature, targeted at stable models that have the need to scale beyond their current capabilities.
+    This is an advanced feature, targeted at mature models that have the need to scale beyond their current capabilities.
     Care should be taken to :ref:`implement this safely<partial-compiles-guidelines>`, and the user should be aware of
     :ref:`its limitations<partial-compiles-limitations>`.
 
@@ -113,8 +113,9 @@ Take extreme care when not following these guidelines and keep in mind the `Cons
 guidelines is to present a modelling approach to safely make use of partial compiles. In essence, this boils down to developing
 the model so that a partial compile only succeeds if a full one would as well.
 
-In this guide, we only cover models where each set of independent resources is defined by a single top-level
-entity, which we will refer to as the "service" or "service entity" (as in ``LSM``).
+In this guide, we only cover models where each set of independent resources is defined by a single top-level entity, which we
+will refer to as the "service" or "service entity" (as in ``LSM``). We will use the term "identity" to refer to any set of
+attributes that uniquely identify an instance. In the model this usually corresponds to an index.
 
 When building an inmanta model all potential instances of a service entity must refine to compatible (low level) config.
 In the model this config is represented by the resources. Therefore these guidelines will focus on creating valid and
@@ -319,9 +320,9 @@ other is the use of some external distributor of unique values (e.g. a plugin to
 inventory).
 
 In either case, the goal is to make sure that any object that is marked as owned by a service instance, is unique to that
-instance. In the index case we do so by making sure the object's identity is in fact completely derived from the identity of
-the service instance. In the case where unique values are externally produced/allocated, responsibility for uniqueness falls
-to the plugin that produces the values.
+instance. In the index case we do so by making sure the object's identity is in fact completely and uniquely derived from the
+identity of the service instance. In the case where unique values are externally produced/allocated, responsibility for
+uniqueness falls to the plugin that produces the values.
 
 Ownership through indexes
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -468,4 +469,3 @@ behavior because the allocator guarantees uniqueness for the host id:
     {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "AgentConfig";
 
 TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
-TODO: review comments
