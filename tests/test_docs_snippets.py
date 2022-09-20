@@ -43,7 +43,7 @@ async def test_docs_snippet_partial_compile(
     Verify that the partial compile example model is valid and is in fact equivalent to the full model it is compared to.
     """
     env_id: uuid.UUID = uuid.UUID(environment)
-    snippets_dir: str = os.path.join(DOCS_DIR, "resource_sets")
+    snippets_dir: str = os.path.join(DOCS_DIR, "model_developers", "resource_sets")
     version: int
 
     handler_module_name: str = "host_handlers"

@@ -1,5 +1,3 @@
-TODO: this appears as a top-level document
-
 **********************************
 Resource sets and partial compile
 **********************************
