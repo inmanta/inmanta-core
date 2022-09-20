@@ -21,7 +21,7 @@ from typing import Awaitable, Callable, List
 import pytest
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202208190.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202208180.sql"))
 async def test_added_exporter_plugin(
     migrate_db_from: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
