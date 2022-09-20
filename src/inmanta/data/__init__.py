@@ -5547,7 +5547,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self.lock_table(TableLockMode.SHARE, connection=con)
+                await ResourceAction.lock_table(TableLockMode.SHARE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only

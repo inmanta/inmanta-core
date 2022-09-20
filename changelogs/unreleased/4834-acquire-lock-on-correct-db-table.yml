@@ -1,0 +1,6 @@
+---
+description: Fix bug where a cascading delete of an environment causes a deadlock because it acquires a table-level lock on an incorrect database table.
+issue-nr: 4834
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso5]
