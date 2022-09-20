@@ -106,7 +106,6 @@ CREATE TYPE public.versionstate AS ENUM (
 
 SET default_tablespace = '';
 
-SET default_table_access_method = heap;
 
 --
 -- Name: agent; Type: TABLE; Schema: public; Owner: -

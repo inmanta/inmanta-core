@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import uuid
 from asyncio import Semaphore
+from collections import abc
 from typing import AsyncIterator, List, Optional, Tuple
 
 import pkg_resources
@@ -120,20 +121,23 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
-    def write_plugin(self, plugin_name: str, plugin_code: str, modules_dir):
+    def add_v1_module(self, module_name: str, *, plugin_code: str, template_dir: str) -> None:
         v1_module_from_template(
-            source_dir=modules_dir,
-            dest_dir=os.path.join(self.libs_dir, plugin_name),
+            source_dir=template_dir,
+            dest_dir=os.path.join(self.libs_dir, module_name),
             new_content_init_py=plugin_code,
-            new_name=plugin_name,
+            new_name=module_name,
         )
         subprocess.check_output(["git", "add", f"{self.libs_dir}"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "write plugin", "--allow-empty"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "add_v1_module", "--allow-empty"], cwd=self.src_dir)
 
 
 async def compile_and_assert(
     env, client, project_work_dir: str, export=True, meta={}, env_vars={}, update=False, exporter_plugin=None
-):
+) -> tuple[CompileRun, abc.Mapping[str, object]]:
+    """
+    Create a compile data object and run it. Returns the compile run itself and the reports for each stage.
+    """
     compile = data.Compile(
         remote_id=uuid.uuid4(),
         environment=env.id,
@@ -1324,12 +1328,13 @@ async def test_compiler_service_export_with_specified_exporter_plugin(
     used_exporter = "test_exporter"
     unused_exporter = "unused_test_exporter"
 
-    used_plugin_name = used_exporter + "_plugin"
-    unused_plugin_name = unused_exporter + "_plugin"
+    used_module_name = used_exporter + "_module"
+    unused_module_name = unused_exporter + "_module"
 
     def make_main():
         return f"""
-import {used_plugin_name}
+import {used_module_name}
+import {unused_module_name}
         """
 
     env = await environment_factory.create_environment(make_main())
@@ -1345,15 +1350,19 @@ def {exporter_name}(exporter: Exporter) -> None:
 
     module_template: str = os.path.join(modules_dir, "minimalv1module")
 
-    environment_factory.write_plugin(used_plugin_name, make_plugin_code(used_exporter), module_template)
-    environment_factory.write_plugin(unused_plugin_name, make_plugin_code(unused_exporter), module_template)
+    environment_factory.add_v1_module(
+        used_module_name, plugin_code=make_plugin_code(used_exporter), template_dir=module_template
+    )
+    environment_factory.add_v1_module(
+        unused_module_name, plugin_code=make_plugin_code(unused_exporter), template_dir=module_template
+    )
 
     project_work_dir = os.path.join(tmpdir, "work")
     ensure_directory_exist(project_work_dir)
 
     # with export
     compile, stages = await compile_and_assert(
-        env=env, project_work_dir=project_work_dir, client=client, export=True, exporter_plugin="test_exporter"
+        env=env, project_work_dir=project_work_dir, client=client, export=True, exporter_plugin=used_exporter
     )
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{used_exporter} ran" in out
@@ -1362,7 +1371,7 @@ def {exporter_name}(exporter: Exporter) -> None:
 
     # no export
     compile, stages = await compile_and_assert(
-        env=env, project_work_dir=project_work_dir, client=client, export=False, exporter_plugin="test_exporter"
+        env=env, project_work_dir=project_work_dir, client=client, export=False, exporter_plugin=used_exporter
     )
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{used_exporter} ran" in out

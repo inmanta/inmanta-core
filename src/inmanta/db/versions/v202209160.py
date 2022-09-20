@@ -21,9 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-
     ALTER TABLE public.compile
-        ADD COLUMN exporter_plugin varchar DEFAULT '';
+        ADD COLUMN exporter_plugin varchar DEFAULT NULL;
     """
-    async with connection.transaction():
-        await connection.execute(schema)
+    await connection.execute(schema)
