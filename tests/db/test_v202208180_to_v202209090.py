@@ -59,4 +59,4 @@ async def test_added_resource_set_column(
         assert "notify_failed_compile" in c
         assert c["notify_failed_compile"] is None
         assert "failed_compile_message" in c
-        assert c["failed_compile_message"] == ""
+        assert c["failed_compile_message"] is None
