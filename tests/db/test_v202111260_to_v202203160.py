@@ -20,7 +20,7 @@ from typing import Awaitable, Callable, List
 
 import pytest
 
-from inmanta.const import ResourceState
+from inmanta.const import NonDeployingResourceState, ResourceState
 from inmanta.data import Resource
 
 
@@ -79,10 +79,10 @@ async def test_added_last_non_deploying_status_column(
         "std::File[localhost,path=/tmp/test],v=1": ResourceState.failed,
     }
     expected_last_non_deploying_status = {
-        "std::AgentConfig[internal,agentname=localhost],v=2": ResourceState.deployed,
-        "std::AgentConfig[internal,agentname=localhost],v=1": ResourceState.deployed,
-        "std::File[localhost,path=/tmp/test],v=2": ResourceState.failed,
-        "std::File[localhost,path=/tmp/test],v=1": ResourceState.failed,
+        "std::AgentConfig[internal,agentname=localhost],v=2": NonDeployingResourceState.deployed,
+        "std::AgentConfig[internal,agentname=localhost],v=1": NonDeployingResourceState.deployed,
+        "std::File[localhost,path=/tmp/test],v=2": NonDeployingResourceState.failed,
+        "std::File[localhost,path=/tmp/test],v=1": NonDeployingResourceState.failed,
     }
 
     resources = await Resource.get_list()

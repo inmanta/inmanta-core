@@ -416,22 +416,24 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print2} {no_marker}" in out
-    assert len(stages) == 4
+    assert len(stages) == 5
     assert compile.version is None
 
     environment_factory.write_main(make_main(marker_print3))
     compile, stages = await compile_and_assert(env2, False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
+    assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
     assert stages["Updating modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
     assert f"{marker_print3} {no_marker}" in out
-    assert len(stages) == 4
+    assert len(stages) == 5
     assert compile.version is None
 
     # Ensure that the pip binary created in the venv of the compiler service works correctly

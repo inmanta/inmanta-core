@@ -1,0 +1,6 @@
+---
+description: Reject v1tov2 module conversion when a setup.py is present
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"

@@ -282,9 +282,9 @@ async def test_last_non_deploying_status_field_on_resource(
 
     async def assert_status_fields(
         r1_status: const.ResourceState,
-        r1_last_non_deploying_status: const.ResourceState,
+        r1_last_non_deploying_status: const.NonDeployingResourceState,
         r2_status: const.ResourceState,
-        r2_last_non_deploying_status: const.ResourceState,
+        r2_last_non_deploying_status: const.NonDeployingResourceState,
     ) -> None:
         db_resources = await data.Resource.get_list(environment=environment)
         rvid_to_resources = {res.resource_version_id: res for res in db_resources}
@@ -328,18 +328,18 @@ async def test_last_non_deploying_status_field_on_resource(
     # All resources in available state
     await assert_status_fields(
         r1_status=const.ResourceState.available,
-        r1_last_non_deploying_status=const.ResourceState.available,
+        r1_last_non_deploying_status=const.NonDeployingResourceState.available,
         r2_status=const.ResourceState.available,
-        r2_last_non_deploying_status=const.ResourceState.available,
+        r2_last_non_deploying_status=const.NonDeployingResourceState.available,
     )
 
     # Put R1 in deploying state
     action_id_r1 = await start_deployment(rvid=rvid_r1_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
-        r1_last_non_deploying_status=const.ResourceState.available,
+        r1_last_non_deploying_status=const.NonDeployingResourceState.available,
         r2_status=const.ResourceState.available,
-        r2_last_non_deploying_status=const.ResourceState.available,
+        r2_last_non_deploying_status=const.NonDeployingResourceState.available,
     )
 
     # R1 finished deployment + R2 start deployment
@@ -347,9 +347,9 @@ async def test_last_non_deploying_status_field_on_resource(
     action_id_r2 = await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.deployed,
-        r1_last_non_deploying_status=const.ResourceState.deployed,
+        r1_last_non_deploying_status=const.NonDeployingResourceState.deployed,
         r2_status=const.ResourceState.deploying,
-        r2_last_non_deploying_status=const.ResourceState.available,
+        r2_last_non_deploying_status=const.NonDeployingResourceState.available,
     )
 
     # R1 start deployment + R2 skipped
@@ -357,9 +357,9 @@ async def test_last_non_deploying_status_field_on_resource(
     await deployment_finished(rvid=rvid_r2_v1, action_id=action_id_r2, status=const.ResourceState.skipped)
     await assert_status_fields(
         r1_status=const.ResourceState.deploying,
-        r1_last_non_deploying_status=const.ResourceState.deployed,
+        r1_last_non_deploying_status=const.NonDeployingResourceState.deployed,
         r2_status=const.ResourceState.skipped,
-        r2_last_non_deploying_status=const.ResourceState.skipped,
+        r2_last_non_deploying_status=const.NonDeployingResourceState.skipped,
     )
 
     # R1 failed + R2 start deployment
@@ -367,9 +367,9 @@ async def test_last_non_deploying_status_field_on_resource(
     await start_deployment(rvid=rvid_r2_v1)
     await assert_status_fields(
         r1_status=const.ResourceState.failed,
-        r1_last_non_deploying_status=const.ResourceState.failed,
+        r1_last_non_deploying_status=const.NonDeployingResourceState.failed,
         r2_status=const.ResourceState.deploying,
-        r2_last_non_deploying_status=const.ResourceState.skipped,
+        r2_last_non_deploying_status=const.NonDeployingResourceState.skipped,
     )
 
 
