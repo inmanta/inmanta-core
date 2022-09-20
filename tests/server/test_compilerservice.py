@@ -46,7 +46,7 @@ from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
-from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
+from utils import LogSequence, report_db_index_usage, retry_limited, v1_module_from_template, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
 
@@ -79,6 +79,7 @@ async def environment_factory(tmpdir) -> AsyncIterator["EnvironmentFactory"]:
 class EnvironmentFactory:
     def __init__(self, dir: str) -> None:
         self.src_dir: str = os.path.join(dir, "src")
+        self.libs_dir: str = os.path.join(self.src_dir, "libs")
         self.project: data.Project = data.Project(name="test")
         self._ready: bool = False
 
@@ -118,6 +119,54 @@ class EnvironmentFactory:
             fd.write(main)
         subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
+
+    def write_plugin(self, plugin_name: str, plugin_code: str, modules_dir):
+        v1_module_from_template(
+            source_dir=modules_dir,
+            dest_dir=os.path.join(self.libs_dir, plugin_name),
+            new_content_init_py=plugin_code,
+            new_name=plugin_name,
+        )
+        subprocess.check_output(["git", "add", f"{self.libs_dir}"], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", "write plugin", "--allow-empty"], cwd=self.src_dir)
+
+
+async def compile_and_assert(
+    env, client, project_work_dir: str, export=True, meta={}, env_vars={}, update=False, exporter_plugin=None
+):
+    compile = data.Compile(
+        remote_id=uuid.uuid4(),
+        environment=env.id,
+        do_export=export,
+        metadata=meta,
+        environment_variables=env_vars,
+        force_update=update,
+        exporter_plugin=exporter_plugin,
+    )
+    await compile.insert()
+
+    # compile with export
+    cr = CompileRun(compile, project_work_dir)
+    await cr.run()
+
+    # get and process reports
+    result = await client.get_report(compile.id)
+    assert result.code == 200
+    stages = result.result["report"]["reports"]
+    if export:
+        assert cr.version > 0
+        result = await client.get_version(env.id, cr.version)
+        assert result.code == 200
+        metadata = result.result["model"]["version_info"]["export_metadata"]
+        for k, v in meta.items():
+            assert k in metadata
+            assert v == metadata[k]
+
+    print(stages)
+
+    stage_by_name = {stage["name"]: stage for stage in stages}
+
+    return cr, stage_by_name
 
 
 async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog):
@@ -334,42 +383,20 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     project_work_dir = os.path.join(tmpdir, "work")
     ensure_directory_exist(project_work_dir)
 
-    async def compile_and_assert(env, export=True, meta={}, env_vars={}, update=False):
-        compile = data.Compile(
-            remote_id=uuid.uuid4(),
-            environment=env.id,
-            do_export=export,
-            metadata=meta,
-            environment_variables=env_vars,
-            force_update=update,
+    def _compile_and_assert(env, export=True, meta={}, env_vars={}, update=False, exporter_plugin=None):
+        return compile_and_assert(
+            env=env,
+            client=client,
+            project_work_dir=project_work_dir,
+            export=export,
+            meta=meta,
+            env_vars=env_vars,
+            update=update,
+            exporter_plugin=exporter_plugin,
         )
-        await compile.insert()
-
-        # compile with export
-        cr = CompileRun(compile, project_work_dir)
-        await cr.run()
-
-        # get and process reports
-        result = await client.get_report(compile.id)
-        assert result.code == 200
-        stages = result.result["report"]["reports"]
-        if export:
-            assert cr.version > 0
-            result = await client.get_version(env.id, cr.version)
-            assert result.code == 200
-            metadata = result.result["model"]["version_info"]["export_metadata"]
-            for k, v in meta.items():
-                assert k in metadata
-                assert v == metadata[k]
-
-        print(stages)
-
-        stage_by_name = {stage["name"]: stage for stage in stages}
-
-        return cr, stage_by_name
 
     # with export
-    compile, stages = await compile_and_assert(env, True, meta={"type": "Test"})
+    compile, stages = await _compile_and_assert(env=env, export=True, meta={"type": "Test"})
     assert stages["Init"]["returncode"] == 0
     assert stages["Cloning repository"]["returncode"] == 0
     assert stages["Creating venv"]["returncode"] == 0
@@ -381,7 +408,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert compile.version is not None
 
     # no export
-    compile, stages = await compile_and_assert(env, False)
+    compile, stages = await _compile_and_assert(env=env, export=False)
     assert stages["Init"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
@@ -391,7 +418,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
 
     # env vars
     marker = str(uuid.uuid4())
-    compile, stages = await compile_and_assert(env, False, env_vars={testmarker_env: marker})
+    compile, stages = await _compile_and_assert(env=env, export=False, env_vars={testmarker_env: marker})
     assert len(compile.request.environment_variables) == 1
     assert stages["Init"]["returncode"] == 0
     assert f"Using extra environment variables during compile TESTMARKER='{marker}'" in stages["Init"]["outstream"]
@@ -402,7 +429,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert compile.version is None
 
     # switch branch
-    compile, stages = await compile_and_assert(env2, False)
+    compile, stages = await _compile_and_assert(env=env2, export=False)
     assert stages["Init"]["returncode"] == 0
     assert stages[f"Switching branch from {env.repo_branch} to {env2.repo_branch}"]["returncode"] == 0
     assert stages["Installing modules"]["returncode"] == 0
@@ -413,7 +440,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert compile.version is None
 
     # update with no update
-    compile, stages = await compile_and_assert(env2, False, update=True)
+    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
@@ -425,7 +452,7 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     assert compile.version is None
 
     environment_factory.write_main(make_main(marker_print3))
-    compile, stages = await compile_and_assert(env2, False, update=True)
+    compile, stages = await _compile_and_assert(env=env2, export=False, update=True)
     assert stages["Init"]["returncode"] == 0
     assert stages["Pulling updates"]["returncode"] == 0
     assert stages["Uninstall inmanta packages from the compiler venv"]["returncode"] == 0
@@ -1287,30 +1314,56 @@ async def test_uninstall_python_packages(
     assert all(r.returncode == 0 for r in reports)
 
 
-async def test_compiler_service_export_with_specified_exporter_plugin(compilerservice: CompilerService, caplog):
-    project = data.Project(name="test")
-    await project.insert()
+async def test_compiler_service_export_with_specified_exporter_plugin(
+    environment_factory: EnvironmentFactory, modules_dir, server, client, tmpdir, caplog
+):
+    plugin_name = "exporter_plugin"
 
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
+    def make_main():
+        return f"""
+import {plugin_name}
+        """
 
-    u1 = uuid.uuid4()
-    id1 = await compilerservice.request_recompile(
-        # env=env, force_update=False, do_export=False, remote_id=u1, exporter_plugin="test_exporter"
-        env=env, force_update=False, do_export=False, remote_id=u1
+    env = await environment_factory.create_environment(make_main())
+
+    def make_plugin_code():
+        return """
+from inmanta.export import export, Exporter
+
+@export("test_exporter")
+def test_exporter(exporter: Exporter) -> None:
+    print("test_exporter ran")
+        """
+
+    module_template: str = os.path.join(modules_dir, "minimalv1module")
+
+    environment_factory.write_plugin(plugin_name, make_plugin_code(), module_template)
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    # with export
+    # compile, stages = await compile_and_assert(env, True, meta={"type": "Test"})
+    compile, stages = await compile_and_assert(
+        env=env, project_work_dir=project_work_dir, client=client, export=True, exporter_plugin="test_exporter"
     )
-    # u2 = uuid.uuid4()
-    # id2 = await compilerservice.request_recompile(
-    #     env=env, force_update=False, do_export=True, remote_id=u2, exporter_plugin="test_exporter"
-    # )
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Cloning repository"]["returncode"] == 0
+    assert stages["Creating venv"]["returncode"] == 0
+    assert stages["Installing modules"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert "test_exporter ran" in out
+    assert len(stages) == 5
+    assert compile.version is not None
 
-    async def compile_done() -> bool:
-        res = await compilerservice.is_compiling(env.id)
-        return res == 204
-
-    await retry_limited(compile_done, timeout=10)
-
-    results = await data.Compile.get_by_remote_id(env.id, u1)
-    assert results[0].remote_id == u1
-
-
+    # no export
+    compile, stages = await compile_and_assert(
+        env=env, project_work_dir=project_work_dir, client=client, export=False, exporter_plugin="test_exporter"
+    )
+    assert stages["Init"]["returncode"] == 0
+    assert stages["Recompiling configuration model"]["returncode"] == 0
+    out = stages["Recompiling configuration model"]["outstream"]
+    assert "test_exporter ran" in out
+    assert len(stages) == 2
+    assert compile.version is None
