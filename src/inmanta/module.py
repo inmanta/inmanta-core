@@ -510,10 +510,10 @@ class ModuleSource(Generic[TModule]):
     def _log_snapshot_difference(
         self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
     ) -> None:
-        set_pre_install = set(previous_snapshot.items())
-        set_post_install = set(version_snapshot.items())
-        updates_and_additions = set_post_install - set_pre_install
-        kept = set_pre_install.intersection(set_post_install)
+        set_pre_install: Set[Tuple[str, "Version"]] = set(previous_snapshot.items())
+        set_post_install: Set[Tuple[str, "Version"]] = set(version_snapshot.items())
+        updates_and_additions: Set[Tuple[str, "Version"]] = set_post_install - set_pre_install
+        kept: Set[Tuple[str, "Version"]] = set_pre_install.intersection(set_post_install)
 
         if header:
             LOGGER.debug(header)
