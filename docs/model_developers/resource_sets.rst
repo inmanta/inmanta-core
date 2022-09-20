@@ -1,6 +1,6 @@
-**********************************
-Resource sets and partial compile
-**********************************
+****************
+Partial compiles
+****************
 
 .. warning::
 
@@ -420,7 +420,6 @@ that refine to the same host objects as shown below. The resource sets are clear
 
 Ownership through allocation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 Instead of the index ``Host(network, id)`` we could also use an allocation plugin to determine the id of a host. Suppose
 we add such a plugin that allocates a unique value in some external inventory, then the index is no longer required for correct
 behavior because the allocator guarantees uniqueness for the host id:
@@ -468,4 +467,12 @@ behavior because the allocator guarantees uniqueness for the host id:
     # force rendering on multiple ranks
     {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "AgentConfig";
 
-TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
+
+Testing
+-------
+While the guidelines outlined above suffice for safe use of partial compiles, a modeling error is easily made. In addition
+to the usual testing of behavior of both full and partial compiles, you should include tests that guard against incompatible
+resource sets and/or shared resources. These tests would generally be full compile tests with multiple service instances. As
+long as a full compile succeeds for any valid set of inputs, you can be confident the partial compile will behave the same.
+If on the other hand a set of valid service instances exist for which the full compile fails, you most likely have a modeling
+error that would allow sequential partial compiles for those same instances.
