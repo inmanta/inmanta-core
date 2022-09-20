@@ -1153,6 +1153,53 @@ async def test_compileservice_api(client, environment):
     assert result.code == 200
 
 
+@pytest.mark.parametrize(
+    "message",
+    ["a custom message", None],
+)
+async def test_notification_failed_compile_with_message(
+    server, client, environment_factory: EnvironmentFactory, message: Optional[str]
+) -> None:
+    compilerservice = server.get_slice(SLICE_COMPILER)
+
+    env = await environment_factory.create_environment("x=0 x=1")
+
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    compile_id, _ = await compilerservice.request_recompile(
+        env,
+        force_update=False,
+        do_export=False,
+        remote_id=uuid.uuid4(),
+        notify_failed_compile=True,
+        failed_compile_message=message,
+    )
+
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
+    async def notification_logged() -> bool:
+        result = await client.list_notifications(env.id)
+        assert result.code == 200
+        return len(result.result["data"]) > 0
+
+    await retry_limited(notification_logged, timeout=10)
+    result = await client.list_notifications(env.id)
+    assert result.code == 200
+    compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
+    assert compile_failed_notification
+    assert str(compile_id) in compile_failed_notification["uri"]
+    if message == "a custom message":
+        assert "a custom message" in compile_failed_notification["message"]
+    else:
+        assert "A compile has failed" in compile_failed_notification["message"]
+
+
 async def test_notification_on_failed_exporting_compile(server, client, environment: str) -> None:
     compilerservice = server.get_slice(SLICE_COMPILER)
     env = await data.Environment.get_by_id(uuid.UUID(environment))
