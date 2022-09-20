@@ -121,13 +121,9 @@ In the model this config is represented by the resources. Therefore these guidel
 compatible resources. With well-designed resources, valid and compatible config will follow.
 
 To safely make use of partial compiles, each service must be the sole owner of its resources and any shared resources must be
-identical across service instances. The graphs below picture respectively a valid and an invalid service for partial compiles.
-Each arrow represents a refinement: one entity creating another in one of its implementations. The valid service results in
-fully separate resource sets for each instance, while the invalid one has resources that overlap
-between instances. Additionally, the shared resource for the valid service is consistent, but the invalid service attempts to
-create a resource with the same id, yet a different value. The invalid service can thus not be allowed for partial compiles
-because of the inconsistency of shared resources and the fact that no resource can be considered completely owned by a single
-service instance.
+identical across service instances. The graph below pictures a valid service for partial compiles. Each arrow represents a
+refinement: one entity creating another in one of its implementations. The valid service results in fully separate resource
+sets for each instance. Additionally, the one shared resource is created consistently between service instances.
 
 .. digraph:: resource_sets_generic_good
     :caption: A good service for partial compiles.
@@ -172,7 +168,9 @@ service instance.
     {"Resource(id=0)" "Resource(id=1)" "Resource(id=2)" "Resource(id=3)"} -> "SharedResource(id=0, value=0)" [style="invis"];
 
 
-TODO: update text to match split bad examples
+In contrast, the graph below shows an invalid service definition. Its resources overlap between instances. The invalid service
+can thus not be allowed for partial compiles because no resource can be considered completely owned by a single service
+instance.
 
 
 .. digraph:: resource_sets_generic_bad_owned
@@ -200,6 +198,10 @@ TODO: update text to match split bad examples
         label = "Shared and consistent among all service instances"
         labelloc = "bottom";
     }
+
+
+Finally, the graph below shows another invalid model. Here, the resources are clearly divided into sets, but the shared
+resource is created inconsistently: one instance sets its value to 0 while the other sets it to 1.
 
 
 .. digraph:: resource_sets_generic_bad_shared
@@ -467,4 +469,3 @@ behavior because the allocator guarantees uniqueness for the host id:
 
 TODO: guideline on test setup to verify correctness. Run tests with both partial and non-partial, what sort of tests should definitely be included, ...?
 TODO: review comments
-TODO: double check commits do not include png/pdf
