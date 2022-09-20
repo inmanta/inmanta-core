@@ -152,7 +152,7 @@ class CompileRunBase(BaseModel):
     removed_resource_sets: list[str] = []
 
     notify_failed_compile: Optional[bool] = None
-    failed_compile_message: str = ""
+    failed_compile_message: Optional[str] = None
 
 
 class CompileRun(CompileRunBase):
