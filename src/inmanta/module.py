@@ -674,6 +674,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         """
         packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
+
         super()._log_snapshot_difference(version_snapshot, previous_snapshot, header)
 
     def log_post_install_information(self, module_name: str) -> None:
