@@ -3515,7 +3515,7 @@ class Compile(BaseDocument):
     removed_resource_sets: list[str] = []
 
     notify_failed_compile: Optional[bool] = None
-    failed_compile_message: str = ""
+    failed_compile_message: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:

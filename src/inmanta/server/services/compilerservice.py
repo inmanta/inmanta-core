@@ -576,7 +576,13 @@ class CompilerService(ServerSlice):
         """
         Recompile an environment in a different thread and taking wait time into account.
 
+        :param notify_failed_compile: if set to True, errors during compilation will be notified using the
+        "failed_compile_message".
+        if set to false, nothing will be notified. If not set then the de default notifications are
+        send (failed pull stage and errors during the do_export)
+        :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
         :return: the compile id of the requested compile and any warnings produced during the request
+
         """
         if removed_resource_sets is None:
             removed_resource_sets = []
