@@ -571,7 +571,7 @@ class CompilerService(ServerSlice):
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
         notify_failed_compile: Optional[bool] = None,
-        failed_compile_message: str = None,
+        failed_compile_message: Optional[str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
