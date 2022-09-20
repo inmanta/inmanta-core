@@ -1317,27 +1317,36 @@ async def test_uninstall_python_packages(
 async def test_compiler_service_export_with_specified_exporter_plugin(
     environment_factory: EnvironmentFactory, modules_dir, server, client, tmpdir, caplog
 ):
-    plugin_name = "exporter_plugin"
+    """
+    Check that compiler service accepts specific exporter plugin as argument for both exporting and non-exporting compiles
+    """
+
+    used_exporter = "test_exporter"
+    unused_exporter = "unused_test_exporter"
+
+    used_plugin_name = used_exporter + "_plugin"
+    unused_plugin_name = unused_exporter + "_plugin"
 
     def make_main():
         return f"""
-import {plugin_name}
+import {used_plugin_name}
         """
 
     env = await environment_factory.create_environment(make_main())
 
-    def make_plugin_code():
-        return """
+    def make_plugin_code(exporter_name):
+        return f"""
 from inmanta.export import export, Exporter
 
-@export("test_exporter")
-def test_exporter(exporter: Exporter) -> None:
-    print("test_exporter ran")
+@export("{exporter_name}")
+def {exporter_name}(exporter: Exporter) -> None:
+    print("{exporter_name} ran")
         """
 
     module_template: str = os.path.join(modules_dir, "minimalv1module")
 
-    environment_factory.write_plugin(plugin_name, make_plugin_code(), module_template)
+    environment_factory.write_plugin(used_plugin_name, make_plugin_code(used_exporter), module_template)
+    environment_factory.write_plugin(unused_plugin_name, make_plugin_code(unused_exporter), module_template)
 
     project_work_dir = os.path.join(tmpdir, "work")
     ensure_directory_exist(project_work_dir)
@@ -1353,7 +1362,8 @@ def test_exporter(exporter: Exporter) -> None:
     assert stages["Installing modules"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
-    assert "test_exporter ran" in out
+    assert f"{used_exporter} ran" in out
+    assert f"{unused_exporter} ran" not in out
     assert len(stages) == 5
     assert compile.version is not None
 
@@ -1364,6 +1374,7 @@ def test_exporter(exporter: Exporter) -> None:
     assert stages["Init"]["returncode"] == 0
     assert stages["Recompiling configuration model"]["returncode"] == 0
     out = stages["Recompiling configuration model"]["outstream"]
-    assert "test_exporter ran" in out
+    assert f"{used_exporter} ran" in out
+    assert f"{unused_exporter} ran" not in out
     assert len(stages) == 2
     assert compile.version is None
