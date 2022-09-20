@@ -153,6 +153,9 @@ class CompileRunBase(BaseModel):
 
     exporter_plugin: Optional[str] = None
 
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
+
 
 class CompileRun(CompileRunBase):
     compile_data: Optional[CompileData]

@@ -1011,9 +1011,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
+        if connection is not None:
+            return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -3483,6 +3485,9 @@ class Compile(BaseDocument):
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
     :param exporter_plugin: Specific exporter plugin to use
+    :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
+        By default, notifications are enabled only for exporting compiles.
+    :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     """
 
     __primary_key__ = ("id",)
@@ -3513,6 +3518,9 @@ class Compile(BaseDocument):
     removed_resource_sets: list[str] = []
 
     exporter_plugin: Optional[str] = None
+
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3938,8 +3946,8 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(
@@ -4456,7 +4464,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
@@ -5575,7 +5583,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self.lock_table(TableLockMode.SHARE, connection=con)
+                await ResourceAction.lock_table(TableLockMode.SHARE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
