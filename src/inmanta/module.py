@@ -501,10 +501,11 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, "Version"]) -> None:
+        if header:
+            LOGGER.debug(header)
         if version_snapshot:
-            out = [header] if header is not None else []
-            out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
-            LOGGER.debug("\n".join(out))
+            for mod, version in version_snapshot.items():
+                LOGGER.debug(f"{mod}: {version}")
 
     def _log_snapshot_difference(
         self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
@@ -512,19 +513,21 @@ class ModuleSource(Generic[TModule]):
         set_pre_install = set(previous_snapshot.items())
         set_post_install = set(version_snapshot.items())
         updates_and_additions = set_post_install - set_pre_install
+        kept = set_pre_install.intersection(set_post_install)
 
+        if header:
+            LOGGER.debug(header)
+        for inmanta_module_name, package_version in sorted(kept):
+            LOGGER.debug(inmanta_module_name + ": " + str(package_version))
         if version_snapshot:
-            out = [header] if header is not None else []
             for inmanta_module_name, package_version in sorted(version_snapshot.items()):
                 if inmanta_module_name not in previous_snapshot.keys():
                     # new module that wasn't previously installed
-                    out.append("+ " + inmanta_module_name + ": " + str(package_version))
+                    LOGGER.debug("+ " + inmanta_module_name + ": " + str(package_version))
                 elif inmanta_module_name in [elmt[0] for elmt in updates_and_additions]:
                     # module has a different version
-                    out.append("+ " + inmanta_module_name + ": " + str(package_version))
-                    out.append("- " + inmanta_module_name + ": " + str(previous_snapshot[inmanta_module_name]))
-
-            LOGGER.debug("\n".join(out))
+                    LOGGER.debug("+ " + inmanta_module_name + ": " + str(package_version))
+                    LOGGER.debug("- " + inmanta_module_name + ": " + str(previous_snapshot[inmanta_module_name]))
 
     @abstractmethod
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional[TModule]:
@@ -671,7 +674,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         """
         packages = env.PythonWorkingSet.get_packages_in_working_set(inmanta_modules_only=True)
         version_snapshot = {self.get_inmanta_module_name(mod): version for mod, version in packages.items()}
-
         super()._log_snapshot_difference(version_snapshot, previous_snapshot, header)
 
     def log_post_install_information(self, module_name: str) -> None:
