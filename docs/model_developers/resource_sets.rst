@@ -2,6 +2,12 @@
 Resource sets and partial compile
 **********************************
 
+.. warning::
+
+    This is an advanced feature, targeted at stable models that have the need to scale beyond their current capabilities.
+    Care should be taken to :ref:`implement this safely<partial-compiles-guidelines>`, and the user should be aware of
+    :ref:`its limitations<partial-compiles-limitations>`.
+
 Small updates to large models can be compiled quickly using partial compiles. We merely recompile a tiny, independent portion of the model, as opposed to doing it for the entire model.
 A ``resource set`` is made up of the resources in a specific portion of the model.
 
@@ -72,7 +78,7 @@ When using partial compiles, the following rules have to be followed:
   i.e., it should not depend on any resource sets other than those that were exported.
 * Multiple resource sets may be updated simultaneously via a partial build.
 
-TODO: link to new section
+For a guide on how to design a model in order to take these into account, see `Modeling guidelines`_.
 
 
 Exporting a partial model to the server
@@ -84,10 +90,13 @@ Two arguments can be passed to the ``inmanta export`` command in order to export
 - ``--delete-resource-set <resource-set-name>`` This option, which may be used more than once, instructs the model to remove the resource set with the specified name. Only in conjunction with the preceding choice may this option be utilized. Note that utilizing a ``std::ResourceSet`` that includes no resources allows resource sets to be implicitly deleted during a partial compilation.
 
 
+.. _partial-compiles-limitations:
+
 Limitations
 -----------
 
 * The compiler cannot verify all constraints that would be verified when a full build is run. Some index constraints, for instance, cannot be verified. The model creator is in charge of making sure that these constraints are met.
+    See `Modeling guidelines`_ on how to design your model.
 * If just a partial compile is performed, it is possible for a shared resource to become obsolete.
   The shared resource will become obsolete when a partial compile deletes the last resource that depended on it, but it is preserved as a server-managed resource because partial compiles cannot delete shared resources.
   A full compile is required to remove shared resources. Scheduled full compilations that ``garbage-collect`` these shared resources are one way to fix this.
@@ -95,7 +104,7 @@ Limitations
   As an example, to plan a daily full compile for 01:00 UTC, use the ``auto_full_compile`` environment setting:  ``0 1 * * *``.
 
 
-TODO: mention this in the document's introduction?
+.. _partial-compiles-guidelines:
 
 Modeling guidelines
 ===================
