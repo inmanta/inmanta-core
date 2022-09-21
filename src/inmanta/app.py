@@ -72,6 +72,34 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
+class MultiLineFormatter(colorlog.ColoredFormatter):
+    """Multi-line formatter."""
+
+    def get_header_length(self, record):
+        """Get the header length of a given record."""
+        header = super().format(
+            logging.LogRecord(
+                name=record.name,
+                level=record.levelno,
+                pathname=record.pathname,
+                lineno=record.lineno,
+                msg="",
+                args=(),
+                exc_info=None,
+            )
+        )
+        len_header = len(header) - 18
+        # 18 is the total length of all the codes used to change the colors in the logs (2 colors "\x1b[3xm" and 2 reset
+        # "\x1b[0m" codes) https://tforgione.fr/posts/ansi-escape-codes/
+        return len_header
+
+    def format(self, record):
+        """Format a record with added indentation."""
+        indent = " " * self.get_header_length(record)
+        head, *trailing = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in trailing)
+
+
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
@@ -743,7 +771,7 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
         log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
-        formatter = colorlog.ColoredFormatter(
+        formatter = MultiLineFormatter(
             log_format,
             datefmt=None,
             reset=True,
