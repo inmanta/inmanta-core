@@ -5579,7 +5579,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await ResourceAction.lock_table(TableLockMode.SHARE, connection=con)
+                await ResourceAction.lock_table(TableLockMode.ROW_EXCLUSIVE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
@@ -5645,17 +5645,10 @@ class ConfigurationModel(BaseDocument):
     ) -> None:
         async with cls.get_connection(connection) as con:
             """
-            Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
-            this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
-            another transaction is able to perform it. This way no race condition is possible where the deployed state is
-            not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
-            transactions have committed already, or they will only start this part of their lifecycle when A has committed
-            itself.
+            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
+            in order to prevent race conditions.
             """
             async with con.transaction():
-                # SHARE UPDATE EXCLUSIVE is self-conflicting
-                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
-                await cls.lock_table(TableLockMode.SHARE_UPDATE_EXCLUSIVE, connection=con)
                 query = f"""UPDATE {ConfigurationModel.table_name()}
                                 SET deployed=True,
                                     result=(CASE WHEN (

@@ -28,7 +28,7 @@ from inmanta.export import unknown_parameters
 from inmanta.main import Client
 from inmanta.server.protocol import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper
+from utils import ClientHelper, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,7 +107,12 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # validate requires and provides
     file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
@@ -501,7 +506,12 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # Version 3 with no resources
     version = await clienthelper.get_version()
