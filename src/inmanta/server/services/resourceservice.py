@@ -499,7 +499,9 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
+        self.add_background_task(
+            data.ConfigurationModel.mark_done_if_done(env.id, resource.model)
+        )
 
         waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
         for agent, resource_id in waiting_agents:
@@ -713,9 +715,10 @@ class ResourceService(protocol.ServerSlice):
                                     environment=env.id, resource_id=res.resource_id, connection=connection
                                 )
 
-                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
-
         if is_resource_state_update and is_resource_action_finished:
+            self.add_background_task(
+                data.ConfigurationModel.mark_done_if_done(env.id, model_version)
+            )
             waiting_agents = set(
                 [(Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides]
             )
