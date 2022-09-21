@@ -122,7 +122,6 @@ class AgentCache(object):
         """
         if version in self.counterforVersion:
             self.counterforVersion[version] += 1
-            time.sleep(0.1)
         else:
             LOGGER.debug("Cache open version %d", version)
             self.counterforVersion[version] = 1
