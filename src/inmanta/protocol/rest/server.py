@@ -30,7 +30,7 @@ from tornado import httpserver, iostream, routing, web
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
-from inmanta import const
+from inmanta import const, tracing
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
@@ -38,9 +38,6 @@ from inmanta.server.config import server_access_control_allow_origin, server_ena
 from inmanta.types import ReturnTypes
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-
-tracer = trace.get_tracer(__name__)
-
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -131,7 +128,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if "traceparent" in self.request.headers:
             ctx = TraceContextTextMapPropagator().extract(carrier=self.request.headers)
 
-        with tracer.start_as_current_span("rpc." + call_config.method_name, kind=trace.SpanKind.SERVER, context=ctx):
+        with tracing.tracer.start_as_current_span("rpc." + call_config.method_name, kind=trace.SpanKind.SERVER, context=ctx):
             with timer("rpc." + call_config.method_name).time():
                 self._transport.start_request()
                 try:

@@ -63,7 +63,6 @@ from inmanta.export import cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
-from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 try:
@@ -72,8 +71,6 @@ except ImportError:
     rpdb = None
 
 LOGGER = logging.getLogger("inmanta")
-
-tracer = trace.get_tracer(__name__)
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -833,7 +830,7 @@ def app() -> None:
     if "traceparent" in os.environ:
         ctx = TraceContextTextMapPropagator().extract(carrier=os.environ)
 
-    with tracer.start_as_current_span(f"cmd {options.func.__name__}", context=ctx):
+    with tracing.tracer.start_as_current_span(f"cmd {options.func.__name__}", context=ctx):
         try:
             options.func(options)
         except ShowUsageException as e:

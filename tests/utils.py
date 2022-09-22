@@ -35,7 +35,7 @@ from pydantic.tools import lru_cache
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module, util, tracing
+from inmanta import const, data, env, module, tracing, util
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -435,7 +435,7 @@ def create_python_package(
     author = Inmanta <code@inmanta.com>
     
     {egg_info}
-    
+
     """.strip()
             )
 
@@ -459,6 +459,7 @@ def create_python_package(
                 build_env.install(builder.get_requires_for_build(distribution="wheel"))
                 builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
             publish_index.publish()
+
 
 def module_from_template(
     source_dir: str,
@@ -493,6 +494,7 @@ def module_from_template(
     :param in_place: Modify the module in-place instead of copying it.
     """
     with tracing.tracer.start_as_current_span("module_from_template"):
+
         def to_python_requires(
             requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
         ) -> abc.Iterator[Requirement]:

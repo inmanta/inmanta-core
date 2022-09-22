@@ -1998,13 +1998,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
         async with cls.get_connection(connection) as con:
-                result: List[Union[Record, TBaseDocument]] = []
-                for record in await con.fetch(query, *values):
-                    if no_obj:
-                        result.append(record)
-                    else:
-                        result.append(cls(from_postgres=True, **record))
-                return result
+            result: List[Union[Record, TBaseDocument]] = []
+            for record in await con.fetch(query, *values):
+                if no_obj:
+                    result.append(record)
+                else:
+                    result.append(cls(from_postgres=True, **record))
+            return result
 
     def to_dict(self) -> JsonType:
         """
@@ -6243,6 +6243,7 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 # Name of core schema in the DB schema verions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
+
 
 async def connect(
     host: str,

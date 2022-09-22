@@ -25,6 +25,7 @@ from urllib.parse import unquote
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
 
 from inmanta import config as inmanta_config
+from inmanta import tracing
 from inmanta.protocol import common
 from inmanta.protocol.rest import RESTBase
 from opentelemetry import trace
@@ -34,7 +35,6 @@ if TYPE_CHECKING:
     from inmanta.protocol.endpoints import Endpoint
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
 
 
 class RESTClient(RESTBase):
@@ -118,7 +118,7 @@ class RESTClient(RESTBase):
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", properties.operation, url)
 
-        with tracer.start_as_current_span("rpc." + str(properties.function.__name__), kind=trace.SpanKind.CLIENT) as span:
+        with tracing.tracer.start_as_current_span("rpc." + str(properties.function.__name__), kind=trace.SpanKind.CLIENT):
             TraceContextTextMapPropagator().inject(headers)
             try:
                 request = HTTPRequest(

@@ -29,6 +29,7 @@ from tornado.ioloop import IOLoop
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
+from inmanta import tracing
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
@@ -46,8 +47,6 @@ from inmanta.util import (
     TaskMethod,
     stable_depth_first,
 )
-from opentelemetry import trace
-tracer = trace.get_tracer(__name__)
 
 if TYPE_CHECKING:
     from inmanta.server.extensions import Feature, FeatureManager
@@ -82,7 +81,7 @@ class ReturnClient(Client):
     async def _call(
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
     ) -> common.Result:
-        with tracer.start_as_current_span(f"return_rpc.{method_properties.function.__name__}"):
+        with tracing.tracer.start_as_current_span(f"return_rpc.{method_properties.function.__name__}"):
             call_spec = method_properties.build_call(args, kwargs)
             try:
                 if method_properties.timeout:

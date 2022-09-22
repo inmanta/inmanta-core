@@ -101,6 +101,7 @@ import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
 from inmanta import config, const, data, env, loader, protocol, resources
+from inmanta import tracing as inmanta_tracing
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -119,9 +120,6 @@ from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 
-from opentelemetry import trace
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
@@ -138,9 +136,6 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_reso
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
 initial_cwd = os.getcwd()
-
-
-tracer = trace.get_tracer(__name__)
 
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
@@ -206,8 +201,9 @@ def pytest_runtest_setup(item: "pytest.Item"):
 
 @pytest.fixture(scope="function", autouse=True)
 def tracing(request: pytest.FixtureRequest):
-    with tracer.start_as_current_span(f"pytest {request.node.name}"):
+    with inmanta_tracing.tracer.start_as_current_span(f"pytest {request.node.name}"):
         yield
+
 
 @pytest.fixture(scope="session")
 def postgres_db(request: pytest.FixtureRequest):
@@ -1069,7 +1065,7 @@ class SnippetCompilationTest(KeepOnFail):
                                            Inmanta project.
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         """
-        with tracer.start_as_current_span("setup_for_snippet"):
+        with inmanta_tracing.tracer.start_as_current_span("setup_for_snippet"):
             self.setup_for_snippet_external(
                 snippet,
                 add_to_module_path,
@@ -1089,16 +1085,16 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
     ):
-        with tracer.start_as_current_span("load project"):
+        with inmanta_tracing.tracer.start_as_current_span("load project"):
             loader.PluginModuleFinder.reset()
             self.project = Project(
                 self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
             )
             Project.set(self.project)
-            with tracer.start_as_current_span("use virtual env"):
+            with inmanta_tracing.tracer.start_as_current_span("use virtual env"):
                 self.project.use_virtual_env()
                 self._patch_process_env()
-            with tracer.start_as_current_span("install module"):
+            with inmanta_tracing.tracer.start_as_current_span("install module"):
                 self._install_v2_modules(install_v2_modules)
                 if install_project:
                     self.project.install_modules()
