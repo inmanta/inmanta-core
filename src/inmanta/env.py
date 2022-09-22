@@ -495,8 +495,8 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
-
-        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env, is_pip=True)
+        print(requirements)
+        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -626,7 +626,6 @@ class PythonEnvironment:
         shell: bool = False,
         timeout: float = 10,
         env_vars: Optional[Mapping[str, str]] = None,
-        is_pip: Optional[bool] = None,
     ) -> Tuple[int, List[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
@@ -641,9 +640,8 @@ class PythonEnvironment:
         )
 
         full_output: List[str] = []
-
         assert process.stdout is not None  # Make mypy happy
-        logger = LOGGER if not is_pip else LOGGER_PIP
+        logger = LOGGER if not "pip" in cmd else LOGGER_PIP
         for line in process.stdout:
             # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
             output = line.decode().strip()
