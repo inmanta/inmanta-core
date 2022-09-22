@@ -117,7 +117,7 @@ In this guide, we only cover models where each set of independent resources is d
 will refer to as the "service" or "service entity" (as in ``LSM``). We will use the term "identity" to refer to any set of
 attributes that uniquely identify an instance. In the model this usually corresponds to an index.
 
-When building an inmanta model all potential instances of a service entity must refine to compatible (low level) config.
+When building an inmanta model, all potential instances of a service entity must refine to compatible (low level) config.
 In the model this config is represented by the resources. Therefore these guidelines will focus on creating valid and
 compatible resources. With well-designed resources, valid and compatible config will follow.
 
