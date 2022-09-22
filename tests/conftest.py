@@ -1032,6 +1032,7 @@ class SnippetCompilationTest(KeepOnFail):
         self.keep_shared = True
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
+    @inmanta_tracing.tracer.start_as_current_span("setup_for_snippet")
     def setup_for_snippet(
         self,
         snippet: str,
@@ -1065,18 +1066,18 @@ class SnippetCompilationTest(KeepOnFail):
                                            Inmanta project.
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
         """
-        with inmanta_tracing.tracer.start_as_current_span("setup_for_snippet"):
-            self.setup_for_snippet_external(
-                snippet,
-                add_to_module_path,
-                python_package_sources,
-                project_requires,
-                python_requires,
-                install_mode,
-                relation_precedence_rules,
-            )
-            return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        self.setup_for_snippet_external(
+            snippet,
+            add_to_module_path,
+            python_package_sources,
+            project_requires,
+            python_requires,
+            install_mode,
+            relation_precedence_rules,
+        )
+        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
+    @inmanta_tracing.tracer.start_as_current_span("load project")
     def _load_project(
         self,
         autostd: bool,
@@ -1085,20 +1086,19 @@ class SnippetCompilationTest(KeepOnFail):
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
     ):
-        with inmanta_tracing.tracer.start_as_current_span("load project"):
-            loader.PluginModuleFinder.reset()
-            self.project = Project(
-                self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
-            )
-            Project.set(self.project)
-            with inmanta_tracing.tracer.start_as_current_span("use virtual env"):
-                self.project.use_virtual_env()
-                self._patch_process_env()
-            with inmanta_tracing.tracer.start_as_current_span("install module"):
-                self._install_v2_modules(install_v2_modules)
-                if install_project:
-                    self.project.install_modules()
-                return self.project
+        loader.PluginModuleFinder.reset()
+        self.project = Project(
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
+        )
+        Project.set(self.project)
+        with inmanta_tracing.tracer.start_as_current_span("use virtual env"):
+            self.project.use_virtual_env()
+            self._patch_process_env()
+        with inmanta_tracing.tracer.start_as_current_span("install module"):
+            self._install_v2_modules(install_v2_modules)
+            if install_project:
+                self.project.install_modules()
+            return self.project
 
     def _patch_process_env(self) -> None:
         """

@@ -25,12 +25,12 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 provider = TracerProvider()
-if "OTEL_EXPORTER_OTLP_ENDPOINT=" in os.environ:
+if "OTEL_EXPORTER_OTLP_ENDPOINT" in os.environ:
     processor = BatchSpanProcessor(OTLPSpanExporter())
     provider.add_span_processor(processor)
 
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-# TornadoInstrumentor().instrument()
+#TornadoInstrumentor().instrument()
 AsyncPGInstrumentor().instrument()
