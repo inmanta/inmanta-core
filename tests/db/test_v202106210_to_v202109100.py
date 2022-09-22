@@ -29,6 +29,7 @@ from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
+@pytest.mark.migration_test
 async def migrate_v202106210_to_v202109100(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
@@ -46,6 +47,7 @@ async def migrate_v202106210_to_v202109100(
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.migration_test
 async def test_valid_loglevels(migrate_v202106210_to_v202109100: Callable[[], Awaitable[None]]) -> None:
     """
     Test whether the value column was added to the resource table.
