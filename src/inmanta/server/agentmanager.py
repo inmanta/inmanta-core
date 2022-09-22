@@ -788,6 +788,7 @@ class AgentManager(ServerSlice, SessionListener):
             start=start,
             end=end,
             no_obj=False,
+            lock=None,
             connection=None,
             **query,
         )

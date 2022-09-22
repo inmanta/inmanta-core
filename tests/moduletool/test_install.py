@@ -39,7 +39,7 @@ from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingE
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
-from utils import PipIndex, log_contains, module_from_template
+from utils import LogSequence, PipIndex, log_contains, module_from_template
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -418,6 +418,38 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     assert not model_file_installed()
 
 
+def test_project_install_logs(
+    snippetcompiler_clean,
+    tmpdir: py.path.local,
+    modules_dir: str,
+    modules_v2_dir: str,
+    caplog,
+) -> None:
+    """
+    Verify the logs of a project install
+    """
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        """,
+        autostd=False,
+        install_project=False,
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    caplog.clear()
+    caplog.set_level(logging.INFO)
+    ProjectTool().execute("install", [])
+    log_sequence = LogSequence(caplog)
+    count_verifying_project = 0
+    for msg in log_sequence.caplog.messages:
+        if msg == "verifying project":
+            count_verifying_project += 1
+    assert count_verifying_project == 1
+
+
 @pytest.mark.parametrize_any(
     "install_module_names, module_dependencies",
     [
@@ -720,36 +752,52 @@ def test_project_install_incompatible_dependencies(
     warnings.
     """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-
     # prepare v2 modules
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
-    v2mod1: module.ModuleV2Metadata = module_from_template(
+
+    module_from_template(
         v2_template_path,
-        os.path.join(str(tmpdir), "v2mod1"),
+        os.path.join(str(tmpdir), "v2mod1_1"),
         new_name="v2mod1",
-        new_requirements=[Requirement.parse("lorem~=0.0.1")],
+        new_version=version.Version("1.0.0"),
         publish_index=index,
     )
+
+    module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1_2"),
+        new_name="v2mod1",
+        new_version=version.Version("2.0.0"),
+        publish_index=index,
+    )
+
     v2mod2: module.ModuleV2Metadata = module_from_template(
         v2_template_path,
         os.path.join(str(tmpdir), "v2mod2"),
         new_name="v2mod2",
-        new_requirements=[Requirement.parse("lorem~=0.1.1")],
+        new_requirements=[Requirement.parse("inmanta-module-v2mod1~=1.0.0")],
+        publish_index=index,
+    )
+    v2mod3: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod3"),
+        new_name="v2mod3",
+        new_requirements=[Requirement.parse("inmanta-module-v2mod1~=2.0.0")],
         publish_index=index,
     )
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         f"""
-        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
         import {module.ModuleV2.get_name_from_metadata(v2mod2)}
+        import {module.ModuleV2.get_name_from_metadata(v2mod3)}
         """,
         autostd=False,
         install_project=False,
-        python_package_sources=[index.url, "https://pypi.org/simple"],
+        python_package_sources=[index.url],
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
-            for metadata in [v2mod1, v2mod2]
+            for metadata in [v2mod2, v2mod3]
         ],
     )
 
@@ -757,7 +805,10 @@ def test_project_install_incompatible_dependencies(
     os.chdir(module.Project.get().path)
     with pytest.raises(env.ConflictingRequirements) as e:
         ProjectTool().execute("install", [])
-    assert "lorem~=0.0.1 and lorem~=0.1.1 because these package versions have conflicting dependencies" in e.value.msg
+    assert (
+        "inmanta-module-v2mod1~=1.0.0 and inmanta-module-v2mod1~=2.0.0 because these package versions have conflicting "
+        "dependencies" in e.value.msg
+    )
 
 
 def test_project_install_requirement_not_loaded(
@@ -778,6 +829,66 @@ def test_project_install_requirement_not_loaded(
 
     message: str = "Module thismoduledoesnotexist is present in requires but it is not used by the model."
     assert message in (rec.message for rec in caplog.records)
+
+
+@pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_CONFIG_FILE"])
+def test_install_from_index_dont_leak_pip_index(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    env_var,
+) -> None:
+    """
+    Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
+    and that it is not changed in the active env. also test that the pip configuration file is not used.
+
+    The installation fails with an ModuleNotFoundException
+    as the index .custom-index is needed to install v2mod1,
+    but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL/config file which is not know by the
+    subprocess doing the pip install.
+    """
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    if env_var == "PIP_CONFIG_FILE":
+        pip_config_file = os.path.join(tmpdir, "pip.conf")
+        with open(pip_config_file, "w+", encoding="utf-8") as f:
+            f.write("[global]\n")
+            f.write("timeout = 60\n")
+            f.write("extra-index-url =" + index.url + "\n")
+        monkeypatch.setenv(env_var, pip_config_file)
+    else:
+        monkeypatch.setenv(env_var, index.url)
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source.
+        python_package_sources=["unknown"],
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1]
+        ],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+    with pytest.raises(ModuleNotFoundException):
+        ProjectTool().execute("install", [])
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])

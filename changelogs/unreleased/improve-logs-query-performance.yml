@@ -1,0 +1,3 @@
+description: Improve logs query by using like instead of position
+change-type: patch
+destination-branches: [master, iso5]

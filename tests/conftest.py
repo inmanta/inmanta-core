@@ -105,7 +105,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import ModuleTool
@@ -967,11 +967,48 @@ async def off_main_thread(func):
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
+class ReentrantVirtualEnv(VirtualEnv):
+    """
+    A virtual env that can be de-activated and re-activated
+
+    This allows faster reloading due to improved caching of the working set
+
+    This is intended for use in testcases to require a lot of venv switching
+    """
+
+    def __init__(self, env_path: str) -> None:
+        super(ReentrantVirtualEnv, self).__init__(env_path)
+        self.working_set = None
+
+    def deactivate(self):
+        self._using_venv = False
+        self.working_set = pkg_resources.working_set
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        if self._using_venv:
+            # We are in use, just ignore double activation
+            return
+
+        if not self.working_set:
+            # First run
+            super().use_virtual_env()
+        else:
+            # Later run
+            self._activate_that()
+            mock_process_env(python_path=self.python_path)
+            pkg_resources.working_set = self.working_set
+            self._using_venv = True
+
+
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
+        self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -992,6 +1029,7 @@ class SnippetCompilationTest(KeepOnFail):
         if not self._keep:
             shutil.rmtree(self.project_dir)
         self.project = None
+        self.venv.deactivate()
 
     def keep(self):
         self._keep = True
@@ -1054,18 +1092,17 @@ class SnippetCompilationTest(KeepOnFail):
         with tracer.start_as_current_span("load project"):
             loader.PluginModuleFinder.reset()
             self.project = Project(
-                self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+                self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
             )
             Project.set(self.project)
             with tracer.start_as_current_span("use virtual env"):
                 self.project.use_virtual_env()
                 self._patch_process_env()
             with tracer.start_as_current_span("install module"):
-                print("Install module!!!!")
                 self._install_v2_modules(install_v2_modules)
                 if install_project:
                     self.project.install_modules()
-            return self.project
+                return self.project
 
     def _patch_process_env(self) -> None:
         """
@@ -1153,7 +1190,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
             include_status=include_status,
@@ -1173,7 +1210,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync

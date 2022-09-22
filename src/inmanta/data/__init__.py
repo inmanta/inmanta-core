@@ -56,6 +56,7 @@ import dateutil
 import pydantic
 import pydantic.tools
 import typing_inspect
+from asyncpg import Connection
 from asyncpg.protocol import Record
 from otel_extensions import instrumented
 
@@ -65,6 +66,8 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
+from inmanta.data.model import ResourceIdStr
+from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -118,9 +121,23 @@ class TableLockMode(enum.Enum):
     """
 
     ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+
+
+class RowLockMode(enum.Enum):
+    """
+    Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
+    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
+    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
+    See relevant data classes' docstrings for appropriate lock orderings.
+    """
+
+    FOR_UPDATE: str = "FOR UPDATE"
+    FOR_NO_KEY_UPDATE: str = "FOR NO KEY UPDATE"
+    FOR_SHARE: str = "FOR SHARE"
+    FOR_KEY_SHARE: str = "FOR KEY SHARE"
 
 
 class RangeOperator(enum.Enum):
@@ -174,6 +191,35 @@ OrderStr = NewType("OrderStr", str)
 """
     A valid database ordering
 """
+
+
+class ArgumentCollector:
+    """
+    Small helper to make placeholders for query arguments
+
+    args = ArgumentCollector()
+    query = f"SELECT * FROM table WHERE a = {args(a_value)} AND b = {args(b_value)}"
+    con.fetch(query, *args.get_values())
+    """
+
+    def __init__(self, offset: int = 0, de_duplicate: bool = False) -> None:
+        """
+
+        :param offset: the smallest number already in use, the next one given out will be offset+1
+        :param de_duplicate: if the value is the same, return the same number
+        """
+        self.args: list[object] = []
+        self.offset = offset
+        self.de_duplicate = de_duplicate
+
+    def __call__(self, entry: object) -> str:
+        if self.de_duplicate and entry in self.args:
+            return "$" + str(self.args.index(entry) + 1 + self.offset)
+        self.args.append(entry)
+        return "$" + str(len(self.args) + self.offset)
+
+    def get_values(self) -> list[object]:
+        return self.args
 
 
 class PagingOrder(str, enum.Enum):
@@ -966,9 +1012,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
+        if connection is not None:
+            return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -1212,9 +1260,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return getattr(self, name)
         return default_value
 
-    def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
+    def _get_column_names_and_values(self) -> Tuple[List[str], List[object]]:
         column_names: List[str] = []
-        values: List[str] = []
+        values: List[object] = []
         for name, metadata in self.get_field_metadata().items():
             if metadata.ignore:
                 continue
@@ -1293,13 +1341,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return
 
         columns = cls.get_field_names()
-        records = []
+        records: list[tuple[object, ...]] = []
         for doc in documents:
             current_record = []
             for col in columns:
                 current_record.append(cls._get_value(doc.__getattribute__(col)))
-            current_record = tuple(current_record)
-            records.append(current_record)
+            records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
@@ -1371,7 +1418,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def get_one(
-        cls: Type[TBaseDocument], connection: Optional[asyncpg.connection.Connection] = None, **query: object
+        cls: Type[TBaseDocument],
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+        **query: object,
     ) -> Optional[TBaseDocument]:
         results = await cls.get_list(
             connection=connection,
@@ -1380,6 +1430,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             limit=1,
             offset=None,
             no_obj=None,
+            lock=lock,
             **query,
         )
         if results:
@@ -1430,6 +1481,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1442,6 +1494,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=None,
             **query,
@@ -1456,6 +1509,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         columns: Optional[List[str]] = None,
         **query: object,
@@ -1487,6 +1541,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if offset is not None and offset > 0:
             sql_query += " OFFSET $" + str(len(values) + 1)
             values.append(int(offset))
+        if lock is not None:
+            sql_query += f" {lock.value}"
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
 
@@ -1501,6 +1557,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         start: Optional[Any] = None,
         end: Optional[Any] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -1542,6 +1599,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if limit is not None and limit > 0:
             sql_query += " LIMIT $" + str(len(values) + 1)
             values.append(int(limit))
+        if lock is not None:
+            sql_query += f" {lock.value}"
 
         result = await cls.select_query(sql_query, values, no_obj=no_obj, connection=connection)
         return result
@@ -1586,7 +1645,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, [value])
 
     @classmethod
-    def _get_value(cls, value: Any) -> Any:
+    def _get_value(cls, value: object) -> object:
         if isinstance(value, dict):
             return json_encode(value)
 
@@ -2508,6 +2567,7 @@ RETURNING last_version;
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
         **query: object,
@@ -2523,6 +2583,7 @@ RETURNING last_version;
                 limit=limit,
                 offset=offset,
                 no_obj=no_obj,
+                lock=lock,
                 connection=connection,
                 **query,
             )
@@ -2532,6 +2593,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             **query,
         )
@@ -2545,6 +2607,7 @@ RETURNING last_version;
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: object,
     ) -> List[TBaseDocument]:
@@ -2559,6 +2622,7 @@ RETURNING last_version;
             limit=limit,
             offset=offset,
             no_obj=no_obj,
+            lock=lock,
             connection=connection,
             columns=columns,
             **query,
@@ -3146,8 +3210,14 @@ class Agent(BaseDocument):
         return field_dict
 
     @classmethod
-    async def get(cls, env: uuid.UUID, endpoint: str, connection: Optional[asyncpg.connection.Connection] = None) -> "Agent":
-        obj = await cls.get_one(environment=env, name=endpoint, connection=connection)
+    async def get(
+        cls,
+        env: uuid.UUID,
+        endpoint: str,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> "Agent":
+        obj = await cls.get_one(environment=env, name=endpoint, connection=connection, lock=lock)
         return obj
 
     @classmethod
@@ -3170,7 +3240,8 @@ class Agent(BaseDocument):
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
-                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume",
+                    # lock FOR UPDATE to avoid deadlocks: next query in this transaction updates the row
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR UPDATE",
                     cls._get_value(env),
                     connection=con,
                 )
@@ -3236,7 +3307,9 @@ class Agent(BaseDocument):
         :param now: Timestamp of this failover
         """
         for (endpoint, sid) in endpoints_with_new_primary:
-            agent = await cls.get(env, endpoint, connection=connection)
+            # Lock mode is required because we will update in this transaction
+            # Deadlocks with cleanup otherwise
+            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
             if agent is None:
                 continue
 
@@ -3411,6 +3484,9 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
+        By default, notifications are enabled only for exporting compiles.
+    :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     """
 
     __primary_key__ = ("id",)
@@ -3439,6 +3515,9 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3863,21 +3942,23 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(
         cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
     ) -> List["ResourceAction"]:
-        # The @> operator is required to use the GIN index on the resource_version_ids column
-        query = f"""SELECT *
-                    FROM {cls.table_name()}
-                    WHERE environment=$1 AND resource_version_ids::varchar[] @> ARRAY[$2]::varchar[]
-                 """
-        values = [cls._get_value(environment), cls._get_value(resource_version_id)]
+        query = """
+        SELECT ra.* FROM public.resourceaction as ra
+                    INNER JOIN public.resourceaction_resource as jt
+                        ON ra.action_id = jt.resource_action_id
+                    WHERE jt.environment=$1 AND jt.resource_id = $2 AND  jt.resource_version = $3
+        """
+        id = resources.Id.parse_id(resource_version_id)
+        values = [cls._get_value(environment), id.resource_str(), id.version]
         if action is not None:
-            query += " AND action=$3"
+            query += " AND action=$4"
             values.append(cls._get_value(action))
         query += " ORDER BY started DESC"
         if limit is not None and limit > 0:
@@ -3918,6 +3999,10 @@ class ResourceAction(BaseDocument):
         resource_id: m.ResourceIdStr,
         offset: int,
     ) -> Tuple[str, List[object]]:
+        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
+        # characters in the query
+        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+
         query = f"""{select_clause}
                     FROM
                     (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
@@ -3925,7 +4010,7 @@ class ResourceAction(BaseDocument):
                     unnested_message ->> 'msg' as msg,
                     unnested_message
                     FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
+                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
                     """
         values = [cls._get_value(environment), cls._get_value(resource_id)]
         return query, values
@@ -4133,13 +4218,16 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
     ) -> List["ResourceAction"]:
-        query = f"""SELECT DISTINCT ra.*
-                        FROM {cls.table_name()} ra
-                        INNER JOIN
-                        {Resource.table_name()} r on  r.resource_version_id = ANY(ra.resource_version_ids)
-                        WHERE r.environment=$1 AND ra.environment=$1
-                     """
-        values = [cls._get_value(environment)]
+        query = """SELECT DISTINCT ra.*
+                    FROM public.resource as r
+                    INNER JOIN public.resourceaction_resource as jt
+                        ON r.environment = jt.environment
+                        AND r.resource_id = jt.resource_id
+                        AND r.model = jt.resource_version
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                        WHERE r.environment=$1 AND ra.environment=$1"""
+        values: list[object] = [cls._get_value(environment)]
 
         parameter_index = 2
         if resource_type:
@@ -4151,9 +4239,12 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
+            # and _ characters in the query
+            escaped_value = attribute_value.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#' "
             values.append(cls._get_value(attribute))
-            values.append(cls._get_value(attribute_value))
+            values.append(cls._get_value(escaped_value))
             parameter_index += 2
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
@@ -4201,6 +4292,118 @@ class ResourceAction(BaseDocument):
         async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
+
+    @classmethod
+    async def get_resource_events(
+        cls, env: Environment, resource_id: "resources.Id", exclude_change: Optional[const.Change] = None
+    ) -> Dict[ResourceIdStr, List["ResourceAction"]]:
+        """
+        Get all events that should be processed by this specific resource, for the current deployment
+
+        This method searches across versions!
+
+        This means:
+        1. assure a deployment is ongoing
+        2. get the time range between the start of this deployment and the last successful deploy
+        3. get all resources required by this resource
+        4. get all resource actions of type deploy emitted by the resource of step 3 in the time interval of step 2
+
+        :param env: environment to consider
+        :param resource_id: resource to consider, should be in deploying state
+        :param exclude_change: in step 4, exclude all resource actions with this specific type of change
+        """
+
+        # This is bang on the critical path for the agent
+        # Squeeze out as much performance from postgresql as we can
+
+        # steps 1 and 2:
+        # find the interval between the current deploy and the previous successful deploy
+        # also check we are currently deploying
+        # do all of this in one query
+        resource_id_str = resource_id.resource_version_str()
+
+        # These two variables are actually of type datetime.datetime
+        # but mypy doesn't know as they come from the DB
+        # mypy also doesn't care, because they go back into the DB
+        current_deploy_start: object
+        last_deploy_start: Optional[object]
+
+        end_query = """
+        with
+            base_ra as (
+            SELECT ra.*
+                FROM public.resourceaction_resource as jt
+                    INNER JOIN public.resourceaction as ra
+                        ON ra.action_id = jt.resource_action_id
+                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
+                    ORDER BY ra.started DESC
+            )
+        SELECT
+            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
+            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
+            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
+        """
+
+        async with cls.get_connection() as connection:
+            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
+
+            if not result or result["begin_status"] is None:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
+                    f" {resource_id_str} has not started deploying yet."
+                )
+            if result["begin_status"] != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_id_str} is {result['begin_status']}."
+                )
+            current_deploy_start = result["begin_started"]
+            last_deploy_start = result["started"]
+
+            # Step3: Get the resource
+            resource: Optional[Resource] = await Resource.get_one(
+                environment=env.id, resource_version_id=resource_id_str, connection=connection
+            )
+            if resource is None:
+                raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
+
+            # Step 4: get the relevant resource actions
+            # Do it in one query for all dependencies
+
+            # Construct the query
+            arg = ArgumentCollector(offset=2)
+
+            # First make the filter
+            filter = f"AND ra.started<{arg(current_deploy_start)}"
+            if last_deploy_start:
+                filter += f" AND ra.started > {arg(last_deploy_start)}"
+            if exclude_change:
+                filter += f"AND ra.change <> {arg(exclude_change.value)}"
+
+            # then the query around it
+            get_all_query = f"""
+    SELECT jt.resource_id, ra.*
+        FROM public.resourceaction_resource as jt
+        INNER JOIN public.resourceaction as ra
+            ON ra.action_id = jt.resource_action_id
+        WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=ANY($2::varchar[]) AND ra.action='deploy' {filter}
+        ORDER BY ra.started DESC;
+            """
+
+            # Convert resource version ids into resource ids
+            ids = [resources.Id.parse_id(req).resource_str() for req in resource.attributes["requires"]]
+            # Get the result
+            result2 = await connection.fetch(get_all_query, env.id, ids, *arg.get_values())
+            # Collect results per resource_id
+            collector: Dict[ResourceIdStr, List["ResourceAction"]] = {
+                rid: [] for rid in ids
+            }  # eagerly initialize, we expect one entry per dependency, even when empty
+            for record in result2:
+                fields = dict(record)
+                del fields["resource_id"]
+                collector[cast(ResourceIdStr, record[0])].append(ResourceAction(from_postgres=True, **fields))
+
+        return collector
 
     def to_dto(self) -> m.ResourceAction:
         return m.ResourceAction(
@@ -4256,7 +4459,7 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
@@ -4266,7 +4469,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
-        cls, environment: uuid.UUID, resource_version_id: "resources.Id"
+        cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
     ) -> Dict[m.ResourceVersionIdStr, ResourceState]:
         """
         Return the last state of each dependency of the given resource that was not 'deploying'.
@@ -4289,7 +4492,7 @@ class Resource(BaseDocument):
             cls._get_value(resource_version_id.version),
             resource_version_id.resource_version_str(),
         ]
-        result = await cls._fetch_query(query, *values)
+        result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
@@ -4313,14 +4516,10 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        resource_version_ids_statement = ", ".join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
-        (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        values = values + cls._get_value(resource_version_ids)
-        query = (
-            f"SELECT * FROM {cls.table_name()} "
-            f"WHERE {filter_statement} AND resource_version_id IN ({resource_version_ids_statement})"
+        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2)"
+        resources = await cls.select_query(
+            query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
         )
-        resources = await cls.select_query(query, values, connection=connection)
         return resources
 
     @classmethod
@@ -4489,9 +4688,7 @@ class Resource(BaseDocument):
         return None
 
     @classmethod
-    def _get_released_resources_base_query(
-        cls, select_clause: str, environment: uuid.UUID, offset: int
-    ) -> Tuple[str, List[object]]:
+    def _get_released_resources_base_query(cls, select_clause: str, environment: uuid.UUID, offset: int) -> Tuple[str, object]:
         """A partial query describing the conditions for selecting the latest released resources,
         according to the model version number."""
         environment_db_value = cls._get_value(environment)
@@ -4800,25 +4997,7 @@ class Resource(BaseDocument):
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status,
-        /* Split up the requires array to its elements and find the latest released version of
-            the resources to get their status, and build a single json object from them */
-        (SELECT JSON_OBJECT_AGG(substring(req.requires from '(.*),v='), s.status) as requires_status
-            FROM
-                (SELECT JSONB_ARRAY_ELEMENTS_TEXT(resource.attributes->'requires') as requires
-                    FROM resource
-                    WHERE resource_id = latest.resource_id and model = latest.model)
-                    as req
-                    INNER JOIN
-                        (SELECT DISTINCT ON (resource_id) resource_id, resource.environment, {status_subquery}
-                        FROM resource
-                        INNER JOIN configurationmodel cm
-                        ON resource.model = cm.version AND resource.environment = cm.environment
-                        WHERE resource.environment = $1 AND cm.released = TRUE
-                        ORDER BY resource_id, model desc
-                        ) as s
-                    ON substring(req.requires from '(.*),v=') = s.resource_id AND s.environment = $1
-                )
+        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -4843,6 +5022,20 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
+        attributes = json.loads(record["attributes"])
+        requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
+
+        # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
+        # fields requires to calculate the status for each resource record, before it is filtered
+        status_query = f"""
+        SELECT DISTINCT ON (resource_id) resource_id, {status_subquery}
+        FROM resource
+        INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
+        WHERE resource.environment = $1 AND cm.released = TRUE AND resource_id = ANY($2)
+        ORDER BY resource_id, model DESC;
+        """
+        status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
+
         return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
             resource_type=record["resource_type"],
@@ -4852,9 +5045,9 @@ class Resource(BaseDocument):
             last_deploy=record["latest_deploy"],
             first_generated_time=record["first_generated_time"],
             first_generated_version=record["first_model"],
-            attributes=json.loads(record["attributes"]),
+            attributes=attributes,
             status=record["status"],
-            requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
+            requires_status={record["resource_id"]: record["status"] for record in status_result},
         )
 
     @classmethod
@@ -5236,6 +5429,7 @@ class ConfigurationModel(BaseDocument):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         no_obj: Optional[bool] = None,
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Any,
     ) -> List["ConfigurationModel"]:
@@ -5262,6 +5456,7 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
+        lock_statement = f" {lock.value} " if lock is not None else ""
         query_string = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
@@ -5275,7 +5470,8 @@ class ConfigurationModel(BaseDocument):
                     GROUP BY c.environment, c.version
                     {order_by_statement}
                     {limit_statement}
-                    {offset_statement}"""
+                    {offset_statement}
+                    {lock_statement}"""
         query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
         for record in query_result:
@@ -5382,7 +5578,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self.lock_table(TableLockMode.SHARE, connection=con)
+                await ResourceAction.lock_table(TableLockMode.ROW_EXCLUSIVE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only
@@ -5448,17 +5644,10 @@ class ConfigurationModel(BaseDocument):
     ) -> None:
         async with cls.get_connection(connection) as con:
             """
-            Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
-            this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
-            another transaction is able to perform it. This way no race condition is possible where the deployed state is
-            not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
-            transactions have committed already, or they will only start this part of their lifecycle when A has committed
-            itself.
+            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
+            in order to prevent race conditions.
             """
             async with con.transaction():
-                # SHARE UPDATE EXCLUSIVE is self-conflicting
-                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
-                await cls.lock_table(TableLockMode.SHARE_UPDATE_EXCLUSIVE, connection=con)
                 query = f"""UPDATE {ConfigurationModel.table_name()}
                                 SET deployed=True,
                                     result=(CASE WHEN (
@@ -5840,6 +6029,7 @@ class DryRun(BaseDocument):
             offset=None,
             no_obj=None,
             connection=None,
+            lock=None,
             **query,
         )
         return [

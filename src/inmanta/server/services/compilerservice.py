@@ -575,11 +575,19 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
+        notify_failed_compile: Optional[bool] = None,
+        failed_compile_message: Optional[str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
+        :param notify_failed_compile: if set to True, errors during compilation will be notified using the
+        "failed_compile_message".
+        if set to false, nothing will be notified. If not set then the default notifications are
+        sent (failed pull stage and errors during the do_export)
+        :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
         :return: the compile id of the requested compile and any warnings produced during the request
+
         """
         if removed_resource_sets is None:
             removed_resource_sets = []
@@ -605,6 +613,8 @@ class CompilerService(ServerSlice):
             environment_variables=env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
+            notify_failed_compile=notify_failed_compile,
+            failed_compile_message=failed_compile_message,
         )
         await compile.insert()
         await self._queue(compile)
@@ -642,7 +652,7 @@ class CompilerService(ServerSlice):
                 return
             env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
             if env is None:
-                raise Exception("Can't queue compile: environment %s does not exist" % environment)
+                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
             nextrun = await data.Compile.get_next_run(environment)
             if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
@@ -729,7 +739,8 @@ class CompilerService(ServerSlice):
                 wait,
             )
         else:
-            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested)
+            assert compile.requested is not None  # Make mypy happy
+            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested.astimezone())
         await asyncio.sleep(wait)
 
     async def _run(self, compile: data.Compile) -> None:
