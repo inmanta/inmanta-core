@@ -61,13 +61,12 @@ from typing import (
 import more_itertools
 import pkg_resources
 import yaml
-from otel_extensions import instrumented
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
 import inmanta.warnings
 import packaging.version
-from inmanta import RUNNING_TESTS, const, env, loader, plugins
+from inmanta import RUNNING_TESTS, const, env, loader, plugins, tracing
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
@@ -1861,7 +1860,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             loader.unload_inmanta_plugins()
         loader.PluginModuleFinder.reset()
 
-    @instrumented(span_name="Project.install_modules")
     def install_modules(self, *, bypass_module_cache: bool = False, update_dependencies: bool = False) -> None:
         """
         Installs all modules, both v1 and v2.
@@ -1869,29 +1867,30 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         :param bypass_module_cache: Fetch the module data from disk even if a cache entry exists.
         :param update_dependencies: Update all Python dependencies (recursive) to their latest versions.
         """
-        if not self.is_using_virtual_env():
-            self.use_virtual_env()
+        with tracing.tracer.start_as_current_span("install modules"):
+            if not self.is_using_virtual_env():
+                self.use_virtual_env()
 
-        self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
+            self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes_urls: List[str] = self.metadata.get_index_urls()
-        # Verify non-python part
-        self.verify_modules_cache()
-        self.verify_module_version_compatibility()
+            indexes_urls: List[str] = self.metadata.get_index_urls()
+            # Verify non-python part
+            self.verify_modules_cache()
+            self.verify_module_version_compatibility()
 
-        # do python install
-        pyreq: List[Requirement] = [Requirement.parse(x) for x in self.collect_python_requirements()]
+            # do python install
+            pyreq: List[Requirement] = [Requirement.parse(x) for x in self.collect_python_requirements()]
 
-        if len(pyreq) > 0:
-            # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_index(
-                pyreq,
-                upgrade=update_dependencies,
-                index_urls=indexes_urls if indexes_urls else None,
-                upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-            )
+            if len(pyreq) > 0:
+                # upgrade both direct and transitive module dependencies: eager upgrade strategy
+                self.virtualenv.install_from_index(
+                    pyreq,
+                    upgrade=update_dependencies,
+                    index_urls=indexes_urls if indexes_urls else None,
+                    upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                )
 
-        self.verify()
+            self.verify()
 
     def load(self, install: bool = False) -> None:
         """

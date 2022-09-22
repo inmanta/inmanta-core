@@ -35,7 +35,7 @@ from pydantic.tools import lru_cache
 import build
 import build.env
 from _pytest.mark import MarkDecorator
-from inmanta import const, data, env, module, util
+from inmanta import const, data, env, module, util, tracing
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -43,7 +43,6 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 from libpip2pi.commands import dir2pi
 from packaging import version
-from otel_extensions import instrumented
 
 T = TypeVar("T")
 
@@ -375,7 +374,6 @@ class PipIndex:
         dir2pi(argv=["dir2pi", self.artifact_dir])
 
 
-@instrumented(span_name="create_python_package")
 def create_python_package(
     name: str,
     pkg_version: version.Version,
@@ -399,69 +397,69 @@ def create_python_package(
     :param editable: Whether to install the package in editable mode, ignored if install is False.
     :param publish_index: Publish to the given local path index. Requires virtualenv to be installed in the python environment.
     """
-    if os.path.exists(path):
-        if not os.path.isdir(path):
-            raise Exception(f"{path} is not a directory.")
-        if os.listdir(path):
-            raise Exception(f"{path} is not an empty directory.")
-    else:
-        os.makedirs(path)
+    with tracing.tracer.start_as_current_span("create_python_package"):
+        if os.path.exists(path):
+            if not os.path.isdir(path):
+                raise Exception(f"{path} is not a directory.")
+            if os.listdir(path):
+                raise Exception(f"{path} is not an empty directory.")
+        else:
+            os.makedirs(path)
 
-    with open(os.path.join(path, "pyproject.toml"), "w") as fd:
-        fd.write(
-            """
-[build-system]
-build-backend = "setuptools.build_meta"
-requires = ["setuptools"]
-            """.strip()
-        )
-
-    install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
-    with open(os.path.join(path, "setup.cfg"), "w") as fd:
-        egg_info: str = (
-            f"""
-[egg_info]
-tag_build = .dev{pkg_version.dev}
-            """.strip()
-            if pkg_version.is_devrelease
-            else ""
-        )
-        fd.write(
-            f"""
-[metadata]
-name = {name}
-version = {pkg_version.base_version}
-description = An empty package for testing purposes
-license = Apache 2.0
-author = Inmanta <code@inmanta.com>
-
-{egg_info}
-
-""".strip()
-        )
-
-        fd.write("\n[options]")
-        fd.write(f"\ninstall_requires ={install_requires_content}")
-
-        if optional_dependencies:
-            fd.write("\n[options.extras_require]")
-            for option_name, requirements in optional_dependencies.items():
-                requirements_as_string = "".join(f"\n  {req}" for req in requirements)
-                fd.write(f"\n{option_name} ={requirements_as_string}")
-
-    if install:
-        env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
-    if publish_index is not None:
-        with build.env.IsolatedEnvBuilder() as build_env:
-            builder = build.ProjectBuilder(
-                srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
+        with open(os.path.join(path, "pyproject.toml"), "w") as fd:
+            fd.write(
+                """
+    [build-system]
+    build-backend = "setuptools.build_meta"
+    requires = ["setuptools"]
+                """.strip()
             )
-            build_env.install(builder.build_system_requires)
-            build_env.install(builder.get_requires_for_build(distribution="wheel"))
-            builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
-        publish_index.publish()
 
-@instrumented(span_name="module_from_template")
+        install_requires_content = "".join(f"\n  {req}" for req in (requirements if requirements is not None else []))
+        with open(os.path.join(path, "setup.cfg"), "w") as fd:
+            egg_info: str = (
+                f"""
+    [egg_info]
+    tag_build = .dev{pkg_version.dev}
+                """.strip()
+                if pkg_version.is_devrelease
+                else ""
+            )
+            fd.write(
+                f"""
+    [metadata]
+    name = {name}
+    version = {pkg_version.base_version}
+    description = An empty package for testing purposes
+    license = Apache 2.0
+    author = Inmanta <code@inmanta.com>
+    
+    {egg_info}
+    
+    """.strip()
+            )
+
+            fd.write("\n[options]")
+            fd.write(f"\ninstall_requires ={install_requires_content}")
+
+            if optional_dependencies:
+                fd.write("\n[options.extras_require]")
+                for option_name, requirements in optional_dependencies.items():
+                    requirements_as_string = "".join(f"\n  {req}" for req in requirements)
+                    fd.write(f"\n{option_name} ={requirements_as_string}")
+
+        if install:
+            env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
+        if publish_index is not None:
+            with build.env.IsolatedEnvBuilder() as build_env:
+                builder = build.ProjectBuilder(
+                    srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
+                )
+                build_env.install(builder.build_system_requires)
+                build_env.install(builder.get_requires_for_build(distribution="wheel"))
+                builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
+            publish_index.publish()
+
 def module_from_template(
     source_dir: str,
     dest_dir: Optional[str] = None,
@@ -494,69 +492,69 @@ def module_from_template(
     :param new_content_init_py: The new content of the __init__.py file.
     :param in_place: Modify the module in-place instead of copying it.
     """
+    with tracing.tracer.start_as_current_span("module_from_template"):
+        def to_python_requires(
+            requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
+        ) -> abc.Iterator[Requirement]:
+            return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
 
-    def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
-    ) -> abc.Iterator[Requirement]:
-        return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
-
-    if (dest_dir is None) != in_place:
-        raise ValueError("Either dest_dir or in_place must be set, never both.")
-    if dest_dir is None:
-        dest_dir = source_dir
-    else:
-        shutil.copytree(source_dir, dest_dir)
-    config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
-    config: configparser.ConfigParser = configparser.ConfigParser()
-    config.read(config_file)
-    if new_version is not None:
-        base, tag = module.ModuleV2Metadata.split_version(new_version)
-        config["metadata"]["version"] = base
-        if tag is not None:
-            config["egg_info"] = {"tag_build": tag}
-    if new_name is not None:
-        old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
-        os.rename(
-            os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
-            os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
-        )
-        config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
-        manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
-        manifest_content: str
-        with open(manifest_file, "r") as fd:
-            manifest_content: str = fd.read()
-        with open(manifest_file, "w", encoding="utf-8") as fd:
-            fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
-    if new_requirements:
-        config["options"]["install_requires"] = "\n    ".join(to_python_requires(new_requirements))
-    if new_extras:
-        # start from a clean slate
-        config.remove_section("options.extras_require")
-        config.add_section("options.extras_require")
-        for extra, requires in new_extras.items():
-            config["options.extras_require"][extra] = "\n    ".join(to_python_requires(requires))
-    if new_content_init_cf is not None:
-        init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
-        with open(init_cf_file, "w", encoding="utf-8") as fd:
-            fd.write(new_content_init_cf)
-    if new_content_init_py is not None:
-        init_py_file: str = os.path.join(
-            dest_dir,
-            const.PLUGINS_PACKAGE,
-            module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
-            "__init__.py",
-        )
-        with open(init_py_file, "w", encoding="utf-8") as fd:
-            fd.write(new_content_init_py)
-    with open(config_file, "w") as fh:
-        config.write(fh)
-    if install:
-        ModuleTool().install(editable=editable, path=dest_dir)
-    if publish_index is not None:
-        ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
-        publish_index.publish()
-    with open(config_file, "r") as fh:
-        return module.ModuleV2Metadata.parse(fh)
+        if (dest_dir is None) != in_place:
+            raise ValueError("Either dest_dir or in_place must be set, never both.")
+        if dest_dir is None:
+            dest_dir = source_dir
+        else:
+            shutil.copytree(source_dir, dest_dir)
+        config_file: str = os.path.join(dest_dir, module.ModuleV2.MODULE_FILE)
+        config: configparser.ConfigParser = configparser.ConfigParser()
+        config.read(config_file)
+        if new_version is not None:
+            base, tag = module.ModuleV2Metadata.split_version(new_version)
+            config["metadata"]["version"] = base
+            if tag is not None:
+                config["egg_info"] = {"tag_build": tag}
+        if new_name is not None:
+            old_name: str = module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"])
+            os.rename(
+                os.path.join(dest_dir, const.PLUGINS_PACKAGE, old_name),
+                os.path.join(dest_dir, const.PLUGINS_PACKAGE, new_name),
+            )
+            config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
+            manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
+            manifest_content: str
+            with open(manifest_file, "r") as fd:
+                manifest_content: str = fd.read()
+            with open(manifest_file, "w", encoding="utf-8") as fd:
+                fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
+        if new_requirements:
+            config["options"]["install_requires"] = "\n    ".join(to_python_requires(new_requirements))
+        if new_extras:
+            # start from a clean slate
+            config.remove_section("options.extras_require")
+            config.add_section("options.extras_require")
+            for extra, requires in new_extras.items():
+                config["options.extras_require"][extra] = "\n    ".join(to_python_requires(requires))
+        if new_content_init_cf is not None:
+            init_cf_file = os.path.join(dest_dir, "model", "_init.cf")
+            with open(init_cf_file, "w", encoding="utf-8") as fd:
+                fd.write(new_content_init_cf)
+        if new_content_init_py is not None:
+            init_py_file: str = os.path.join(
+                dest_dir,
+                const.PLUGINS_PACKAGE,
+                module.ModuleV2Source.get_inmanta_module_name(config["metadata"]["name"]),
+                "__init__.py",
+            )
+            with open(init_py_file, "w", encoding="utf-8") as fd:
+                fd.write(new_content_init_py)
+        with open(config_file, "w") as fh:
+            config.write(fh)
+        if install:
+            ModuleTool().install(editable=editable, path=dest_dir)
+        if publish_index is not None:
+            ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
+            publish_index.publish()
+        with open(config_file, "r") as fh:
+            return module.ModuleV2Metadata.parse(fh)
 
 
 def v1_module_from_template(
