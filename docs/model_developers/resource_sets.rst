@@ -48,7 +48,7 @@ The resources from the prior example would be updated by a partial export for th
     :language: inmanta
     :caption: main.cf
 
-As a result, network 0 would be changed to only have one host (the other resources are removed), but the other networks
+As a result, network 0 would be changed to only have one host (the other four resources are removed), but the other networks
 would continue to function as they had before (because their resource set was not present in the partial export).
 The comparable complete model would seem as follows:
 
@@ -295,14 +295,14 @@ For example, suppose we modify the example model to take input from a simple yam
           hosts:
             - id: 0
         - id: 1
-          routers:
+          hosts:
             - id: 0
             - id: 1
             - id: 2
             - id: 3
             - id: 4
         - id: 0
-          routers:
+          hosts:
             - id: 0
             - id: 1
 
