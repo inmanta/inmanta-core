@@ -309,7 +309,7 @@ For example, suppose we modify the example model to take input from a simple yam
 
 The ``read_from_yaml()`` plugin would have to verify that no two networks with the same id are defined. After this validation,
 if doing a partial, it may return a list with only the relevant network in it. For the yaml given above validation would fail
-because two routers with the same id are defined.
+because two networks with the same id are defined.
 
 
 Ownership
