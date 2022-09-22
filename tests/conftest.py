@@ -203,8 +203,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
         file_name: str = item.location[0]
         date: str = re.search("_v(.*)_to_v(.*)[0-9].py", file_name).group(2)
         test_creation_date: datetime.datetime = datetime.datetime(int(date[0:4]), int(date[4:6]), int(date[6:8]))
-        today: datetime.datetime = datetime.datetime.today()
-        elapsed_days: int = (today - test_creation_date).days
+        elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
         if elapsed_days > 30:
             pytest.skip("Skipping old migration test")
 
