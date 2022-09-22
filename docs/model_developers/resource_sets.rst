@@ -292,7 +292,7 @@ For example, suppose we modify the example model to take input from a simple yam
 
     networks:
         - id: 0
-          routers:
+          hosts:
             - id: 0
         - id: 1
           routers:
