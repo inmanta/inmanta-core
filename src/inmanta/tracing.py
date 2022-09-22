@@ -32,5 +32,5 @@ if "OTEL_EXPORTER_OTLP_ENDPOINT=" in os.environ:
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-TornadoInstrumentor().instrument()
+# TornadoInstrumentor().instrument()
 AsyncPGInstrumentor().instrument()
