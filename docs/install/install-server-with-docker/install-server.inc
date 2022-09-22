@@ -38,6 +38,8 @@ Here is a minimalist docker-compose file content that can be used to deploy the 
             networks:
                 inm_net:
                     ipv4_address: 172.30.0.3
+            depends_on:
+                - "postgres"
             command: "server --wait-for-host inmanta_db --wait-for-port 5432"
 
     networks:
