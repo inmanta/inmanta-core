@@ -151,6 +151,10 @@ def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
         "markers",
         "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
     )
+    config.addinivalue_line(
+        "markers",
+        "migration_test: mark a test as a migration test to run skip it in fast runs once it is older than one mount",
+    )
 
 
 def pytest_configure(config: "pytest.Config") -> None:
@@ -196,6 +200,14 @@ def pytest_runtest_setup(item: "pytest.Item"):
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
+    if any(True for mark in item.iter_markers(name="migration_test")):
+        file_name: str = item.location[0]
+        date: str = re.search("_v(.*)_to_v(.*)[0-9].py", file_name).group(2)
+        test_creation_date: datetime.datetime = datetime.datetime(int(date[0:4]), int(date[4:6]), int(date[6:8]))
+        today: datetime.datetime = datetime.datetime.today()
+        elapsed_days: int = (today - test_creation_date).days
+        if elapsed_days > 30:
+            pytest.skip("Skipping old migration test")
 
 
 @pytest.fixture(scope="session")

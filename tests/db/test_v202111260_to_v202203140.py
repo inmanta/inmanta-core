@@ -25,6 +25,7 @@ from db.common import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
 
 
+@pytest.mark.migration_test
 @pytest.fixture
 async def migrate_v202111260_to_v202203140(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
@@ -43,6 +44,7 @@ async def migrate_v202111260_to_v202203140(
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.migration_test
 async def test_added_notification_table(
     migrate_v202111260_to_v202203140: Callable[[], Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],

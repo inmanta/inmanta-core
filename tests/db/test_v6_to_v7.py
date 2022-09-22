@@ -47,6 +47,7 @@ async def migrate_v6_to_v7(
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.slowtest
 async def test_unique_agent_instances(migrate_v6_to_v7: None, postgresql_client: Connection) -> None:
     # assert that existing documents have been merged and expired state has been set correctly
     async with postgresql_client.transaction():

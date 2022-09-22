@@ -28,6 +28,7 @@ from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
+@pytest.mark.slowtest
 async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
     # Get old tables
     with open(os.path.join(os.path.dirname(__file__), "dumps/v2.sql"), "r") as fh:
@@ -73,6 +74,7 @@ async def test_environment_update(migrate_v2_to_v3, async_finalizer, server_conf
     assert e3_next == 2
 
 
+@pytest.mark.slowtest
 async def test_addition_resource_type_column(migrate_v2_to_v3, postgresql_client: Connection):
     results = await postgresql_client.fetch("SELECT resource_version_id, resource_type FROM public.Resource")
     for r in results:
