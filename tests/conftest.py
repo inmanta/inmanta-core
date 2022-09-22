@@ -153,7 +153,7 @@ def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     )
     config.addinivalue_line(
         "markers",
-        "migration_test: mark a test as a migration test to run skip it in fast runs once it is older than one mount",
+        "migration_test: mark a test as a migration test to skip it in fast runs once it is older than 30 days",
     )
 
 
