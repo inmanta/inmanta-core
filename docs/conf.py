@@ -97,7 +97,12 @@ else:
         version = pkg_resources.get_distribution("inmanta").version
     except pkg_resources.DistributionNotFound:
         raise ConfigError(
-            "When building the docs locally, please set the INMANTA_DONT_DISCOVER_VERSION environment variable to true."
+            """
+The inmanta package is not installed. This way sphinx failed to discover the version number that should be
+displayed on the documentation pages. Either install the inmanta package or set the environment variable
+INMANTA_DONT_DISCOVER_VERSION when the version number is not important for this documentation build. The latter
+solution will set the version number to 1.0.0.
+            """
         )
 
 # The full version, including alpha/beta/rc tags.
