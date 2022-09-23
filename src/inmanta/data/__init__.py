@@ -2045,7 +2045,7 @@ class Project(BaseDocument):
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         # flush the environment cache
-        Environment.flush_cache()
+        Environment.flush_cache(self.id)
         await super().delete(connection)
 
 
@@ -2438,8 +2438,12 @@ class Environment(BaseDocument):
     }  # name new_option -> name deprecated_option
 
     @classmethod
-    def flush_cache(cls) -> None:
-        cls.__instance_cache = {}
+    def flush_cache(cls, env_id: Optional[uuid.UUID] = None) -> None:
+        if env_id:
+            if env_id in cls.__instance_cache:
+                del cls.__instance_cache[env_id]
+        else:
+            cls.__instance_cache = {}
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
@@ -2476,7 +2480,8 @@ class Environment(BaseDocument):
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         :param value: The value of the settings. The value should be of type as defined in _settings
         """
-        Environment.flush_cache()
+        Environment.flush_cache(self.id)
+
         if key not in self._settings:
             raise KeyError()
         # TODO: convert this to a string
@@ -2507,7 +2512,7 @@ class Environment(BaseDocument):
         if key not in self._settings:
             raise KeyError()
 
-        Environment.flush_cache()
+        Environment.flush_cache(self.id)
 
         if self._settings[key].default is None:
             (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
