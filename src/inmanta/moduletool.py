@@ -39,11 +39,11 @@ import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
-from build.env import IsolatedEnvBuilder
-import build.env
 import build
+import build.env
 import inmanta
 import toml
+from build.env import IsolatedEnvBuilder
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException

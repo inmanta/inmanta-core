@@ -55,8 +55,6 @@ The following fixtures manage test environments:
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
 """
-import yaml
-
 import asyncio
 import concurrent
 import csv
@@ -1647,10 +1645,9 @@ use the same build-backend and build requirements.
         with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
             pyproject_toml_as_dct = toml.load(fh)
             try:
-                if (
-                    pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or
-                    set(pyproject_toml_as_dct["build-system"]["requires"]) != {"setuptools", "wheel"}
-                ):
+                if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(
+                    pyproject_toml_as_dct["build-system"]["requires"]
+                ) != {"setuptools", "wheel"}:
                     raise Exception(error_message)
             except (KeyError, TypeError):
                 raise Exception(error_message)
