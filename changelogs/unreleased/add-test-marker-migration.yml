@@ -1,0 +1,3 @@
+change-type: patch
+description: Add a marker for migration test to skip migration test older than 30 days when in fast mode
+destination-branches: [master, iso5]
