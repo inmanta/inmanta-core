@@ -33,7 +33,8 @@ The @db_migration_test annotation is only added on db migration tests. Those tes
 naming convention: test_v<old_version>_to_v<new_version>.py where 'old_version' and 'new_version' are a timestamp followed by
 an index. The timestamp is in the form YYYYMMDD and the index in an additional number to allow more than one schema update
 per day (e.g. ``v202102220.py``). Tests with this annotation will not be run in --fast mode if they are older than 30 days.
-The age of the test is derived from the file name. """
+The age of the test is derived from the file name.
+"""
 
 """
 About venvs in tests (see linked objects' docstrings for more details):
