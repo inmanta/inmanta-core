@@ -108,7 +108,7 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -498,6 +498,15 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     data.Environment._settings = default_settings
 
 
+@pytest.fixture(scope="session", autouse=True)
+def clean_reset_session():
+    """
+    Execute cleanup tasks that should only run at the end of the test suite.
+    """
+    yield
+    IsolatedEnvBuilderCached.get_instance().destroy()
+
+
 def reset_all_objects():
     resources.resource.reset()
     asyncio.set_child_watcher(None)
@@ -508,6 +517,12 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+
+
+@pytest.fixture()
+def disable_isolated_env_builder_cache() -> None:
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
 
 
 @pytest.fixture(scope="function", autouse=True)
