@@ -433,7 +433,7 @@ def create_python_package(
     description = An empty package for testing purposes
     license = Apache 2.0
     author = Inmanta <code@inmanta.com>
-    
+
     {egg_info}
 
     """.strip()
