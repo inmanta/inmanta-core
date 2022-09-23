@@ -206,7 +206,10 @@ def pytest_runtest_setup(item: "pytest.Item"):
         pytest.skip("Skipping slow tests")
     if any(True for mark in item.iter_markers(name="db_migration_test")):
         file_name: str = item.location[0]
-        match: str = re.fullmatch("test_v[0-9]{9}_to_v([0-9]{9}).py", file_name)
+        match: str = re.fullmatch("tests/db/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+        print("=======================================")
+        print(file_name)
+        print(match)
         if not match:
             pytest.fail("The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py")
         timestamp: str = match.group(1)
