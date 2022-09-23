@@ -1998,13 +1998,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Sequence[Union[Record, TBaseDocument]]:
         async with cls.get_connection(connection) as con:
-            result: List[Union[Record, TBaseDocument]] = []
-            for record in await con.fetch(query, *values):
-                if no_obj:
-                    result.append(record)
-                else:
-                    result.append(cls(from_postgres=True, **record))
-            return result
+            async with con.transaction():
+                result: List[Union[Record, TBaseDocument]] = []
+                async for record in con.cursor(query, *values):
+                    if no_obj:
+                        result.append(record)
+                    else:
+                        result.append(cls(from_postgres=True, **record))
+                return result
 
     def to_dict(self) -> JsonType:
         """
