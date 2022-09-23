@@ -207,7 +207,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
     if any(True for mark in item.iter_markers(name="migration_test")):
         try:
             file_name: str = item.location[0]
-            date: str = re.search("_v(.*)_to_v(.*)[0-9].py", file_name).group(2)
+            date: str = re.fullmatch("test_v[0-9]{9}_to_v([0-9]{9}).py", file_name).group(1)
             test_creation_date: datetime.datetime = datetime.datetime(int(date[0:4]), int(date[4:6]), int(date[6:8]))
             elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
             if elapsed_days > 30:
