@@ -13,6 +13,7 @@
 # serve to show the default.
 
 import sys, os, pkg_resources, datetime
+from sphinx.errors import ConfigError
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -92,7 +93,13 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
 else:
-    version = pkg_resources.get_distribution("inmanta").version
+    try:
+        version = pkg_resources.get_distribution("inmanta").version
+    except pkg_resources.DistributionNotFound:
+        raise ConfigError(
+            "When building the docs locally, please set the INMANTA_DONT_DISCOVER_VERSION environment variable to true"
+        )
+
 # The full version, including alpha/beta/rc tags.
 release = version
 
