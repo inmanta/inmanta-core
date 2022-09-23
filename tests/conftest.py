@@ -28,7 +28,12 @@ The @slowtest annotation is usually added on test periodically, when the test su
 We analyze performance and place the @slowtest in the best places.
 It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
 This also allows test to run a few hundred times before being marked as slow.
-"""
+
+The @migration_test annotation is only added on db migration tests. Those Tests should be placed in files following the right
+naming convention: test_v<old_version>_to_v<new_version>.py where 'old_version' and 'new_version' are a timestamp followed by
+an index. The timestamp is in the form YYYYMMDD and the index in an additional number to allow more than one schema update
+per day (e.g. ``v202102220.py``). Tests with this annotation will not be run in --fast mode if they are older than 30 days.
+The age of the test is derived from the file name. """
 
 """
 About venvs in tests (see linked objects' docstrings for more details):
@@ -54,7 +59,6 @@ The following fixtures manage test environments:
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
 """
-
 
 import asyncio
 import concurrent
@@ -209,8 +213,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
             if elapsed_days > 30:
                 pytest.skip("Skipping old migration test")
         except ValueError:
-            print("??????????????????????????????????????")
-            logger.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            pytest.fail("The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py")
 
 
 @pytest.fixture(scope="session")
