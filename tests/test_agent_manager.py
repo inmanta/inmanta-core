@@ -719,14 +719,13 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
-async def test_session_creation_fails(server, environment, async_finalizer, caplog):
+async def test_session_creation_fails(server, environment: uuid.UUID, async_finalizer, caplog):
     """
     Verify that:
      * Session creation works correctly when the connectivity to the database works.
      * Session creation is refused when the connectivity to the database doesn't work.
        In that case the server state should stay consistent.
     """
-    env_id = UUID(environment)
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
@@ -734,10 +733,10 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     async_finalizer(a.stop)
 
     # Wait until session is created
-    await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: (environment, "agent1") in agentmanager.tid_endpoint_to_session, 10)
 
     # Verify that the session is created correctly
-    session = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
+    session = agentmanager.tid_endpoint_to_session[(environment, "agent1")]
     session_manager = session._sessionstore
     assert len(agentmanager.sessions) == 1
     assert session in agentmanager.sessions.values()
@@ -1192,6 +1191,7 @@ async def test_add_internal_agent_when_missing_in_agent_map(server, environment,
     # Remove the internal agent from the autostart_agent_map
     query = "UPDATE public.environment SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::jsonb), TRUE)"
     await postgresql_client.execute(query, [data.AUTOSTART_AGENT_MAP], "{}")
+    data.Environment.flush_cache()
 
     # Assert internal agent not in autostart_agent_map
     env = await data.Environment.get_by_id(UUID(environment))
