@@ -26,7 +26,7 @@ from inmanta import protocol
 from inmanta.server.bootloader import InmantaBootloader
 
 
-@pytest.mark.migration_test
+@pytest.mark.db_migration_test
 @pytest.fixture
 async def migrate_v202109100_to_v202111260(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
@@ -45,7 +45,7 @@ async def migrate_v202109100_to_v202111260(
     await ibl.stop(timeout=15)
 
 
-@pytest.mark.migration_test
+@pytest.mark.db_migration_test
 async def test_added_environment_columns(
     migrate_v202109100_to_v202111260: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],

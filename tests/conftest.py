@@ -29,7 +29,7 @@ We analyze performance and place the @slowtest in the best places.
 It is often harder to correctly judge what is slow up front, so we do it in bulk when we have all the (historical) data.
 This also allows test to run a few hundred times before being marked as slow.
 
-The @migration_test annotation is only added on db migration tests. Those tests should be placed in files following the right
+The @db_migration_test annotation is only added on db migration tests. Those tests should be placed in files following the right
 naming convention: test_v<old_version>_to_v<new_version>.py where 'old_version' and 'new_version' are a timestamp followed by
 an index. The timestamp is in the form YYYYMMDD and the index in an additional number to allow more than one schema update
 per day (e.g. ``v202102220.py``). Tests with this annotation will not be run in --fast mode if they are older than 30 days.
@@ -157,7 +157,7 @@ def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
     )
     config.addinivalue_line(
         "markers",
-        "migration_test: mark a test as a migration test to skip it in fast runs once it is older than 30 days",
+        "db_migration_test: mark a test as a migration test to skip it in fast runs once it is older than 30 days",
     )
 
 
@@ -204,7 +204,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
-    if any(True for mark in item.iter_markers(name="migration_test")):
+    if any(True for mark in item.iter_markers(name="db_migration_test")):
         try:
             file_name: str = item.location[0]
             date: str = re.fullmatch("test_v[0-9]{9}_to_v([0-9]{9}).py", file_name).group(1)
