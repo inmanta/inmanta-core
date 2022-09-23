@@ -2043,6 +2043,11 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
+    async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        # flush the environment cache
+        Environment.flush_cache()
+        await super().delete(connection)
+
 
 def convert_boolean(value: Union[bool, str]) -> bool:
     if isinstance(value, bool):
@@ -2431,6 +2436,10 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
+
+    @classmethod
+    def flush_cache(cls) -> None:
+        cls.__instance_cache = {}
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
