@@ -2233,6 +2233,8 @@ class Environment(BaseDocument):
     :param icon: An icon for the environment
     """
 
+    __instance_cache: Dict[uuid.UUID, Dict[bool, "Environment"]] = {}
+
     __primary_key__ = ("id",)
 
     id: uuid.UUID
@@ -2527,6 +2529,12 @@ class Environment(BaseDocument):
             # Cascade is done by PostgreSQL
             await self.delete()
 
+    async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        if self.id in self.__instance_cache:
+            del self.__instance_cache[self.id]
+
+        await super().delete(connection)
+
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
         Reserves the next available version and returns it. Increments the last_version counter.
@@ -2630,18 +2638,24 @@ RETURNING last_version;
 
     @classmethod
     async def get_by_id(
-        cls: Type[TBaseDocument],
+        cls,
         doc_id: uuid.UUID,
         connection: Optional[asyncpg.connection.Connection] = None,
         details: bool = True,
-    ) -> Optional[TBaseDocument]:
+    ) -> Optional["Environment"]:
         """
         Get a specific environment based on its ID
 
         :return: An instance of this class with its fields filled from the database.
         """
+        if doc_id in cls.__instance_cache and details in cls.__instance_cache[doc_id]:
+            return cls.__instance_cache[doc_id][details]
+
         result = await cls.get_list(id=doc_id, connection=connection, details=details)
         if len(result) > 0:
+            if doc_id not in cls.__instance_cache:
+                cls.__instance_cache[doc_id] = {}
+            cls.__instance_cache[doc_id][details] = result[0]
             return result[0]
         return None
 
