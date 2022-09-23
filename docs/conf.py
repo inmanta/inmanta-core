@@ -97,7 +97,7 @@ else:
         version = pkg_resources.get_distribution("inmanta").version
     except pkg_resources.DistributionNotFound:
         raise ConfigError(
-            "When building the docs locally, please set the INMANTA_DONT_DISCOVER_VERSION environment variable to true"
+            "When building the docs locally, please set the INMANTA_DONT_DISCOVER_VERSION environment variable to true."
         )
 
 # The full version, including alpha/beta/rc tags.
