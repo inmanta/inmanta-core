@@ -719,7 +719,7 @@ async def test_fix_corrupted_database(init_dataclasses_and_load_schema):
     await assert_agent_db_state(tid, nr_procs=1, nr_non_expired_procs=1, nr_agent_instances=1, nr_non_expired_instances=1)
 
 
-async def test_session_creation_fails(server, environment, async_finalizer, caplog):
+async def test_session_creation_fails(server, environment: str, async_finalizer, caplog):
     """
     Verify that:
      * Session creation works correctly when the connectivity to the database works.
