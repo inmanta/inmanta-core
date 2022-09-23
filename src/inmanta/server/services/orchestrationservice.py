@@ -760,7 +760,10 @@ class OrchestrationService(protocol.ServerSlice):
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial.
-                await data.Resource.lock_table(data.TableLockMode.ROW_EXCLUSIVE, connection=con)
+                await con.execute(
+                    # TODO: document why id.time
+                    f"SELECT pg_advisory_xact_lock_shared({const.PG_ADVISORY_KEY_PUT_VERSION}, {env.id.time_low - 2**31})"
+                )
                 await self._put_version(
                     env, version, resources, resource_state, unknown_objs, version_info, resource_sets, connection=con
                 )
@@ -817,8 +820,12 @@ class OrchestrationService(protocol.ServerSlice):
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():
+                # TODO: could an advisory lock suffice here (and be less restrictive)?
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
-                await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
+                await con.execute(
+                    # TODO: document why id.time
+                    f"SELECT pg_advisory_xact_lock({const.PG_ADVISORY_KEY_PUT_VERSION}, {env.id.time_low - 2**31})"
+                )
 
                 # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
                 version: int = await env.get_next_version(connection=con)

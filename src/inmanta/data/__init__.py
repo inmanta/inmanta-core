@@ -5358,6 +5358,7 @@ class Resource(BaseDocument):
 
 @stable_api
 class ConfigurationModel(BaseDocument):
+    # TODO: update locking order, also include Code and Agent which are currently excluded
     """
     A specific version of the configuration model.
     Any transactions that update ResourceAction, Resource, Environment, Parameter and/or ConfigurationModel
@@ -5578,29 +5579,25 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await ResourceAction.lock_table(TableLockMode.ROW_EXCLUSIVE, connection=con)
-                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
-
-                # Delete facts when the resources in this version are the only
-                await con.execute(
-                    f"""
-                    DELETE FROM {Parameter.table_name()} p
-                    WHERE(
-                        environment=$1 AND
-                        resource_id<>'' AND
-                        NOT EXISTS(
-                            SELECT 1
-                            FROM {Resource.table_name()} r
-                            WHERE p.resource_id=r.resource_id
-                        )
-                    )
-                    """,
-                    self.environment,
-                )
-
                 # Delete ConfigurationModel and cascade delete on connected tables
                 await self.delete(connection=con)
+
+            # Delete facts when the resources in this version are the only
+            await con.execute(
+                f"""
+                DELETE FROM {Parameter.table_name()} p
+                WHERE(
+                    environment=$1 AND
+                    resource_id<>'' AND
+                    NOT EXISTS(
+                        SELECT 1
+                        FROM {Resource.table_name()} r
+                        WHERE p.resource_id=r.resource_id
+                    )
+                )
+                """,
+                self.environment,
+            )
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
