@@ -2045,7 +2045,7 @@ class Project(BaseDocument):
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         # flush the environment cache
-        Environment.flush_cache(self.id)
+        Environment.flush_cache()
         await super().delete(connection)
 
 
