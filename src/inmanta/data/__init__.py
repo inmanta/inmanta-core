@@ -2439,7 +2439,7 @@ class Environment(BaseDocument):
 
     @classmethod
     def flush_cache(cls, env_id: Optional[uuid.UUID] = None) -> None:
-        if env_id:
+        if env_id is not None:
             if env_id in cls.__instance_cache:
                 del cls.__instance_cache[env_id]
         else:
@@ -2547,8 +2547,8 @@ class Environment(BaseDocument):
             await self.delete()
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
-        if self.id in self.__instance_cache:
-            del self.__instance_cache[self.id]
+        if self.id in Environment.__instance_cache:
+            del Environment.__instance_cache[self.id]
 
         await super().delete(connection)
 
@@ -2566,6 +2566,7 @@ RETURNING last_version;
             self.id,
             connection=connection,
         )
+        Environment.flush_cache()
         version = cast(int, record[0])
         self.last_version = version
         return version

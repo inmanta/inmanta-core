@@ -45,7 +45,7 @@ async def environment(environment, client):
     yield environment
 
 
-async def test_purge_on_delete_requires(client: Client, server: Server, environment: str, clienthelper: ClientHelper):
+async def test_purge_on_delete_requires(client: Client, server: Server, environment: uuid.UUID, clienthelper: ClientHelper):
     """
     Test purge on delete of resources and inversion of requires
     """
