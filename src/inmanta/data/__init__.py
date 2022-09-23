@@ -3965,7 +3965,8 @@ class ResourceAction(BaseDocument):
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
         async with cls.get_connection() as con:
-            return [cls(**dict(record), from_postgres=True) for record in await con.fetch(query, *values)]
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
     async def get_logs_for_version(
