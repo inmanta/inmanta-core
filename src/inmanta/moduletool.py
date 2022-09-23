@@ -998,21 +998,36 @@ class IsolatedEnvBuilderCached(build.env.IsolatedEnvBuilder):
 
     def __enter__(self) -> build.env._IsolatedEnvVenvPip:
         if not self._isolated_env:
-            # __enter__() was not called before
             self._isolated_env = super(IsolatedEnvBuilderCached, self).__enter__()
-            # Install the build requirements. All modules in this test suite have the same build requirements, so
-            # we can choose any module here to install them
-            builder = build.ProjectBuilder(
-                srcdir=os.path.join(os.path.dirname(__file__), "..", "..", "tests", "data", "modules_v2", "minimalv2module"),
-                python_executable=self._isolated_env.executable,
-                scripts_dir=self._isolated_env.scripts_dir,
-            )
-            self._isolated_env.install(builder.build_system_requires)
-            self._isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
+            self._install_build_requirements(self._isolated_env)
             # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
             # This prevents unnecessary pip processes from being spawned.
             self._isolated_env.install = lambda *args, **kwargs: None
         return self._isolated_env
+
+    def _install_build_requirements(self, isolated_env: build.env._IsolatedEnvVenvPip) -> None:
+        """
+        Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
+        """
+        with tempfile.TemporaryDirectory() as tmp_python_project_dir:
+            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
+            # So we can safely use the pyproject.toml file below.
+            pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
+            with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    """
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+                """
+                )
+            builder = build.ProjectBuilder(
+                srcdir=tmp_python_project_dir,
+                python_executable=self._isolated_env.executable,
+                scripts_dir=self._isolated_env.scripts_dir,
+            )
+            isolated_env.install(builder.build_system_requires)
+            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
 
     def __exit__(
         self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
