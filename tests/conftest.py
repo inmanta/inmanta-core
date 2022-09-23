@@ -211,7 +211,8 @@ def pytest_runtest_setup(item: "pytest.Item"):
         print(match)
         if not match:
             pytest.fail(
-                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py and be placed in the tests/db folder"
+                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
+                "file might be at the wrong location: must be placed in the tests/db folder "
             )
         timestamp: str = match.group(1)
         test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))
