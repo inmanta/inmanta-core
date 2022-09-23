@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import toml
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -54,7 +55,7 @@ The following fixtures manage test environments:
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
 """
-
+import yaml
 
 import asyncio
 import concurrent
@@ -1619,6 +1620,40 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop(timeout=15)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
+    """
+    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
+    and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
+    """
+    for dir_name in os.listdir(modules_v2_dir):
+        module_path = os.path.join(modules_v2_dir, dir_name)
+        pyproject_toml_path = os.path.join(module_path, "pyproject.toml")
+        error_message = f"""
+Module {module_path} has a pyproject.toml file that is incompatible with the requirements of this test suite.
+The build-backend and the build requirements should be set as follows:
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+All modules present in the tests/data/module_v2 directory should satisfy the above-mentioned requirements, because
+the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
+use the same build-backend and build requirements.
+        """.strip()
+        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+            pyproject_toml_as_dct = toml.load(fh)
+            try:
+                if (
+                    pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or
+                    set(pyproject_toml_as_dct["build-system"]["requires"]) != {"setuptools", "wheel"}
+                ):
+                    raise Exception(error_message)
+            except (KeyError, TypeError):
+                raise Exception(error_message)
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)

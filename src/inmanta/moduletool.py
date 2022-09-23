@@ -39,8 +39,9 @@ import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
 
-import build
+from build.env import IsolatedEnvBuilder
 import build.env
+import build
 import inmanta
 import toml
 from inmanta import env
@@ -972,7 +973,7 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
-class IsolatedEnvBuilderCached(build.env.IsolatedEnvBuilder):
+class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
     """
     An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
     This class is only used by the test suite. It decreases the runtime of the test suite because the build
@@ -981,11 +982,11 @@ class IsolatedEnvBuilderCached(build.env.IsolatedEnvBuilder):
     This class is a singleton. The get_instance() method should be used to obtain an instance of this class.
     """
 
-    _instance: Optional[build.env.IsolatedEnvBuilder] = None
+    _instance: Optional["IsolatedEnvBuilderCached"] = None
 
     def __init__(self) -> None:
         super().__init__()
-        self._isolated_env: Optional[build.env._IsolatedEnvVenvPip] = None
+        self._isolated_env: Optional[build.env.IsolatedEnv] = None
 
     @classmethod
     def get_instance(cls) -> "IsolatedEnvBuilderCached":
@@ -996,19 +997,21 @@ class IsolatedEnvBuilderCached(build.env.IsolatedEnvBuilder):
             cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env._IsolatedEnvVenvPip:
+    def __enter__(self) -> build.env.IsolatedEnv:
         if not self._isolated_env:
             self._isolated_env = super(IsolatedEnvBuilderCached, self).__enter__()
             self._install_build_requirements(self._isolated_env)
             # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
             # This prevents unnecessary pip processes from being spawned.
-            self._isolated_env.install = lambda *args, **kwargs: None
+            setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
         return self._isolated_env
 
-    def _install_build_requirements(self, isolated_env: build.env._IsolatedEnvVenvPip) -> None:
+    def _install_build_requirements(self, isolated_env: build.env.IsolatedEnv) -> None:
         """
         Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
         """
+        # Make mypy happy
+        assert self._isolated_env is not None
         with tempfile.TemporaryDirectory() as tmp_python_project_dir:
             # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
             # So we can safely use the pyproject.toml file below.
@@ -1040,7 +1043,7 @@ build-backend = "setuptools.build_meta"
         Cleanup the cached build environment. It should be called at the end of the test suite.
         """
         if self._isolated_env:
-            super(IsolatedEnvBuilderCached, self).__exit__(exc_type=None, exc_val=None, exc_tb=None)
+            super(IsolatedEnvBuilderCached, self).__exit__(None, None, None)
             self._isolated_env = None
 
 
@@ -1212,7 +1215,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
-    def _get_isolated_env_builder(self) -> "build.env.IsolatedEnvBuilder":
+    def _get_isolated_env_builder(self) -> IsolatedEnvBuilder:
         """
         Returns the IsolatedEnvBuilder instance that should be used to build V2 modules. To speed to up the test
         suite, the build environment is cached when the tests are ran. This is possible because all modules, built
@@ -1222,7 +1225,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE:
             return IsolatedEnvBuilderCached.get_instance()
         else:
-            return build.env.IsolatedEnvBuilder()
+            return IsolatedEnvBuilder()
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
