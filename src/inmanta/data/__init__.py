@@ -2476,6 +2476,7 @@ class Environment(BaseDocument):
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         :param value: The value of the settings. The value should be of type as defined in _settings
         """
+        Environment.flush_cache()
         if key not in self._settings:
             raise KeyError()
         # TODO: convert this to a string
@@ -2505,6 +2506,8 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
+
+        Environment.flush_cache()
 
         if self._settings[key].default is None:
             (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
@@ -5602,7 +5605,7 @@ class ConfigurationModel(BaseDocument):
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
                 # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await ResourceAction.lock_table(TableLockMode.ROW_EXCLUSIVE, connection=con)
+                await ResourceAction.lock_table(TableLockMode.SHARE, connection=con)
                 await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
 
                 # Delete facts when the resources in this version are the only

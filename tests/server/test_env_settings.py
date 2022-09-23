@@ -374,6 +374,7 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     )
     values = [["new_setting"], True, "dev", project_id]
     await Environment._execute_query(setting_db_query, *values)
+    Environment.flush_cache()
 
     result = await client.get_setting(tid=environment, id="a setting")
     assert result.code == 404
