@@ -2677,6 +2677,13 @@ RETURNING last_version;
             return result[0]
         return None
 
+    @classmethod
+    async def close_connection_pool(cls) -> None:
+        """ Flush the cache when the connection is closed
+        """
+        await BaseDocument.close_connection_pool()
+        cls.flush_cache()
+
 
 class Parameter(BaseDocument):
     """
