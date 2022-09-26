@@ -30,7 +30,8 @@ import pytest
 async def test_postgres_cascade_locking_order(postgresql_pool) -> None:
     """
     Verifies that Postgres' cascade deletion acquires locks top-down. This is important because in order to avoid deadlocks
-    we define a corresponding locking order for all transactions. See `inmanta.data.ConfigurationModel` docstring.
+    we define a corresponding locking order for all transactions. See `TableLockMode`, `RowLockMode` and `ConfigurationModel`
+    docstrings in `inmanta.data`.
     """
     async with postgresql_pool.acquire() as connection:
         await connection.execute(

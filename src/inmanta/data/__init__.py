@@ -112,8 +112,10 @@ class TableLockMode(enum.Enum):
     Table level locks as defined in the PostgreSQL docs:
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
     locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
-    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY. See relevant data classes'
-    docstrings for appropriate lock orderings.
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
+
+    In general, locks should be acquired consistently with delete cascade lock order, which is top down. See relevant data
+    classes' docstrings for additional lock orderings where relevant.
 
     Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
     may be extended when a new lock mode is required.
@@ -130,7 +132,9 @@ class RowLockMode(enum.Enum):
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
     When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
     respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-    See relevant data classes' docstrings for appropriate lock orderings.
+
+    In general, locks should be acquired consistently with delete cascade lock order, which is top down. See relevant data
+    classes' docstrings for additional lock orderings where relevant.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -2219,9 +2223,6 @@ class Environment(BaseDocument):
     """
     A deployment environment of a project
 
-    Any transactions that update Environment should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
-
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
@@ -2649,8 +2650,6 @@ RETURNING last_version;
 class Parameter(BaseDocument):
     """
     A parameter that can be used in the configuration model
-    Any transactions that update Parameter should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param name: The name of the parameter
     :param value: The value of the parameter
@@ -3885,8 +3884,6 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
-    Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
@@ -4426,8 +4423,6 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
-    Any transactions that update Resource should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this resource version is defined in
     :param rid: The id of the resource and its version
@@ -5358,11 +5353,9 @@ class Resource(BaseDocument):
 
 @stable_api
 class ConfigurationModel(BaseDocument):
-    # TODO: update locking order, also include Code and Agent which are currently excluded
     """
     A specific version of the configuration model.
-    Any transactions that update ResourceAction, Resource, Environment, Parameter and/or ConfigurationModel
-    should acquire their locks in that order.
+    Any transactions that update Code and ConfigurationModel should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
@@ -5901,6 +5894,9 @@ class ConfigurationModel(BaseDocument):
 class Code(BaseDocument):
     """
     A code deployment
+
+    Any transactions that update Code should adhere to the locking order described in
+    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this code belongs to
     :param version: The version of configuration model it belongs to
