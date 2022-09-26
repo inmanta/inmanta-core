@@ -84,6 +84,15 @@ APILIMIT = 1000
 default_unset = object()
 
 
+"""
+Locking order rules:
+In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
+are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
+as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
+- Code -> ConfigurationModel
+"""
+
+
 @enum.unique
 class QueryType(str, enum.Enum):
     def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
@@ -111,11 +120,8 @@ class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
-    locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
-    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-
-    In general, locks should be acquired consistently with delete cascade lock order, which is top down. See relevant data
-    classes' docstrings for additional lock orderings where relevant.
+    locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
+    the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
 
     Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
     may be extended when a new lock mode is required.
@@ -130,11 +136,9 @@ class TableLockMode(enum.Enum):
 class RowLockMode(enum.Enum):
     """
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
-    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
-    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-
-    In general, locks should be acquired consistently with delete cascade lock order, which is top down. See relevant data
-    classes' docstrings for additional lock orderings where relevant.
+    When acquiring a lock, make sure to use the same locking order accross transactions (as described at the top of this
+    module) to prevent deadlocks and to otherwise respect the consistency docs:
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -1328,7 +1332,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """
         Acquire a table-level lock on a single environment. Callers should adhere to a consistent locking order accross
-        transactions.
+        transactions as described at the top of this module.
         Passing a connection object is mandatory. The connection is expected to be in a transaction.
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
@@ -5355,7 +5359,6 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update Code and ConfigurationModel should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
@@ -5894,9 +5897,6 @@ class ConfigurationModel(BaseDocument):
 class Code(BaseDocument):
     """
     A code deployment
-
-    Any transactions that update Code should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this code belongs to
     :param version: The version of configuration model it belongs to
