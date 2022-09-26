@@ -416,8 +416,8 @@ class Exporter(object):
     def add_resource(self, resource: Resource) -> None:
         """
         Add a new resource to the list of exported resources. When
-        commit_resources is called, the entire list of resources is send
-        to the the server.
+        commit_resources is called, the entire list of resources is sent
+        to the server.
 
         A resource is a map of attributes. This method validates the id
         of the resource and will add a version (if it is not set already)
