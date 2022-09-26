@@ -499,7 +499,7 @@ class PythonEnvironment:
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             allow_pre_releases=allow_pre_releases,
-            constraints_files=["requirements.txt"],
+            constraints_files=constraints_files,
             requirements_files=requirements_files,
         )
 
