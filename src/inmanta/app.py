@@ -96,7 +96,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
     def format(self, record):
         """Format a record with added indentation."""
         indent = " " * self.get_header_length(record)
-        head, *trailing = super().format(record).splitlines(True)
+        head, *trailing = super().format(record).splitlines(keepends=True)
         return head + "".join(indent + line for line in trailing)
 
 
