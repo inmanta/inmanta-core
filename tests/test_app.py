@@ -188,8 +188,8 @@ def test_verify_that_colorama_package_is_not_present():
             False,
             True,
             [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint",
+                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
+                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
             ],
             [],
         ),
@@ -197,8 +197,8 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             False,
             True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
         ),
         (
             3,
@@ -219,8 +219,8 @@ def test_verify_that_colorama_package_is_not_present():
             True,
             True,
             [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint",
+                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
+                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
             ],
             [],
         ),
@@ -228,8 +228,8 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             True,
             True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
         ),
     ],
 )
