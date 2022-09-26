@@ -793,7 +793,6 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
         log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
-        print(timed)
         formatter = MultiLineFormatter(
             log_format,
             datefmt=None,
