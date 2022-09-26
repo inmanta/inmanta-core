@@ -84,6 +84,15 @@ APILIMIT = 1000
 default_unset = object()
 
 
+"""
+Locking order rules:
+In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
+are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
+as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
+- Code -> ConfigurationModel
+"""
+
+
 @enum.unique
 class QueryType(str, enum.Enum):
     def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
@@ -111,9 +120,8 @@ class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
-    locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
-    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY. See relevant data classes'
-    docstrings for appropriate lock orderings.
+    locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
+    the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
 
     Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
     may be extended when a new lock mode is required.
@@ -128,9 +136,9 @@ class TableLockMode(enum.Enum):
 class RowLockMode(enum.Enum):
     """
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
-    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
-    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-    See relevant data classes' docstrings for appropriate lock orderings.
+    When acquiring a lock, make sure to use the same locking order accross transactions (as described at the top of this
+    module) to prevent deadlocks and to otherwise respect the consistency docs:
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -1324,7 +1332,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """
         Acquire a table-level lock on a single environment. Callers should adhere to a consistent locking order accross
-        transactions.
+        transactions as described at the top of this module.
         Passing a connection object is mandatory. The connection is expected to be in a transaction.
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
@@ -2201,9 +2209,6 @@ class Environment(BaseDocument):
     """
     A deployment environment of a project
 
-    Any transactions that update Environment should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
-
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
@@ -2623,8 +2628,6 @@ RETURNING last_version;
 class Parameter(BaseDocument):
     """
     A parameter that can be used in the configuration model
-    Any transactions that update Parameter should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param name: The name of the parameter
     :param value: The value of the parameter
@@ -3859,8 +3862,6 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
-    Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
@@ -4400,8 +4401,6 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
-    Any transactions that update Resource should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this resource version is defined in
     :param rid: The id of the resource and its version
@@ -5334,8 +5333,6 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update ResourceAction, Resource, Environment, Parameter and/or ConfigurationModel
-    should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
@@ -5552,29 +5549,25 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await ResourceAction.lock_table(TableLockMode.ROW_EXCLUSIVE, connection=con)
-                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
-
-                # Delete facts when the resources in this version are the only
-                await con.execute(
-                    f"""
-                    DELETE FROM {Parameter.table_name()} p
-                    WHERE(
-                        environment=$1 AND
-                        resource_id<>'' AND
-                        NOT EXISTS(
-                            SELECT 1
-                            FROM {Resource.table_name()} r
-                            WHERE p.resource_id=r.resource_id
-                        )
-                    )
-                    """,
-                    self.environment,
-                )
-
                 # Delete ConfigurationModel and cascade delete on connected tables
                 await self.delete(connection=con)
+
+            # Delete facts when the resources in this version are the only
+            await con.execute(
+                f"""
+                DELETE FROM {Parameter.table_name()} p
+                WHERE(
+                    environment=$1 AND
+                    resource_id<>'' AND
+                    NOT EXISTS(
+                        SELECT 1
+                        FROM {Resource.table_name()} r
+                        WHERE p.resource_id=r.resource_id
+                    )
+                )
+                """,
+                self.environment,
+            )
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
