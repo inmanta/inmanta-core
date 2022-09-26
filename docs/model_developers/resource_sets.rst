@@ -117,14 +117,16 @@ In this guide, we only cover models where each set of independent resources is d
 will refer to as the "service" or "service entity" (as in ``LSM``). We will use the term "identity" to refer to any set of
 attributes that uniquely identify an instance. In the model this usually corresponds to an index.
 
-When building an inmanta model, all potential instances of a service entity must refine to compatible (low level) config.
-In the model this config is represented by the resources. Therefore these guidelines will focus on creating valid and
+All potential instances of a service entity must be refined to compatible (low level) configuration when creating an Inmanta
+model. In the model this config is represented by the resources. Therefore these guidelines will focus on creating valid and
 compatible resources. With well-designed resources, valid and compatible config will follow.
 
 To safely make use of partial compiles, each service must be the sole owner of its resources and any shared resources must be
 identical across service instances. The graph below pictures a valid service for partial compiles. Each arrow represents a
 refinement: one entity creating another in one of its implementations. The valid service results in fully separate resource
-sets for each instance. Additionally, the one shared resource is created consistently between service instances.
+sets for each instance. Additionally, the one shared resource is created consistently between service instances. For each
+entity type, the ``id`` attribute is assumed to be an identifying attribute for the instance (i.e. there is an index on the
+attribute).
 
 .. digraph:: resource_sets_generic_good
     :caption: A good service for partial compiles.
@@ -315,9 +317,9 @@ because two networks with the same id are defined.
 Ownership
 ---------
 A resource can safely be considered owned by a service instance if it could never be created by another service instance. There
-are two main mechanisms that can be used to provide this guarantee. One is the use of indexes on appropriate locations, the
-other is the use of some external distributor of unique values (e.g. a plugin to generate a UUID or to allocate values in an
-inventory).
+are two main mechanisms that can be used to provide this guarantee, both of which will be described in their own subsection
+below. One is the use of indexes on appropriate locations, the other is the use of some external allocator of unique values
+(e.g. a plugin to generate a UUID or to allocate values in an inventory).
 
 In either case, the goal is to make sure that any object that is marked as owned by a service instance, is unique to that
 instance. In the index case we do so by making sure the object's identity is in fact completely and uniquely derived from the
