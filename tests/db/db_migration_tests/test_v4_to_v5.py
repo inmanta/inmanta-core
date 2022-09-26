@@ -28,38 +28,38 @@ from inmanta.server.bootloader import InmantaBootloader
 
 @pytest.fixture
 @pytest.mark.slowtest
-async def migrate_v5_to_v6(
+async def migrate_v4_to_v5(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
 ) -> AsyncIterator[None]:
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v5.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "../dumps/v4.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
 
     await ibl.start()
-    # When the bootloader is started, it also executes the migration to v6
+    # When the bootloader is started, it also executes the migration to v5
     yield
     await ibl.stop(timeout=15)
 
 
 @pytest.mark.slowtest
-async def test_add_on_delete_cascade_constraint(migrate_v5_to_v6, postgresql_client: Connection) -> None:
-    """
-    Verify that the ON DELETE CASCADE constraint is set correctly on the substitute_compile_id column
-    of the compile table.
-    """
-    # Assert values in substitute_compile_id column are correct
-    compiles = await postgresql_client.fetch("SELECT substitute_compile_id FROM public.compile")
-    assert all([c["substitute_compile_id"] is None for c in compiles])
+async def test_db_migration_compile_data(migrate_v4_to_v5, postgresql_client: Connection) -> None:
+    compiles = await postgresql_client.fetch("SELECT * FROM public.compile;")
+    for c in compiles:
+        assert "substitute_compile_id" in c
+        assert c["substitute_compile_id"] is None
+        assert "compile_data" in c
+        assert c["compile_data"] is None
 
-    # Assert that ON DELETE CASCADE is set the foreign key constraint compile_substitute_compile_id_fkey
-    constraints = await postgresql_client.fetch(
-        """
-            SELECT pg_catalog.pg_get_constraintdef(r.oid, true) as condef
-            FROM pg_catalog.pg_constraint r
-            WHERE conname='compile_substitute_compile_id_fkey'
-        """
-    )
-    assert len(constraints) == 1
-    assert "ON DELETE CASCADE" in constraints[0]["condef"]
+
+@pytest.mark.slowtest
+async def test_db_migration_environment_halt(migrate_v4_to_v5, postgresql_client: Connection) -> None:
+    environments = await postgresql_client.fetch("SELECT * FROM public.environment;")
+    for env in environments:
+        assert "halted" in env
+        assert env["halted"] is False
+    agents = await postgresql_client.fetch("SELECT * FROM public.agent;")
+    for a in agents:
+        assert "unpause_on_resume" in a
+        assert a["unpause_on_resume"] is None

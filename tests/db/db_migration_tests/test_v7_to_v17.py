@@ -37,7 +37,7 @@ async def migrate_v7_to_v17(
     Performs a v7 database restore and migrates to v17.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v7.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "../dumps/v7.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()

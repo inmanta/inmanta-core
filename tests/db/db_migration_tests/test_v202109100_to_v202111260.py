@@ -34,7 +34,7 @@ async def migrate_v202109100_to_v202111260(
     Returns a callable that performs a v202109100 database restore and migrates to v202111260.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202109100.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "../dumps/v202109100.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
