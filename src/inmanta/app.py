@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import traceback
+import typing
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
@@ -47,6 +48,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
+from colorlog.formatter import LogColors, SecondaryLogColors, _FormatStyle
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -75,9 +77,32 @@ LOGGER = logging.getLogger("inmanta")
 class MultiLineFormatter(colorlog.ColoredFormatter):
     """Multi-line formatter."""
 
+    def __init__(
+        self,
+        fmt: typing.Optional[str] = None,
+        datefmt: typing.Optional[str] = None,
+        style: _FormatStyle = "%",
+        log_colors: typing.Optional[LogColors] = None,
+        reset: bool = True,
+        secondary_log_colors: typing.Optional[SecondaryLogColors] = None,
+        validate: bool = True,
+        stream: typing.Optional[typing.IO] = None,
+        no_color: bool = False,
+        force_color: bool = False,
+        defaults: typing.Optional[typing.Mapping[str, typing.Any]] = None,
+        timed: bool = False,
+    ):
+        super().__init__(
+            fmt, datefmt, style, log_colors, reset, secondary_log_colors, validate, stream, no_color, force_color, defaults
+        )
+        self.timed = timed
+
     def get_header_length(self, record):
         """Get the header length of a given record."""
-        header = super().format(
+        log_format = "%(asctime)s " if self.timed else ""
+        log_format += "%(name)-25s%(levelname)-8s%(message)s"
+        formatter = logging.Formatter(fmt=log_format)
+        header = formatter.format(
             logging.LogRecord(
                 name=record.name,
                 level=record.levelno,
@@ -88,16 +113,13 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
                 exc_info=None,
             )
         )
-        len_header = len(header) - 18
-        # 18 is the total length of all the codes used to change the colors in the logs (2 colors "\x1b[3xm" and 2 reset
-        # "\x1b[0m" codes) https://tforgione.fr/posts/ansi-escape-codes/
-        return len_header
+        return len(header)
 
     def format(self, record):
         """Format a record with added indentation."""
         indent = " " * self.get_header_length(record)
-        head, *trailing = super().format(record).splitlines(True)
-        return head + "".join(indent + line for line in trailing)
+        head, *tail = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in tail)
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -770,12 +792,14 @@ def _convert_cli_log_level(level: int) -> int:
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+        print(timed)
         formatter = MultiLineFormatter(
             log_format,
             datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
+            timed=timed,
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
