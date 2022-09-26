@@ -326,3 +326,5 @@ class NotificationSeverity(str, Enum):
 
 
 CF_CACHE_DIR = ".cfcache"
+
+PG_ADVISORY_KEY_PUT_VERSION = 1

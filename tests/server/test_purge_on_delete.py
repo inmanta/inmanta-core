@@ -459,7 +459,12 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # Version 2 with purge_on_delete false
     version = await clienthelper.get_version()

@@ -151,6 +151,8 @@ class CompileRunBase(BaseModel):
     partial: bool = False
     removed_resource_sets: list[str] = []
 
+    exporter_plugin: Optional[str] = None
+
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
 
