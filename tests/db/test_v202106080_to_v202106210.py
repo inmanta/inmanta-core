@@ -27,7 +27,6 @@ from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.fixture
-@pytest.mark.db_migration_test
 async def migrate_v202106080_to_v202106210(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
@@ -45,7 +44,6 @@ async def migrate_v202106080_to_v202106210(
     await ibl.stop(timeout=15)
 
 
-@pytest.mark.db_migration_test
 async def test_add_value_to_resource_table(
     migrate_v202106080_to_v202106210: Callable[[], Awaitable[None]],
     postgresql_client: Connection,

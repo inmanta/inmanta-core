@@ -24,7 +24,6 @@ from inmanta.const import NonDeployingResourceState, ResourceState
 from inmanta.data import Resource
 
 
-@pytest.mark.db_migration_test
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql"))
 async def test_added_last_non_deploying_status_column(
     migrate_db_from: Callable[[], Awaitable[None]],
