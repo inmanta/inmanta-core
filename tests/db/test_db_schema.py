@@ -36,7 +36,6 @@ from inmanta.data.schema import TableNotFound, Version
 from utils import log_contains
 
 
-@pytest.mark.slowtest
 async def run_updates_and_verify(
     get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[Set[int]] = None, prefix: str = ""
 ):
@@ -67,7 +66,6 @@ async def run_updates_and_verify(
     assert set(await get_columns_in_db_table(f"{prefix}tab")) == {"id", "mycolumn"}
 
 
-@pytest.mark.slowtest
 async def get_core_versions(postgresql_client) -> Set[int]:
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
     try:
@@ -76,7 +74,6 @@ async def get_core_versions(postgresql_client) -> Set[int]:
         return set()
 
 
-@pytest.mark.slowtest
 async def assert_core_untouched(postgresql_client, corev: Optional[Set[int]] = None):
     """
     Verify abscence of side-effect leaks to other cases
@@ -88,7 +85,6 @@ async def assert_core_untouched(postgresql_client, corev: Optional[Set[int]] = N
     assert current_db_versions == corev
 
 
-@pytest.mark.slowtest
 async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, caplog):
     with caplog.at_level(logging.INFO):
         dbm = schema.DBSchema("test_dbschema_clean", inmanta.db.versions, postgresql_client)
@@ -101,7 +97,6 @@ async def test_dbschema_clean(postgresql_client: asyncpg.Connection, get_columns
         log_contains(caplog, "inmanta.data.schema.schema:test_dbschema_clean", logging.INFO, "Creating schema version table")
 
 
-@pytest.mark.slowtest
 async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db):
     dbm = schema.DBSchema("test_dbschema_unclean", inmanta.db.versions, postgresql_client)
     await dbm.ensure_self_update()
@@ -115,7 +110,6 @@ async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_colum
     await assert_core_untouched(postgresql_client)
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_legacy_1(
     postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
 ):
@@ -138,7 +132,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     await run_updates_and_verify(get_columns_in_db_table, dbm, set())
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_legacy_2(
     postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
 ):
@@ -161,7 +154,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     await run_updates_and_verify(get_columns_in_db_table, dbm, {0, 1})
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_legacy_contained(
     postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
 ):
@@ -193,7 +185,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     assert await dbm2.get_installed_versions() == {1, 3}
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_legacy_table_concurrent(
     postgres_db, database_name, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
 ):
@@ -235,7 +226,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     assert await dbm2.get_installed_versions() == set()
 
 
-@pytest.mark.slowtest
 async def test_dbschema_ensure_self_update(
     postgresql_client: asyncpg.Connection, get_columns_in_db_table, hard_clean_db, hard_clean_db_post
 ):
@@ -258,7 +248,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     assert await dbm.get_installed_versions() == {1, 3}
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_table, hard_clean_db, hard_clean_db_post):
     db_schema = schema.DBSchema("test_dbschema_update_db_schema", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
@@ -270,7 +259,6 @@ async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_ta
     await run_updates_and_verify(get_columns_in_db_table, db_schema, set(), prefix="c")
 
 
-@pytest.mark.slowtest
 async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
     corev: Set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_update_db_schema_failure", inmanta.db.versions, postgresql_client)
@@ -317,7 +305,6 @@ def make_versions(idx, *fcts):
     return [make_version(idx + i, fct) for i, fct in enumerate(fcts)]
 
 
-@pytest.mark.slowtest
 async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
     corev: Set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_partial_update_db_schema_failure", inmanta.db.versions, postgresql_client)
@@ -367,7 +354,6 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
     await assert_core_untouched(postgresql_client, corev)
 
 
-@pytest.mark.slowtest
 def test_dbschema_get_dct_with_update_functions():
     def disabled(module: types.ModuleType) -> bool:
         try:
@@ -392,7 +378,6 @@ def test_dbschema_get_dct_with_update_functions():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-@pytest.mark.slowtest
 async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
     async with postgresql_pool.acquire() as postgresql_client:
         async with postgresql_pool.acquire() as postgresql_client2:
@@ -461,7 +446,6 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
             await assert_core_untouched(postgresql_client, corev)
 
 
-@pytest.mark.slowtest
 async def test_dbschema_get_dct_filter_disabled():
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, versions, None)
     update_function_map = db_schema._get_update_functions()
@@ -473,7 +457,6 @@ async def test_dbschema_get_dct_filter_disabled():
         assert inspect.getfullargspec(version.function)[0] == ["connection"]
 
 
-@pytest.mark.slowtest
 async def test_dbschema_get_dct_filter_invalid_names(caplog):
     db_schema = schema.DBSchema(CORE_SCHEMA_NAME, invalid_versions, None)
     update_function_map = db_schema._get_update_functions()
