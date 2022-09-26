@@ -22,8 +22,8 @@ especially those that are not explicitly documented anywhere. These tests act bo
 future PostgreSQL versions and as a knowledge collector to refer back to when we need it.
 """
 import asyncio
-import asyncpg
 
+import asyncpg
 import pytest
 
 
