@@ -362,6 +362,24 @@ class PipCommandBuilder:
         )
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
+
+        if requirements_files:
+            log_msg: List[str] = ["Content of requirement files:\n"]
+            for requirements_file in requirements_files:
+                log_msg.append("* " + requirements_file + ": \n")
+                with open(requirements_file) as f:
+                    requirements = f.readlines()
+                    log_msg.extend(map("** {}".format, requirements))
+            LOGGER_PIP.debug("".join(log_msg))
+        if constraints_files:
+            log_msg: List[str] = ["Content of constraint files:\n"]
+            for constraints_file in constraints_files:
+                log_msg.append("* " + constraints_file + ": \n")
+                with open(constraints_file) as f:
+                    constraints = f.readlines()
+                    log_msg.extend(map("** {}".format, constraints))
+            LOGGER_PIP.debug("".join(log_msg))
+
         return [
             python_path,
             "-m",
@@ -481,7 +499,7 @@ class PythonEnvironment:
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
             allow_pre_releases=allow_pre_releases,
-            constraints_files=constraints_files,
+            constraints_files=["requirements.txt"],
             requirements_files=requirements_files,
         )
 
@@ -495,7 +513,6 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
-        print(requirements)
         return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:
