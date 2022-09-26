@@ -156,10 +156,6 @@ def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
         "markers",
         "db_restore_dump(dump): mark the db dump to restore. To be used in conjunction with the `migrate_db_from` fixture.",
     )
-    config.addinivalue_line(
-        "markers",
-        "db_migration_test: mark a test as a migration test to skip it in fast runs once it is older than 30 days",
-    )
 
 
 def pytest_configure(config: "pytest.Config") -> None:
@@ -205,14 +201,14 @@ def pytest_runtest_setup(item: "pytest.Item"):
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
-    if any(True for mark in item.iter_markers(name="db_migration_test")):
-        file_name: str = item.location[0]
+
+    file_name: str = item.location[0]
+    if file_name.startswith("tests/db/"):
         match: str = re.fullmatch("tests/db/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
-        print(match)
         if not match:
             pytest.fail(
                 "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
-                "file might be at the wrong location: must be placed in the tests/db folder "
+                "should have the @slowtest annotation"
             )
         timestamp: str = match.group(1)
         test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))

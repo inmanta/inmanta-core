@@ -22,7 +22,6 @@ from typing import List
 import pytest
 
 
-@pytest.mark.db_migration_test
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v202208180.sql"))
 async def test_added_notification_related_columns_to_compile_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],

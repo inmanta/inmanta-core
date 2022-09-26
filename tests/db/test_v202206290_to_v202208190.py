@@ -21,7 +21,6 @@ from collections import abc
 import pytest
 
 
-@pytest.mark.db_migration_test
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202206290.sql"))
 async def test_added_resource_join_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
