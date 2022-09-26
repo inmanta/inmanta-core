@@ -90,18 +90,15 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         no_color: bool = False,
         force_color: bool = False,
         defaults: typing.Optional[typing.Mapping[str, typing.Any]] = None,
-        timed: bool = False,
     ):
         super().__init__(
             fmt, datefmt, style, log_colors, reset, secondary_log_colors, validate, stream, no_color, force_color, defaults
         )
-        self.timed = timed
+        self.fmt = fmt
 
     def get_header_length(self, record):
         """Get the header length of a given record."""
-        log_format = "%(asctime)s " if self.timed else ""
-        log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = logging.Formatter(fmt=log_format)
+        formatter = colorlog.ColoredFormatter(fmt=self.fmt, reset=False, force_color=False, no_color=True)
         header = formatter.format(
             logging.LogRecord(
                 name=record.name,
@@ -798,11 +795,16 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
             datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
-            timed=timed,
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = logging.Formatter(fmt=log_format)
+        formatter = MultiLineFormatter(
+            log_format,
+            reset=False,
+            force_color=False,
+            no_color=True,
+            datefmt=None,
+        )
     return formatter
 
 
