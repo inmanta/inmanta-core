@@ -45,7 +45,6 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     language
     moduleguides
     model_developers
-    resource_sets
     platform_developers
     administrators
     extensions
