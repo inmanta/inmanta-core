@@ -3461,6 +3461,7 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param exporter_plugin: Specific exporter plugin to use
     :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
         By default, notifications are enabled only for exporting compiles.
     :param failed_compile_message: Optional message to use when a notification for a failed compile is created
@@ -3492,6 +3493,8 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    exporter_plugin: Optional[str] = None
 
     notify_failed_compile: Optional[bool] = None
     failed_compile_message: Optional[str] = None
@@ -3811,6 +3814,7 @@ class Compile(BaseDocument):
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
+            exporter_plugin=self.exporter_plugin,
         )
 
 
