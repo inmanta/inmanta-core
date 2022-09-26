@@ -733,7 +733,7 @@ class OrchestrationService(protocol.ServerSlice):
             result.append(unknown_parameter)
         return result
 
-    async def _put_version_lock(env: data.Environment, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+    async def _put_version_lock(self, env: data.Environment, *, shared: bool = False, connection: asyncpg.Connection) -> None:
         """
         Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
 
