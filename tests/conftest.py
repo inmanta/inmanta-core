@@ -198,8 +198,8 @@ def pytest_runtest_setup(item: "pytest.Item"):
         pytest.skip("Skipping slow tests")
 
     file_name: str = item.location[0]
-    if file_name.startswith("tests/db/"):
-        match: Optional[re.Match] = re.fullmatch("tests/db/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+    if file_name.startswith("tests/db/migration_tests"):
+        match: Optional[re.Match] = re.fullmatch("tests/db/migration_tests/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
         if not match:
             pytest.fail(
                 "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
