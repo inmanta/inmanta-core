@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import pytest
 from asyncpg import Connection
 
 from db.common import PGRestore
