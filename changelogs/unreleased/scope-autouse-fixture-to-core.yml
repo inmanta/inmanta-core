@@ -1,0 +1,4 @@
+---
+description: Ensure that the autouse fixture `guard_invariant_on_v2_modules_in_data_dir` only activates on core and not on the extensions.
+change-type: patch
+destination-branches: [master, iso5]

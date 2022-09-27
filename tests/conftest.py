@@ -1623,7 +1623,7 @@ async def migrate_db_from(
     await bootloader.stop(timeout=15)
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
     """
     When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
