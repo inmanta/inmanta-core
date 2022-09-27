@@ -35,7 +35,7 @@ from inmanta.data import model
 from inmanta.protocol.common import Result
 
 
-def slowdown_queries(monkeypatch, delay: int = 1) -> None:
+def slowdown_queries(monkeypatch, delay: float = 1) -> None:
     """
     Introduces an artificial delay after each query execution through data.Document in order to increase the likelyhood of
     concurrent transactions.
@@ -64,7 +64,8 @@ def slowdown_queries(monkeypatch, delay: int = 1) -> None:
 
 
 @pytest.mark.slowtest
-async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environment: str, agent) -> None:
+@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
+async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environment: str, agent, endpoint_to_use: str) -> None:
     """
     Verify that no deadlock exists between the delete of a version and the deploy_done (background task) on that same version.
     """
@@ -105,22 +106,43 @@ async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environm
     # artificially slow down queries to increase deadlock probability
     slowdown_queries(monkeypatch)
 
-    # request deploy_done
-    now: datetime.datetime = datetime.datetime.now()
-    deploy_done: abc.Awaitable[Result] = agent._client.resource_deploy_done(
-        tid=env_id,
-        rvid=resource,
-        action_id=action_id,
-        status=const.ResourceState.deployed,
-        messages=[
-            model.LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
-            model.LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
-        ],
-        changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
-        change=const.Change.purged,
-    )
     # request delete
     delete: abc.Awaitable[Result] = client.delete_version(tid=environment, id=version)
+    # request deploy_done
+    now: datetime.datetime = datetime.datetime.now()
+    deploy_done: abc.Awaitable[Result]
+    if endpoint_to_use == "resource_deploy_done":
+        deploy_done = agent._client.resource_deploy_done(
+            tid=env_id,
+            rvid=resource,
+            action_id=action_id,
+            status=const.ResourceState.deployed,
+            messages=[
+                model.LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
+                model.LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
+            ],
+            changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
+            change=const.Change.purged,
+        )
+    elif endpoint_to_use == "resource_action_update":
+        deploy_done = agent._client.resource_action_update(
+            tid=env_id,
+            resource_ids=[resource],
+            action_id=action_id,
+            action=const.ResourceAction.deploy,
+            started=None,
+            finished=now,
+            status=const.ResourceState.deployed,
+            messages=[
+                data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
+                data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
+            ],
+            changes={resource: {"attr1": model.AttributeStateChange(current=None, desired="test")}},
+            change=const.Change.purged,
+            send_events=True,
+        )
+    else:
+        raise ValueError("Unknown value for endpoint_to_use parameter")
 
     # wait for both concurrent requests
     results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete)
@@ -130,4 +152,4 @@ async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environm
     assert delete_result.code == 200, delete_result.result
 
 
-# TODO: add test case for other two deadlocks
+# TODO: add test case for other deadlocks
