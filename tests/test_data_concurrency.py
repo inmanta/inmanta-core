@@ -21,5 +21,113 @@ This module contains tests related to database concurrency issues. Whenever we f
 or deadlock related, a test should be added to ensure this occurence can not accidentally be introduced again.
 """
 
+import asyncio
+import asyncpg
+import datetime
+import uuid
+from collections import abc
+from typing import TypeVar
 
-# TODO: add tests for known deadlocks
+import pytest
+
+from inmanta import const, data
+from inmanta.data import model
+from inmanta.protocol.common import Result
+
+
+def slowdown_queries(monkeypatch, delay: int = 1) -> None:
+    """
+    Introduces an artificial delay after each query execution through data.Document in order to increase the likelyhood of
+    concurrent transactions.
+    """
+    F = TypeVar("F", bound=abc.Coroutine)
+
+    def patch_classmethod(method: F) -> F:
+        @classmethod
+        async def patched(cls, *args, **kwargs) -> object:
+            # call unbound original method with cls object bound to the patched method
+            result: object = await method.__func__(cls, *args, **kwargs)
+            await asyncio.sleep(delay)
+            return result
+        return patched
+
+    for query_func in (
+        "select_query",
+        "_fetchval",
+        "_fetch_int",
+        "_fetchrow",
+        "_fetch_query",
+        "_execute_query",
+        "insert_many",
+    ):
+        monkeypatch.setattr(data.BaseDocument, query_func, patch_classmethod(getattr(data.BaseDocument, query_func)))
+
+
+@pytest.mark.slowtest
+async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environment: str, agent) -> None:
+    """
+    Verify that no deadlock exists between the delete of a version and the deploy_done (background task) on that same version.
+    """
+    env_id: uuid.UUID = uuid.UUID(environment)
+
+    version: int = 1
+    await data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    ).insert()
+
+    resource = model.ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.available,
+        resource_version_id=resource,
+        attributes={"purge_on_delete": False, "purged": True, "requires": []},
+    ).insert()
+
+    # Add parameter for resource
+    parameter_id = "test_param"
+    result = await client.set_param(
+        tid=env_id,
+        id=parameter_id,
+        source=const.ParameterSource.user,
+        value="val",
+        resource_id="std::File[agent1,path=/etc/file1]",
+    )
+    assert result.code == 200
+
+    action_id = uuid.uuid4()
+    result = await agent._client.resource_deploy_start(tid=env_id, rvid=resource, action_id=action_id)
+    assert result.code == 200, result.result
+
+    # artificially slow down queries to increase deadlock probability
+    slowdown_queries(monkeypatch)
+
+    # request deploy_done
+    now: datetime.datetime = datetime.datetime.now()
+    deploy_done: abc.Awaitable[Result] = agent._client.resource_deploy_done(
+        tid=env_id,
+        rvid=resource,
+        action_id=action_id,
+        status=const.ResourceState.deployed,
+        messages=[
+            model.LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
+            model.LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
+        ],
+        changes={"attr1": model.AttributeStateChange(current=None, desired="test")},
+        change=const.Change.purged,
+    )
+    # request delete
+    delete: abc.Awaitable[Result] = client.delete_version(tid=environment, id=version)
+
+    # wait for both concurrent requests
+    results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete)
+    # deploy_done will fail if delete wins the race. This is expected so we only make sure the delete doesn't fail
+    # with a deadlock.
+    delete_result: Result = results[1]
+    assert delete_result.code == 200, delete_result.result
+
+
+# TODO: add test case for other two deadlocks
