@@ -451,7 +451,7 @@ def resource_action_update(
     action: const.ResourceAction,
     started: datetime.datetime = None,
     finished: datetime.datetime = None,
-    status: const.ResourceState = None,
+    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
     messages: list = [],
     changes: dict = {},
     change: const.Change = None,
@@ -536,7 +536,8 @@ def put_version(
     :param tid: The id of the environment
     :param version: The version of the configuration model
     :param resources: A list of all resources in the configuration model (deployable)
-    :param resource_state: A dictionary with the initial const.ResourceState per resource id
+    :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
+                           to undefined when the resource depends on an unknown or available when it doesn't.
     :param unknowns: A list of unknown parameters that caused the model to be incomplete
     :param version_info: Module version information
     :param compiler_version: version of the compiler, if not provided, this call will return an error
@@ -794,21 +795,6 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
 
 
-# Upload code to the server
-
-
-@method(path="/code/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
-def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
-    """
-    Upload the supporting code to the server
-
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
-    :param sources: The source files that contain handlers and inmanta plug-ins
-        {code_hash:(file_name, provider.__module__, source_code, [req])}
-    """
-
-
 @method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
@@ -817,9 +803,6 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
     :param tid: The environment the code belongs to
     :param id: The id (version) of the configuration model
     """
-
-
-# Upload code to the server
 
 
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])

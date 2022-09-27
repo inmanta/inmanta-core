@@ -182,7 +182,7 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         """
     )
     config.Config.set("unknown_handler", "default", "prune-resource")
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3
     assert len([x for x in status.values() if x == const.ResourceState.available]) == 2
@@ -256,7 +256,7 @@ import exp
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
 
@@ -269,7 +269,7 @@ import exp
 a = exp::Test2(mydict={"a": null}, mylist=["a",null])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
     json_dict = snippetcompiler.get_exported_json()
@@ -288,7 +288,7 @@ a = exp::Test2(mydict={"a": tests::unknown()}, mylist=["a"])
 b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 2
     assert status["exp::Test2[agenta,name=ida]"] == ResourceState.undefined
@@ -482,14 +482,13 @@ class Res(Resource):
 entity Res extends std::Resource:
     string name
 end
-
 implement Res using std::none
-
 a = Res(name="the_resource_a")
 b = Res(name="the_resource_b")
 c = Res(name="the_resource_c")
 d = Res(name="the_resource_d")
 e = Res(name="the_resource_e")
+y = Res(name="the_resource_y")
 z = Res(name="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
@@ -505,6 +504,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_c": "resource_set_1",
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
+            "the_resource_y": None,
             "the_resource_z": None,
         },
     )
@@ -515,12 +515,13 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     entity Res extends std::Resource:
         string name
     end
-
     implement Res using std::none
-
     a = Res(name="the_resource_a")
     c2 = Res(name="the_resource_c2")
     f = Res(name="the_resource_f")
+    # y is a shared resource, identical to the one in previous compile
+    y = Res(name="the_resource_y")
+    # z is a shared resource not present in this model
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
             """,
@@ -535,6 +536,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_d": "resource_set_3",
             "the_resource_e": "resource_set_3",
             "the_resource_f": "resource_set_4",
+            "the_resource_y": None,
             "the_resource_z": None,
         },
     )
@@ -603,8 +605,8 @@ implement std::Resource using std::none
     cwd = snippetcompiler.project_dir
 
     msg: str = (
-        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSets std::ResourceSet "
-        f"(instantiated at {cwd}/main.cf:2) but will not be exported."
+        f"resource std::Resource (instantiated at {cwd}/main.cf:2) is part of ResourceSet resource_set_1 "
+        f"but will not be exported."
     )
 
     log_sequence = LogSequence(caplog)

@@ -21,6 +21,7 @@ import datetime
 import inspect
 import logging
 import os
+import py_compile
 import re
 import shutil
 import subprocess
@@ -30,7 +31,8 @@ import time
 import zipfile
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
 
 import texttable
 import yaml
@@ -39,7 +41,9 @@ from pkg_resources import parse_version
 
 import build
 import build.env
+import inmanta
 import toml
+from build.env import IsolatedEnvBuilder
 from inmanta import env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -341,7 +345,7 @@ compatible with the dependencies specified by the updated modules.
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
             v2_python_specs: List[Requirement] = [
-                ModuleV2Source.get_python_package_requirement(module_spec)
+                module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
                 if module in v2_modules
@@ -568,6 +572,14 @@ mode.
             default=False,
             action="store_true",
         )
+        build.add_argument(
+            "-b",
+            "--byte-code",
+            help="Produce a module wheel that contains only python bytecode for the plugins.",
+            action="store_true",
+            default=False,
+            dest="byte_code",
+        )
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
 
@@ -618,7 +630,9 @@ mode.
             raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
         ModuleConverter(module).convert_in_place()
 
-    def build(self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False) -> str:
+    def build(
+        self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
+    ) -> str:
         """
         Build a v2 module and return the path to the build artifact.
         """
@@ -635,9 +649,9 @@ mode.
         if isinstance(module, ModuleV1):
             with tempfile.TemporaryDirectory() as tmpdir:
                 ModuleConverter(module).convert(tmpdir)
-                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build)
+                return V2ModuleBuilder(tmpdir).build(output_dir, dev_build=dev_build, byte_code=byte_code)
         else:
-            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build)
+            return V2ModuleBuilder(path).build(output_dir, dev_build=dev_build, byte_code=byte_code)
 
     def get_project_for_module(self, module: str) -> Project:
         try:
@@ -959,7 +973,84 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
+class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
+    """
+    An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
+    This class is only used by the test suite. It decreases the runtime of the test suite because the build
+    environment is reused across test cases.
+
+    This class is a singleton. The get_instance() method should be used to obtain an instance of this class.
+    """
+
+    _instance: Optional["IsolatedEnvBuilderCached"] = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._isolated_env: Optional[build.env.IsolatedEnv] = None
+
+    @classmethod
+    def get_instance(cls) -> "IsolatedEnvBuilderCached":
+        """
+        This method should be used to obtain an instance of this class, because this class is a singleton.
+        """
+        if not cls._instance:
+            cls._instance = cls()
+        return cls._instance
+
+    def __enter__(self) -> build.env.IsolatedEnv:
+        if not self._isolated_env:
+            self._isolated_env = super(IsolatedEnvBuilderCached, self).__enter__()
+            self._install_build_requirements(self._isolated_env)
+            # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
+            # This prevents unnecessary pip processes from being spawned.
+            setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
+        return self._isolated_env
+
+    def _install_build_requirements(self, isolated_env: build.env.IsolatedEnv) -> None:
+        """
+        Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
+        """
+        # Make mypy happy
+        assert self._isolated_env is not None
+        with tempfile.TemporaryDirectory() as tmp_python_project_dir:
+            # All modules in the tests/data/modules_v2 directory have the same pyproject.toml file.
+            # So we can safely use the pyproject.toml file below.
+            pyproject_toml_path = os.path.join(tmp_python_project_dir, "pyproject.toml")
+            with open(pyproject_toml_path, "w", encoding="utf-8") as fh:
+                fh.write(
+                    """
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+                """
+                )
+            builder = build.ProjectBuilder(
+                srcdir=tmp_python_project_dir,
+                python_executable=self._isolated_env.executable,
+                scripts_dir=self._isolated_env.scripts_dir,
+            )
+            isolated_env.install(builder.build_system_requires)
+            isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
+
+    def __exit__(
+        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
+    ) -> None:
+        # Ignore implementation from the super class to keep the environment
+        pass
+
+    def destroy(self) -> None:
+        """
+        Cleanup the cached build environment. It should be called at the end of the test suite.
+        """
+        if self._isolated_env:
+            super(IsolatedEnvBuilderCached, self).__exit__(None, None, None)
+            self._isolated_env = None
+
+
 class V2ModuleBuilder:
+
+    DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
+
     def __init__(self, module_path: str) -> None:
         """
         :raises InvalidModuleException: The given module_path doesn't reference a valid module.
@@ -967,13 +1058,16 @@ class V2ModuleBuilder:
         """
         self._module = ModuleV2(project=None, path=os.path.abspath(module_path))
 
-    def build(self, output_directory: str, dev_build: bool = False) -> str:
+    def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
         Build the module and return the path to the build artifact.
+
+        :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
         if os.path.exists(output_directory):
             if not os.path.isdir(output_directory):
                 raise ModuleBuildFailedError(msg=f"Given output directory is not a directory: {output_directory}")
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy module to temporary directory to perform the build
             build_path = os.path.join(tmpdir, "module")
@@ -982,6 +1076,9 @@ class V2ModuleBuilder:
                 self._add_dev_build_tag_to_setup_cfg(build_path)
             self._ensure_plugins(build_path)
             self._move_data_files_into_namespace_package_dir(build_path)
+            if byte_code:
+                self._byte_compile_code(build_path)
+
             path_to_wheel = self._build_v2_module(build_path, output_directory)
             self._verify_wheel(build_path, path_to_wheel)
             return path_to_wheel
@@ -1003,6 +1100,53 @@ class V2ModuleBuilder:
         # Write file back
         with open(path_setup_cfg, "w") as fh:
             config_in.write(fh)
+
+    def _byte_compile_code(self, build_path: str) -> None:
+        # Backup src dir and replace .py files with .pyc files
+        for root, dirs, files in os.walk(os.path.join(build_path, "inmanta_plugins"), followlinks=True):
+            for current_file in [f for f in files if f.endswith(".py")]:
+                py_file = os.path.join(root, current_file)
+                pyc_file = f"{py_file}c"
+                py_compile.compile(file=py_file, cfile=pyc_file, doraise=True)
+                os.remove(py_file)
+
+        # Make sure there is a pyc line in the manifest.in
+        with open(os.path.join(build_path, "MANIFEST.in"), "r+", encoding="utf-8") as fh:
+            content = fh.read()
+            # Make sure that there is at least one .pyc include
+            if ".pyc" not in content:
+                # Add it to the manifest. The read has moved the pointer to the end of the file
+                LOGGER.info("Adding .pyc include line to the MANIFEST")
+                fh.write("\nrecursive-include inmanta_plugins *.pyc\n")
+                fh.write("global-exclude */__pycache__/*\n")
+
+        # For wheel to build a non universal python wheel we need to trick it into thinking it contains
+        # compiled extensions against a specific python ABI. If not we might install this wheel on a python with incompatible
+        # python code
+        dummy_file = os.path.join(build_path, "inmanta_plugins", self._module.name, "_cdummy.c")
+        with open(dummy_file, "w") as fd:
+            fd.write("// Dummy python file")
+
+        setup_file = os.path.join(build_path, "setup.py")
+        if os.path.exists(setup_file):
+            LOGGER.warning("This command will overwrite setup.py to make sure a correct wheel is generated.")
+
+        with open(os.path.join(build_path, "setup.py"), "w") as fd:
+            fd.write(
+                f"""
+from distutils.core import setup
+from Cython.Build import cythonize
+setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
+    version="{self._module.version}",
+    ext_modules=cythonize("inmanta_plugins/{self._module.name}/_cdummy.c"),
+)
+            """
+            )
+
+        # make sure cython is in the pyproject.toml
+        pyproject = ModuleConverter.get_pyproject(build_path, build_requires=["wheel", "setuptools", "cython"])
+        with open(os.path.join(build_path, "pyproject.toml"), "w") as fh:
+            fh.write(pyproject)
 
     def _verify_wheel(self, build_path: str, path_to_wheel: str) -> None:
         """
@@ -1071,12 +1215,24 @@ class V2ModuleBuilder:
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
+    def _get_isolated_env_builder(self) -> IsolatedEnvBuilder:
+        """
+        Returns the IsolatedEnvBuilder instance that should be used to build V2 modules. To speed to up the test
+        suite, the build environment is cached when the tests are ran. This is possible because all modules, built
+        by the test suite, have the same build requirements. For tests that need to test the code path used in
+        production, the V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE flag can be set to True.
+        """
+        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE:
+            return IsolatedEnvBuilderCached.get_instance()
+        else:
+            return IsolatedEnvBuilder()
+
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
         Build v2 module using PEP517 package builder.
         """
         try:
-            with build.env.IsolatedEnvBuilder() as env:
+            with self._get_isolated_env_builder() as env:
                 distribution = "wheel"
                 builder = build.ProjectBuilder(srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir)
                 env.install(builder.build_system_requires)
@@ -1119,16 +1275,19 @@ class ModuleConverter:
         if os.path.exists(os.path.join(output_directory, "inmanta_plugins")):
             raise CLIException("inmanta_plugins folder already exists, aborting. Please remove/rename this file", exitcode=1)
 
+        if os.path.exists(os.path.join(output_directory, "setup.py")):
+            raise CLIException(
+                f"Cannot convert v1 module at {output_directory} to v2 because a setup.py file is present."
+                " Please remove/rename this file",
+                exitcode=1,
+            )
+
         setup_cfg = self.get_setup_cfg(output_directory, warn_on_merge=True)
         self._do_update(output_directory, setup_cfg, warn_on_merge=True)
 
     def _do_update(self, output_directory: str, setup_cfg: ConfigParser, warn_on_merge: bool = False) -> None:
         # remove module.yaml
         os.remove(os.path.join(output_directory, self._module.MODULE_FILE))
-        # remove requirements.txt
-        req = os.path.join(output_directory, "requirements.txt")
-        if os.path.exists(req):
-            os.remove(req)
         # move plugins or create
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
@@ -1160,7 +1319,8 @@ graft inmanta_plugins/{self._module.name}/templates
                 + "\n"
             )
 
-    def get_pyproject(self, in_folder: str, warn_on_merge: bool = False) -> str:
+    @classmethod
+    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:
         """
         Adds this to the existing config
 
@@ -1168,6 +1328,9 @@ graft inmanta_plugins/{self._module.name}/templates
         requires = ["setuptools", "wheel"]
         build-backend = "setuptools.build_meta"
         """
+        if build_requires is None:
+            build_requires = ["setuptools", "wheel"]
+
         config_in = {}
         if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
             with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
@@ -1198,7 +1361,7 @@ graft inmanta_plugins/{self._module.name}/templates
                     exitcode=1,
                 )
 
-        for req in ["setuptools", "wheel"]:
+        for req in build_requires:
             if req not in requires:
                 requires.append(req)
         build_system["build-backend"] = "setuptools.build_meta"
@@ -1226,7 +1389,7 @@ graft inmanta_plugins/{self._module.name}/templates
         ]
         python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
-            requires: List[str] = sorted([str(ModuleV2Source.get_python_package_requirement(r)) for r in module_requirements])
+            requires: List[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
             requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 

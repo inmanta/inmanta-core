@@ -1,0 +1,4 @@
+---
+description: Fix issue where the test suite didn't correctly cleanup editable installs
+change-type: patch
+destination-branches: [master, iso5]

@@ -35,7 +35,7 @@ from pkg_resources import Requirement
 
 from inmanta import env, loader, module
 from packaging import version
-from utils import LogSequence
+from utils import LogSequence, PipIndex, create_python_package
 
 if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
     pytest.skip(
@@ -45,6 +45,32 @@ if "inmanta-core" in env.process_env.get_installed_packages(only_editable=True):
         "on the python package repository.",
         allow_module_level=True,
     )
+
+
+def test_venv_pyton_env_empty_string(tmpdir):
+    """test that an exception is raised if the venv path is an empty string"""
+    with pytest.raises(ValueError) as e:
+        env.VirtualEnv("")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    venv1 = env.VirtualEnv(env_dir1)
+    venv1.use_virtual_env()
+
+    env_dir2 = tmpdir.mkdir("env2").strpath
+    venv2 = env.VirtualEnv(env_dir2)
+    venv2.env_path = ""
+    with pytest.raises(Exception) as e:
+        venv2.use_virtual_env()
+    assert e.value.args[0] == "The env_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(python_path="")
+    assert e.value.args[0] == "The python_path cannot be an empty string."
+
+    with pytest.raises(ValueError) as e:
+        env.PythonEnvironment(env_path="")
+    assert e.value.args[0] == "The env_path cannot be an empty string."
 
 
 def test_basic_install(tmpdir):
@@ -419,8 +445,11 @@ def test_active_env_check_basic(
     assert_all_checks()
     create_install_package("test-package-one", version.Version("2.0.0"), [])
     assert_all_checks(
-        expect_test=(False, "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0"),
-        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0"),
+        expect_test=(
+            False,
+            "Incompatibility between constraint test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)",
+        ),
+        expect_nonext=(True, error_msg + " test-package-one~=1.0 and installed version 2.0.0 (from test-package-two)"),
     )
 
 
@@ -443,9 +472,26 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
+    # Add an unrelated package to the venv, that should not matter
+    # setup for #4761
+    caplog.clear()
+    create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
+    env.ActiveEnv.check(in_scope, constraints)
+    assert "Incompatibility between constraint" not in caplog.text
+
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
     create_install_package("test-package-one", v, [])
+    # test for #4761
+    # without additional constrain, this is not a hard failure
+    # except for the unrelated package, which should produce a warning
+    env.ActiveEnv.check(in_scope, [])
+    assert (
+        "Incompatibility between constraint test-package-one==1.0 and installed version 2.0.0 (from ext-package-one)"
+        in caplog.text
+    )
+
+    caplog.clear()
     with pytest.raises(env.ConflictingRequirements):
         env.ActiveEnv.check(in_scope, constraints)
 
@@ -554,3 +600,38 @@ def test_basic_logging(tmpdir, caplog):
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
         log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+
+
+def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit: env.VirtualEnv) -> None:
+    """
+    Ensure that the `ActiveEnv.are_installed()` method doesn't go into an infinite loop when there is a circular dependency
+    involving an extra.
+
+    Dependency loop:
+        pkg[optional]
+           -> dep[optional]
+               -> pkg[optional]
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-pkg": [Requirement.parse("dep[optional-dep]")],
+        },
+    )
+    create_python_package(
+        name="dep",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "dep"),
+        publish_index=pip_index,
+        optional_dependencies={
+            "optional-dep": [Requirement.parse("pkg[optional-pkg]")],
+        },
+    )
+
+    requirements = [Requirement.parse("pkg[optional-pkg]")]
+    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    assert tmpvenv_active_inherit.are_installed(requirements=requirements)

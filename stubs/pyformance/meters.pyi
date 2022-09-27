@@ -3,9 +3,11 @@ from typing import Union, Callable
 
 class Gauge(object):
 
-    def get_value(self) -> Union[float, int, str, bool]: ...
+    # The code can handle string and bool as well
+    # but influxdb can not
+    def get_value(self) -> Union[float, int]: ...
 
 class CallbackGauge(Gauge):
 
-    def __init__(self, callback: Callable[[],Union[float, int, str, bool]]) -> None: ...
+    def __init__(self, callback: Callable[[],Union[float, int]]) -> None: ...
 
