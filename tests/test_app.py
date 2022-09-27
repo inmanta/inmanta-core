@@ -360,8 +360,8 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath}, killtime=15, termtime=10)
     assert "inmanta                  ERROR   Server setup failed" in stdout
     assert (
-        "inmanta.server.protocol.SliceStartupException: "
-        "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
+        "                                 " + "inmanta.server.protocol.SliceStartupException: Slice badplugin.badslice "
+        "failed to start because: Too bad, this plugin is broken"
     ) in stdout
     assert code == 4
 
