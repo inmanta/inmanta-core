@@ -34,6 +34,7 @@ from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
 from subprocess import CalledProcessError
+from textwrap import indent
 from typing import Any, Dict, Iterator, List, Mapping, NamedTuple, Optional, Pattern, Sequence, Set, Tuple, TypeVar
 
 import pkg_resources
@@ -363,22 +364,20 @@ class PipCommandBuilder:
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
 
+        def log_content_file(name: str, files: List[str]):
+            log_msg: List[str] = [f"Content of {name}:\n"]
+            indentation: str = "    "
+            for file in files:
+                log_msg.append(indent(file + ": \n", indentation))
+                with open(file) as f:
+                    req = f.readlines()
+                    log_msg.extend(map(indent, req, [2 * indentation] * len(req)))
+            LOGGER_PIP.debug("".join(log_msg))
+
         if requirements_files:
-            log_msg: List[str] = ["Content of requirement files:\n"]
-            for requirements_file in requirements_files:
-                log_msg.append("* " + requirements_file + ": \n")
-                with open(requirements_file) as f:
-                    requirements = f.readlines()
-                    log_msg.extend(map("** {}".format, requirements))
-            LOGGER_PIP.debug("".join(log_msg))
+            log_content_file("requirements files", requirements_files)
         if constraints_files:
-            log_msg: List[str] = ["Content of constraint files:\n"]
-            for constraints_file in constraints_files:
-                log_msg.append("* " + constraints_file + ": \n")
-                with open(constraints_file) as f:
-                    constraints = f.readlines()
-                    log_msg.extend(map("** {}".format, constraints))
-            LOGGER_PIP.debug("".join(log_msg))
+            log_content_file("constraints files", constraints_files)
 
         return [
             python_path,

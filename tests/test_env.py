@@ -635,3 +635,13 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
     requirements = [Requirement.parse("pkg[optional-pkg]")]
     tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
+
+
+def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
+    """
+    Verify the logs of a pip install
+    """
+    caplog.set_level(logging.DEBUG)
+    caplog.clear()
+    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    assert "Incompatibility between constraint" not in caplog.text
