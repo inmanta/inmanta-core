@@ -53,7 +53,7 @@ simple_project_dir = os.path.join(data_dir, "simple_project")
 db_common_py = os.path.join(db_dir, "common.py")
 dest_db_common_py = os.path.join(dest_db_dir, "common.py")
 dump_tool_py = os.path.join(db_dir, "dump_tool.py")
-dest_dump_tool_py = os.path.join(dest_db_dir, "dump_tool.py")
+dest_dump_tool_py = os.path.join(dest_db_dir, "migration_tests", "dump_tool.py")
 dest_simple_project_dir = os.path.join(dest_db_dir, "simple_project")
 
 
