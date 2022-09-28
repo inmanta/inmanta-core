@@ -364,7 +364,7 @@ class PipCommandBuilder:
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
 
-        def log_content_files(title: str, files: List[str]):
+        def log_content_files(title: str, files: List[str]) -> None:
             """
             Log the content of a list of files with indentations in the following format:
 
