@@ -1,0 +1,4 @@
+description: Improve the logging of the pip install command
+issue-nr: 4651
+change-type: patch
+destination-branches: [master, iso5]
