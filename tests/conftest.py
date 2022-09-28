@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import toml
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -55,12 +56,10 @@ The deactive_venv autouse fixture cleans up all venv activation and resets inman
 environment.
 """
 
-
 import asyncio
 import concurrent
 import csv
 import datetime
-import importlib.util
 import json
 import logging
 import os
@@ -79,8 +78,7 @@ import traceback
 import uuid
 import venv
 from configparser import ConfigParser
-from types import ModuleType
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import asyncpg
 import pkg_resources
@@ -107,10 +105,10 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
-from inmanta.env import LocalPackagePath
-from inmanta.export import cfg_env, unknown_parameters
+from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -119,6 +117,7 @@ from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from libpip2pi.commands import dir2pi
+from packaging.version import Version
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -131,7 +130,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes]
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -190,13 +189,27 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 
 def pytest_runtest_setup(item: "pytest.Item"):
     """
-    When in fast mode, skip test marked as slow
+    When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
     """
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
+
+    file_name: str = item.location[0]
+    if file_name.startswith("tests/db/migration_tests"):
+        match: Optional[re.Match] = re.fullmatch("tests/db/migration_tests/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+        if not match:
+            pytest.fail(
+                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
+                "should have the @slowtest annotation"
+            )
+        timestamp: str = match.group(1)
+        test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))
+        elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
+        if elapsed_days > 30:
+            pytest.skip("Skipping old migration test")
 
 
 @pytest.fixture(scope="session")
@@ -436,11 +449,13 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     return f
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
     old_path = list(sys.path)
+    old_meta_path = sys.meta_path.copy()
+    old_path_hooks = sys.path_hooks.copy()
     old_pythonpath = os.environ.get("PYTHONPATH", None)
     old_os_venv: Optional[str] = os.environ.get("VIRTUAL_ENV", None)
     old_process_env: str = env.process_env.python_path
@@ -454,6 +469,13 @@ def deactive_venv():
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
+    # reset sys.meta_path because it might contain finders for editable installs, make sure to keep the same object
+    sys.meta_path.clear()
+    sys.meta_path.extend(old_meta_path)
+    sys.path_hooks.clear()
+    sys.path_hooks.extend(old_path_hooks)
+    # Clear cache for sys.path_hooks
+    sys.path_importer_cache.clear()
     pkg_resources.working_set = old_working_set
     # Restore PYTHONPATH
     if old_pythonpath is not None:
@@ -475,17 +497,28 @@ def reset_metrics():
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def clean_reset(create_db, clean_db):
+async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
     loader.unload_inmanta_plugins()
+    default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
     reset_all_objects()
     loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
+    data.Environment._settings = default_settings
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_reset_session():
+    """
+    Execute cleanup tasks that should only run at the end of the test suite.
+    """
+    yield
+    IsolatedEnvBuilderCached.get_instance().destroy()
 
 
 def reset_all_objects():
@@ -498,6 +531,12 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+
+
+@pytest.fixture()
+def disable_isolated_env_builder_cache() -> None:
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -946,11 +985,48 @@ async def off_main_thread(func):
     return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
+class ReentrantVirtualEnv(VirtualEnv):
+    """
+    A virtual env that can be de-activated and re-activated
+
+    This allows faster reloading due to improved caching of the working set
+
+    This is intended for use in testcases to require a lot of venv switching
+    """
+
+    def __init__(self, env_path: str) -> None:
+        super(ReentrantVirtualEnv, self).__init__(env_path)
+        self.working_set = None
+
+    def deactivate(self):
+        self._using_venv = False
+        self.working_set = pkg_resources.working_set
+
+    def use_virtual_env(self) -> None:
+        """
+        Activate the virtual environment.
+        """
+        if self._using_venv:
+            # We are in use, just ignore double activation
+            return
+
+        if not self.working_set:
+            # First run
+            super().use_virtual_env()
+        else:
+            # Later run
+            self._activate_that()
+            mock_process_env(python_path=self.python_path)
+            pkg_resources.working_set = self.working_set
+            self._using_venv = True
+
+
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.repo = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
+        self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
         self.keep_shared = False
         self.project = None
@@ -967,9 +1043,11 @@ class SnippetCompilationTest(KeepOnFail):
         self.modules_dir = module_dir
 
     def tear_down_func(self):
+        loader.unload_modules_for_path(self.env)
         if not self._keep:
             shutil.rmtree(self.project_dir)
         self.project = None
+        self.venv.deactivate()
 
     def keep(self):
         self._keep = True
@@ -1030,7 +1108,7 @@ class SnippetCompilationTest(KeepOnFail):
     ):
         loader.PluginModuleFinder.reset()
         self.project = Project(
-            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.env, strict_deps_check=strict_deps_check
+            self.project_dir, autostd=autostd, main_file=main_file, venv_path=self.venv, strict_deps_check=strict_deps_check
         )
         Project.set(self.project)
         self.project.use_virtual_env()
@@ -1126,7 +1204,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
             include_status=include_status,
@@ -1146,7 +1224,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
@@ -1191,7 +1269,7 @@ class SnippetCompilationTest(KeepOnFail):
         do_raise=True,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
-    ):
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
         return await off_main_thread(
             lambda: self._do_export(
                 deploy=True,
@@ -1465,13 +1543,13 @@ def tmpvenv_active(
 
     yield tmpvenv
 
-    unload_modules_for_path(site_packages)
+    loader.unload_modules_for_path(site_packages)
     # Force refresh build's cache once more
     build.env._should_use_virtualenv.cache_clear()
 
 
 @pytest.fixture
-def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
+def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
     """
     Creates and activates a venv similar to tmpvenv_active with the difference that this venv inherits from the previously
     active one.
@@ -1480,22 +1558,7 @@ def tmpvenv_active_inherit(tmpdir: py.path.local) -> Iterator[env.VirtualEnv]:
     venv: env.VirtualEnv = env.VirtualEnv(str(venv_dir))
     venv.use_virtual_env()
     yield venv
-    unload_modules_for_path(venv.site_packages_dir)
-
-
-def unload_modules_for_path(path: str) -> None:
-    """
-    Unload any modules that are loaded from a given path.
-    """
-
-    def module_in_prefix(module: ModuleType, prefix: str) -> bool:
-        file: Optional[str] = getattr(module, "__file__", None)
-        return file.startswith(prefix) if file is not None else False
-
-    loaded_modules: List[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]
-    for mod_name in loaded_modules:
-        del sys.modules[mod_name]
-    importlib.invalidate_caches()
+    loader.unload_modules_for_path(venv.site_packages_dir)
 
 
 @pytest.fixture(scope="session")
@@ -1573,6 +1636,39 @@ async def migrate_db_from(
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
+def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
+    """
+    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
+    and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
+    """
+    for dir_name in os.listdir(modules_v2_dir):
+        module_path = os.path.join(modules_v2_dir, dir_name)
+        pyproject_toml_path = os.path.join(module_path, "pyproject.toml")
+        error_message = f"""
+Module {module_path} has a pyproject.toml file that is incompatible with the requirements of this test suite.
+The build-backend and the build requirements should be set as follows:
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+All modules present in the tests/data/module_v2 directory should satisfy the above-mentioned requirements, because
+the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
+use the same build-backend and build requirements.
+        """.strip()
+        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+            pyproject_toml_as_dct = toml.load(fh)
+            try:
+                if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(
+                    pyproject_toml_as_dct["build-system"]["requires"]
+                ) != {"setuptools", "wheel"}:
+                    raise Exception(error_message)
+            except (KeyError, TypeError):
+                raise Exception(error_message)
+
+
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_testing_venv():
     """
     Ensure that the tests don't install packages into the venv that runs the tests.
@@ -1600,3 +1696,32 @@ async def set_running_tests():
     Ensure the RUNNING_TESTS variable is True when running tests
     """
     inmanta.RUNNING_TESTS = True
+
+
+@pytest.fixture(scope="session")
+def index_with_pkgs_containing_optional_deps() -> str:
+    """
+    This fixture creates a python package repository containing packages with optional dependencies.
+    These packages are NOT inmanta modules but regular python packages. This fixture returns the URL
+    to the created python package repository.
+    """
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        pip_index = utils.PipIndex(artifact_dir=tmpdirname)
+        utils.create_python_package(
+            name="pkg",
+            pkg_version=Version("1.0.0"),
+            path=os.path.join(tmpdirname, "pkg"),
+            publish_index=pip_index,
+            optional_dependencies={
+                "optional-a": [Requirement.parse("dep-a")],
+                "optional-b": [Requirement.parse("dep-b"), Requirement.parse("dep-c")],
+            },
+        )
+        for pkg_name in ["dep-a", "dep-b", "dep-c"]:
+            utils.create_python_package(
+                name=pkg_name,
+                pkg_version=Version("1.0.0"),
+                path=os.path.join(tmpdirname, pkg_name),
+                publish_index=pip_index,
+            )
+        yield pip_index.url

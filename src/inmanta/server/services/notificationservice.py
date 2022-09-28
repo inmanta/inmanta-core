@@ -58,7 +58,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
 
     async def start(self) -> None:
         await super().start()
-        self.schedule(self._cleanup, 3600, initial_delay=0)
+        self.schedule(self._cleanup, 3600, initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         await data.Notification.clean_up_notifications()
@@ -70,7 +70,18 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             failed_pull_stage = next(
                 (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
-            if failed_pull_stage:
+            if compile.notify_failed_compile is False:
+                return
+            elif compile.notify_failed_compile and compile.failed_compile_message:
+                # Use specific message provided in request
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message=compile.failed_compile_message,
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif failed_pull_stage:
                 await self.notify(
                     compile.environment,
                     title="Pulling updates during compile failed",
@@ -83,6 +94,15 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     compile.environment,
                     title="Compilation failed",
                     message="An exporting compile has failed",
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif compile.notify_failed_compile:
+                # Send notification with generic message as fallback
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message="A compile has failed",
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )

@@ -1,0 +1,4 @@
+---
+description: Add support to cache the environment used to build v2 modules when running the test suite.
+change-type: patch
+destination-branches: [master, iso5]

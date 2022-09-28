@@ -47,7 +47,6 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
-import yaml
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -60,7 +59,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
-from inmanta.export import ModelExporter, cfg_env
+from inmanta.export import cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -509,7 +508,12 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--partial",
         dest="partial_compile",
-        help="Execute a partial export (experimental, may receive breaking changes in future releases).",
+        help=(
+            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
+            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
+            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
+            " the model version."
+        ),
         action="store_true",
         default=False,
     )
@@ -607,12 +611,6 @@ def export(options: argparse.Namespace) -> None:
 
     if exp is not None:
         raise exp
-
-    if options.model:
-        modelexporter = ModelExporter(types)
-        with open("testdump.json", "w", encoding="utf-8") as fh:
-            print(yaml.dump(modelexporter.export_all()))
-            json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
         conn = protocol.SyncClient("compiler")

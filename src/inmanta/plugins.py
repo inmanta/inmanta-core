@@ -213,7 +213,12 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
         filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
         assert filename is not None
-        line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
+        try:
+            line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
+        except OSError:
+            # In case of bytecompiled code there is no source line
+            line = 1
+
         self.location = Location(filename, line)
 
     def normalize(self) -> None:

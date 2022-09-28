@@ -19,12 +19,12 @@ import logging
 from typing import Dict, List, cast
 
 from inmanta import data
-from inmanta.protocol import handle, methods
+from inmanta.data import model
+from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
 from inmanta.server import SLICE_CODE, SLICE_DATABASE, SLICE_FILE, SLICE_TRANSPORT, protocol
 from inmanta.server.services.fileservice import FileService
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,26 +46,6 @@ class CodeService(protocol.ServerSlice):
     async def prestart(self, server: protocol.Server) -> None:
         await super().prestart(server)
         self.file_slice = cast(FileService, server.get_slice(SLICE_FILE))
-
-    @handle(methods.upload_code, code_id="id", env="tid")
-    async def upload_code(self, env: data.Environment, code_id: int, resource: str, sources: JsonType) -> Apireturn:
-        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
-        if code is not None:
-            raise ServerError("Code for this version has already been uploaded.")
-
-        hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
-        if hasherrors:
-            return 400, {"message": "Hashes in source map do not match to source_code"}
-
-        for file_hash in self.file_slice.stat_file_internal(sources.keys()):
-            self.file_slice.upload_file_internal(file_hash, sources[file_hash][2].encode())
-
-        compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
-
-        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact)
-        await code.insert()
-
-        return 200
 
     @handle(methods.upload_code_batched, code_id="id", env="tid")
     async def upload_code_batched(self, env: data.Environment, code_id: int, resources: JsonType) -> Apireturn:
@@ -125,7 +105,29 @@ class CodeService(protocol.ServerSlice):
         sources = {}
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
-                content = self.file_slice.get_file_internal(code_hash)
-                sources[code_hash] = (file_name, module, content.decode(), req)
+                try:
+                    content = self.file_slice.get_file_internal(code_hash)
+                    sources[code_hash] = (file_name, module, content.decode(), req)
+                except UnicodeDecodeError:
+                    raise BadRequest(
+                        f"The source file {file_name}({hash}) is not correctly encoded," f" use the v2 endpoint to retrieve it"
+                    )
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
+
+    @handle(methods_v2.get_source_code, env="tid")
+    async def get_source_code(self, env: data.Environment, version: int, resource_type: str) -> List[model.Source]:
+        code = await data.Code.get_version(environment=env.id, version=version, resource=resource_type)
+        if code is None:
+            raise NotFound(f"The version of the code does not exist. {resource_type}, {version}")
+
+        sources = []
+        if code.source_refs is not None:
+            for code_hash, (file_name, module, requires) in code.source_refs.items():
+                sources.append(
+                    model.Source(
+                        hash=code_hash, is_byte_code=file_name.endswith(".pyc"), module_name=module, requirements=requires
+                    )
+                )
+
+        return sources

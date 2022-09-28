@@ -20,6 +20,7 @@ import json
 import logging
 import uuid
 from operator import itemgetter
+from typing import List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -28,11 +29,11 @@ from inmanta import const, data
 from inmanta.server.config import get_bind_port
 
 # This resource ID has some garbage characters, to make sure the queries are good
-resource_id_a = r"std::File[agent1,path=/tmp/%%/\_file1.txt]"
+resource_id_a = r"std::File[agent1,path=/tmp#/%%/\_file1.txt]"
 
 
 @pytest.fixture
-async def env_with_logs(client, server, environment):
+async def env_with_logs(client, server, environment: str):
     cm_times = []
     for i in range(1, 10):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
@@ -58,6 +59,24 @@ async def env_with_logs(client, server, environment):
     msg_timings_idx = 0
     for i in range(1, 10):
         action_id = uuid.uuid4()
+        res1 = data.Resource.new(
+            environment=uuid.UUID(environment),
+            resource_version_id=f"{resource_id_a},v={i}",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/file2"},
+        )
+        await res1.insert()
+
+        res2 = data.Resource.new(
+            environment=uuid.UUID(environment),
+            resource_version_id=f"std::Directory[agent1,path=/tmp/dir2],v={i}",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/dir2"},
+        )
+        await res2.insert()
+
         resource_action = data.ResourceAction(
             environment=uuid.UUID(environment),
             version=i,
@@ -158,7 +177,7 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
-async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs):
+async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: Tuple[str, List[datetime.datetime]]):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
@@ -280,7 +299,7 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
     assert result.code == expected_status, result.result
 
 
-async def test_log_without_kwargs(server, client, environment):
+async def test_log_without_kwargs(server, client, environment: str):
 
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
@@ -290,6 +309,24 @@ async def test_log_without_kwargs(server, client, environment):
         released=True,
         version_info={},
     ).insert()
+
+    res1 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id=f"{resource_id_a},v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res1.insert()
+
+    res2 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2.insert()
 
     resource_action = data.ResourceAction(
         environment=uuid.UUID(environment),
@@ -319,7 +356,7 @@ async def test_log_without_kwargs(server, client, environment):
     assert result.code == 200
 
 
-async def test_log_nested_kwargs(server, client, environment):
+async def test_log_nested_kwargs(server, client, environment: str):
 
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
@@ -329,6 +366,24 @@ async def test_log_nested_kwargs(server, client, environment):
         released=True,
         version_info={},
     ).insert()
+
+    res1 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id=f"{resource_id_a},v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res1.insert()
+
+    res2 = data.Resource.new(
+        environment=uuid.UUID(environment),
+        resource_version_id="std::Directory[agent1,path=/tmp/dir2],v=1",
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2.insert()
 
     resource_action = data.ResourceAction(
         environment=uuid.UUID(environment),

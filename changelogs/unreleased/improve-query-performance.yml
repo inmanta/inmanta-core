@@ -1,0 +1,3 @@
+description: Improve query performance by splitting the query into two different queries.
+change-type: patch
+destination-branches: [master, iso5]
