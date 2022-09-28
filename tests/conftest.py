@@ -55,6 +55,7 @@ The following fixtures manage test environments:
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
 """
+
 import asyncio
 import concurrent
 import csv
@@ -188,13 +189,27 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 
 def pytest_runtest_setup(item: "pytest.Item"):
     """
-    When in fast mode, skip test marked as slow
+    When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
     """
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
+
+    file_name: str = item.location[0]
+    if file_name.startswith("tests/db/migration_tests"):
+        match: Optional[re.Match] = re.fullmatch("tests/db/migration_tests/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+        if not match:
+            pytest.fail(
+                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
+                "should have the @slowtest annotation"
+            )
+        timestamp: str = match.group(1)
+        test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))
+        elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
+        if elapsed_days > 30:
+            pytest.skip("Skipping old migration test")
 
 
 @pytest.fixture(scope="session")
