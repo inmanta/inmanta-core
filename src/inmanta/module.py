@@ -71,6 +71,7 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.env import CommandRunner
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -356,7 +357,7 @@ class CLIGitProvider(GitProvider):
         process_env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", "--progress", src, dest]
 
-        return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd, env_vars=process_env)
+        return_code, _ = CommandRunner.run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:
             raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")

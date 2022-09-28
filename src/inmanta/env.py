@@ -529,7 +529,7 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
-        return_code, full_output = self.run_command_and_stream_output(cmd, env_vars=sub_env)
+        return_code, full_output = CommandRunner.run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -566,7 +566,7 @@ class PythonEnvironment:
         :return: A dict with package names as keys and versions as values
         """
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
-        output = self._run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        output = CommandRunner.run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 
     def install_from_index(
@@ -630,8 +630,10 @@ class PythonEnvironment:
         workingset: Dict[str, version.Version] = PythonWorkingSet.get_packages_in_working_set()
         return [Requirement.parse(f"{pkg}=={workingset[pkg]}") for pkg in workingset if pkg in protected_inmanta_packages]
 
+
+class CommandRunner:
     @classmethod
-    def _run_command_and_log_output(
+    def run_command_and_log_output(
         cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
     ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
