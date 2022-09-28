@@ -640,7 +640,9 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
 
 def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
     """
-    Verify the logs of a pip install
+    Verify the logs of a pip install:
+        - all records start with 'inmanta.pip'
+        - content of requirements and constraints files are logged
     """
     caplog.set_level(logging.DEBUG)
 
@@ -681,11 +683,14 @@ inmanta-module-net
                 """
             )
 
-        PipCommandBuilder.compose_install_command(
+        tmpvenv_active_inherit._run_pip_install_command(
             python_path=env.process_env.python_path,
             constraints_files=[constraint1, constraint2],
             requirements_files=[requirement1, requirement2],
         )
+
+        assert all(record.name == "inmanta.pip" for record in caplog.records)
+
         assert (
             f"""
 Content of requirements files:

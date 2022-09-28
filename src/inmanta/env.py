@@ -379,7 +379,7 @@ class PipCommandBuilder:
                 [files[2]]:
                 ...
 
-            this function will skip empty lines in given file
+            this function will skip empty lines in files
             """
             log_msg: List[str] = [f"Content of {title}:\n"]
             indentation: str = "    "
