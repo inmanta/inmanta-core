@@ -73,6 +73,7 @@ async def test_environment_update(migrate_v2_to_v3, async_finalizer, server_conf
     assert e3_next == 2
 
 
+@pytest.mark.slowtest
 async def test_addition_resource_type_column(migrate_v2_to_v3, postgresql_client: Connection):
     results = await postgresql_client.fetch("SELECT resource_version_id, resource_type FROM public.Resource")
     for r in results:
