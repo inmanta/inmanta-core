@@ -22,12 +22,12 @@ or deadlock related, a test should be added to ensure this occurence can not acc
 """
 
 import asyncio
-import asyncpg
 import datetime
 import uuid
 from collections import abc
 from typing import Optional, Type, TypeVar
 
+import asyncpg
 import pytest
 
 from inmanta import const, data
@@ -84,7 +84,9 @@ def slowdown_queries(
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
-async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, client, environment: str, agent, endpoint_to_use: str) -> None:
+async def test_4889_deadlock_delete_resource_action_update(
+    monkeypatch, server, client, environment: str, agent, endpoint_to_use: str
+) -> None:
     """
     Verify that no deadlock exists between the delete of a version and the deploy_done/resource_action_update (background task)
     on that same version.
@@ -131,7 +133,7 @@ async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, 
         # Make sure insert starts first so it can acquire its first lock.
         await asyncio.sleep(1)
         return await client.delete_version(tid=environment, id=version)
-    delete: abc.Awaitable[Result] = delete()
+
     # request deploy_done
     now: datetime.datetime = datetime.datetime.now()
     deploy_done: abc.Awaitable[Result]
@@ -169,8 +171,10 @@ async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, 
         raise ValueError("Unknown value for endpoint_to_use parameter")
 
     # wait for both concurrent requests
-    results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete)
-    assert all(result.code == 200 for result in results), "\n".join( str(result.result) for result in results if result.code != 200)
+    results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete())
+    assert all(result.code == 200 for result in results), "\n".join(
+        str(result.result) for result in results if result.code != 200
+    )
 
 
 @pytest.mark.slowtest
@@ -209,6 +213,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         action=const.ResourceAction.deploy,
         started=datetime.datetime.now(),
     ).insert()
+
     async def delete() -> None:
         # Make sure insert starts first so it can acquire its first lock.
         await asyncio.sleep(0.5)
