@@ -4487,7 +4487,6 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_version_ids: List[m.ResourceVersionIdStr],
-        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
@@ -4495,8 +4494,7 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        query_lock: str = lock.value if lock is not None else ""
-        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2) {query_lock}"
+        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2)"
         resources = await cls.select_query(
             query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
         )

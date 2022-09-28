@@ -1,6 +1,0 @@
-description: "Added some database concurrency tests to assert the deadlocks fixed in #4889 are not introduced again"
-issue-nr: 4889
-change-type: patch
-destination-branches:
-  - iso5
-  - master
