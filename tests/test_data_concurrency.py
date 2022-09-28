@@ -170,7 +170,7 @@ async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, 
 
     # wait for both concurrent requests
     results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete)
-    assert all(result.code == 200 for result in results), "\n".join(result.result for result in results)
+    assert all(result.code == 200 for result in results), "\n".join( str(result.result) for result in results if result.code != 200)
 
 
 @pytest.mark.slowtest
