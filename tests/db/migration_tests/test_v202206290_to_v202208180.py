@@ -23,7 +23,7 @@ import pytest
 from inmanta.data import ConfigurationModel, Environment, Project
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "../dumps/v202206290.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202206290.sql"))
 async def test_column_add(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,

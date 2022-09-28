@@ -61,7 +61,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     assert result.code == 200
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
-    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "simple_project")
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..", "data", "simple_project")
 
     # Get correct version
     version = sorted([v.version for v in DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, None)._get_update_functions()])[
