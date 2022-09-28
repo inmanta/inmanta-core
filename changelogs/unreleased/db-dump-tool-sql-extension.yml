@@ -1,0 +1,6 @@
+description: "db dump tool: include sql file extension for .editorconfig compatibility"
+change-type: patch
+destination-branches:
+  - iso4
+  - iso5
+  - master

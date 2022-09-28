@@ -385,7 +385,7 @@ class CompilerService(ServerSlice):
     async def start(self) -> None:
         await super(CompilerService, self).start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -464,7 +464,7 @@ class CompilerService(ServerSlice):
                 return
             env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
             if env is None:
-                raise Exception("Can't queue compile: environment %s does not exist" % environment)
+                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
             nextrun = await data.Compile.get_next_run(environment)
             if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
@@ -543,7 +543,8 @@ class CompilerService(ServerSlice):
                 wait,
             )
         else:
-            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested)
+            assert compile.requested is not None  # Make mypy happy
+            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested.astimezone())
         await asyncio.sleep(wait)
 
     async def _run(self, compile: data.Compile) -> None:

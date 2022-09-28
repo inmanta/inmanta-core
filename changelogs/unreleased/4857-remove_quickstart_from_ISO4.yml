@@ -1,0 +1,8 @@
+---
+description: Remove quickstart from ISO4
+issue-nr: 4857
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso4]
+sections:
+  deprecation-note: "{{description}}"
