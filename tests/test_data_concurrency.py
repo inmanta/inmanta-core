@@ -26,7 +26,7 @@ import asyncpg
 import datetime
 import uuid
 from collections import abc
-from typing import TypeVar
+from typing import Type, TypeVar
 
 import pytest
 
@@ -35,7 +35,7 @@ from inmanta.data import model
 from inmanta.protocol.common import Result
 
 
-def slowdown_queries(monkeypatch, delay: float = 1) -> None:
+def slowdown_queries(monkeypatch, *, cls: Type[data.BaseDocument] = data.BaseDocument, delay: float = 1) -> None:
     """
     Introduces an artificial delay after each query execution through data.Document in order to increase the likelyhood of
     concurrent transactions.
@@ -60,14 +60,15 @@ def slowdown_queries(monkeypatch, delay: float = 1) -> None:
         "_execute_query",
         "insert_many",
     ):
-        monkeypatch.setattr(data.BaseDocument, query_func, patch_classmethod(getattr(data.BaseDocument, query_func)))
+        monkeypatch.setattr(cls, query_func, patch_classmethod(getattr(cls, query_func)))
 
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
-async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environment: str, agent, endpoint_to_use: str) -> None:
+async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, client, environment: str, agent, endpoint_to_use: str) -> None:
     """
-    Verify that no deadlock exists between the delete of a version and the deploy_done (background task) on that same version.
+    Verify that no deadlock exists between the delete of a version and the deploy_done/resource_action_update (background task)
+    on that same version.
     """
     env_id: uuid.UUID = uuid.UUID(environment)
 
@@ -152,4 +153,46 @@ async def test_deadlock_delete_deploy_done(monkeypatch, server, client, environm
     assert delete_result.code == 200, delete_result.result
 
 
-# TODO: add test case for other deadlocks
+@pytest.mark.slowtest
+async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environment: str) -> None:
+    """
+    Verify that no deadlock exists between the delete of a version and the insert of a ResourceAction for that same version.
+    """
+    env_id: uuid.UUID = uuid.UUID(environment)
+
+    version: int = 1
+    confmodel: data.ConfigurationModel = data.ConfigurationModel(
+        environment=env_id,
+        version=version,
+        date=datetime.datetime.now().astimezone(),
+        total=1,
+        version_info={},
+    )
+    await confmodel.insert()
+
+    resource = model.ResourceVersionIdStr(f"mymod::myresource[myagent,id=1],v={version}")
+    await data.Resource.new(
+        environment=env_id,
+        status=const.ResourceState.available,
+        resource_version_id=resource,
+        attributes={},
+    ).insert()
+
+    # artificially slow down ResourceAction queries to increase deadlock probability
+    slowdown_queries(monkeypatch, cls=data.ResourceAction, delay=1)
+
+    insert: abc.Awaitable[None] = data.ResourceAction(
+        environment=env_id,
+        version=version,
+        resource_version_ids=[resource],
+        action_id=uuid.uuid4(),
+        action=const.ResourceAction.deploy,
+        started=datetime.datetime.now(),
+    ).insert()
+    async def delete() -> None:
+        # Make sure insert starts first so it can acquire its first lock.
+        asyncio.sleep(0.1)
+        await confmodel.delete_cascade()
+
+    # verify that this does not raise a deadlock exception
+    await asyncio.gather(insert, delete())
