@@ -364,21 +364,38 @@ class PipCommandBuilder:
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
 
-        def log_content_file(name: str, files: List[str]):
-            log_msg: List[str] = [f"Content of {name}:\n"]
+        def log_content_files(title: str, files: List[str]):
+            """
+            Log the content of a list of files with indentations in the following format:
+
+            Content of [title]:
+                [files[0]]:
+                    line 1 in files[0]
+                [files[1]]:
+                    line 1 in files[1]
+                    line 2 in files[1]
+                    line 3 in files[1]
+                    ...
+                [files[2]]:
+                ...
+
+            this function will skip empty lines in given file
+            """
+            log_msg: List[str] = [f"Content of {title}:\n"]
             indentation: str = "    "
             for file in files:
                 log_msg.append(indent(file + ":\n", indentation))
                 with open(file) as f:
-                    req = f.readlines()
-                    log_msg.extend(map(indent, req, [2 * indentation] * len(req)))
-                log_msg.append("\n")
-            LOGGER_PIP.debug("".join(log_msg))
+                    lines = f.readlines()
+                    for line in lines:
+                        if line.strip():
+                            log_msg.extend(indent(line.strip() + "\n", 2 * indentation))
+            LOGGER_PIP.debug("".join(log_msg).strip())
 
         if requirements_files:
-            log_content_file("requirements files", requirements_files)
+            log_content_files("requirements files", requirements_files)
         if constraints_files:
-            log_content_file("constraints files", constraints_files)
+            log_content_files("constraints files", constraints_files)
 
         return [
             python_path,

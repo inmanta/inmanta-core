@@ -34,6 +34,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
+from inmanta.env import PipCommandBuilder
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -652,30 +653,35 @@ def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
             fd.write(
                 """
 inmanta-module-std
-                """.strip()
+
+                """
             )
         with open(requirement2, "w") as fd:
             fd.write(
                 """
 inmanta-module-net
+
 inmanta-module-ip
-                """.strip()
+                """
             )
         with open(constraint1, "w") as fd:
             fd.write(
                 """
 inmanta-module-std
-                """.strip()
+                """
             )
         with open(constraint2, "w") as fd:
             fd.write(
                 """
-inmanta-module-net
+
 inmanta-module-ip
-                """.strip()
+inmanta-module-net
+
+
+                """
             )
 
-        tmpvenv_active_inherit._run_pip_install_command(
+        PipCommandBuilder.compose_install_command(
             python_path=env.process_env.python_path,
             constraints_files=[constraint1, constraint2],
             requirements_files=[requirement1, requirement2],
@@ -688,6 +694,17 @@ Content of requirements files:
     {requirement2}:
         inmanta-module-net
         inmanta-module-ip
-"""
+""".strip()
+            in caplog.messages
+        )
+        assert (
+            f"""
+Content of constraints files:
+    {constraint1}:
+        inmanta-module-std
+    {constraint2}:
+        inmanta-module-ip
+        inmanta-module-net
+""".strip()
             in caplog.messages
         )
