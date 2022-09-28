@@ -194,5 +194,9 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         asyncio.sleep(0.1)
         await confmodel.delete_cascade()
 
-    # verify that this does not raise a deadlock exception
-    await asyncio.gather(insert, delete())
+    # Verify that this does not raise a deadlock exception. A failure on the insert is expected and acceptable if the delete
+    # wins the race.
+    try:
+        await asyncio.gather(insert, delete())
+    except asyncpg.ForeignKeyViolationError:
+        pass
