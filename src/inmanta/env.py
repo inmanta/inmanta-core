@@ -368,10 +368,11 @@ class PipCommandBuilder:
             log_msg: List[str] = [f"Content of {name}:\n"]
             indentation: str = "    "
             for file in files:
-                log_msg.append(indent(file + ": \n", indentation))
+                log_msg.append(indent(file + ":\n", indentation))
                 with open(file) as f:
                     req = f.readlines()
                     log_msg.extend(map(indent, req, [2 * indentation] * len(req)))
+                log_msg.append("\n")
             LOGGER_PIP.debug("".join(log_msg))
 
         if requirements_files:

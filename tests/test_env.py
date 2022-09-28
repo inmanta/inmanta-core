@@ -642,6 +642,52 @@ def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
     Verify the logs of a pip install
     """
     caplog.set_level(logging.DEBUG)
-    caplog.clear()
-    create_install_package("test-package-one", version.Version("1.0.0"), [])
-    assert "Incompatibility between constraint" not in caplog.text
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        requirement1 = os.path.join(tmpdir, "requirement1.txt")
+        requirement2 = os.path.join(tmpdir, "requirement2.txt")
+        constraint1 = os.path.join(tmpdir, "constraint1.txt")
+        constraint2 = os.path.join(tmpdir, "constraint2.txt")
+        with open(requirement1, "w") as fd:
+            fd.write(
+                """
+inmanta-module-std
+                """.strip()
+            )
+        with open(requirement2, "w") as fd:
+            fd.write(
+                """
+inmanta-module-net
+inmanta-module-ip
+                """.strip()
+            )
+        with open(constraint1, "w") as fd:
+            fd.write(
+                """
+inmanta-module-std
+                """.strip()
+            )
+        with open(constraint2, "w") as fd:
+            fd.write(
+                """
+inmanta-module-net
+inmanta-module-ip
+                """.strip()
+            )
+
+        tmpvenv_active_inherit._run_pip_install_command(
+            python_path=env.process_env.python_path,
+            constraints_files=[constraint1, constraint2],
+            requirements_files=[requirement1, requirement2],
+        )
+        assert (
+            f"""
+Content of requirements files:
+    {requirement1}:
+        inmanta-module-std
+    {requirement2}:
+        inmanta-module-net
+        inmanta-module-ip
+"""
+            in caplog.messages
+        )
