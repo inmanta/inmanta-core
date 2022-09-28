@@ -52,8 +52,6 @@ enduser_certs_dir = os.path.join(data_dir, "ca", "enduser-certs")
 simple_project_dir = os.path.join(data_dir, "simple_project")
 db_common_py = os.path.join(db_dir, "common.py")
 dest_db_common_py = os.path.join(dest_db_dir, "common.py")
-dump_tool_py = os.path.join(db_dir, "migration_tests", "dump_tool.py")
-dest_dump_tool_py = os.path.join(dest_db_dir, "migration_tests", "dump_tool.py")
 dest_simple_project_dir = os.path.join(dest_db_dir, "simple_project")
 
 
@@ -65,7 +63,6 @@ def remove_file_if_exists(filename: str):
 remove_file_if_exists(dest_conftest_py)
 remove_file_if_exists(dest_utils_py)
 remove_file_if_exists(dest_db_common_py)
-remove_file_if_exists(dest_dump_tool_py)
 
 # Copy files
 shutil.copy(conftest_py, dest_dir)
@@ -74,5 +71,4 @@ shutil.copy(server_crt_file, dest_data_dir)
 shutil.copy(server_open_key_file, dest_data_dir)
 shutil.copytree(enduser_certs_dir, os.path.join(dest_data_dir, "ca", "enduser-certs"))
 shutil.copy(db_common_py, dest_db_common_py)
-shutil.copy(dump_tool_py, dest_dump_tool_py)
 shutil.copytree(simple_project_dir, dest_simple_project_dir)
