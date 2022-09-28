@@ -601,7 +601,14 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
-                resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
+                resources = await data.Resource.get_resources(
+                    env.id,
+                    resource_ids,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
+                    connection=connection,
+                )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
                     return (
                         404,
