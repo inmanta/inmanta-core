@@ -386,7 +386,7 @@ class PipCommandBuilder:
             for file in files:
                 log_msg.append(indent(file + ":\n", indentation))
                 with open(file) as f:
-                    lines = f.readlines()
+                    lines: Sequence[str] = f.readlines()
                     for line in lines:
                         if line.strip():
                             log_msg.extend(indent(line.strip() + "\n", 2 * indentation))
