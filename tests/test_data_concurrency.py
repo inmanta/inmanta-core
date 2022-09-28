@@ -26,7 +26,7 @@ import asyncpg
 import datetime
 import uuid
 from collections import abc
-from typing import Type, TypeVar
+from typing import Optional, Type, TypeVar
 
 import pytest
 
@@ -35,32 +35,51 @@ from inmanta.data import model
 from inmanta.protocol.common import Result
 
 
-def slowdown_queries(monkeypatch, *, cls: Type[data.BaseDocument] = data.BaseDocument, delay: float = 1) -> None:
+def slowdown_queries(
+    monkeypatch,
+    *,
+    cls: Type[data.BaseDocument] = data.BaseDocument,
+    query_funcs: Optional[abc.Collection[str]] = None,
+    delay: float = 1,
+) -> None:
     """
     Introduces an artificial delay after each query execution through data.Document in order to increase the likelyhood of
     concurrent transactions.
+
+    :param cls: The class to slow down the methods for.
+    :param query_funcs: The names of the methods to add a delay to.
+    :param delay: The amount of seconds to delay.
     """
+    query_funcs = (
+        query_funcs
+        if query_funcs
+        else [
+            "select_query",
+            "_fetchval",
+            "_fetch_int",
+            "_fetchrow",
+            "_fetch_query",
+            "_execute_query",
+            "insert_many",
+        ]
+    )
+
     F = TypeVar("F", bound=abc.Coroutine)
 
-    def patch_classmethod(method: F) -> F:
-        @classmethod
-        async def patched(cls, *args, **kwargs) -> object:
+    def patch_method(method: F) -> F:
+        clsmethod: bool = hasattr(method, "__func__")
+        func: F = method.__func__ if clsmethod else method
+
+        async def patched(*args, **kwargs) -> object:
             # call unbound original method with cls object bound to the patched method
-            result: object = await method.__func__(cls, *args, **kwargs)
+            result: object = await func(*args, **kwargs)
             await asyncio.sleep(delay)
             return result
-        return patched
 
-    for query_func in (
-        "select_query",
-        "_fetchval",
-        "_fetch_int",
-        "_fetchrow",
-        "_fetch_query",
-        "_execute_query",
-        "insert_many",
-    ):
-        monkeypatch.setattr(cls, query_func, patch_classmethod(getattr(cls, query_func)))
+        return classmethod(patched) if clsmethod else patched
+
+    for query_func in query_funcs:
+        monkeypatch.setattr(cls, query_func, patch_method(getattr(cls, query_func)))
 
 
 @pytest.mark.slowtest
@@ -105,10 +124,14 @@ async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, 
     assert result.code == 200, result.result
 
     # artificially slow down queries to increase deadlock probability
-    slowdown_queries(monkeypatch)
+    slowdown_queries(monkeypatch, cls=data.ResourceAction, query_funcs=["set_and_save"], delay=2)
 
     # request delete
-    delete: abc.Awaitable[Result] = client.delete_version(tid=environment, id=version)
+    async def delete() -> Result:
+        # Make sure insert starts first so it can acquire its first lock.
+        await asyncio.sleep(1)
+        return await client.delete_version(tid=environment, id=version)
+    delete: abc.Awaitable[Result] = delete()
     # request deploy_done
     now: datetime.datetime = datetime.datetime.now()
     deploy_done: abc.Awaitable[Result]
@@ -147,10 +170,7 @@ async def test_4889_deadlock_delete_resource_action_update(monkeypatch, server, 
 
     # wait for both concurrent requests
     results: abc.Sequence[Result] = await asyncio.gather(deploy_done, delete)
-    # deploy_done will fail if delete wins the race. This is expected so we only make sure the delete doesn't fail
-    # with a deadlock.
-    delete_result: Result = results[1]
-    assert delete_result.code == 200, delete_result.result
+    assert all(result.code == 200 for result in results), "\n".join(result.result for result in results)
 
 
 @pytest.mark.slowtest
@@ -191,7 +211,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
     ).insert()
     async def delete() -> None:
         # Make sure insert starts first so it can acquire its first lock.
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
         await confmodel.delete_cascade()
 
     # Verify that this does not raise a deadlock exception. A failure on the insert is expected and acceptable if the delete
