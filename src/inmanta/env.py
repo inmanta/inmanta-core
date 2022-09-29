@@ -361,6 +361,8 @@ class PipCommandBuilder:
             if index_urls
             else ["--no-index"]
         )
+        constraints_files = constraints_files if constraints_files is not None else []
+        requirements_files = requirements_files if requirements_files is not None else []
         return [
             python_path,
             "-m",
@@ -494,9 +496,6 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
-
-        constraints_files = constraints_files if constraints_files is not None else []
-        requirements_files = requirements_files if requirements_files is not None else []
 
         def create_log_content_files(title: str, files: List[str]) -> List[str]:
             """
