@@ -59,7 +59,7 @@ else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
 LOGGER = logging.getLogger(__name__)
-LOGGER_PIP = logging.getLogger("inmanta.pip")
+LOGGER_PIP = logging.getLogger("inmanta.pip")  # Use this logger to log pip commands or data related to pip commands.
 
 
 class PackageNotFound(Exception):
@@ -362,40 +362,6 @@ class PipCommandBuilder:
             if index_urls
             else ["--no-index"]
         )
-        constraints_files = constraints_files if constraints_files is not None else []
-        requirements_files = requirements_files if requirements_files is not None else []
-
-        def log_content_files(title: str, files: List[str]) -> None:
-            """
-            Log the content of a list of files with indentations in the following format:
-
-            Content of [title]:
-                [files[0]]:
-                    line 1 in files[0]
-                [files[1]]:
-                    line 1 in files[1]
-                    line 2 in files[1]
-                    line 3 in files[1]
-                    ...
-                [files[2]]:
-                ...
-
-            this function will skip empty lines in files
-            """
-            log_msg: List[str] = [f"Content of {title}:\n"]
-            indentation: str = "    "
-            for file in files:
-                log_msg.append(indent(file + ":\n", indentation))
-                with open(file) as f:
-                    for line in f:
-                        if line.strip():
-                            log_msg.extend(indent(line.strip() + "\n", 2 * indentation))
-            LOGGER_PIP.debug("".join(log_msg).strip())
-
-        if requirements_files:
-            log_content_files("requirements files", requirements_files)
-        if constraints_files:
-            log_content_files("constraints files", constraints_files)
 
         return [
             python_path,
@@ -530,6 +496,44 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
+
+        constraints_files = constraints_files if constraints_files is not None else []
+        requirements_files = requirements_files if requirements_files is not None else []
+
+        def create_log_content_files(title: str, files: List[str]) -> List[str]:
+            """
+            Log the content of a list of files with indentations in the following format:
+
+            Content of [title]:
+                [files[0]]:
+                    line 1 in files[0]
+                [files[1]]:
+                    line 1 in files[1]
+                    line 2 in files[1]
+                    line 3 in files[1]
+                    ...
+                [files[2]]:
+                ...
+
+            this function will skip empty lines in files
+            """
+            log_msg: List[str] = [f"Content of {title}:\n"]
+            indentation: str = "    "
+            for file in files:
+                log_msg.append(indent(file + ":\n", indentation))
+                with open(file) as f:
+                    for line in f:
+                        if line.strip():
+                            log_msg.append(indent(line.strip() + "\n", 2 * indentation))
+            return log_msg
+
+        log_msg: List[str] = []
+        if requirements_files:
+            log_msg.extend(create_log_content_files("requirements files", requirements_files))
+        if constraints_files:
+            log_msg.extend(create_log_content_files("constraints files", constraints_files))
+        log_msg.append("Pip command: " + " ".join(cmd))
+        LOGGER_PIP.debug("".join(log_msg).strip())
         return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:

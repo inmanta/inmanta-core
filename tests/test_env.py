@@ -643,6 +643,7 @@ def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
     Verify the logs of a pip install:
         - all records start with 'inmanta.pip'
         - content of requirements and constraints files are logged
+        - the pip command is logged
     """
     caplog.set_level(logging.DEBUG)
 
@@ -682,7 +683,7 @@ inmanta-module-net
 
                 """
             )
-
+        caplog.clear()
         tmpvenv_active_inherit._run_pip_install_command(
             python_path=env.process_env.python_path,
             constraints_files=[constraint1, constraint2],
@@ -699,17 +700,13 @@ Content of requirements files:
     {requirement2}:
         inmanta-module-net
         inmanta-module-ip
-""".strip()
-            in caplog.messages
-        )
-        assert (
-            f"""
 Content of constraints files:
     {constraint1}:
         inmanta-module-std
     {constraint2}:
         inmanta-module-ip
         inmanta-module-net
+Pip command: {tmpvenv_active_inherit.python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
 """.strip()
             in caplog.messages
         )
