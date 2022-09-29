@@ -46,7 +46,6 @@ from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
-from typing_extensions import reveal_type
 
 try:
     from typing import TYPE_CHECKING
@@ -362,7 +361,6 @@ class PipCommandBuilder:
             if index_urls
             else ["--no-index"]
         )
-
         return [
             python_path,
             "-m",
