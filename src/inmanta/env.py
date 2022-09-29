@@ -46,6 +46,7 @@ from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
+from typing_extensions import reveal_type
 
 try:
     from typing import TYPE_CHECKING
@@ -529,7 +530,7 @@ class PythonEnvironment:
             del sub_env["PIP_EXTRA_INDEX_URL"]
         if index_urls is not None and "PIP_INDEX_URL" in sub_env:
             del sub_env["PIP_INDEX_URL"]
-        return_code, full_output = CommandRunner.run_command_and_stream_output(cmd, env_vars=sub_env)
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=sub_env)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -566,7 +567,7 @@ class PythonEnvironment:
         :return: A dict with package names as keys and versions as values
         """
         cmd = PipCommandBuilder.compose_list_command(self.python_path, format=PipListFormat.json, only_editable=only_editable)
-        output = CommandRunner.run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
+        output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 
     def install_from_index(
@@ -632,9 +633,11 @@ class PythonEnvironment:
 
 
 class CommandRunner:
-    @classmethod
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+
     def run_command_and_log_output(
-        cls, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
+        self, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
     ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
@@ -646,17 +649,17 @@ class CommandRunner:
                 msg = e.output.decode()
             else:
                 msg = ""
-            LOGGER.error("%s: %s", cmd, msg)
+            self.logger.error("%s: %s", cmd, msg)
             raise
         except Exception:
-            LOGGER.error("%s: %s", cmd, output.decode())
+            self.logger.error("%s: %s", cmd, output.decode())
             raise
         else:
-            LOGGER.debug("%s: %s", cmd, output.decode())
+            self.logger.debug("%s: %s", cmd, output.decode())
             return output.decode()
 
-    @staticmethod
     def run_command_and_stream_output(
+        self,
         cmd: List[str],
         shell: bool = False,
         timeout: float = 10,
@@ -676,12 +679,11 @@ class CommandRunner:
 
         full_output: List[str] = []
         assert process.stdout is not None  # Make mypy happy
-        logger = LOGGER if not "pip" in cmd else LOGGER_PIP
         for line in process.stdout:
             # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
             output = line.decode().strip()
             full_output.append(output)
-            logger.debug(output)
+            self.logger.debug(output)
 
         return_code = process.wait(timeout=timeout)
 
