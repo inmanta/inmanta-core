@@ -1,0 +1,5 @@
+---
+description: Fix issue in logs of project install. The 'verifying project' log line is logged twice
+issue-nr: 4620
+change-type: patch
+destination-branches: [master, iso5]

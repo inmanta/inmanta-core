@@ -1,0 +1,5 @@
+description: Implemented db performance fixes
+change-type: patch
+destination-branches:
+  - iso5
+  - master

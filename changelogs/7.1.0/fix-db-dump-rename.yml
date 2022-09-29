@@ -1,0 +1,5 @@
+description: Fixed version name in latest db dump
+change-type: patch
+destination-branches:
+  - master
+  - iso5

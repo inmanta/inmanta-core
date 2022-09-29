@@ -43,7 +43,7 @@ from inmanta import config, const, data, protocol, server
 from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.paging import CompileReportPagingCountsProvider, CompileReportPagingHandler, QueryIdentifier
-from inmanta.env import PythonEnvironment, VenvCreationFailedError, VirtualEnv
+from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
 from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -271,6 +271,18 @@ class CompileRun(object):
                 else:
                     return await self._end_stage(returncode=0)
 
+            async def uninstall_protected_inmanta_packages() -> data.Report:
+                """
+                Ensure that no protected Inmanta packages are installed in the compiler venv.
+                """
+                cmd: List[str] = PipCommandBuilder.compose_uninstall_command(
+                    python_path=PythonEnvironment.get_python_path_for_env_path(venv_dir),
+                    pkg_names=PythonEnvironment.get_protected_inmanta_packages(),
+                )
+                return await self._run_compile_stage(
+                    name="Uninstall inmanta packages from the compiler venv", cmd=cmd, cwd=project_dir
+                )
+
             async def update_modules() -> data.Report:
                 return await run_compile_stage_in_venv("Updating modules", ["-vvv", "-X", "project", "update"], cwd=project_dir)
 
@@ -330,6 +342,7 @@ class CompileRun(object):
                         # only pull changes if there is an upstream branch
                         if await self.get_upstream_branch():
                             yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                        yield uninstall_protected_inmanta_packages()
                         yield update_modules()
                 else:
                     if not repo_url:
@@ -375,6 +388,10 @@ class CompileRun(object):
                 "--export-compile-data-file",
                 compile_data_json_file.name,
             ]
+
+            if self.request.exporter_plugin:
+                cmd.append("--export-plugin")
+                cmd.append(self.request.exporter_plugin)
 
             if self.request.partial:
                 cmd.append("--partial")
@@ -509,7 +526,7 @@ class CompilerService(ServerSlice):
     async def start(self) -> None:
         await super(CompilerService, self).start()
         await self._recover()
-        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0)
+        self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
     async def _cleanup(self) -> None:
         oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(
@@ -544,7 +561,7 @@ class CompilerService(ServerSlice):
             recompile: TaskMethod = partial(
                 self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
             )
-            self.schedule_cron(recompile, schedule_cron)
+            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
             self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
 
     async def request_recompile(
@@ -557,11 +574,20 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
+        exporter_plugin: Optional[str] = None,
+        notify_failed_compile: Optional[bool] = None,
+        failed_compile_message: Optional[str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
+        :param notify_failed_compile: if set to True, errors during compilation will be notified using the
+        "failed_compile_message".
+        if set to false, nothing will be notified. If not set then the default notifications are
+        sent (failed pull stage and errors during the do_export)
+        :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
         :return: the compile id of the requested compile and any warnings produced during the request
+
         """
         if removed_resource_sets is None:
             removed_resource_sets = []
@@ -587,6 +613,9 @@ class CompilerService(ServerSlice):
             environment_variables=env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
+            exporter_plugin=exporter_plugin,
+            notify_failed_compile=notify_failed_compile,
+            failed_compile_message=failed_compile_message,
         )
         await compile.insert()
         await self._queue(compile)
@@ -624,7 +653,7 @@ class CompilerService(ServerSlice):
                 return
             env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
             if env is None:
-                raise Exception("Can't queue compile: environment %s does not exist" % environment)
+                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
             nextrun = await data.Compile.get_next_run(environment)
             if nextrun and not env.halted:
                 task = self.add_background_task(self._run(nextrun))
@@ -711,7 +740,8 @@ class CompilerService(ServerSlice):
                 wait,
             )
         else:
-            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested)
+            assert compile.requested is not None  # Make mypy happy
+            LOGGER.debug("Running recompile without waiting: requested at %s", compile.requested.astimezone())
         await asyncio.sleep(wait)
 
     async def _run(self, compile: data.Compile) -> None:

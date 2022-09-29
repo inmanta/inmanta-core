@@ -495,9 +495,7 @@ import minimalv1module
 import minimalv2module
         """.strip(),
         python_package_sources=[local_module_package_index],
-        python_requires=[
-            module.ModuleV2Source.get_python_package_requirement(module.InmantaModuleRequirement.parse("minimalv2module"))
-        ],
+        python_requires=[module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement()],
         autostd=False,
     )
 

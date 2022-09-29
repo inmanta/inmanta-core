@@ -34,6 +34,27 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+class NonDeployingResourceState(str, Enum):
+    unavailable = ResourceState.unavailable.value
+    skipped = ResourceState.skipped.value
+    dry = ResourceState.dry.value
+    deployed = ResourceState.deployed.value
+    failed = ResourceState.failed.value
+    available = ResourceState.available.value
+    cancelled = ResourceState.cancelled.value
+    undefined = ResourceState.undefined.value
+    skipped_for_undefined = ResourceState.skipped_for_undefined.value
+
+
+class DeprecatedResourceState(str, Enum):
+    """
+    Deprecated resource states kept for backwards compatibility.
+    """
+
+    # deprecated in iso5
+    processing_events = "processing_events"
+
+
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
@@ -305,3 +326,5 @@ class NotificationSeverity(str, Enum):
 
 
 CF_CACHE_DIR = ".cfcache"
+
+PG_ADVISORY_KEY_PUT_VERSION = 1

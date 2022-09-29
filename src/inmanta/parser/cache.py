@@ -141,7 +141,7 @@ class CacheManager:
             # cache not enabled
             return
         if self.hits + self.misses != 0:
-            LOGGER.info(
+            LOGGER.debug(
                 "Compiler cache observed %d hits and %d misses (%d%%)",
                 self.hits,
                 self.misses,
