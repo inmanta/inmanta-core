@@ -1,0 +1,8 @@
+---
+description: "Fix issue where the progress information of the git clone command shows mixed log lines"
+issue-nr: 4919
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  bugfix: "{{description}}"
