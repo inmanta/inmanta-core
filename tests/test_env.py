@@ -690,7 +690,7 @@ inmanta-module-net
         )
 
         assert all(record.name == "inmanta.pip" for record in caplog.records)
-
+        python_path: str = tmpvenv_active_inherit.python_path
         assert (
             f"""
 Content of requirements files:
@@ -705,7 +705,7 @@ Content of constraints files:
     {constraint2}:
         inmanta-module-ip
         inmanta-module-net
-Pip command: {tmpvenv_active_inherit.python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
+Pip command: {python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
 """.strip()
             in caplog.messages
         )
