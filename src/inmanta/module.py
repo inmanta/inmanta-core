@@ -354,7 +354,7 @@ class CLIGitProvider(GitProvider):
     def clone(self, src: str, dest: str) -> None:
         process_env = os.environ.copy()
         process_env["GIT_ASKPASS"] = "true"
-        cmd = ["git", "clone", "--progress", src, dest]
+        cmd = ["git", "clone", src, dest]
 
         return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd, env_vars=process_env)
 
