@@ -1,0 +1,4 @@
+---
+description: Fix issue where a link in the documentation is broken on a non-existing sr-linux-topology anchor.
+change-type: patch
+destination-branches: [master, iso5]

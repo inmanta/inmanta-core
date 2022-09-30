@@ -62,6 +62,7 @@ docs/_static/*.png
 mypy
 types
 mypy.xml
+mypy_output.txt
 coverage
 .mypy-baseline
 .mypy-tmp

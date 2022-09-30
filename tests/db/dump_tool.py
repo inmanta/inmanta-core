@@ -23,6 +23,8 @@ import os
 import shutil
 
 from inmanta import const
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
+from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
 
@@ -60,7 +62,12 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env_id_1))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "simple_project")
-    outname = "dbdump"
+
+    # Get correct version
+    version = sorted([v.version for v in DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, None)._get_update_functions()])[
+        -1
+    ]
+    outfile = os.path.join(os.path.dirname(__file__), "dumps", f"v{version}.sql")
     print("Project at: ", project_dir)
 
     shutil.copytree(project_source, project_dir)
@@ -89,6 +96,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await _wait_until_deployment_finishes(client, env_id_1, v2, 20)
 
     proc = await asyncio.create_subprocess_exec(
-        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outname, "-O", "-U", postgres_db.user, database_name
+        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
     )
     await proc.wait()

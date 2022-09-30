@@ -9,9 +9,9 @@ requires = [
     "colorlog~=6.0",
     "cookiecutter>=1,<3",
     "crontab~=0.23",
-    "cryptography>=36,<38",
+    "cryptography>=36,<39",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
-    "docstring-parser>=0.10,<0.15",
+    "docstring-parser>=0.10,<0.16",
     "email-validator~=1.0",
     "execnet~=1.0",
     "importlib_metadata~=4.0",
@@ -42,7 +42,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "6.2.0"
+version = "6.3.0"
 
 setup(
     version=version,

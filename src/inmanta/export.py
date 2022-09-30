@@ -18,29 +18,27 @@
 
 import argparse
 import base64
-import itertools
 import logging
 import os
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
-import inmanta.model as model
+import pydantic
+
 from inmanta import const, loader, protocol
 from inmanta.agent.handler import Commander
-from inmanta.ast import CompilerException, Locatable, Namespace, OptionalValueException
-from inmanta.ast.attribute import Attribute, RelationAttribute
+from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.execute.runtime import Instance, ResultVariable
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute.runtime import Instance
+from inmanta.execute.util import Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
-from inmanta.types import JsonType
-from inmanta.util import get_compiler_version, groupby, hash_file
+from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +84,7 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
 
     for file in res.result["files"]:
         content = code_manager.get_file_content(file)
-        res = conn.upload_file(id=file, content=base64.b64encode(content.encode()).decode("ascii"))
+        res = conn.upload_file(id=file, content=base64.b64encode(content).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
@@ -137,7 +135,8 @@ class Exporter(object):
         self._empty_resource_sets: List[str] = []
         self._resource_state: Dict[str, ResourceState] = {}
         self._unknown_objects: Set[str] = set()
-        self._version = 0
+        # Actual version (placeholder for partial export) is set as soon as export starts.
+        self._version: Optional[int] = None
         self._scope = None
         self.failed = False
 
@@ -220,9 +219,9 @@ class Exporter(object):
                     empty_set = False
                 else:
                     LOGGER.warning(
-                        "resource %s is part of ResourceSets %s but will not be exported.",
+                        "resource %s is part of ResourceSet %s but will not be exported.",
                         str(resource_in_set),
-                        str(resource_set_instance),
+                        str(resource_set_instance.get_attribute("name").get_value()),
                     )
             if empty_set:
                 self._empty_resource_sets.append(name)
@@ -333,8 +332,8 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def get_version(self, no_commit: bool = False) -> int:
-        if no_commit:
+    def get_version(self, no_commit: bool = False, partial_compile: bool = False) -> int:
+        if no_commit or partial_compile:
             return 0
         tid = cfg_env.get()
         if tid is None:
@@ -358,9 +357,9 @@ class Exporter(object):
         export_plugin: Optional[str] = None,
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[Sequence[str]] = None,
-    ) -> Union[Tuple[int, ResourceDict], Tuple[int, ResourceDict, Dict[str, ResourceState], Optional[Dict[str, Any]]]]:
+    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
         """
-        Run the export functions
+        Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
@@ -368,7 +367,8 @@ class Exporter(object):
 
         self.types = types
         self.scopes = scopes
-        self._version = self.get_version(no_commit)
+
+        self._version = self.get_version(no_commit, partial_compile)
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
@@ -399,33 +399,25 @@ class Exporter(object):
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
-        model: Optional[Dict[str, Any]] = {}
-
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-            if types is not None and model_export:
-                if len(self._resources) > 0 or len(unknown_parameters) > 0:
-                    model = ModelExporter(types).export_all()
-                    with open(self.options.json + ".types", "wb+") as fd:
-                        fd.write(protocol.json_encode(model).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
-            model = None
-            if types is not None and model_export:
-                model = ModelExporter(types).export_all()
-
-            self.commit_resources(self._version, resources, metadata, model, partial_compile, resource_sets_to_remove_all)
+            self._version = self.commit_resources(
+                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
+            )
             LOGGER.info("Committed resources with version %d" % self._version)
 
+        exported_version: int = self._version
         if include_status:
-            return self._version, self._resources, self._resource_state, model
-        return self._version, self._resources
+            return exported_version, self._resources, self._resource_state
+        return exported_version, self._resources
 
     def add_resource(self, resource: Resource) -> None:
         """
         Add a new resource to the list of exported resources. When
-        commit_resources is called, the entire list of resources is send
-        to the the server.
+        commit_resources is called, the entire list of resources is sent
+        to the server.
 
         A resource is a map of attributes. This method validates the id
         of the resource and will add a version (if it is not set already)
@@ -484,23 +476,30 @@ class Exporter(object):
 
     def commit_resources(
         self,
-        version: int,
+        version: Optional[int],
         resources: List[Dict[str, str]],
         metadata: Dict[str, str],
-        model: Dict,
         partial_compile: bool,
         resource_sets_to_remove: List[str],
-    ) -> None:
+    ) -> int:
         """
         Commit the entire list of resources to the configuration server.
+
+        :return: The version for which resources were committed.
         """
         tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
             raise Exception("The environment for this model should be set!")
 
+        if version is None and not partial_compile:
+            raise Exception("Full export requires version to be set")
+
         conn = protocol.SyncClient("compiler")
-        self.deploy_code(conn, tid, version)
+
+        # partial exports use the same code as the version they're based on
+        if not partial_compile:
+            self.deploy_code(conn, tid, version)
 
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -527,7 +526,7 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {const.EXPORT_META_DATA: metadata, "model": model}
+        version_info = {const.EXPORT_META_DATA: metadata}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
@@ -537,7 +536,6 @@ class Exporter(object):
         if partial_compile:
             result = conn.put_partial(
                 tid=tid,
-                version=version,
                 resources=resources,
                 resource_sets=self._resource_sets,
                 unknowns=unknown_parameters,
@@ -560,6 +558,12 @@ class Exporter(object):
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % result.result["message"])
+
+        if version == 0:
+            assert result.result is not None
+            return pydantic.parse_obj_as(int, result.result["data"])
+        else:
+            return version
 
     def upload_file(self, content: Union[str, bytes]) -> str:
         """
@@ -647,148 +651,3 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))  # type: ignore
-
-
-def location(obj: Locatable) -> model.Location:
-    loc = obj.get_location()
-    return model.Location(loc.file, loc.lnr)
-
-
-def relation_name(type: Entity, rel: Optional[RelationAttribute]) -> str:
-    if rel is None:
-        return ""
-    return f"{type.get_full_name()}.{rel.name}"
-
-
-class ModelExporter(object):
-    def __init__(self, types: ModelDict):
-        self.root_type = types["std::Entity"]
-        self.types = types
-
-    def export_types(self) -> Dict[str, Any]:
-        """
-        Run after export_model!!
-        """
-
-        def convert_comment(value: Optional[str]) -> str:
-            if value is None:
-                return ""
-            else:
-                return str(value)
-
-        def convert_value_for_type(value) -> model.Value:
-            if isinstance(value, Unknown):
-                raise Exception("annotations should not be unknown")
-            if isinstance(value, Instance):
-                return model.ReferenceValue(self.entity_ref[value])
-            else:
-                return model.DirectValue(value)
-
-        def convert_attribute(attr: Attribute) -> model.Attribute:
-            type_string: Optional[str] = attr.type.get_base_type().type_string()
-            if type_string is None:
-                raise Exception("Type %s can not be represented in the inmanta DSL" % attr.type.get_base_type())
-            return model.Attribute(
-                type_string, attr.is_optional(), attr.is_multi(), convert_comment(attr.comment), location(attr)
-            )
-
-        def convert_relation(relation: RelationAttribute) -> model.Relation:
-
-            return model.Relation(
-                relation.type.get_full_name(),
-                (relation.low, relation.high),
-                relation_name(relation.type, relation.end),
-                convert_comment(relation.comment),
-                location(relation),
-                [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
-                [convert_value_for_type(x.get_value()) for x in relation.target_annotations],
-            )
-
-        def convert_type(mytype: Entity) -> model.Entity:
-            return model.Entity(
-                [x.get_full_name() for x in mytype.parent_entities],
-                {
-                    n: convert_attribute(attr)
-                    for n, attr in mytype.get_attributes().items()
-                    if not isinstance(attr, RelationAttribute)
-                },
-                {
-                    n: convert_relation(attr)
-                    for n, attr in mytype.get_attributes().items()
-                    if isinstance(attr, RelationAttribute)
-                },
-                location(mytype),
-            )
-
-        return {k: convert_type(v).to_dict() for k, v in self.types.items() if isinstance(v, Entity)}
-
-    def export_model(self) -> Dict[str, Any]:
-        entities = self.root_type.get_all_instances()
-
-        entities_per_type = {t: [e for e in g] for t, g in groupby(entities, lambda x: x.type.get_full_name())}
-
-        entity_ref = {e: t + "_" + str(i) for t, es in entities_per_type.items() for e, i in zip(es, itertools.count(1))}
-        self.entity_ref = entity_ref
-
-        def convert(value):
-            if isinstance(value, Unknown):
-                return "_UNKNOWN_"
-            if isinstance(value, Instance):
-                return entity_ref[value]
-            return value
-
-        def convert_relation(value: ResultVariable):
-            if value.is_ready() and value.value is not None:
-                rawvalue = value.get_value()
-            else:
-                # no value present
-                return {"values": []}
-            if not isinstance(rawvalue, list):
-                rawvalue = [rawvalue]
-            return {"values": [convert(v) for v in rawvalue]}
-
-        def convert_attribute(value: ResultVariable) -> JsonType:
-            try:
-                rawvalue = value.get_value()
-            except OptionalValueException:
-                return {"nones": [0]}
-            if isinstance(rawvalue, Unknown):
-                return {"unknowns": [0]}
-            if isinstance(rawvalue, NoneValue):
-                return {"nones": [0]}
-            if not isinstance(rawvalue, list):
-                rawvalue = [rawvalue]
-                return {"values": rawvalue}
-            else:
-                unknowns = []
-                offset = 0
-                for i in range(0, len(rawvalue)):
-                    value = rawvalue[i - offset]
-                    if isinstance(value, Unknown):
-                        unknowns.append(i)
-                        del rawvalue[i - offset]
-                        offset += 1
-                if len(unknowns) > 0:
-                    return {"values": rawvalue, "unknowns": unknowns}
-                else:
-                    return {"values": rawvalue}
-
-        def convert_entity(original):
-            attributes = {}
-            relations = {}
-            map = {"type": original.type.get_full_name(), "relations": relations, "attributes": attributes}
-            for name, value in original.slots.items():
-                if name == "self":
-                    pass
-                elif isinstance(value.type, Entity):
-                    relations[name] = convert_relation(value)
-                else:
-                    attributes[name] = convert_attribute(value)
-            return map
-
-        maps = {entity_ref[k]: convert_entity(k) for k in entities}
-
-        return maps
-
-    def export_all(self) -> Dict[str, Any]:
-        return {"instances": self.export_model(), "types": self.export_types()}

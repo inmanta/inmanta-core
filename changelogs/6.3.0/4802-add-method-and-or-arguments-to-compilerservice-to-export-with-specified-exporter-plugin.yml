@@ -1,0 +1,6 @@
+---
+description: Add argument to compilerservice to allow exporting with the specified exporter plugin
+change-type: minor
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"

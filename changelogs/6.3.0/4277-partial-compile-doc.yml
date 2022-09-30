@@ -1,0 +1,4 @@
+description: Add doc for resource sets and partial compiles
+issue-nr: 4277
+change-type: minor
+destination-branches: [master, iso5]

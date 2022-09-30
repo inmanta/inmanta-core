@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 64.0.1 to 65.1.0
+destination-branches:
+- iso5
+sections: {}
