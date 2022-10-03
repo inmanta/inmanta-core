@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import toml
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -54,7 +55,6 @@ The following fixtures manage test environments:
 The deactive_venv autouse fixture cleans up all venv activation and resets inmanta.env.process_env to point to the outer
 environment.
 """
-
 
 import asyncio
 import concurrent
@@ -108,7 +108,7 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -189,13 +189,27 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 
 def pytest_runtest_setup(item: "pytest.Item"):
     """
-    When in fast mode, skip test marked as slow
+    When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
     """
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
+
+    file_name: str = item.location[0]
+    if file_name.startswith("tests/db/migration_tests"):
+        match: Optional[re.Match] = re.fullmatch("tests/db/migration_tests/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+        if not match:
+            pytest.fail(
+                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
+                "should have the @slowtest annotation"
+            )
+        timestamp: str = match.group(1)
+        test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))
+        elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
+        if elapsed_days > 30:
+            pytest.skip("Skipping old migration test")
 
 
 @pytest.fixture(scope="session")
@@ -498,6 +512,15 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     data.Environment._settings = default_settings
 
 
+@pytest.fixture(scope="session", autouse=True)
+def clean_reset_session():
+    """
+    Execute cleanup tasks that should only run at the end of the test suite.
+    """
+    yield
+    IsolatedEnvBuilderCached.get_instance().destroy()
+
+
 def reset_all_objects():
     resources.resource.reset()
     asyncio.set_child_watcher(None)
@@ -508,6 +531,12 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+
+
+@pytest.fixture()
+def disable_isolated_env_builder_cache() -> None:
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -1604,6 +1633,39 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop(timeout=15)
+
+
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
+def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
+    """
+    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
+    and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
+    """
+    for dir_name in os.listdir(modules_v2_dir):
+        module_path = os.path.join(modules_v2_dir, dir_name)
+        pyproject_toml_path = os.path.join(module_path, "pyproject.toml")
+        error_message = f"""
+Module {module_path} has a pyproject.toml file that is incompatible with the requirements of this test suite.
+The build-backend and the build requirements should be set as follows:
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+All modules present in the tests/data/module_v2 directory should satisfy the above-mentioned requirements, because
+the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
+use the same build-backend and build requirements.
+        """.strip()
+        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+            pyproject_toml_as_dct = toml.load(fh)
+            try:
+                if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(
+                    pyproject_toml_as_dct["build-system"]["requires"]
+                ) != {"setuptools", "wheel"}:
+                    raise Exception(error_message)
+            except (KeyError, TypeError):
+                raise Exception(error_message)
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)

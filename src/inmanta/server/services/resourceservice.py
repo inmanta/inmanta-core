@@ -439,7 +439,12 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
                 resource = await data.Resource.get_one(
-                    connection=connection, environment=env.id, resource_version_id=resource_id_str
+                    connection=connection,
+                    environment=env.id,
+                    resource_version_id=resource_id_str,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
                 )
                 if resource is None:
                     raise NotFound("The resource with the given id does not exist in the given environment.")
@@ -499,7 +504,7 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
+        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
         for agent, resource_id in waiting_agents:
@@ -596,7 +601,14 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
-                resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
+                resources = await data.Resource.get_resources(
+                    env.id,
+                    resource_ids,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
+                    connection=connection,
+                )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
                     return (
                         404,
@@ -713,9 +725,8 @@ class ResourceService(protocol.ServerSlice):
                                     environment=env.id, resource_id=res.resource_id, connection=connection
                                 )
 
-                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
-
         if is_resource_state_update and is_resource_action_finished:
+            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
             waiting_agents = set(
                 [(Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides]
             )

@@ -1,0 +1,6 @@
+---
+description: Set the startup/shutdown order between the Inmanta server and the database in the docker-compose file
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  minor-improvement: "{{description}}"
