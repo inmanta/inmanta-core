@@ -107,8 +107,10 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             reset=False,
             secondary_log_colors=self.secondary_log_colors,
             validate=self.validate,
-            force_color=False,
+            stream=self.stream,
             no_color=True,
+            force_color=False,
+            defaults=self.defaults,
         )
         header = formatter.format(
             logging.LogRecord(
