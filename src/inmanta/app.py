@@ -98,7 +98,9 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
     def get_header_length(self, record):
         """Get the header length of a given record."""
-        formatter = colorlog.ColoredFormatter(fmt=self.fmt, reset=False, force_color=False, no_color=True)
+        formatter = colorlog.ColoredFormatter(
+            fmt=self.fmt, reset=self.reset, force_color=self.force_color, no_color=self.no_color
+        )
         header = formatter.format(
             logging.LogRecord(
                 name=record.name,
