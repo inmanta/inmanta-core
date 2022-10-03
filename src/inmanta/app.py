@@ -95,6 +95,9 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             fmt, datefmt, style, log_colors, reset, secondary_log_colors, validate, stream, no_color, force_color, defaults
         )
         self.fmt = fmt
+        self.style = style
+        self.validate = validate
+        self.defaults = defaults
 
     def get_header_length(self, record):
         """Get the header length of a given record."""
