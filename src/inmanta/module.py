@@ -356,7 +356,7 @@ class CLIGitProvider(GitProvider):
         process_env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", src, dest]
 
-        return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd, env_vars=process_env)
+        return_code, _ = env.CommandRunner(LOGGER).run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:
             raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")
