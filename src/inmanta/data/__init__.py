@@ -84,6 +84,15 @@ APILIMIT = 1000
 default_unset = object()
 
 
+"""
+Locking order rules:
+In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
+are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
+as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
+- Code -> ConfigurationModel
+"""
+
+
 @enum.unique
 class QueryType(str, enum.Enum):
     def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
@@ -111,9 +120,8 @@ class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
-    locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
-    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY. See relevant data classes'
-    docstrings for appropriate lock orderings.
+    locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
+    the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
 
     Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
     may be extended when a new lock mode is required.
@@ -128,9 +136,9 @@ class TableLockMode(enum.Enum):
 class RowLockMode(enum.Enum):
     """
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
-    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
-    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-    See relevant data classes' docstrings for appropriate lock orderings.
+    When acquiring a lock, make sure to use the same locking order accross transactions (as described at the top of this
+    module) to prevent deadlocks and to otherwise respect the consistency docs:
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -1324,7 +1332,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """
         Acquire a table-level lock on a single environment. Callers should adhere to a consistent locking order accross
-        transactions.
+        transactions as described at the top of this module.
         Passing a connection object is mandatory. The connection is expected to be in a transaction.
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
@@ -2219,9 +2227,6 @@ class Environment(BaseDocument):
     """
     A deployment environment of a project
 
-    Any transactions that update Environment should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
-
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
@@ -2649,8 +2654,6 @@ RETURNING last_version;
 class Parameter(BaseDocument):
     """
     A parameter that can be used in the configuration model
-    Any transactions that update Parameter should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param name: The name of the parameter
     :param value: The value of the parameter
@@ -3484,6 +3487,10 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param exporter_plugin: Specific exporter plugin to use
+    :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
+        By default, notifications are enabled only for exporting compiles.
+    :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     """
 
     __primary_key__ = ("id",)
@@ -3512,6 +3519,11 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    exporter_plugin: Optional[str] = None
+
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3828,6 +3840,7 @@ class Compile(BaseDocument):
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
+            exporter_plugin=self.exporter_plugin,
         )
 
 
@@ -3879,8 +3892,6 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
-    Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
@@ -4420,8 +4431,6 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
-    Any transactions that update Resource should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this resource version is defined in
     :param rid: The id of the resource and its version
@@ -4504,6 +4513,7 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_version_ids: List[m.ResourceVersionIdStr],
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
@@ -4511,7 +4521,8 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2)"
+        query_lock: str = lock.value if lock is not None else ""
+        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2) {query_lock}"
         resources = await cls.select_query(
             query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
         )
@@ -5354,8 +5365,6 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update ResourceAction, Resource, Environment, Parameter and/or ConfigurationModel
-    should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
@@ -5572,29 +5581,25 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self.lock_table(TableLockMode.SHARE, connection=con)
-                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
-
-                # Delete facts when the resources in this version are the only
-                await con.execute(
-                    f"""
-                    DELETE FROM {Parameter.table_name()} p
-                    WHERE(
-                        environment=$1 AND
-                        resource_id<>'' AND
-                        NOT EXISTS(
-                            SELECT 1
-                            FROM {Resource.table_name()} r
-                            WHERE p.resource_id=r.resource_id
-                        )
-                    )
-                    """,
-                    self.environment,
-                )
-
                 # Delete ConfigurationModel and cascade delete on connected tables
                 await self.delete(connection=con)
+
+            # Delete facts when the resources in this version are the only
+            await con.execute(
+                f"""
+                DELETE FROM {Parameter.table_name()} p
+                WHERE(
+                    environment=$1 AND
+                    resource_id<>'' AND
+                    NOT EXISTS(
+                        SELECT 1
+                        FROM {Resource.table_name()} r
+                        WHERE p.resource_id=r.resource_id
+                    )
+                )
+                """,
+                self.environment,
+            )
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
@@ -5639,17 +5644,10 @@ class ConfigurationModel(BaseDocument):
     ) -> None:
         async with cls.get_connection(connection) as con:
             """
-            Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
-            this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
-            another transaction is able to perform it. This way no race condition is possible where the deployed state is
-            not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
-            transactions have committed already, or they will only start this part of their lifecycle when A has committed
-            itself.
+            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
+            in order to prevent race conditions.
             """
             async with con.transaction():
-                # SHARE UPDATE EXCLUSIVE is self-conflicting
-                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
-                await cls.lock_table(TableLockMode.SHARE_UPDATE_EXCLUSIVE, connection=con)
                 query = f"""UPDATE {ConfigurationModel.table_name()}
                                 SET deployed=True,
                                     result=(CASE WHEN (

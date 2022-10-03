@@ -88,6 +88,7 @@ def test_build_v2_module(
     set_path_argument: bool,
     byte_code: bool,
     monkeypatch: MonkeyPatch,
+    disable_isolated_env_builder_cache: None,  # Test the code path used in production
 ) -> None:
     """
     Build a V2 package and verify that the required files are present in the resulting wheel.

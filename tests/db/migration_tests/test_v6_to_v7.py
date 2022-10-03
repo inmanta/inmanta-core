@@ -21,6 +21,7 @@ from typing import AsyncIterator
 
 import pytest
 from asyncpg import Connection
+from asyncpg.cursor import Cursor
 
 from db.common import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
@@ -28,37 +29,45 @@ from inmanta.server.bootloader import InmantaBootloader
 
 @pytest.fixture
 @pytest.mark.slowtest
-async def migrate_v5_to_v6(
+async def migrate_v6_to_v7(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
 ) -> AsyncIterator[None]:
+    """
+    Performs a v6 database restore and migrates to v7.
+    """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v5.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v6.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
 
     await ibl.start()
-    # When the bootloader is started, it also executes the migration to v6
+    # When the bootloader is started, it also executes the migration to v7
     yield
     await ibl.stop(timeout=15)
 
 
-async def test_add_on_delete_cascade_constraint(migrate_v5_to_v6, postgresql_client: Connection) -> None:
-    """
-    Verify that the ON DELETE CASCADE constraint is set correctly on the substitute_compile_id column
-    of the compile table.
-    """
-    # Assert values in substitute_compile_id column are correct
-    compiles = await postgresql_client.fetch("SELECT substitute_compile_id FROM public.compile")
-    assert all([c["substitute_compile_id"] is None for c in compiles])
+@pytest.mark.slowtest
+async def test_unique_agent_instances(migrate_v6_to_v7: None, postgresql_client: Connection) -> None:
+    # assert that existing documents have been merged and expired state has been set correctly
+    async with postgresql_client.transaction():
+        records: Cursor = postgresql_client.cursor(
+            """
+            SELECT COUNT(*)
+            FROM public.agentinstance
+            GROUP BY tid, process, name
+            ;
+            """
+        )
+        assert all([record["count"] == 1 async for record in records])
 
-    # Assert that ON DELETE CASCADE is set the foreign key constraint compile_substitute_compile_id_fkey
+    # assert unique constraint is present
     constraints = await postgresql_client.fetch(
         """
-            SELECT pg_catalog.pg_get_constraintdef(r.oid, true) as condef
-            FROM pg_catalog.pg_constraint r
-            WHERE conname='compile_substitute_compile_id_fkey'
+        SELECT pg_catalog.pg_get_constraintdef(r.oid, true) as condef
+        FROM pg_catalog.pg_constraint r
+        WHERE conname='agentinstance_unique'
         """
     )
     assert len(constraints) == 1
-    assert "ON DELETE CASCADE" in constraints[0]["condef"]
+    assert constraints[0]["condef"] == "UNIQUE (tid, process, name)"

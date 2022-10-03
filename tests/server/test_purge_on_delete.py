@@ -22,13 +22,13 @@ from datetime import datetime
 
 import pytest
 
-from inmanta import const, data
+from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters
 from inmanta.main import Client
 from inmanta.server.protocol import Server
 from inmanta.util import get_compiler_version
-from utils import ClientHelper
+from utils import ClientHelper, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +49,9 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     """
     Test purge on delete of resources and inversion of requires
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -107,7 +110,12 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # validate requires and provides
     file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
@@ -174,6 +182,9 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     """
     Test purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -275,6 +286,9 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     """
     Test purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -454,7 +468,12 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # Version 2 with purge_on_delete false
     version = await clienthelper.get_version()
@@ -501,7 +520,12 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # Version 3 with no resources
     version = await clienthelper.get_version()
@@ -527,6 +551,9 @@ async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelpe
     """
     Test disable purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
