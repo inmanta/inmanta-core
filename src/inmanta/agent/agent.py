@@ -535,7 +535,7 @@ class AgentInstance(object):
         self.sessionid: uuid.UUID = process.sessionid
 
         # init
-        self._cache = AgentCache()
+        self._cache = AgentCache(self)
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
         self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False

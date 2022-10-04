@@ -26,6 +26,22 @@ from inmanta.agent.handler import cache
 from inmanta.resources import Id, Resource, resource
 
 
+class AgentInstanceMock:
+
+    def is_stopped(self) -> bool:
+        return False
+
+
+@pytest.fixture(scope="session")
+def agent_instance_mock():
+    """
+    The AgentCache needs a reference to an AgentInstance to verify whether
+    the AgentInstance is stopped or not. This fixture provides a mocked
+    AgentInstance that only has the is_stopped() method.
+    """
+    return AgentInstanceMock()
+
+
 @fixture()
 def my_resource():
     @resource("test::Resource", agent="agent", id_attribute="key")
@@ -37,15 +53,15 @@ def my_resource():
         fields = ("key", "value", "purged")
 
 
-def test_base():
-    cache = AgentCache()
+def test_base(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     cache.cache_value("test", value)
     assert value == cache.find("test")
 
 
-def test_timout():
-    cache = AgentCache()
+def test_timout(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     cache.cache_value("test", value, timeout=0.1)
     cache.cache_value("test2", value)
@@ -61,23 +77,23 @@ def test_timout():
     assert value == cache.find("test2")
 
 
-def test_base_fail():
-    cache = AgentCache()
+def test_base_fail(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     with pytest.raises(KeyError):
         assert value == cache.find("test")
 
 
-def test_resource():
-    cache = AgentCache()
+def test_resource(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("test", value, resource=resource)
     assert value == cache.find("test", resource=resource)
 
 
-def test_resource_fail(my_resource):
-    cache = AgentCache()
+def test_resource_fail(my_resource, agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     cache.cache_value("test", value, resource=resource)
@@ -86,8 +102,8 @@ def test_resource_fail(my_resource):
         assert value == cache.find("test")
 
 
-def test_version_closed():
-    cache = AgentCache()
+def test_version_closed(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     version = 200
     with pytest.raises(Exception):
@@ -95,8 +111,8 @@ def test_version_closed():
         assert value == cache.find("test", version=version)
 
 
-def test_version():
-    cache = AgentCache()
+def test_version(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     version = 200
     cache.open_version(version)
@@ -104,8 +120,8 @@ def test_version():
     assert value == cache.find("test", version=version)
 
 
-def test_version_close():
-    cache = AgentCache()
+def test_version_close(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     version = 200
     cache.open_version(version)
@@ -123,8 +139,8 @@ def test_version_close():
         raise AssertionError("Should get exception")
 
 
-def test_context_manager():
-    cache = AgentCache()
+def test_context_manager(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     version = 200
     with cache.manager(version):
@@ -141,7 +157,7 @@ def test_context_manager():
         assert value == cache.find("test", version=version)
 
 
-def test_multi_threaded():
+def test_multi_threaded(agent_instance_mock):
     class Spy(object):
         def __init__(self):
             self.created = 0
@@ -156,7 +172,7 @@ def test_multi_threaded():
         def delete(self):
             self.deleted += 1
 
-    cache = AgentCache()
+    cache = AgentCache(agent_instance_mock)
     version = 200
 
     cache.open_version(version)
@@ -195,8 +211,8 @@ def test_multi_threaded():
     assert beta.deleted == beta.created
 
 
-def test_timout_and_version():
-    cache = AgentCache()
+def test_timout_and_version(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     version = 200
 
     cache.open_version(version)
@@ -218,8 +234,8 @@ def test_timout_and_version():
     assert value == cache.find("testx")
 
 
-def test_version_and_timout():
-    cache = AgentCache()
+def test_version_and_timout(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     version = 200
 
     cache.open_version(version)
@@ -240,8 +256,8 @@ def test_version_and_timout():
         cache.find("test", version=version)
 
 
-def test_version_fail():
-    cache = AgentCache()
+def test_version_fail(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     version = 200
     cache.open_version(version)
@@ -251,8 +267,8 @@ def test_version_fail():
         assert value == cache.find("test")
 
 
-def test_resource_and_version():
-    cache = AgentCache()
+def test_resource_and_version(agent_instance_mock):
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     version = 200
@@ -261,7 +277,7 @@ def test_resource_and_version():
     assert value == cache.find("test", resource=resource, version=version)
 
 
-def test_get_or_else(my_resource):
+def test_get_or_else(my_resource, agent_instance_mock):
     called = []
 
     def creator(param, resource, version):
@@ -269,7 +285,7 @@ def test_get_or_else(my_resource):
         called.append("x")
         return param
 
-    cache = AgentCache()
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     value2 = "test too x"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -285,7 +301,7 @@ def test_get_or_else(my_resource):
     assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
 
 
-def test_get_or_else_none():
+def test_get_or_else_none(agent_instance_mock):
     called = []
 
     def creator(param, resource, version):
@@ -302,7 +318,7 @@ def test_get_or_else_none():
             self.count += 1
             return out
 
-    cache = AgentCache()
+    cache = AgentCache(agent_instance_mock)
     value = "test too"
     resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
     version = 100
@@ -328,7 +344,7 @@ def test_get_or_else_none():
     assert seq.count == 3
 
 
-def test_decorator():
+def test_decorator(agent_instance_mock):
     class Closeable:
         def __init__(self):
             self.closed = False
@@ -339,7 +355,7 @@ def test_decorator():
     my_closable = Closeable()
     my_closable_2 = Closeable()
 
-    xcache = AgentCache()
+    xcache = AgentCache(agent_instance_mock)
 
     class DT(object):
         def __init__(self, cache):
