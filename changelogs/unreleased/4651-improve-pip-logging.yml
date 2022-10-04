@@ -1,0 +1,6 @@
+description: Improve the logging of the pip commands by using a separated logger for those. Also add the content of the requirements and constraints files to the logging.
+issue-nr: 4651
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  minor-improvement: "{{description}}"

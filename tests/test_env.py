@@ -635,3 +635,77 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
     requirements = [Requirement.parse("pkg[optional-pkg]")]
     tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
+
+
+def test_pip_logs(caplog, tmpvenv_active_inherit: str) -> None:
+    """
+    Verify the logs of a pip install:
+        - all records start with 'inmanta.pip'
+        - content of requirements and constraints files are logged
+        - the pip command is logged
+    """
+    caplog.set_level(logging.DEBUG)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        requirement1 = os.path.join(tmpdir, "requirement1.txt")
+        requirement2 = os.path.join(tmpdir, "requirement2.txt")
+        constraint1 = os.path.join(tmpdir, "constraint1.txt")
+        constraint2 = os.path.join(tmpdir, "constraint2.txt")
+        with open(requirement1, "w") as fd:
+            fd.write(
+                """
+inmanta-module-std
+
+                """
+            )
+        with open(requirement2, "w") as fd:
+            fd.write(
+                """
+inmanta-module-net
+
+inmanta-module-ip
+                """
+            )
+        with open(constraint1, "w") as fd:
+            fd.write(
+                """
+inmanta-module-std
+                """
+            )
+        with open(constraint2, "w") as fd:
+            fd.write(
+                """
+
+inmanta-module-ip
+inmanta-module-net
+
+
+                """
+            )
+        caplog.clear()
+        tmpvenv_active_inherit._run_pip_install_command(
+            python_path=env.process_env.python_path,
+            constraints_files=[constraint1, constraint2],
+            requirements_files=[requirement1, requirement2],
+        )
+
+        assert all(record.name == "inmanta.pip" for record in caplog.records)
+        python_path: str = tmpvenv_active_inherit.python_path
+        assert (
+            f"""
+Content of requirements files:
+    {requirement1}:
+        inmanta-module-std
+    {requirement2}:
+        inmanta-module-net
+        inmanta-module-ip
+Content of constraints files:
+    {constraint1}:
+        inmanta-module-std
+    {constraint2}:
+        inmanta-module-ip
+        inmanta-module-net
+Pip command: {python_path} -m pip install -c {constraint1} -c {constraint2} -r {requirement1} -r {requirement2}
+""".strip()
+            in caplog.messages
+        )
