@@ -1,0 +1,8 @@
+description: Added guidelines for partial compiles
+change-type: patch
+sections:
+  # was previously added as experimental but didn't have a real change entry yet
+  feature: Added partial compile feature
+destination-branches:
+  - master
+  - iso5

@@ -14,7 +14,7 @@ requires = [
     "docstring-parser>=0.10,<0.16",
     "email-validator~=1.0",
     "execnet~=1.0",
-    "importlib_metadata~=4.0",
+    "importlib_metadata>=4,<6",
     "jinja2~=3.0",
     "more-itertools~=8.0",
     "netifaces~=0.11",
@@ -42,7 +42,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "7.0.1"
+version = "7.1.1"
 
 setup(
     version=version,

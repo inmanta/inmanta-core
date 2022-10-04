@@ -8,7 +8,7 @@ cryptography==38.0.1
 docstring-parser==0.15
 email-validator==1.3.0
 execnet==1.9.0
-importlib_metadata==4.12.0
+importlib_metadata==5.0.0
 jinja2==3.1.2
 more-itertools==8.14.0
 netifaces==0.11.0
@@ -20,7 +20,7 @@ pyformance==0.4
 PyJWT==2.5.0
 python-dateutil==2.8.2
 pyyaml==6.0
-setuptools==65.3.0
+setuptools==65.4.1
 texttable==1.6.4
 tornado==6.2
 toml==0.10.2

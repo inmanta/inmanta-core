@@ -389,6 +389,10 @@ class CompileRun(object):
                 compile_data_json_file.name,
             ]
 
+            if self.request.exporter_plugin:
+                cmd.append("--export-plugin")
+                cmd.append(self.request.exporter_plugin)
+
             if self.request.partial:
                 cmd.append("--partial")
 
@@ -570,6 +574,7 @@ class CompilerService(ServerSlice):
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
         removed_resource_sets: Optional[List[str]] = None,
+        exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
@@ -608,6 +613,7 @@ class CompilerService(ServerSlice):
             environment_variables=env_vars,
             partial=partial,
             removed_resource_sets=removed_resource_sets,
+            exporter_plugin=exporter_plugin,
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
         )
