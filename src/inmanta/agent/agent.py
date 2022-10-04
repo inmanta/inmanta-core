@@ -88,6 +88,8 @@ class ResourceAction(object):
         if self.resource is not None:
             self.resource_id: Id = self.resource.id
         self.future: ResourceActionResultFuture = Future()
+        # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
+        # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
@@ -244,87 +246,88 @@ class ResourceAction(object):
                 )
 
                 self.running = True
-                if self.is_done():
-                    # Action is cancelled
-                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
-                    self.running = False
-                    return
+                try:
+                    if self.is_done():
+                        # Action is cancelled
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
+                        return
 
-                result = sum(results, ResourceActionResult(True, False, False))
+                    result = sum(results, ResourceActionResult(True, False, False))
 
-                if result.cancel:
-                    # self.running will be set to false when self.cancel is called
-                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                    return
+                    if result.cancel:
+                        # self.running will be set to false when self.cancel is called
+                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                        return
 
-                received_events: Dict[Id, Event]
-                if result.receive_events:
-                    received_events = {
-                        x.resource_id: Event(
-                            status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
+                    received_events: Dict[Id, Event]
+                    if result.receive_events:
+                        received_events = {
+                            x.resource_id: Event(
+                                status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
+                            )
+                            for x in self.dependencies
+                        }
+                    else:
+                        received_events = {}
+
+                    if self.undeployable is not None:
+                        ctx.set_status(self.undeployable)
+                        success = False
+                        send_event = False
+                    elif not result.success:
+                        ctx.set_status(const.ResourceState.skipped)
+                        ctx.info(
+                            "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                            resource=self.resource.id.resource_version_str(),
+                            failed=self.skipped_because(results),
                         )
-                        for x in self.dependencies
+                        success = False
+                        send_event = False
+                        await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
+                    else:
+                        success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+
+                        ctx.debug(
+                            "End run for resource %(resource)s in deploy %(deploy_id)s",
+                            resource=str(self.resource.id),
+                            deploy_id=self.gid,
+                        )
+
+                    end = datetime.datetime.now().astimezone()
+                    changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
+                        self.resource.id.resource_version_str(): ctx.changes
                     }
-                else:
-                    received_events = {}
 
-                if self.undeployable is not None:
-                    ctx.set_status(self.undeployable)
-                    success = False
-                    send_event = False
-                elif not result.success:
-                    ctx.set_status(const.ResourceState.skipped)
-                    ctx.info(
-                        "Resource %(resource)s skipped due to failed dependency %(failed)s",
-                        resource=self.resource.id.resource_version_str(),
-                        failed=self.skipped_because(results),
+                    if ctx.facts:
+                        ctx.debug("Sending facts to the server")
+                        set_fact_response = await self.scheduler.get_client().set_parameters(
+                            tid=self.scheduler._env_id, parameters=ctx.facts
+                        )
+                        if set_fact_response.code != 200:
+                            ctx.error("Failed to send facts to the server %s", set_fact_response.result)
+
+                    response = await self.scheduler.get_client().resource_action_update(
+                        tid=self.scheduler._env_id,
+                        resource_ids=[self.resource.id.resource_version_str()],
+                        action_id=ctx.action_id,
+                        action=const.ResourceAction.deploy,
+                        started=start,
+                        finished=end,
+                        status=ctx.status,
+                        changes=changes,
+                        messages=ctx.logs,
+                        change=ctx.change,
+                        send_events=send_event,
                     )
-                    success = False
-                    send_event = False
-                    await self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
-                else:
-                    success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
+                    if response.code != 200:
+                        LOGGER.error("Resource status update failed %s", response.result)
 
-                ctx.debug(
-                    "End run for resource %(resource)s in deploy %(deploy_id)s",
-                    resource=str(self.resource.id),
-                    deploy_id=self.gid,
-                )
-
-                end = datetime.datetime.now().astimezone()
-                changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
-                    self.resource.id.resource_version_str(): ctx.changes
-                }
-
-                if ctx.facts:
-                    ctx.debug("Sending facts to the server")
-                    set_fact_response = await self.scheduler.get_client().set_parameters(
-                        tid=self.scheduler._env_id, parameters=ctx.facts
-                    )
-                    if set_fact_response.code != 200:
-                        ctx.error("Failed to send facts to the server %s", set_fact_response.result)
-
-                response = await self.scheduler.get_client().resource_action_update(
-                    tid=self.scheduler._env_id,
-                    resource_ids=[self.resource.id.resource_version_str()],
-                    action_id=ctx.action_id,
-                    action=const.ResourceAction.deploy,
-                    started=start,
-                    finished=end,
-                    status=ctx.status,
-                    changes=changes,
-                    messages=ctx.logs,
-                    change=ctx.change,
-                    send_events=send_event,
-                )
-                if response.code != 200:
-                    LOGGER.error("Resource status update failed %s", response.result)
-
-                self.status = ctx.status
-                self.change = ctx.change
-                self.changes = changes
-                self.future.set_result(ResourceActionResult(success, send_event, False))
-                self.running = False
+                    self.status = ctx.status
+                    self.change = ctx.change
+                    self.changes = changes
+                    self.future.set_result(ResourceActionResult(success, send_event, False))
+                finally:
+                    self.running = False
 
     def __str__(self) -> str:
         if self.resource is None:
@@ -364,6 +367,7 @@ class RemoteResourceAction(ResourceAction):
                 return
 
             status = const.ResourceState[result.result["resource"]["status"]]
+            self.running = True
             if status in const.TRANSIENT_STATES or self.future.done():
                 # wait for event
                 pass
@@ -390,10 +394,10 @@ class RemoteResourceAction(ResourceAction):
                     send_event = log["send_event"]
 
                 self.future.set_result(ResourceActionResult(success, send_event, False))
-
-            self.running = False
         except Exception:
             LOGGER.exception("could not get status for remote resource")
+        finally:
+            self.running = False
 
     def notify(
         self,
@@ -603,7 +607,7 @@ class AgentInstance(object):
         self.sessionid: uuid.UUID = process.sessionid
 
         # init
-        self._cache = AgentCache()
+        self._cache = AgentCache(self)
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
         self._time_triggered_actions: Set[Callable[[], Awaitable[None]]] = set()
         self._enabled = False
