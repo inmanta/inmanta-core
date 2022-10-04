@@ -1,0 +1,4 @@
+---
+description: Fix tests that verify the logging output that were broken due to #4869
+change-type: patch
+destination-branches: [master, iso5]
