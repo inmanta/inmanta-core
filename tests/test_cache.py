@@ -27,7 +27,6 @@ from inmanta.resources import Id, Resource, resource
 
 
 class AgentInstanceMock:
-
     def is_stopped(self) -> bool:
         return False
 
