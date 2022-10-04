@@ -356,7 +356,7 @@ class CLIGitProvider(GitProvider):
         process_env["GIT_ASKPASS"] = "true"
         cmd = ["git", "clone", src, dest]
 
-        return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd, env_vars=process_env)
+        return_code, _ = env.CommandRunner(LOGGER).run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:
             raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")
@@ -509,9 +509,9 @@ class ModuleSource(Generic[TModule]):
     def _log_snapshot_difference(
         self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
     ) -> None:
-        set_pre_install = set(previous_snapshot.items())
-        set_post_install = set(version_snapshot.items())
-        updates_and_additions = set_post_install - set_pre_install
+        set_pre_install: Set[tuple[str, "Version"]] = set(previous_snapshot.items())
+        set_post_install: Set[tuple[str, "Version"]] = set(version_snapshot.items())
+        updates_and_additions: Set[tuple[str, "Version"]] = set_post_install - set_pre_install
 
         if version_snapshot:
             out = [header] if header is not None else []
