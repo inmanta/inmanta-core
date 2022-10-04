@@ -1145,3 +1145,75 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
         await autostarted_agent_manager._ensure_agents(env=env, agents=["internal"], restart=True)
 
     assert exception_message in str(excinfo.value)
+
+
+async def test_are_agents_active(server, client, environment, agent_factory) -> None:
+    """
+    Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
+    is in the up or the paused state.
+    """
+    agent_config.use_autostart_agent_map.set("True")
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agent_name = "agent1"
+    env_id = UUID(environment)
+    env = await data.Environment.get_by_id(env_id)
+
+    # The agent is not started yet ->  it should not be active
+    assert not await agentmanager.are_agents_active(tid=env_id, endpoints=[agent_name])
+
+    # Start agent
+    await agentmanager.ensure_agent_registered(env, agent_name)
+    await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+
+    # Verify agent is active
+    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
+
+    # Pause agent
+    result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
+    assert result.code == 200, result.result
+
+    # Ensure the agent is still active
+    await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
+
+
+async def test_dont_start_paused_agent(server, client, environment, caplog) -> None:
+    """
+    Ensure that the AutostartedAgentManager doesn't try to start an agent that is paused (inmanta/inmanta-core#4398).
+    """
+    caplog.set_level(logging.DEBUG)
+    env_id = UUID(environment)
+    agent_name = "agent1"
+
+    # Register agent in model
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+    # Add agent1 to AUTOSTART_AGENT_MAP
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
+    assert result.code == 200, result.result
+
+    # Start agent1
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    env = await data.Environment.get_by_id(env_id)
+    assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
+    caplog.clear()
+    await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+    # Ensure we wait until a primary has been elected for agent1
+    assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
+    assert len(autostarted_agent_manager._agent_procs) == 1
+    assert "Started new agent with PID" in caplog.text
+    # Ensure no timeout happened
+    assert "took too long to start" not in caplog.text
+
+    # Pause agent1
+    result = await client.agent_action(tid=env_id, name=agent_name, action=AgentAction.pause.value)
+    assert result.code == 200, result.result
+
+    # Execute _ensure_agents() again and verify that no restart is triggered
+    caplog.clear()
+    await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+    assert len(autostarted_agent_manager._agent_procs) == 1
+    assert "Started new agent with PID" not in caplog.text
+    # Ensure no timeout happened
+    assert "took too long to start" not in caplog.text

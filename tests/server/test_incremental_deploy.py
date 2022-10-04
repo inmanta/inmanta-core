@@ -34,6 +34,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOU
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.util import get_compiler_version
+from utils import assert_no_warning
 
 
 class MultiVersionSetup(object):
@@ -317,8 +318,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
         result, _ = await resource_service.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True, sid=sid)
         assert result == 500
 
-    for record in caplog.records:
-        assert record.levelname != "WARNING"
+    assert_no_warning(caplog)
 
 
 def strip_version(v):
@@ -366,8 +366,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
 
         await setup.setup(orchestration_service, resource_service, env, sid)
 
-    for record in caplog.records:
-        assert record.levelname != "WARNING"
+    assert_no_warning(caplog)
 
 
 @pytest.mark.asyncio
@@ -389,8 +388,7 @@ async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, e
         resources = await setup.setup(orchestration_service, resource_service, env, sid)
         assert not resources[id2]["attributes"]["requires"]
 
-    for record in caplog.records:
-        assert record.levelname != "WARNING"
+    assert_no_warning(caplog)
 
 
 @pytest.mark.asyncio
@@ -422,9 +420,7 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
 
         finally:
             await agent.stop()
-    for record in caplog.records:
-        # gets some logs when setting up agent
-        assert record.levelname != "WARNING" or record.name == "inmanta.config"
+    assert_no_warning(caplog)
 
 
 @pytest.mark.asyncio
@@ -448,8 +444,7 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
 
         await setup.setup(orchestration_service, resource_service, env, sid)
 
-    for record in caplog.records:
-        assert record.levelname != "WARNING"
+    assert_no_warning(caplog)
 
 
 @pytest.mark.asyncio
@@ -475,5 +470,4 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, en
         setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
         await setup.setup(orchestration_service, resource_service, env, sid)
 
-    for record in caplog.records:
-        assert record.levelname != "WARNING"
+    assert_no_warning(caplog)

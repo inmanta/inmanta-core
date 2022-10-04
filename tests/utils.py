@@ -17,36 +17,33 @@
 """
 import asyncio
 import datetime
-import inspect
 import json
 import logging
-import time
 import uuid
-from typing import Any, Dict
+from typing import Any, Awaitable, Callable, Dict, List, Union
 
 import pytest
 from pkg_resources import parse_version
 from pydantic.tools import lru_cache
 
 from _pytest.mark import MarkDecorator
-from inmanta import data
+from inmanta import data, util
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 
 
-async def retry_limited(fun, timeout, *args, **kwargs):
-    async def fun_wrapper():
-        if inspect.iscoroutinefunction(fun):
-            return await fun(*args, **kwargs)
-        else:
-            return fun(*args, **kwargs)
-
-    start = time.time()
-    while time.time() - start < timeout and not (await fun_wrapper()):
-        await asyncio.sleep(0.1)
-    if not (await fun_wrapper()):
+async def retry_limited(
+    fun: Union[Callable[..., bool], Callable[..., Awaitable[bool]]],
+    timeout: float,
+    interval: float = 0.1,
+    *args: object,
+    **kwargs: object,
+) -> None:
+    try:
+        await util.retry_limited(fun, timeout, interval, *args, **kwargs)
+    except asyncio.TimeoutError:
         raise AssertionError("Bounded wait failed")
 
 
@@ -206,6 +203,20 @@ class LogSequence(object):
 
     def no_more_errors(self):
         self.assert_not("", logging.ERROR, "")
+
+
+NOISY_LOGGERS = [
+    "inmanta.config",  # Option deprecations
+    "inmanta.util",  # cancel background tasks
+]
+
+
+def assert_no_warning(caplog, loggers_to_allow: List[str] = NOISY_LOGGERS):
+    """
+    Assert there are no warning, except from the list of loggers to allow
+    """
+    for record in caplog.records:
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
 
 
 def configure(unused_tcp_port, database_name, database_port):
