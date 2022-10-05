@@ -1,0 +1,5 @@
+description: Fixed some compatibility issues with colorlog library
+change-type: patch
+destination-branches:
+  - iso5
+  - master
