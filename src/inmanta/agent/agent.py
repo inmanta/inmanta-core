@@ -287,11 +287,11 @@ class ResourceAction(object):
                     else:
                         success, send_event = await self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
-                        ctx.debug(
-                            "End run for resource %(resource)s in deploy %(deploy_id)s",
-                            resource=str(self.resource.id),
-                            deploy_id=self.gid,
-                        )
+                    ctx.debug(
+                        "End run for resource %(resource)s in deploy %(deploy_id)s",
+                        resource=str(self.resource.id),
+                        deploy_id=self.gid,
+                    )
 
                     end = datetime.datetime.now().astimezone()
                     changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
