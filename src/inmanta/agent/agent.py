@@ -263,7 +263,9 @@ class ResourceAction(object):
                     if result.receive_events:
                         received_events = {
                             x.resource_id: Event(
-                                status=x.status, change=x.change, changes=x.changes.get(x.resource_id.resource_version_str(), {})
+                                status=x.status,
+                                change=x.change,
+                                changes=x.changes.get(x.resource_id.resource_version_str(), {}),
                             )
                             for x in self.dependencies
                         }
