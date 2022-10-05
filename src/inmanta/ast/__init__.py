@@ -716,6 +716,7 @@ class WrappingRuntimeException(RuntimeException):
         return self.__cause__.importantance() + 1
 
 
+@stable_api
 class AttributeException(WrappingRuntimeException):
     """Exception raise when an attribute could not be set, always wraps another exception"""
 
@@ -802,6 +803,7 @@ class NotFoundException(RuntimeException):
         return 20
 
 
+@stable_api
 class DoubleSetException(RuntimeException):
     def __init__(
         self, variable: "ResultVariable", stmt: "Optional[Statement]", newvalue: object, newlocation: Location
