@@ -1,4 +1,0 @@
----
-description: Ensure that the interface of AgentCache is backwards compatible with the previous implementation, because pytest-inmanta depends on it.
-change-type: patch
-destination-branches: [master, iso5]
