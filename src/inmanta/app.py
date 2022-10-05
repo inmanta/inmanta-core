@@ -48,7 +48,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
-from colorlog.formatter import LogColors, SecondaryLogColors, _FormatStyle
+from colorlog.formatter import LogColors
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -80,40 +80,23 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
     def __init__(
         self,
         fmt: typing.Optional[str] = None,
-        datefmt: typing.Optional[str] = None,
-        style: _FormatStyle = "%",
+        *,
+        # keep interface minimal: only include fields we actually use
         log_colors: typing.Optional[LogColors] = None,
         reset: bool = True,
-        secondary_log_colors: typing.Optional[SecondaryLogColors] = None,
-        validate: bool = True,
-        stream: typing.Optional[typing.IO] = None,
         no_color: bool = False,
-        force_color: bool = False,
-        defaults: typing.Optional[typing.Mapping[str, typing.Any]] = None,
     ):
-        super().__init__(
-            fmt, datefmt, style, log_colors, reset, secondary_log_colors, validate, stream, no_color, force_color, defaults
-        )
+        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
         self.fmt = fmt
-        self.style = style
-        self.validate = validate
-        self.defaults = defaults
 
-    def get_header_length(self, record):
+    def get_header_length(self, record: logging.LogRecord) -> int:
         """Get the header length of a given record."""
         # to get the length of the header we want to get the header without the color codes
         formatter = colorlog.ColoredFormatter(
             fmt=self.fmt,
-            datefmt=self.datefmt,
-            style=self.style,
             log_colors=self.log_colors,
             reset=False,
-            secondary_log_colors=self.secondary_log_colors,
-            validate=self.validate,
-            stream=self.stream,
             no_color=True,
-            force_color=False,
-            defaults=self.defaults,
         )
         header = formatter.format(
             logging.LogRecord(
@@ -128,7 +111,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         )
         return len(header)
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format a record with added indentation."""
         indent = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
@@ -808,7 +791,6 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
         log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
         formatter = MultiLineFormatter(
             log_format,
-            datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
@@ -817,9 +799,7 @@ def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
         formatter = MultiLineFormatter(
             log_format,
             reset=False,
-            force_color=False,
             no_color=True,
-            datefmt=None,
         )
     return formatter
 
