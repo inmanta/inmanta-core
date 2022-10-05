@@ -86,9 +86,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         reset: bool = True,
         no_color: bool = False,
     ):
-        super().__init__(
-            fmt, log_colors=log_colors, reset=reset, no_color=no_color
-        )
+        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
         self.fmt = fmt
 
     def get_header_length(self, record: logging.LogRecord) -> int:
