@@ -527,7 +527,7 @@ class Id(object):
         return self._version
 
     def set_version(self, version: int) -> None:
-        if self._version > 0:
+        if self._version > 0 and version != self._version:
             raise AttributeError("can't set attribute version")
 
         self._version = version

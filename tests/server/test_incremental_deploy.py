@@ -28,6 +28,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.const import ResourceAction, ResourceState
+from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -199,7 +200,7 @@ class MultiVersionSetup(object):
 
         # increments are complements, without the undeployables
         assert {
-            resource["id"]
+            Id.parse_id(resource["id"]).resource_str()
             for resource in self.versions[version]
             if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
         } == set(pos).union(set(neg))

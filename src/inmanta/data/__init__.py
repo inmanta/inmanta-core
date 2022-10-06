@@ -67,6 +67,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -4443,7 +4444,7 @@ class Resource(BaseDocument):
     :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
     """
 
-    __primary_key__ = ("environment", "resource_version_id")
+    __primary_key__ = ("environment", "model", "resource_id")
 
     environment: uuid.UUID
     model: int
@@ -4451,7 +4452,6 @@ class Resource(BaseDocument):
     # ID related
     resource_id: m.ResourceIdStr
     resource_type: m.ResourceType
-    resource_version_id: m.ResourceVersionIdStr
     resource_id_value: str
 
     agent: str
@@ -4471,6 +4471,10 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides: List[m.ResourceVersionIdStr] = []
 
+    @property
+    def resource_version_id(self):
+        return Id.set_version_in_id(self.resource_id, self.model)
+
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
@@ -4481,23 +4485,23 @@ class Resource(BaseDocument):
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
         query = """
-            SELECT r1.resource_version_id, r1.last_non_deploying_status
+            SELECT r1.resource_id, r1.model, r1.last_non_deploying_status
             FROM resource AS r1
             WHERE r1.environment=$1
                   AND r1.model=$2
                   AND (
                       SELECT (r2.attributes->'requires')::jsonb
                       FROM resource AS r2
-                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
-                  ) ? r1.resource_version_id
+                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_id=$3
+                  ) ? r1.resource_id
         """
         values = [
             cls._get_value(environment),
             cls._get_value(resource_version_id.version),
-            resource_version_id.resource_version_str(),
+            resource_version_id.resource_str(),
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
-        return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
+        return {r["resource_id"]+",v="+str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = "|".join(
@@ -4522,9 +4526,23 @@ class Resource(BaseDocument):
         if not resource_version_ids:
             return []
         query_lock: str = lock.value if lock is not None else ""
-        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2) {query_lock}"
+
+        def convert_or_ignore(rvid):
+            """ Method to retain backward compatibility, ignore bad ID's"""
+            try:
+                return Id.parse_resource_version_id(rvid)
+            except Exception:
+                return None
+
+        parsed_rv = (convert_or_ignore(id) for id in resource_version_ids)
+        effective_parsed_rv = [id for id in parsed_rv if id is not None]
+
+        if not effective_parsed_rv:
+            return []
+
+        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND (resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
         resources = await cls.select_query(
-            query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
+            query, [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]], connection=connection
         )
         return resources
 
@@ -4659,8 +4677,10 @@ class Resource(BaseDocument):
                     if no_obj:
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
+                        parsed_id = resources.Id.parse_id(record["resource_id"])
+                        parsed_id.set_version(record["model"])
+                        record["resource_version_id"] = parsed_id.resource_version_str()
                         record["id"] = record["resource_version_id"]
-                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
                         record["resource_type"] = parsed_id.entity_type
                         resources_list.append(record)
                     else:
@@ -4870,7 +4890,8 @@ class Resource(BaseDocument):
         """
         Get a resource with the given resource version id
         """
-        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id, connection=connection)
+        parsed_id = Id.parse_id(resource_version_id)
+        value = await cls.get_one(environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection)
         return value
 
     @classmethod
@@ -4882,7 +4903,6 @@ class Resource(BaseDocument):
             model=vid.version,
             resource_id=vid.resource_str(),
             resource_type=vid.entity_type,
-            resource_version_id=resource_version_id,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
         )
@@ -5064,9 +5084,10 @@ class Resource(BaseDocument):
         if not resource:
             return None
         parsed_id = resources.Id.parse_id(resource.resource_id)
+        parsed_id.set_version(resource.model)
         return m.VersionedResourceDetails(
             resource_id=resource.resource_id,
-            resource_version_id=resource.resource_version_id,
+            resource_version_id=parsed_id.resource_version_str(),
             resource_type=resource.resource_type,
             agent=resource.agent,
             id_attribute=parsed_id.attribute,
@@ -5342,6 +5363,8 @@ class Resource(BaseDocument):
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
+        rvid = Id.set_version_in_id(self.resource_id, self.model)
+        dct["resource_version_id"] = rvid
         dct["id"] = dct["resource_version_id"]
         return dct
 
@@ -5351,7 +5374,7 @@ class Resource(BaseDocument):
             model=self.model,
             resource_id=self.resource_id,
             resource_type=self.resource_type,
-            resource_version_id=self.resource_version_id,
+            resource_version_id=Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             last_deploy=self.last_deploy,
             attributes=self.attributes,
@@ -5676,7 +5699,7 @@ class ConfigurationModel(BaseDocument):
     @classmethod
     async def get_increment(
         cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[m.ResourceVersionIdStr], Set[m.ResourceVersionIdStr]]:
+    ) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5688,8 +5711,8 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_version_id", "resource_id", "status", "attribute_hash", "attributes"]
-        projection = ["resource_version_id", "resource_id", "status", "attribute_hash"]
+        projection_a = ["resource_id", "status", "attribute_hash", "attributes"]
+        projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
@@ -5756,22 +5779,22 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = {res["resource_version_id"] for res in not_increment}
+        negative = {res["resource_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = {res["resource_version_id"] for res in increment}  # type: Set[str]
+        outset = {res["resource_id"] for res in increment}  # type: Set[str]
         original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
         send_events = []  # type: List[str]
 
         # build lookup tables
         for res in resources:
             for req in res["attributes"]["requires"]:
-                original_provides[req].append(res["resource_version_id"])
+                original_provides[req].append(res["resource_id"])
             if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
-                send_events.append(res["resource_version_id"])
+                send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         work = list(outset)
