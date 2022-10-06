@@ -180,8 +180,8 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
         ProjectTool().execute("install", [])
 
 
-def test_master_checkout(git_modules_dir, modules_repo):
-    coroot = install_project(git_modules_dir, "masterproject")
+def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
+    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
 
     ProjectTool().execute("install", [])
 

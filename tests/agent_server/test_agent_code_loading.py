@@ -22,6 +22,7 @@ import tempfile
 import uuid
 from logging import DEBUG, INFO
 from typing import List
+import os
 
 import pytest
 
@@ -34,25 +35,26 @@ from utils import LogSequence
 async def make_source_structure(
     into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: List[str] = []
 ) -> str:
-    if byte_code:
-        fd, source_file = tempfile.mkstemp(suffix=".py")
-        with open(fd, "w+") as fh:
-            fh.write(source)
-        py_compile.compile(source_file, cfile=source_file + "c")
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        if byte_code:
+            py_file = os.path.join(tmpdirname, "test.py")
+            pyc_file = os.path.join(tmpdirname, "test.pyc")
+            with open(py_file, "w+") as fh:
+                fh.write(source)
+            py_compile.compile(py_file, cfile=pyc_file)
+            with open(pyc_file, "rb") as fh:
+                data = fh.read()
+            file_name = pyc_file
+        else:
+            data = source.encode()
+            file_name = file
 
-        with open(source_file + "c", "rb") as fh:
-            data = fh.read()
-        file_name = source_file + "c"
-    else:
-        data = source.encode()
-        file_name = file
-
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(data)
-    hv: str = sha1sum.hexdigest()
-    into[hv] = (file_name, module, dependencies)
-    await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
-    return hv
+        sha1sum = hashlib.new("sha1")
+        sha1sum.update(data)
+        hv: str = sha1sum.hexdigest()
+        into[hv] = (file_name, module, dependencies)
+        await client.upload_file(hv, content=base64.b64encode(data).decode("ascii"))
+        return hv
 
 
 async def test_agent_code_loading(caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch) -> None:
