@@ -189,7 +189,7 @@ install_requires =
     assert metadata_file.read().strip() == metadata_contents("1.3.1")
 
 
-def test_module_corruption(git_modules_dir, modules_repo):
+def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
     add_file(mod9, "signal", "present", "third commit", version="3.3")
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
@@ -207,7 +207,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
     commitmodule(p9, "first commit")
 
     # setup project
-    proj = install_project(git_modules_dir, "proj9")
+    proj = install_project(git_modules_dir, "proj9", tmpdir)
     app(["project", "install"])
     print(os.listdir(proj))
 
