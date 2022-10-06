@@ -17,12 +17,12 @@
 """
 import base64
 import hashlib
+import os
 import py_compile
 import tempfile
 import uuid
 from logging import DEBUG, INFO
 from typing import List
-import os
 
 import pytest
 

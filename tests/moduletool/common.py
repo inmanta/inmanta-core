@@ -17,7 +17,6 @@
 """
 import os
 import subprocess
-import tempfile
 from subprocess import CalledProcessError
 from typing import Optional
 
@@ -153,7 +152,9 @@ def install_project(modules_dir: str, name: str, working_dir: str, config=True, 
     :param config_content: If provided, override the project.yml file with this content.
     """
     coroot = os.path.join(working_dir, name)
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=working_dir, stderr=subprocess.STDOUT)
+    subprocess.check_output(
+        ["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=working_dir, stderr=subprocess.STDOUT
+    )
     os.chdir(coroot)
     if config_content:
         with open("project.yml", "w", encoding="utf-8") as fh:
