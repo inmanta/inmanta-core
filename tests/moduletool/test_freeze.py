@@ -27,7 +27,6 @@ from moduletool.common import install_project
 from test_app_cli import app
 
 
-@pytest.mark.slowtest
 def test_freeze_basic(modules_dir: str, modules_repo: str, tmpdir):
     install_project(modules_dir, "projectA", tmpdir)
     modtool = ModuleTool()
@@ -44,7 +43,6 @@ def test_freeze_basic(modules_dir: str, modules_repo: str, tmpdir):
     assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
 
 
-@pytest.mark.slowtest
 def test_project_freeze_basic(modules_dir: str, modules_repo: str, tmpdir):
     install_project(modules_dir, "projectA", tmpdir)
     modtool = ModuleTool()
@@ -68,8 +66,7 @@ def test_project_freeze_basic(modules_dir: str, modules_repo: str, tmpdir):
     }
 
 
-@pytest.mark.slowtest
-def test_project_freeze_bad(modules_dir: str, modules_repo: str, , capsys, caplog, tmpdir):
+def test_project_freeze_bad(modules_dir: str, modules_repo: str, capsys, caplog, tmpdir):
     coroot = install_project(modules_dir, "baddep", tmpdir, config=False)
 
     with pytest.raises(CLIException) as e:
@@ -87,7 +84,6 @@ def test_project_freeze_bad(modules_dir: str, modules_repo: str, , capsys, caplo
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
 
 
-@pytest.mark.slowtest
 def test_project_freeze(modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(modules_dir, "projectA", tmpdir)
 
@@ -115,7 +111,6 @@ requires:
     )
 
 
-@pytest.mark.slowtest
 def test_project_freeze_disk(modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(modules_dir, "projectA", tmpdir)
 
@@ -145,7 +140,6 @@ requires:
         )
 
 
-@pytest.mark.slowtest
 def test_project_freeze_odd_opperator(modules_dir: str, modules_repo: str, tmpdir):
     coroot = install_project(modules_dir, "projectA", tmpdir)
 
@@ -165,14 +159,11 @@ def test_project_freeze_odd_opperator(modules_dir: str, modules_repo: str, tmpdi
     assert "argument --operator: invalid choice: 'xxx'" in err
 
 
-@pytest.mark.slowtest
 def test_project_options_in_config(modules_dir: str, modules_repo: str, capsys, tmpdir):
-    coroot = install_project(
-        modules_dir,
-        "projectA",
-        tmpdir,
-        config_content=f"""
-name: projectA
+    coroot = install_project(modules_dir, "projectA", tmpdir)
+    with open("project.yml", "w", encoding="utf-8") as fh:
+        fh.write(
+            """name: projectA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
@@ -221,7 +212,6 @@ requires:
     verify()
 
 
-@pytest.mark.slowtest
 def test_module_freeze(modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(modules_dir, "projectA", tmpdir)
 
@@ -246,7 +236,6 @@ requires:
     verify()
 
 
-@pytest.mark.slowtest
 def test_module_freeze_self_disk(modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(modules_dir, "projectA", tmpdir)
 
