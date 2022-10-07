@@ -1,0 +1,7 @@
+---
+description: Remove support for leaving nullable attribute unassigned, an exception will now be raised.
+change-type: major
+issue-nr: 1888
+destination-branches: [master, iso5]
+sections:
+  deprecation-note: "{{description}}"
