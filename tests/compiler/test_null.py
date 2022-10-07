@@ -16,10 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import OptionalValueException
 from inmanta.execute.util import NoneValue
 
 

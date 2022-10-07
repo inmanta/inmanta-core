@@ -18,10 +18,8 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
-    CompilerDeprecationWarning,
     CompilerException,
     DoubleSetException,
     Locatable,

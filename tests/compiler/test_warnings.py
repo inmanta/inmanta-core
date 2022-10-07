@@ -198,7 +198,6 @@ C()
         """
         % (" = null" if assign else ""),
     )
-    message: str = "No value for attribute __config__::C.n. Assign null instead of leaving unassigned. ({dir}/main.cf:17)"
 
     def match(exception) -> bool:
         message: str = (
