@@ -42,11 +42,6 @@ if TYPE_CHECKING:
 DBLIMIT = 100000
 
 
-dashboard_feature = BoolFeature(
-    slice=SLICE_SERVER, name="dashboard", description="Serve the dashboard under the /dashboard endpoint."
-)
-
-
 class Server(protocol.ServerSlice):
     """
     The central Inmanta server that communicates with clients and agents and persists configuration
@@ -67,51 +62,10 @@ class Server(protocol.ServerSlice):
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
-    def define_features(self) -> List[Feature[object]]:
-        return [dashboard_feature]
-
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
-
-        self.setup_dashboard()
-
-    def setup_dashboard(self) -> None:
-        """
-        If configured, set up tornado to serve the dashboard
-        """
-        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
-            return
-
-        dashboard_path = opt.dash_path.get()
-        if dashboard_path is None:
-            LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
-            return
-
-        if not opt.server_enable_auth.get():
-            auth = ""
-        else:
-            auth = """,
-    'auth': {
-        'realm': '%s',
-        'url': '%s',
-        'clientId': '%s'
-    }""" % (
-                opt.dash_realm.get(),
-                opt.dash_auth_url.get(),
-                opt.dash_client_id.get(),
-            )
-
-        content = """
-angular.module('inmantaApi.config', []).constant('inmantaConfig', {
-    'backend': window.location.origin+'/'%s
-});
-        """ % (
-            auth
-        )
-        self.add_static_content("/dashboard/config.js", content=content)
-        self.add_static_handler("/dashboard", dashboard_path)
 
     def check_storage(self) -> Dict[str, str]:
         """
