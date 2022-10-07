@@ -22,7 +22,7 @@ import logging
 import time
 import uuid
 from collections import abc
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, cast
 
 import asyncpg
 import pytest
@@ -2883,11 +2883,11 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rid_r2_v2 = "std::File[agent1,path=/etc/file2]"
     rid_r3_v2 = "std::File[agent1,path=/etc/file3]"
 
-    rvid_r1_v2 = "std::File[agent1,path=/etc/file1],v=2"
-    rvid_r2_v2 = "std::File[agent1,path=/etc/file2],v=2"
-    rvid_r3_v2 = "std::File[agent1,path=/etc/file3],v=2"
-    rvid_r4_v2 = "std::File[agent1,path=/etc/file4],v=2"
-    rvid_r5_v2 = "std::File[agent1,path=/etc/file5],v=2"
+    rvid_r1_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file1],v=2")
+    rvid_r2_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file2],v=2")
+    rvid_r3_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file3],v=2")
+    rvid_r4_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file4],v=2")
+    rvid_r5_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file5],v=2")
 
     await data.Resource.new(
         environment=env.id,
