@@ -495,6 +495,7 @@ def test_running_test_fixture():
     """
     assert inmanta.RUNNING_TESTS
 
+
 def test_running_test_fixture_fails():
     """
     Test that always fails for testing purposes
