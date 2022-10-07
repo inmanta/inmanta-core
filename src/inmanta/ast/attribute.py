@@ -61,8 +61,6 @@ class Attribute(Locatable):
             self.__type = NullableType(self.__type)
 
         self.low: int = 0 if nullable else 1
-        # This attribute is only used for the DeprecatedOptionVariable
-        self.high: Optional[int] = None
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
@@ -110,17 +108,7 @@ class Attribute(Locatable):
         self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
-        out: ResultVariable["Instance"]
-
-        if self.is_optional():
-            # be a 0-1 relation
-            self.end = None
-            self.low = 0
-            self.high = 1
-            out = ResultVariable()
-        else:
-            out = ResultVariable()
-
+        out: ResultVariable["Instance"] = ResultVariable()
         out.set_type(self.type)
         return out
 
