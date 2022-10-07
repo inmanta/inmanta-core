@@ -17,7 +17,6 @@
 """
 import os
 import subprocess
-import tempfile
 from subprocess import CalledProcessError
 from typing import Optional
 
@@ -140,10 +139,21 @@ def make_module_simple_deps(reporoot, name, depends=[], project=False, version="
     return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
-def install_project(modules_dir, name, config=True):
-    subroot = tempfile.mkdtemp()
-    coroot = os.path.join(subroot, name)
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=subroot, stderr=subprocess.STDOUT)
+def install_project(modules_dir: str, name: str, working_dir: str, config=True):
+    """
+    Copy the project with `name` in `modules_dir` to the given `working_dir`.
+    This method changes the current working directory to the root of the project copied into the working_dir,
+    as such that the ModuleTool() can be used to act on it.
+
+    :param modules_dir: Should match the value of the git_modules_dir fixture.
+    :param name: The name of the project present in the repos subdirectory of the modules_dir directory.
+    :param working_dir: The directory where the project will be copied.
+    :param config: Whether to reload the configuration store.
+    """
+    coroot = os.path.join(working_dir, name)
+    subprocess.check_output(
+        ["git", "clone", os.path.join(modules_dir, "repos", name)], cwd=working_dir, stderr=subprocess.STDOUT
+    )
     os.chdir(coroot)
     if config:
         Config.load_config()
