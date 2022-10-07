@@ -445,7 +445,6 @@ Export the ``OSPF`` configuration model to the Inmanta server:
 
 
 When the model is sent to the server, it will start deploying the configuration.
-To track progress, you can go to the `dashboard <http://172.30.0.3:8888/dashboard>`_, select the `test` project and then the `SR_Linux` environment and click on ``Resources`` tab on the left pane to view the progress.
 
 When the deployment is complete, you can verify the configuration using the commands provided in `Verifying the configuration`_ section.
 
