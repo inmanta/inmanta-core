@@ -494,3 +494,9 @@ def test_running_test_fixture():
     Assert that the RUNNING_TESTS variable is set to True when we run the tests
     """
     assert inmanta.RUNNING_TESTS
+
+def test_running_test_fixture_fails():
+    """
+    Test that always fails for testing purposes
+    """
+    assert False
