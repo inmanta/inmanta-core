@@ -34,7 +34,6 @@ from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
-from utils import resource_action_consistency_check
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
@@ -2881,11 +2880,8 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     cm = data.ConfigurationModel(version=2, environment=env.id)
     await cm.insert()
 
-    rid_r1_v2 = "std::File[agent1,path=/etc/file1]"
     rid_r2_v2 = "std::File[agent1,path=/etc/file2]"
     rid_r3_v2 = "std::File[agent1,path=/etc/file3]"
-    rid_r4_v2 = "std::File[agent1,path=/etc/file4]"
-    rid_r5_v2 = "std::File[agent1,path=/etc/file5]"
 
     rvid_r1_v2 = "std::File[agent1,path=/etc/file1],v=2"
     rvid_r2_v2 = "std::File[agent1,path=/etc/file2],v=2"

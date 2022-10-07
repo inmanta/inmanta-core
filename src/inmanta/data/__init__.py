@@ -65,7 +65,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
+from inmanta.data.model import ResourceIdStr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.resources import Id
 from inmanta.server import config
@@ -4541,7 +4541,11 @@ class Resource(BaseDocument):
         if not effective_parsed_rv:
             return []
 
-        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND (resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
+        query = (
+            f"SELECT * FROM {cls.table_name()} WHERE "
+            f"environment=$1 AND "
+            f"(resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
+        )
         resources = await cls.select_query(
             query,
             [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
