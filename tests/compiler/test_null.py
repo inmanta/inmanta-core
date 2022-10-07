@@ -41,39 +41,6 @@ def test_null(snippetcompiler):
     assert isinstance(a, NoneValue)
 
 
-def test_null_unset(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-        entity A:
-            string? a
-        end
-        implement A using std::none
-        a = A()
-
-    """
-    )
-
-    (_, scopes) = compiler.do_compile()
-    root = scopes.get_child("__config__")
-    with pytest.raises(OptionalValueException):
-        root.lookup("a").get_value().get_attribute("a").get_value()
-
-
-def test_null_unset_hang(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-            entity A:
-                string? a
-            end
-            implement A using std::none
-            a = A()
-            b = a.a
-        """
-    )
-    with pytest.raises(OptionalValueException):
-        (_, scopes) = compiler.do_compile()
-
-
 def test_null_on_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

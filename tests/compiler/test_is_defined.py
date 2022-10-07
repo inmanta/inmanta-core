@@ -132,7 +132,7 @@ def test_is_defined_attribute_not(snippetcompiler, capsys, condition_block_with_
         f"""
 
 entity A:
-    number? a
+    number? a = null
 end
 
 implement A using std::none
@@ -187,7 +187,7 @@ def test_is_defined_attribute_not_3(snippetcompiler, capsys, condition_block):
         f"""
 
     entity A:
-        number[]? a
+        number[]? a = null
     end
 
     implement A using std::none
