@@ -290,15 +290,10 @@ class ResourceService(protocol.ServerSlice):
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
-        def convert_id(rid: ResourceIdStr) -> ResourceVersionIdStr:
-            v = Id.parse_id(rid)
-            v.set_version(version)
-            return v.resource_version_str()
-
         resource_ids = []
         for rv in resources:
             deploy_model.append(rv.to_dict())
-            resource_ids.append(convert_id(rv.resource_id))
+            resource_ids.append(rv.resource_version_id)
 
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.
@@ -376,11 +371,6 @@ class ResourceService(protocol.ServerSlice):
         deploy_model: List[Dict[str, Any]] = []
         resource_ids: List[str] = []
 
-        def convert_id(rid: ResourceIdStr) -> ResourceVersionIdStr:
-            v = Id.parse_id(rid)
-            v.set_version(version)
-            return v.resource_version_str()
-
         for rv in resources:
             if rv.resource_id not in increment_ids:
                 continue
@@ -392,9 +382,8 @@ class ResourceService(protocol.ServerSlice):
                 idr = Id.parse_id(req)
                 return idr.get_agent_name() != agent
 
-            rv.attributes["requires"] = [convert_id(r) for r in rv.attributes["requires"] if in_requires(r)]
             deploy_model.append(rv.to_dict())
-            resource_ids.append(convert_id(rv.resource_id))
+            resource_ids.append(rv.resource_version_id)
 
         # Don't log ResourceActions without resource_version_ids, because
         # no API call exists to retrieve them.

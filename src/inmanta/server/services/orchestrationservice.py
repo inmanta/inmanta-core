@@ -561,6 +561,7 @@ class OrchestrationService(protocol.ServerSlice):
             if "requires" not in attributes:
                 LOGGER.warning("Received resource without requires attribute (%s)" % res_obj.resource_id)
             else:
+                # Collect all requires as resource_ids instead of resource version ids
                 cleaned_requires = []
                 for req in attributes["requires"]:
                     rid = Id.parse_id(req)
@@ -905,12 +906,11 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-
         now = datetime.datetime.now().astimezone()
 
-        # not checking error conditions
-        if undep_ids:
+        if undep:
+            undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
+            # not checking error conditions
             await self.resource_service.resource_action_update(
                 env,
                 undep_ids,
