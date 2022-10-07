@@ -382,6 +382,7 @@ class OrchestrationService(protocol.ServerSlice):
         for env_item in envs:
             # get available versions
             n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
+            assert isinstance(n_versions, int)
             versions = await data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
@@ -585,7 +586,7 @@ class OrchestrationService(protocol.ServerSlice):
         # hook up all CADs
         for f, t in cross_agent_dep:
             res_obj = rv_dict[t.resource_str()]
-            res_obj.provides.append(f.resource_version_id)
+            res_obj.provides.append(f.resource_id)
 
         # detect failed compiles
         def safe_get(input: object, key: str, default: object) -> object:
@@ -635,7 +636,7 @@ class OrchestrationService(protocol.ServerSlice):
                         req_res = rv_dict[req_id.resource_str()]
 
                         req_res.attributes["requires"].append(res_obj.resource_version_id)
-                        res_obj.provides.append(req_res.resource_version_id)
+                        res_obj.provides.append(req_res.resource_id)
 
         undeployable_ids: List[str] = [res.resource_id for res in undeployable]
         # get skipped for undeployable

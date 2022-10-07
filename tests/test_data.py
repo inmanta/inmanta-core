@@ -339,7 +339,9 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is not None
     for environment, resource_version_id in resource_ids:
         id = Id.parse_id(resource_version_id)
-        assert (await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)) is not None
+        assert (
+            await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)
+        ) is not None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
     assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
@@ -1856,6 +1858,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         for message in ra.messages:
             assert message == {}
 
+
 async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1941,6 +1944,7 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             assert action.action == const.ResourceAction.dryrun
         else:
             assert action.action == const.ResourceAction.deploy
+
 
 async def test_data_document_recursion(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
@@ -2654,6 +2658,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert len(resource_actions) == 1
     assert resource_actions[0].messages[0]["level"] == "WARNING"
 
+
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
     """
     Test querying resource actions that have non unique timestamps, with pagination, using an explicit start and end time
@@ -2828,7 +2833,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rid_r3_v1 = "std::File[agent1,path=/etc/file3]"
     rid_r4_v1 = "std::File[agent1,path=/etc/file4]"
 
-    rvid_r1_v1 = rid_r1_v1+",v=1"
+    rvid_r1_v1 = rid_r1_v1 + ",v=1"
     rvid_r2_v1 = rid_r2_v1 + ",v=1"
     rvid_r3_v1 = rid_r3_v1 + ",v=1"
     rvid_r4_v1 = rid_r4_v1 + ",v=1"

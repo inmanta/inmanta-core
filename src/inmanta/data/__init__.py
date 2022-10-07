@@ -65,7 +65,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.resources import Id
 from inmanta.server import config
@@ -4327,7 +4327,8 @@ class ResourceAction(BaseDocument):
         # find the interval between the current deploy and the previous successful deploy
         # also check we are currently deploying
         # do all of this in one query
-        resource_id_str = resource_id.resource_version_str()
+        resource_version_id_str = resource_id.resource_version_str()
+        resource_id_str = resource_id.resource_str()
 
         # These two variables are actually of type datetime.datetime
         # but mypy doesn't know as they come from the DB
@@ -4352,27 +4353,27 @@ class ResourceAction(BaseDocument):
         """
 
         async with cls.get_connection() as connection:
-            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
+            result = await connection.fetchrow(end_query, env.id, resource_id_str)
 
             if not result or result["begin_status"] is None:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                    f" {resource_id_str} has not started deploying yet."
+                    f" {resource_version_id_str} has not started deploying yet."
                 )
             if result["begin_status"] != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {result['begin_status']}."
+                    f" for resource {resource_version_id_str} is {result['begin_status']}."
                 )
             current_deploy_start = result["begin_started"]
             last_deploy_start = result["started"]
 
             # Step3: Get the resource
             resource: Optional[Resource] = await Resource.get_one(
-                environment=env.id, resource_version_id=resource_id_str, connection=connection
+                environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
             if resource is None:
-                raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
+                raise NotFound(f"Resource with id {resource_version_id_str} was not found in environment {env.id}")
 
             # Step 4: get the relevant resource actions
             # Do it in one query for all dependencies
@@ -4469,7 +4470,7 @@ class Resource(BaseDocument):
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides: List[m.ResourceVersionIdStr] = []
+    provides: List[m.ResourceIdStr] = []
 
     @property
     def resource_version_id(self):
@@ -4501,7 +4502,7 @@ class Resource(BaseDocument):
             resource_version_id.resource_str(),
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
-        return {r["resource_id"]+",v="+str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
+        return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = "|".join(
@@ -4528,7 +4529,7 @@ class Resource(BaseDocument):
         query_lock: str = lock.value if lock is not None else ""
 
         def convert_or_ignore(rvid):
-            """ Method to retain backward compatibility, ignore bad ID's"""
+            """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return Id.parse_resource_version_id(rvid)
             except Exception:
@@ -4542,7 +4543,9 @@ class Resource(BaseDocument):
 
         query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND (resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
         resources = await cls.select_query(
-            query, [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]], connection=connection
+            query,
+            [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
+            connection=connection,
         )
         return resources
 
@@ -4891,7 +4894,9 @@ class Resource(BaseDocument):
         Get a resource with the given resource version id
         """
         parsed_id = Id.parse_id(resource_version_id)
-        value = await cls.get_one(environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection)
+        value = await cls.get_one(
+            environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection
+        )
         return value
 
     @classmethod
@@ -5363,12 +5368,27 @@ class Resource(BaseDocument):
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
-        rvid = Id.set_version_in_id(self.resource_id, self.model)
+
+        # Patch up id, resource_version_id, requires and provides for backward compat with older internal representation
+        # in the DB, it is all resource_id, externally resource_version_id
+        version = self.model
+        rvid = Id.set_version_in_id(self.resource_id, version)
         dct["resource_version_id"] = rvid
         dct["id"] = dct["resource_version_id"]
+        if "requires" in dct["attributes"]:
+            dct["attributes"]["requires"] = [Id.set_version_in_id(id, version) for id in dct["attributes"]["requires"]]
+        dct["provides"] = [Id.set_version_in_id(id, version) for id in dct["provides"]]
+
         return dct
 
     def to_dto(self) -> m.Resource:
+        attributes = self.attributes
+
+        if "requires" in self.attributes:
+            version = self.model
+            attributes = dict(attributes)
+            attributes["requires"] = [Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
+
         return m.Resource(
             environment=self.environment,
             model=self.model,
@@ -5377,7 +5397,7 @@ class Resource(BaseDocument):
             resource_version_id=Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             last_deploy=self.last_deploy,
-            attributes=self.attributes,
+            attributes=attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
@@ -5697,9 +5717,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(
-        cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
+    async def get_increment(cls, environment: uuid.UUID, version: int) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 

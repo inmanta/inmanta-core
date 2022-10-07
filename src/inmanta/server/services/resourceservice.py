@@ -290,9 +290,7 @@ class ResourceService(protocol.ServerSlice):
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
-        def convert_id(
-            rid: ResourceIdStr
-        ) -> ResourceVersionIdStr:
+        def convert_id(rid: ResourceIdStr) -> ResourceVersionIdStr:
             v = Id.parse_id(rid)
             v.set_version(version)
             return v.resource_version_str()
@@ -349,7 +347,7 @@ class ResourceService(protocol.ServerSlice):
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
-        neg_increment = [res_id for res_id in neg_increment if on_agent(res_id)]
+        neg_increment = [f"{res_id},v={version}" for res_id in neg_increment if on_agent(res_id)]
 
         logline = {
             "level": "INFO",
@@ -378,19 +376,17 @@ class ResourceService(protocol.ServerSlice):
         deploy_model: List[Dict[str, Any]] = []
         resource_ids: List[str] = []
 
-        def convert_id(
-            rid: ResourceIdStr
-        ) -> ResourceVersionIdStr:
+        def convert_id(rid: ResourceIdStr) -> ResourceVersionIdStr:
             v = Id.parse_id(rid)
             v.set_version(version)
             return v.resource_version_str()
 
         for rv in resources:
-            if rv.resource_version_id not in increment_ids:
+            if rv.resource_id not in increment_ids:
                 continue
 
-            #TODO double parsing of ID
-            def in_requires(req: ResourceVersionIdStr) -> bool:
+            # TODO double parsing of ID
+            def in_requires(req: ResourceIdStr) -> bool:
                 if req in increment_ids:
                     return True
                 idr = Id.parse_id(req)
@@ -456,7 +452,8 @@ class ResourceService(protocol.ServerSlice):
                 resource = await data.Resource.get_one(
                     connection=connection,
                     environment=env.id,
-                    resource_version_id=resource_id_str,
+                    resource_id=resource_id.resource_str(),
+                    model=resource_id.version,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_UPDATE,
@@ -611,6 +608,8 @@ class ResourceService(protocol.ServerSlice):
                         action=action,
                         action_id=action_id,
                     )
+
+        assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
 
         resources: List[data.Resource]
         async with data.Resource.get_connection(connection) as connection:
@@ -768,7 +767,10 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
                 resource = await data.Resource.get_one(
-                    connection=connection, environment=env.id, resource_version_id=resource_id_str
+                    connection=connection,
+                    environment=env.id,
+                    resource_id=resource_id.resource_str(),
+                    model=resource_id.version,
                 )
                 if resource is None:
                     raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id_str}")
