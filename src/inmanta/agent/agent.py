@@ -544,7 +544,11 @@ class ResourceScheduler(object):
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceAction]) -> None:
-        await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
+        # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
+        # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
+        # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
+        # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
+        await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
         async with self.agent.critical_ratelimiter:
             if not self.finished():
                 return
