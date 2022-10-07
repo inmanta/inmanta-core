@@ -25,6 +25,7 @@ import pytest
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.execute.proxy import UnsetException
 from inmanta.warnings import InmantaWarning, WarningsManager
 
 
@@ -151,7 +152,7 @@ end
         assert str(w1.message) == message % (2, 4)
 
 
-def test_deprecation_warning_nullable(snippetcompiler):
+def test_deprecation_exception_nullable(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
@@ -164,17 +165,18 @@ A()
 A(n = null)
         """
     )
-    message: str = "No value for attribute __config__::A.n. Assign null instead of leaving unassigned. ({dir}/main.cf:8)"
-    message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
+    try:
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+    except UnsetException as e:
+        message: str = (
+            f"The object __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:8) is not "
+            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
+        )
+        assert e.msg == message
 
 
 @pytest.mark.parametrize("assign", [True, False])
-def test_1950_deprecation_warning_nullable_diamond_inheritance(snippetcompiler, assign: bool):
+def test_1950_deprecation_exception_nullable_diamond_inheritance(snippetcompiler, assign: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
@@ -198,15 +200,19 @@ C()
     )
     message: str = "No value for attribute __config__::C.n. Assign null instead of leaving unassigned. ({dir}/main.cf:17)"
 
-    def match(warning) -> bool:
-        return issubclass(warning.category, CompilerDeprecationWarning) and str(warning.message) == message.format(
-            dir=snippetcompiler.project_dir
+    def match(exception) -> bool:
+        message: str = (
+            f"The object __config__::C (instantiated at {snippetcompiler.project_dir}/main.cf:17) is not "
+            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
         )
+        return exception.msg == message
 
-    with warnings.catch_warnings(record=True) as ws:
+    warned: bool = False
+    try:
         compiler.do_compile()
-        warned: bool = any(match(w) for w in ws)
-        assert warned != assign
+    except UnsetException as e:
+        warned: bool = match(e)
+    assert warned != assign
 
 
 def test_deprecation_warning_default_constructors(snippetcompiler):
