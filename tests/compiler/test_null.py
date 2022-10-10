@@ -18,6 +18,7 @@
 
 
 import inmanta.compiler as compiler
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import NoneValue
 
 
@@ -111,3 +112,26 @@ def test_null_on_list_err(snippetcompiler):
     """,
         "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3:22))",
     )
+
+
+def test_exception_nullable(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number? n
+end
+
+implement A using std::none
+
+A()
+A(n = null)
+        """
+    )
+    try:
+        compiler.do_compile()
+    except UnsetException as e:
+        message: str = (
+            f"The object __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:8) is not "
+            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
+        )
+        assert e.msg == message

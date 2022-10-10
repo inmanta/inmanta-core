@@ -152,68 +152,6 @@ end
         assert str(w1.message) == message % (2, 4)
 
 
-def test_deprecation_exception_nullable(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    number? n
-end
-
-implement A using std::none
-
-A()
-A(n = null)
-        """
-    )
-    try:
-        compiler.do_compile()
-    except UnsetException as e:
-        message: str = (
-            f"The object __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:8) is not "
-            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
-        )
-        assert e.msg == message
-
-
-@pytest.mark.parametrize("assign", [True, False])
-def test_1950_deprecation_exception_nullable_diamond_inheritance(snippetcompiler, assign: bool):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    number? n%s
-end
-
-entity B extends A:
-end
-
-entity C extends A, B:
-end
-
-
-implement A using std::none
-implement B using std::none
-implement C using std::none
-
-C()
-        """
-        % (" = null" if assign else ""),
-    )
-
-    def match(exception) -> bool:
-        message: str = (
-            f"The object __config__::C (instantiated at {snippetcompiler.project_dir}/main.cf:17) is not "
-            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
-        )
-        return exception.msg == message
-
-    warned: bool = False
-    try:
-        compiler.do_compile()
-    except UnsetException as e:
-        warned: bool = match(e)
-    assert warned != assign
-
-
 def test_deprecation_warning_default_constructors(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
