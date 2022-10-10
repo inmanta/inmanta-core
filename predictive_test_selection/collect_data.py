@@ -1,25 +1,23 @@
 import os
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from enum import IntFlag, auto
-from typing import List, Mapping, Any
-import xml.etree.ElementTree as ET
+from typing import Any, List, Mapping
 
 
-
-def send_influx_db_data(test_file: str, failed: bool, time_stamp:int):
+def send_influx_db_data(test_file: str, failed: bool, time_stamp: int):
     """
-        Dummy function for now, TODO: implement sending the data to influx_db
+    Dummy function for now, TODO: implement sending the data to influx_db
     """
     influx_db_string = f"test_result,fqn={test_file} failed={failed} {time_stamp}"
     print(influx_db_string)
 
 
-
 def parse_xml_test_results(path="out.xml"):
     """
-        Parse an xml file as produced by '$ py.test --junit-xml=out.xml'
+    Parse an xml file as produced by '$ py.test --junit-xml=out.xml'
     """
     tree = ET.parse(path)
     root = tree.getroot()
@@ -55,6 +53,7 @@ def parse_xml_test_results(path="out.xml"):
 TEST_RESULTS = os.path.join(os.curdir, "out.xml")
 BRANCH_NAME = "issue/add-data-collector"
 
+
 class CommonFileExtension(IntFlag):
     other = auto()
     mo = auto()
@@ -64,6 +63,7 @@ class CommonFileExtension(IntFlag):
     dat = auto()
     pyi = auto()
     py = auto()
+
 
 def collect_data() -> Mapping[str, Any]:
     """
@@ -97,13 +97,10 @@ def collect_data() -> Mapping[str, Any]:
     data["file_cardinality"] = len(changed_files)
 
     def get_extension_vector() -> List[int]:
-        extensions = set([
-            os.path.splitext(file)[1].replace(".", "")
-            for file in changed_files
-        ])
+        extensions = set([os.path.splitext(file)[1].replace(".", "") for file in changed_files])
         print(extensions)
 
-        out = [0]*8
+        out = [0] * 8
         known_exts = [ext for ext in CommonFileExtension]
         for ext in extensions:
             try:
@@ -120,7 +117,9 @@ def collect_data() -> Mapping[str, Any]:
         for n_days_ago in [3, 14, 56]:
             acc: int = 0
             for file in changed_files:
-                ps = subprocess.Popen(["git", "log", f"--after='{n_days_ago} days ago'", "--format=oneline", f"{file}"], stdout=subprocess.PIPE)
+                ps = subprocess.Popen(
+                    ["git", "log", f"--after='{n_days_ago} days ago'", "--format=oneline", f"{file}"], stdout=subprocess.PIPE
+                )
                 acc += int(subprocess.check_output(["wc", "-l"], stdin=ps.stdout))
                 ps.wait()
 
@@ -135,6 +134,4 @@ def collect_data() -> Mapping[str, Any]:
 
     # sum([git log --after="{3/14/56} days ago" --format=oneline {file} | wc -l for file in changed_files])
 
-
     return data
-
