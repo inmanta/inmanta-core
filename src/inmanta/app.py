@@ -99,7 +99,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         self.validate = validate
         self.defaults = defaults
 
-    def get_header_length(self, record):
+    def get_header_length(self, record: logging.LogRecord) -> int:
         """Get the header length of a given record."""
         # to get the length of the header we want to get the header without the color codes
         formatter = colorlog.ColoredFormatter(
@@ -128,9 +128,9 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         )
         return len(header)
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format a record with added indentation."""
-        indent = " " * self.get_header_length(record)
+        indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)
 

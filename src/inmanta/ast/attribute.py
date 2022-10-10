@@ -168,7 +168,8 @@ class RelationAttribute(Attribute):
         Set the multiplicity of this end
         """
         self.low = values[0]
-        self.high = values[1]
+        if values[1]:
+            self.high = values[1]
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         out: ResultVariable
