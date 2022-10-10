@@ -21,6 +21,8 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
 
+from tornado import routing, web
+
 from inmanta import data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
@@ -66,6 +68,10 @@ class Server(protocol.ServerSlice):
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
+        self._handlers.append(routing.Rule(routing.PathMatches(r"/dashboard"), web.RedirectHandler, dict(url=r"/console")))
+        self._handlers.append(
+            routing.Rule(routing.PathMatches(r"/dashboard/(.*)"), web.RedirectHandler, dict(url=r"/console/{0}"))
+        )
 
     def check_storage(self) -> Dict[str, str]:
         """

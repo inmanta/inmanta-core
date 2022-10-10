@@ -319,7 +319,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     def schedule_cron(self, call: TaskMethod, cron: str, cancel_on_stop: bool = True) -> None:
         """
         Schedule a task according to a cron specifier. Tasks with the same call and the same schedule are considered the same.
-        Clients that wish to be able to delete tasks should make sure to use a unique `call` function.
+        Clients that wish to be able to delete tasks should make sure to use a unique `call` function."
 
         :param cron: The cron specifier to schedule the task by.
         """
@@ -349,7 +349,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         self._handlers.append(
             routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location[1:]})
         )
-
         if start:
             self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 
