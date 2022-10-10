@@ -33,7 +33,6 @@ from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.extensions import BoolFeature, Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
