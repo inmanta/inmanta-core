@@ -6,6 +6,52 @@ from enum import IntFlag, auto
 from typing import List, Mapping, Any
 import xml.etree.ElementTree as ET
 
+
+
+def send_influx_db_data(test_file: str, failed: bool, time_stamp:int):
+    """
+        Dummy function for now, TODO: implement sending the data to influx_db
+    """
+    influx_db_string = f"test_result,fqn={test_file} failed={failed} {time_stamp}"
+    print(influx_db_string)
+
+
+
+def parse_xml_test_results(path="out.xml"):
+    """
+        Parse an xml file as produced by '$ py.test --junit-xml=out.xml'
+    """
+    tree = ET.parse(path)
+    root = tree.getroot()
+
+    time_stamp = int(time.mktime(datetime.fromisoformat(root.find("testsuite").get("timestamp")).timetuple()) * 1000)
+
+    previous_test_file = None
+    previous_test_file_failure = False
+
+    for test_suite in root.findall("testsuite"):
+        for test_case in test_suite.findall("testcase"):
+            test_file = test_case.get("classname")
+
+            if previous_test_file != test_file:
+                # New test file detected -> send previous data to influx_db
+                if previous_test_file is not None:
+                    send_influx_db_data(previous_test_file, previous_test_file_failure, time_stamp)
+
+                previous_test_file_failure = False
+                previous_test_file = test_file
+
+            if previous_test_file_failure:
+                continue
+
+            previous_test_file_failure = test_case.find("failure") is not None
+
+        # Make sure we write the last test file
+        send_influx_db_data(previous_test_file, previous_test_file_failure, time_stamp)
+
+
+# Eveything below is work in progress for part 2 when we already have historic data for the failure rates.
+
 TEST_RESULTS = os.path.join(os.curdir, "out.xml")
 BRANCH_NAME = "issue/add-data-collector"
 
@@ -92,44 +138,3 @@ def collect_data() -> Mapping[str, Any]:
 
     return data
 
-
-def send_influx_db_data(test_file: str, failed: bool, time_stamp:int):
-    """
-        Dummy function for now, TODO: implement sending the data to influx_db
-    """
-    influx_db_string = f"test_result,fqn={test_file} failed={failed} {time_stamp}"
-    print(influx_db_string)
-
-
-
-def parse_xml_test_results(path="out.xml"):
-    """
-        Parse an xml file as produced by '$ py.test --junit-xml=out.xml'
-    """
-    tree = ET.parse(path)
-    root = tree.getroot()
-
-    time_stamp = int(time.mktime(datetime.fromisoformat(root.find("testsuite").get("timestamp")).timetuple()) * 1000)
-
-    previous_test_file = None
-    previous_test_file_failure = False
-
-    for test_suite in root.findall("testsuite"):
-        for test_case in test_suite.findall("testcase"):
-            test_file = test_case.get("classname")
-
-            if previous_test_file != test_file:
-                # New test file detected -> send previous data to influx_db
-                if previous_test_file is not None:
-                    send_influx_db_data(previous_test_file, previous_test_file_failure, time_stamp)
-
-                previous_test_file_failure = False
-                previous_test_file = test_file
-
-            if previous_test_file_failure:
-                continue
-
-            previous_test_file_failure = test_case.find("failure") is not None
-
-        # Make sure we write the last test file
-        send_influx_db_data(previous_test_file, previous_test_file_failure, time_stamp)
