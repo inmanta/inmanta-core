@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+    <testsuite name="pytest" errors="0" failures="1" skipped="2" tests="4" time="3.182"
+               timestamp="2022-10-07T15:56:04.976357" hostname="hugo-Latitude-5421">
+        <testcase classname="" name="tests.test_env" time="0.000">
+            <skipped message="collection skipped">
+                ('/home/hugo/work/inmanta/github-repos/inmanta-core/tests/test_env.py', 41, 'Skipped: The tests in this
+                module will fail if it runs against inmanta-core installed in editable mode, because the build tag on
+                the development branch is set to .dev0 by default. The inmanta package protection feature would make pip
+                install a non-editable version of the same package. But no version with build tag .dev0 exists on the
+                python package repository.')
+            </skipped>
+        </testcase>
+        <testcase classname="" name="tests.compiler.dataflow.test_model_graphic" time="0.000">
+            <skipped message="collection skipped">
+                ('/home/hugo/work/inmanta/github-repos/inmanta-core/tests/compiler/dataflow/test_model_graphic.py', 42,
+                "Skipped: skipping graphic tests because graphviz fdp executable was not found in your $PATH. Install
+                your distribution's graphviz package to resolve this.")
+            </skipped>
+        </testcase>
+        <testcase classname="tests.test_util" name="test_running_test_fixture_fails" time="1.248">
+            <failure message="assert False">def test_running_test_fixture_fails():
+                """
+                Test that always fails for testing purposes
+                """
+                &gt; assert False
+                E assert False
+
+                tests/test_util.py:502: AssertionError
+            </failure>
+        </testcase>
+        <testcase classname="tests.test_util" name="test_running_test_fixture" time="0.448"/>
+        <testcase classname="tests.test_util_other" name="test_running_test_fixture" time="0.448"/>
+    </testsuite>
+</testsuites>
