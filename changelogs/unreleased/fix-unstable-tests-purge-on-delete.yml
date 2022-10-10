@@ -1,0 +1,5 @@
+description: Fixed some unstable tests
+change-type: patch
+destination-branches:
+  - iso5
+  - master
