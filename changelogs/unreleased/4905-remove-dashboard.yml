@@ -1,0 +1,8 @@
+---
+description: Remove dashboard
+change-type: major
+destination-branches: [master]
+deprecation-note:
+  - remove the static file handler from the server
+  - add a redirecting from dashboard to webconsole
+  - remove docs of dashboard
