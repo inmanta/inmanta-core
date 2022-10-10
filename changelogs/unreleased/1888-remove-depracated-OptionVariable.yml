@@ -2,6 +2,6 @@
 description: Remove support for leaving nullable attribute unassigned, an exception will now be raised. You should make sure optional variables are always assigned a value.
 change-type: major
 issue-nr: 1888
-destination-branches: [master, iso5]
+destination-branches: [master]
 sections:
   deprecation-note: "{{description}}"
