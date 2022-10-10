@@ -108,7 +108,7 @@ class Attribute(Locatable):
         self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
-        out: ResultVariable["Instance"] = ResultVariable()
+        out: ResultVariable[object] = ResultVariable()
         out.set_type(self.type)
         return out
 
