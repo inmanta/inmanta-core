@@ -26,7 +26,6 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
-from inmanta.server import config as server_opts
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 
