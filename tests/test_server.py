@@ -1388,7 +1388,7 @@ async def test_start_location_no_redirect(server):
     assert base_url == response.effective_url
 
 
-@pytest.mark.parametrize("path", ["", "/", "/test", "error"])
+@pytest.mark.parametrize("path", ["", "/", "/test"])
 async def test_redirect_dashboard_to_console(server, path):
     """
     Ensure that there is a redirection from the dashboard to the webconsole
@@ -1401,7 +1401,4 @@ async def test_redirect_dashboard_to_console(server, path):
         url=base_url,
     )
     response = await http_client.fetch(request, raise_error=False)
-    if path != "error":
-        assert result_url == response.effective_url
-    else:
-        assert response.code == 404
+    assert result_url == response.effective_url
