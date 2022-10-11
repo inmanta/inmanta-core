@@ -5386,7 +5386,7 @@ class Resource(BaseDocument):
         return dct
 
     def to_dto(self) -> m.Resource:
-        attributes = self.attributes
+        attributes = self.attributes.copy()
 
         if "requires" in self.attributes:
             version = self.model
