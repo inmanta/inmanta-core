@@ -275,6 +275,14 @@ server_access_control_allow_origin = Option(
     is_str_opt,
 )
 
+#############################
+# Dashboard
+#############################
+
+dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
+dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
+dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
+
 
 def default_hangtime() -> str:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
