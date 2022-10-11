@@ -283,7 +283,7 @@ dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycl
 dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
 dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
 
-#########bla bla
+
 def default_hangtime() -> str:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
     return str(int(agent_timeout.get() * 3 / 4))
