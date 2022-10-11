@@ -1,6 +1,6 @@
 import pytest
 
-from collect_data import parse_xml_test_results
+from collect_test_failure_data import parse_xml_test_results
 
 
 @pytest.mark.parametrize(
