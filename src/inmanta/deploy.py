@@ -132,13 +132,6 @@ host=localhost
             % vars_in_configfile
         )
 
-        dash_path = server_opts.dash_path.get()
-        if self._options.dashboard:
-            if not os.path.exists(dash_path):
-                LOGGER.error("Dashboard requested but the configured path does not exist: %s", dash_path)
-            else:
-                config_file += f"\n[dashboard]\npath={dash_path}\n"
-
         server_config = os.path.join(self._data_path, "server.cfg")
         with open(server_config, "w+", encoding="utf-8") as fd:
             fd.write(config_file)
@@ -297,9 +290,6 @@ host=localhost
             if os.path.exists(server_env):
                 os.unlink(server_env)
             os.symlink(full_path, server_env)
-
-        if not os.path.exists(os.path.join(full_path, ".git")) and self._options.dashboard:
-            LOGGER.error("Make sure the project is a git repository, otherwise the embedded server cannot recompile the model.")
 
         return True
 
@@ -482,19 +472,8 @@ host=localhost
         raise FinishedException()
 
     def run(self) -> None:
-        if self._options.dashboard:
-            print(
-                "Dashboard available at "
-                f"http://localhost:{self._server_port}/dashboard/#!/environment/{self._environment_id}/portal"
-            )
-
         self.export()
-        self.deploy(dry_run=self._options.dryrun, report=not self._options.dashboard)
-
-        if self._options.dashboard:
-            print("Press ctrl+c to exit")
-            while True:
-                time.sleep(1)
+        self.deploy(dry_run=self._options.dryrun)
 
     def stop(self) -> None:
         loud_logger = logging.getLogger("inmanta.protocol")

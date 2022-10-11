@@ -1404,4 +1404,4 @@ async def test_redirect_dashboard_to_console(server, path):
     if path != "error":
         assert result_url == response.effective_url
     else:
-        assert "http://localhost:%s/dashboarderror" % port == response.effective_url
+        assert response.code == 404
