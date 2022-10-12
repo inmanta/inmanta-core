@@ -1,6 +1,6 @@
 import pytest
 
-from collect_test_failure_data import parse_xml_test_results
+from collect_test_failure_data import parse_xml_test_results_old
 
 
 @pytest.mark.parametrize(
@@ -12,4 +12,4 @@ from collect_test_failure_data import parse_xml_test_results
     ],
 )
 def test_basic_xml_parsing(path):
-    parse_xml_test_results(path)
+    parse_xml_test_results_old(path)
