@@ -1,3 +1,5 @@
+description: Remove dashboard
+issue-nr: 4905
 destination-branches: [master]
 sections:
   deprecation-note: The Inmanta dashboard was removed. The URL of the Inmanta dashboard now redirects to the Inmanta web-console which is the successor of the Inmanta dashboard.
