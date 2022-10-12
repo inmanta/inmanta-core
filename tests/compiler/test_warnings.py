@@ -25,7 +25,6 @@ import pytest
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
-from inmanta.execute.proxy import UnsetException
 from inmanta.warnings import InmantaWarning, WarningsManager
 
 
