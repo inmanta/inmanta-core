@@ -279,16 +279,6 @@ server_access_control_allow_origin = Option(
 # Dashboard
 #############################
 
-dash_enable = Option("dashboard", "enabled", True, "Determines whether the server should host the dashboard or not", is_bool)
-
-dash_path = Option(
-    "dashboard",
-    "path",
-    "/usr/share/inmanta/dashboard",
-    "The path on the local file system where the dashboard can be found",
-    is_str,
-)
-
 dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
 dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
 dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
