@@ -84,16 +84,13 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 if TYPE_CHECKING:
     from pkg_resources.packaging.version import Version  # noqa: F401
-
 
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
-
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -267,6 +264,10 @@ class InvalidMetadata(CompilerException):
 
 
 class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
+    pass
+
+
+class ModuleDeprecationWarning(inmanta.warnings.InmantaWarning):
     pass
 
 
@@ -1138,6 +1139,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
+    deprecated: Optional[bool]
 
     @validator("version")
     @classmethod
@@ -1335,7 +1337,6 @@ class ModuleRepoType(enum.Enum):
 
 @stable_api
 class ModuleRepoInfo(BaseModel):
-
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
@@ -2517,11 +2518,14 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         :param project: A reference to the project this module belongs to.
         :param path: Where is the module stored
+
         """
         if not os.path.exists(path):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
+        if self.metadata.deprecated:
+            inmanta.warnings.warn(ModuleDeprecationWarning("aie aie"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
