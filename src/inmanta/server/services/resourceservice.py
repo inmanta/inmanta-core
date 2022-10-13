@@ -909,6 +909,9 @@ class ResourceService(protocol.ServerSlice):
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> ReturnValue[List[LatestReleasedResource]]:
+
+        # TODO: optimize for no orphans
+
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
