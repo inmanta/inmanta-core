@@ -94,6 +94,7 @@ LOGGER = logging.getLogger(__name__)
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
 
+
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
 TProject = TypeVar("TProject", bound="Project")
