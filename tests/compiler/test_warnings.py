@@ -155,7 +155,7 @@ end
 
         assert len(caught_warnings) >= 1
         assert any(
-            [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings]
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings
         )
 
 
