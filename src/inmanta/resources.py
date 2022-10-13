@@ -615,15 +615,7 @@ class Id(object):
         if version_match is not None:
             version = int(version_match)
 
-        parts = {
-            "type": result.group("type"),
-            "hostname": result.group("hostname"),
-            "attr": result.group("attr"),
-            "value": result.group("value"),
-            "id": result.group("id"),
-        }
-
-        id_obj = Id(parts["type"], parts["hostname"], parts["attr"], parts["value"], version)
+        id_obj = Id(result.group("type"), result.group("hostname"), result.group("attr"), result.group("value"), version)
         return id_obj
 
     @classmethod
@@ -645,6 +637,7 @@ class Id(object):
         """
         Return a copy of the given id_str with the version number set to new_version.
         """
+        # Todo:
         parsed_id = cls.parse_id(id_str)
         new_id = parsed_id.copy(version=new_version)
         return new_id.resource_version_str()

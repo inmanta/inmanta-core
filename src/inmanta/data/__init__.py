@@ -295,9 +295,9 @@ class DatabaseOrder:
         """The validated column name string as it should be used in the database queries"""
         return self.order_by_column
 
-    def get_order(self) -> PagingOrder:
+    def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
-        return self.order
+        return self.order.invert() if invert else self.order
 
     def is_nullable_column(self) -> bool:
         """Is the current order by column type nullable (optional) or not"""
@@ -403,6 +403,22 @@ class DatabaseOrder:
         """Get the end and last_id values as end filters"""
         return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
 
+    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
+        """
+        return a list of column/order pairs, to format an ORDER VBY statement
+
+        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
+        """
+        # Moved legacy code
+        order = self.get_order(invert)
+        return [(self.get_order_by_column_db_name(), order), (self.id_column, order)]
+
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Return the actual order by statement, as derived from get_order_elements"""
+        table_prefix = "" if table is None else table + "."
+        order_by_part = ", ".join((f"{table_prefix}{col} {order.db_form}" for col, order in self.get_order_elements(invert)))
+        return f" ORDER BY {order_by_part}"
+
 
 class VersionedResourceOrder(DatabaseOrder):
     """Represents the ordering by which resources should be sorted"""
@@ -419,7 +435,41 @@ class VersionedResourceOrder(DatabaseOrder):
     @property
     def id_column(self) -> ColumnNameStr:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id")
+        return ColumnNameStr("resource_id")
+
+
+class ColumnType:
+    def __init__(self, base_type: Type, nullable: bool):
+        self.base_type = base_type
+        self.nullable = nullable
+
+    def get_value(self, value):
+        if value is None:
+            if not self.nullable:
+                raise ValueError()  # todo
+            else:
+                return None
+        return self.base_type(value)
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, for example, because comparing a value to
+        NULL always yields NULL.
+        """
+        if self.nullable:
+            if self.base_type == datetime.datetime:
+                return f"COALESCE({value_reference}, to_timestamp(0))"
+            elif self.base_type == bool:
+                return f"COALESCE({value_reference}, FALSE)"
+            elif self.base_type == int:
+                return f"COALESCE({value_reference}, 0)"
+            else:
+                return f"COALESCE({value_reference}, '')"
+        return value_reference
+
+
+StringColumn = ColumnType(base_type=str, nullable=False)
+IntColumn = ColumnType(base_type=int, nullable=False)
 
 
 class ResourceOrder(VersionedResourceOrder):
@@ -428,7 +478,15 @@ class ResourceOrder(VersionedResourceOrder):
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {**super().get_valid_sort_columns(), "status": str}
+        return {"resource_type": str, "agent": str, "resource_id": str, "resource_id_value": str}
+
+    def get_valid_sort_columns_new(self) -> Dict[str, ColumnType]:
+        return {
+            "resource_type": StringColumn,
+            "agent": StringColumn,
+            "resource_id": StringColumn,
+            "resource_id_value": StringColumn,
+        }
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
         return ColumnNameStr(
@@ -436,8 +494,72 @@ class ResourceOrder(VersionedResourceOrder):
         )
 
     def _should_be_treated_as_string(self) -> bool:
+        assert False
         """Ensure that records are sorted alphabetically by status instead of the enum order"""
         return self.order_by_column == "status"
+
+    def id_column(self) -> ColumnNameStr:
+        """Name of the id column of this database order"""
+        assert False, "broken"
+
+    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
+        """
+        return a list of column/order pairs, to format an ORDER VBY statement
+
+        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
+        """
+        # Moved legacy code
+        order = self.get_order(invert)
+        return [(self.order_by_column, order), (ColumnNameStr("resource_id"), order), (ColumnNameStr("model"), order)]
+
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[object] = None,
+        id_value: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[bool] = True,
+    ) -> Tuple[List[str], List[object]]:
+        """Get the column and id values as filters"""
+
+        # All the filter elements:
+        # 1. name of the actual collumn in the DB
+        # 2. type of the collumn
+        # 3. sanitized value of the collumn
+        filter_elements: List[Tuple[str, ColumnType, object]] = []
+
+        if column_value is not None:
+            # Have column value
+            order_by_collumns_type = self.get_valid_sort_columns_new()[self.order_by_column]
+            filter_elements.append(
+                (self.order_by_column, order_by_collumns_type, order_by_collumns_type.get_value(column_value))
+            )
+
+        if id_value is not None:
+            # Have ID
+            parsed_id = Id.parse_resource_version_id(id_value)  # TODO handle exception
+            filter_elements.append(("resource_id", StringColumn, parsed_id.resource_str()))
+            filter_elements.append(("model", IntColumn, parsed_id.version))
+
+        relation = ">" if start else "<"
+
+        if len(filter_elements) == 0:
+            return [], []
+
+        ac = ArgumentCollector(offset=offset)
+        if len(filter_elements) == 1:
+            col_name, coll_type, value = filter_elements[0]
+            filter = f"{col_name} {relation} ${ac(coll_type.get_value(value))}"
+            return [filter], ac.args
+        else:
+            # composed filter:
+            # 1. comparison of two tuples (c_a, c_b) < (c_a, c_b)
+            # 2. nulls must be removed to get proper comparison
+            names_tuple = ", ".join([col_name for col_name, coll_type, value in filter_elements])
+            values_references_tuple = ", ".join(
+                [coll_type.coalesce_to_min(ac(value)) for col_name, coll_type, value in filter_elements]
+            )
+            filter = f"({names_tuple}) {relation} ({values_references_tuple})"
+            return [filter], ac.args
 
 
 class ResourceHistoryOrder(DatabaseOrder):
@@ -711,15 +833,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          {self._join_filter_statements(self.filter_statements)}
                          """
         if self.db_order:
-            order = self.db_order.get_order()
-            order_by_column = self.db_order.get_order_by_column_db_name()
-            if self.backward_paging:
-                backward_paging_order = order.invert().db_form
-                full_query += (
-                    f" ORDER BY {order_by_column} {backward_paging_order}, {self.db_order.id_column} {backward_paging_order}"
-                )
-            else:
-                full_query += f" ORDER BY {order_by_column} {order.db_form}, {self.db_order.id_column}  {order.db_form}"
+            full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:
             if self.limit > DBLIMIT:
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {self.limit}")
@@ -4684,11 +4798,7 @@ class Resource(BaseDocument):
                     if no_obj:
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
-                        parsed_id = resources.Id.parse_id(record["resource_id"])
-                        parsed_id.set_version(record["model"])
-                        record["resource_version_id"] = parsed_id.resource_version_str()
-                        record["id"] = record["resource_version_id"]
-                        record["resource_type"] = parsed_id.entity_type
+                        cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
@@ -4748,7 +4858,7 @@ class Resource(BaseDocument):
             cte AS (
                (
                /* specify the necessary columns */
-               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+               SELECT r.resource_id, r.attributes, r.resource_type,
                     r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
                             (SELECT r.model < cm_version.max_version
                             FROM cm_version)
@@ -4765,7 +4875,7 @@ class Resource(BaseDocument):
                FROM   cte c
                CROSS JOIN LATERAL
                /* specify the same columns in the recursive part */
-                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
+                (SELECT r.resource_id, r.attributes, r.resource_type,
                     r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
                             (SELECT r.model < cm_version.max_version
                             FROM cm_version)
@@ -4800,30 +4910,30 @@ class Resource(BaseDocument):
         """
         Get all resources that are in a released version, sorted, paged and filtered
         """
-        order_by_column = database_order.get_order_by_column_db_name()
+
+        # Inlined _get_list_query_pagination_parameters
+        cls._validate_paging_parameters(start, end, first_id, last_id)
+        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
+
+        # TODO this is a mess
+        start_filter_statements, start_values = database_order.as_start_filter(len(values), start, first_id)
+        filter_statements.extend(start_filter_statements)
+        values.extend(start_values)
+
+        end_filter_statements, end_values = database_order.as_end_filter(len(values), end, last_id)
+        filter_statements.extend(end_filter_statements)
+        values.extend(end_values)
+
         order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            **query,
-        )
+
         db_query, base_query_values = cls._get_released_resources_base_query(
             select_clause="SELECT * ", environment=environment, offset=len(values) + 1
         )
         values.append(base_query_values)
         if len(filter_statements) > 0:
             db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}, resource_version_id {order}"
+        backward_paging = (order == PagingOrder.ASC and end is not None) or (order == PagingOrder.DESC and start is not None)
+        db_query += database_order.get_order_by_statement(backward_paging)
         if limit is not None:
             if limit > DBLIMIT:
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
@@ -4831,8 +4941,9 @@ class Resource(BaseDocument):
                 db_query += " LIMIT " + str(limit)
 
         if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.resource_version_id {order}"""
+            db_query = f"""SELECT * FROM ({db_query}) AS matching_records""" + database_order.get_order_by_statement(
+                table="matching_records"
+            )
 
         resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
         resource_records = cast(Iterable[Record], resource_records)
@@ -4840,7 +4951,7 @@ class Resource(BaseDocument):
         dtos = [
             m.LatestReleasedResource(
                 resource_id=resource["resource_id"],
-                resource_version_id=resource["resource_version_id"],
+                resource_version_id=resource["resource_id"] + ",v=" + str(resource["model"]),
                 id_details=cls.get_details_from_resource_id(resource["resource_id"]),
                 status=resource["status"],
                 requires=json.loads(resource["attributes"]).get("requires", []),
@@ -4873,6 +4984,49 @@ class Resource(BaseDocument):
     ) -> Tuple[str, List[object]]:
         select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
             database_order, id_column_name, first_id, last_id, start, end, **query
+        )
+
+        sql_query, base_query_values = cls._get_released_resources_base_query(
+            select_clause=select_clause,
+            environment=environment,
+            offset=len(values) + 1,
+        )
+        values.append(base_query_values)
+
+        if len(common_filter_statements) > 0:
+            sql_query += cls._join_filter_statements(common_filter_statements)
+
+        return sql_query, values
+
+    @classmethod
+    def _get_paging_item_count_query_new(
+        cls,
+        environment: uuid.UUID,
+        database_order: DatabaseOrder,
+        first_id: Optional[Union[uuid.UUID, str]] = None,
+        last_id: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        **query: Tuple[QueryType, object],
+    ) -> Tuple[str, List[object]]:
+
+        order = database_order.get_order()
+        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
+
+        reversed = order == PagingOrder.DESC
+
+        after_filter_statements, after_values = database_order.as_filter(len(values), end, last_id, start=not reversed)
+        values.extend(after_values)
+        before_filter_statements, before_values = database_order.as_filter(len(values), start, first_id, start=reversed)
+        values.extend(before_values)
+
+        before_filter = cls._join_filter_statements(before_filter_statements)
+        after_filter = cls._join_filter_statements(after_filter_statements)
+
+        select_clause = (
+            f"SELECT COUNT(*) as count_total, "
+            f"COUNT(*) filter ({before_filter}) as count_before, "
+            f"COUNT(*) filter ({after_filter}) as count_after "
         )
 
         sql_query, base_query_values = cls._get_released_resources_base_query(
@@ -5263,15 +5417,14 @@ class Resource(BaseDocument):
         return m.ResourceDeploySummary.create_from_db_result(results)
 
     @classmethod
-    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                                    r.agent, r.resource_id_value, r.environment""",
-            from_clause=f" FROM {cls.table_name()} as r",
+    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> SimpleQueryBuilder:
+        return SimpleQueryBuilder(
+            select_clause="""SELECT resource_id, attributes, resource_id, resource_type,
+                                    agent, resource_id_value, environment""",
+            from_clause=f" FROM {cls.table_name()}",
             filter_statements=[" environment = $1 ", " model = $2"],
             values=[cls._get_value(environment), cls._get_value(version)],
         )
-        return query_builder.build()
 
     @classmethod
     async def count_versioned_resources_for_paging(
@@ -5285,12 +5438,13 @@ class Resource(BaseDocument):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
+        base_query = cls.versioned_resources_subquery(environment, version)
+        page_query = PageCountQueryBuilder(
+            from_clause=base_query._from_clause,
+            filter_statements=base_query.filter_statements,
+            values=base_query.values,
         )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
+        paging_query = page_query.page_count(database_order, first_id, last_id, start, end)
         filtered_query = paging_query.filter(
             *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
         )
@@ -5315,13 +5469,8 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
         **query: Tuple[QueryType, object],
     ) -> List[m.VersionedResource]:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
+        query_builder = Resource.versioned_resources_subquery(environment, version)
 
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
         filtered_query = query_builder.filter(
             *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
         )
@@ -5341,7 +5490,7 @@ class Resource(BaseDocument):
         dtos = [
             m.VersionedResource(
                 resource_id=versioned_resource["resource_id"],
-                resource_version_id=versioned_resource["resource_version_id"],
+                resource_version_id=versioned_resource["resource_id"] + f",v={version}",
                 id_details=cls.get_details_from_resource_id(versioned_resource["resource_id"]),
                 requires=json.loads(versioned_resource["attributes"]).get("requires", []),
             )
@@ -5372,25 +5521,30 @@ class Resource(BaseDocument):
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
-
-        # Patch up id, resource_version_id, requires and provides for backward compat with older internal representation
-        # in the DB, it is all resource_id, externally resource_version_id
-        version = self.model
-        rvid = Id.set_version_in_id(self.resource_id, version)
-        dct["resource_version_id"] = rvid
-        dct["id"] = dct["resource_version_id"]
-        if "requires" in dct["attributes"]:
-            dct["attributes"]["requires"] = [Id.set_version_in_id(id, version) for id in dct["attributes"]["requires"]]
-        dct["provides"] = [Id.set_version_in_id(id, version) for id in dct["provides"]]
-
+        self.__mangle_dict(dct)
         return dct
+
+    @classmethod
+    def __mangle_dict(cls, record: dict) -> None:
+        """
+        Transform the dict of attributes as it exists here/in the database to the backward compatible form
+        Operates in-place
+        """
+        version = record["model"]
+        parsed_id = resources.Id.parse_id(record["resource_id"])
+        parsed_id.set_version(version)
+        record["resource_version_id"] = parsed_id.resource_version_str()
+        record["id"] = record["resource_version_id"]
+        record["resource_type"] = parsed_id.entity_type
+        if "requires" in record["attributes"]:
+            record["attributes"]["requires"] = [Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]]
+        record["provides"] = [Id.set_version_in_id(id, version) for id in record["provides"]]
 
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
 
         if "requires" in self.attributes:
             version = self.model
-            attributes = dict(attributes)
             attributes["requires"] = [Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
 
         return m.Resource(

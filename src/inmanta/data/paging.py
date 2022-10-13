@@ -106,10 +106,9 @@ class ResourcePagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
-        sql_query, values = self.data_class._get_paging_item_count_query(
+        sql_query, values = self.data_class._get_paging_item_count_query_new(
             query_identifier.environment,
             database_order,
-            ColumnNameStr("resource_version_id"),
             first_id,
             last_id,
             start,

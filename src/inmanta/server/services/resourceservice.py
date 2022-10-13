@@ -382,6 +382,7 @@ class ResourceService(protocol.ServerSlice):
                 idr = Id.parse_id(req)
                 return idr.get_agent_name() != agent
 
+            rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
@@ -915,6 +916,9 @@ class ResourceService(protocol.ServerSlice):
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> ReturnValue[List[LatestReleasedResource]]:
+
+        # TODO: optimize for no orphans
+
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:
