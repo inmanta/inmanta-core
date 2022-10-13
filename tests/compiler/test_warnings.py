@@ -48,7 +48,7 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
         else:
             inmanta_warnings.warn(internal_warning)
         if expected_warning:
-            assert len(caught_warnings) > 0
+            assert len(caught_warnings) >= 1
             assert any([issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings])
         else:
             assert len(caught_warnings) == 0
