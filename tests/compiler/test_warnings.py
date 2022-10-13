@@ -181,7 +181,7 @@ implement A using std::none
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_2030_type_overwrite_warning(snippetcompiler):
