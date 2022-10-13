@@ -74,7 +74,6 @@ class DataParser:
 
         def get_extension_vector() -> List[int]:
             extensions = set([os.path.splitext(file)[1].replace(".", "") for file in changed_files])
-            print(extensions)
 
             out = [0] * 8
             known_exts = [ext for ext in CommonFileExtension]
@@ -156,7 +155,7 @@ class DataParser:
 
             r.raise_for_status()
         else:
-            LOGGER.debug(payload)
+            LOGGER.info(payload)
 
     def collect_data(self):
         self.parse_code_change()
