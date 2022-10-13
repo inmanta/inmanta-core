@@ -1,5 +1,5 @@
 ---
-description: V1 modules are deprecated. Supported for V1 modules will be removed in one of the next major releases
+description: V1 modules are deprecated. Support for V1 modules will be removed in one of the next major releases
 issue-nr: 4941
 issue-repo: inmanta-core
 change-type: patch
