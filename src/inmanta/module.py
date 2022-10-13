@@ -84,8 +84,10 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
+
 if TYPE_CHECKING:
     from pkg_resources.packaging.version import Version  # noqa: F401
+
 
 LOGGER = logging.getLogger(__name__)
 
