@@ -40,6 +40,9 @@ from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
 
+if TYPE_CHECKING:
+    from inmanta.ast.variables import Reference
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -81,7 +84,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):

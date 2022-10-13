@@ -433,7 +433,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
@@ -497,7 +497,7 @@ class ShortIndexLookup(IndexLookup):
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
         self.wrapped_querypart: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         ReferenceStatement.normalize(self)
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None

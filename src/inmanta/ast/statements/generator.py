@@ -63,6 +63,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
+    from inmanta.ast.variables import Reference
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
         self.location = self.implements.get_location()
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
@@ -272,7 +273,7 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
@@ -329,7 +330,7 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(if_expression.get_anchors())
         self.anchors.extend(else_expression.get_anchors())
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         self.condition.normalize()
         self.if_expression.normalize()
         self.else_expression.normalize()
@@ -501,7 +502,7 @@ class Constructor(ExpressionStatement):
             ),
         )
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         mytype: "EntityLike" = self.namespace.get_type(self.class_type)
         self.type = mytype
 
@@ -745,7 +746,7 @@ class WrappedKwargs(ExpressionStatement):
     def __repr__(self) -> str:
         return "**%s" % repr(self.dictionary)
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         self.dictionary.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:

@@ -65,15 +65,6 @@ class Context(object):
         self.result = result
         self.compiler = queue.get_compiler()
 
-    def emit_expression(self, stmt: "ExpressionStatement") -> None:
-        """
-        Add a new statement
-        """
-        self.owner.copy_location(stmt)
-        stmt.normalize(self.resolver)
-        reqs = stmt.requires_emit(self.resolver, self.queue)
-        ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt, provides=False)
-
     def get_resolver(self) -> Resolver:
         return self.resolver
 
