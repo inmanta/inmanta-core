@@ -1,0 +1,7 @@
+---
+description: Remove support for leaving nullable attribute unassigned. You should make sure optional variables are always assigned a value. This changes the behaviour of 'is defined' in Jinja templates. You should now use 'is not none' instead.
+change-type: patch
+issue-nr: 1888
+destination-branches: [iso5]
+sections:
+  deprecation-note: "{{description}}"
