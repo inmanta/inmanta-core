@@ -10,18 +10,6 @@ from typing import Any, List, Mapping
 import requests
 
 
-def create_data_point(code_change_data: Mapping[str, Any], test_file: str, failed: int) -> str:
-    # Use influx_db auto-generated timestamp
-    return f"test_result,fqn={test_file} failed_as_int={failed}"
-
-
-def send_influxdb_data(data_points: Sequence[str]) -> None:
-    url = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
-    r = requests.post(url, data="\n".join(data_points))
-
-    r.raise_for_status()
-
-
 
 
 
@@ -57,6 +45,7 @@ class DataParser():
     """
     def __init__(self):
         self.code_change_data: Mapping[str, Any] = {}
+        self.test_result_data: Mapping[str, int] = {}
 
     def parse_code_change(self) -> None:
         """
@@ -119,14 +108,15 @@ class DataParser():
 
         self.code_change_data = data
 
-    def parse_xml_test_results(self, path: str = "junit-py39.xml") -> Sequence[str]:
+    def parse_xml_test_results(self, path: str = "junit-py39.xml") -> None:
         """
-        Parse the test result xml file (produced by '$ py.test --junit-xml=junit-py39.xml')
+            Collect all data pertaining to the test cases by parsing the test result xml file (produced by
+            '$ py.test --junit-xml=junit-py39.xml')
         """
         tree = ET.parse(path)
         root = tree.getroot()
 
-        data_points = []
+        self.test_result_data = {}
 
         for test_suite in root.findall("testsuite"):
             for test_case in test_suite.findall("testcase"):
@@ -139,9 +129,30 @@ class DataParser():
 
                 test_failed: int = int(test_case.find("failure") is not None)
 
-                data_points.append(create_data_point(code_change_data, test_fqn, test_failed))
+                self.test_result_data[test_fqn] = test_failed
 
-        return data_points
+
+    def create_data_payload(self) -> str:
+        # Use influx_db auto-generated timestamp
+        data_points: List[str] = [
+            (
+                f"test_result,fqn={test_file},commit_hash={self.code_change_data['commit_hash']}"
+                f" failed_as_int={failed},n_changes={self.code_change_data['n_changes']},"
+                f"file_extension={self.code_change_data['file_extension']},"
+                f"file_cardinality={self.code_change_data['file_cardinality']}"
+            )
+            for test_file, failed in self.test_result_data.items()
+        ]
+        return "\n".join(data_points)
+
+    def send_influxdb_data(self) -> None:
+        url = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
+        r = requests.post(url, data=self.create_data_payload())
+
+        r.raise_for_status()
+
+
+
 
 if __name__ == "__main__":
     data_parser = DataParser()
