@@ -135,7 +135,7 @@ implement A using std::none
 
         assert len(caught_warnings) >= 1
         assert any(
-            [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings]
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings
         )
 
 
