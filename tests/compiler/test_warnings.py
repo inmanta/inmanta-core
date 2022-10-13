@@ -132,8 +132,8 @@ implement A using std::none
     message = message.format(dir=snippetcompiler.project_dir)
     with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(caught_warnings) >= 1
 
+        assert len(caught_warnings) >= 1
         assert any(
             [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings]
         )
@@ -152,8 +152,8 @@ end
     message = message.format(dir=snippetcompiler.project_dir)
     with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(caught_warnings) >= 1
 
+        assert len(caught_warnings) >= 1
         assert any(
             [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings]
         )
@@ -179,8 +179,8 @@ implement A using std::none
     message = message.format(dir=snippetcompiler.project_dir)
     with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(caught_warnings) >= 1
 
+        assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
 
@@ -196,8 +196,8 @@ typedef string as number matching self > 0
             "Trying to override a built-in type: string (reported in Type(string) "
             f"({snippetcompiler.project_dir}/main.cf:2:9))"
         )
-        assert len(caught_warnings) >= 1
 
+        assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings])
 
 
@@ -214,6 +214,7 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
             f"(reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -232,6 +233,7 @@ def test_deprecation_minus_in_attribute_name(snippetcompiler):
             f"(reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -271,6 +273,7 @@ typedef tcp-port as int matching self > 0 and self < 65535
             f"(reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -291,6 +294,7 @@ typedef Corsa-opel as Car(brand="opel")
             f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 2
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -307,6 +311,7 @@ var-hello = "hello"
             f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -323,6 +328,7 @@ import std as std-std
             f"(reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
         )
         compiler.do_compile()
+
         assert len(caught_warnings) >= 1
         assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
 
@@ -374,4 +380,5 @@ import st-d
             """
         )
         compiler.do_compile()
+
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
