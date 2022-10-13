@@ -18,10 +18,8 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
-    CompilerDeprecationWarning,
     CompilerException,
     DoubleSetException,
     Locatable,
@@ -756,33 +754,6 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
     def get_progress_potential(self) -> int:
         """How many are actually waiting for us"""
         return len(self.waiters) + int(self.attribute.has_relation_precedence_rules())
-
-
-class DeprecatedOptionVariable(OptionVariable):
-    """
-    Represents nullable attributes. In the future this class can be removed, and a standard
-    ResultVariable with nullable type should be used.
-    """
-
-    def freeze(self) -> None:
-        if self.value is None:
-            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
-                None,
-                "No value for attribute %s.%s. Assign null instead of leaving unassigned." % (self.myself.type, self.attribute),
-            )
-            warning.set_location(self.myself.get_location())
-            inmanta_warnings.warn(warning)
-        super().freeze()
-
-    def _get_null_value(self) -> object:
-        return NoneValue()
-
-    def _validate_value(self, value: object) -> None:
-        if isinstance(value, Unknown):
-            return
-        if self.type is None:
-            return
-        self.type.validate(value)
 
 
 class QueueScheduler(object):

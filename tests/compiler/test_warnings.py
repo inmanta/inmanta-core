@@ -151,64 +151,6 @@ end
         assert str(w1.message) == message % (2, 4)
 
 
-def test_deprecation_warning_nullable(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    number? n
-end
-
-implement A using std::none
-
-A()
-A(n = null)
-        """
-    )
-    message: str = "No value for attribute __config__::A.n. Assign null instead of leaving unassigned. ({dir}/main.cf:8)"
-    message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
-        compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
-
-
-@pytest.mark.parametrize("assign", [True, False])
-def test_1950_deprecation_warning_nullable_diamond_inheritance(snippetcompiler, assign: bool):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    number? n%s
-end
-
-entity B extends A:
-end
-
-entity C extends A, B:
-end
-
-
-implement A using std::none
-implement B using std::none
-implement C using std::none
-
-C()
-        """
-        % (" = null" if assign else ""),
-    )
-    message: str = "No value for attribute __config__::C.n. Assign null instead of leaving unassigned. ({dir}/main.cf:17)"
-
-    def match(warning) -> bool:
-        return issubclass(warning.category, CompilerDeprecationWarning) and str(warning.message) == message.format(
-            dir=snippetcompiler.project_dir
-        )
-
-    with warnings.catch_warnings(record=True) as ws:
-        compiler.do_compile()
-        warned: bool = any(match(w) for w in ws)
-        assert warned != assign
-
-
 def test_deprecation_warning_default_constructors(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
