@@ -216,7 +216,7 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_attribute_name(snippetcompiler):
