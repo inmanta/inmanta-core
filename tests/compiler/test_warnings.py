@@ -137,7 +137,7 @@ implement A using std::none
 
         assert len(caught_warnings) >= 1
         assert any(
-            [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings]
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings
         )
 
 
@@ -157,7 +157,7 @@ end
 
         assert len(caught_warnings) >= 1
         assert any(
-            [issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings]
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings
         )
 
 
@@ -183,7 +183,7 @@ implement A using std::none
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_2030_type_overwrite_warning(snippetcompiler):
@@ -200,7 +200,7 @@ typedef string as number matching self > 0
         )
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_entity_name(snippetcompiler):
@@ -218,7 +218,7 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_attribute_name(snippetcompiler):
@@ -237,7 +237,7 @@ def test_deprecation_minus_in_attribute_name(snippetcompiler):
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_implementation_name(snippetcompiler):
@@ -260,7 +260,7 @@ end
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_typedef_name(snippetcompiler):
@@ -277,7 +277,7 @@ typedef tcp-port as int matching self > 0 and self < 65535
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
@@ -298,7 +298,7 @@ typedef Corsa-opel as Car(brand="opel")
         compiler.do_compile()
 
         assert len(caught_warnings) >= 2
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
@@ -315,7 +315,7 @@ var-hello = "hello"
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_import_as(snippetcompiler):
@@ -332,7 +332,7 @@ import std as std-std
         compiler.do_compile()
 
         assert len(caught_warnings) >= 1
-        assert any([issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings])
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_relation(snippetcompiler):
