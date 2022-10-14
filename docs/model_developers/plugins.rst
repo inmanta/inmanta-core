@@ -75,7 +75,7 @@ that converts a string to uppercase:
 
 The plugin decorator also accept the ``deprecated`` and ``replaced_by`` fields. When the ``deprecated`` field
 is set to ``True`` it prints out a warning that the plugin is deprecated. with the ``replaced_by`` string it is possible
-to tell by which plugin the current one has been replaced. for example if the code below is run
+to tell by which plugin the current one has been replaced. for example if the following plugin is called,
 
 .. code-block:: python
     :linenos:
