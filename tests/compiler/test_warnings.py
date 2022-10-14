@@ -38,7 +38,7 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
     internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message)
     external_warning: Warning = Warning(None, "Some external warning")
     WarningsManager.apply_config({"default": option} if option is not None else None)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         if expected_error:
             with pytest.raises(CompilerRuntimeWarning):
                 if raise_external_warning:
@@ -48,11 +48,12 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
         else:
             inmanta_warnings.warn(internal_warning)
         if expected_warning:
-            assert len(w) == 1
-            assert issubclass(w[0].category, CompilerRuntimeWarning)
-            assert str(w[0].message) == message
+            assert len(caught_warnings) >= 1
+            assert any(issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings)
         else:
-            assert len(w) == 0
+            assert not any(
+                issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings
+            )
 
 
 @pytest.mark.parametrize(
@@ -96,15 +97,22 @@ end
     )
     message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(w) == 2
-        w1 = w[0]
-        w3 = w[1]
-        assert issubclass(w1.category, VariableShadowWarning)
-        assert str(w1.message) == message % (2, 4)
-        assert issubclass(w3.category, VariableShadowWarning)
-        assert str(w3.message) == message % (4, 7)
+        assert len(caught_warnings) >= 2
+
+        shadow_warning_1: bool = False
+        shadow_warning_2: bool = False
+
+        for w in caught_warnings:
+            if str(w.message) == message % (2, 4):
+                assert issubclass(w.category, VariableShadowWarning)
+                shadow_warning_1 = True
+            elif str(w.message) == message % (4, 7):
+                assert issubclass(w.category, VariableShadowWarning)
+                shadow_warning_2 = True
+
+        assert all([shadow_warning_1, shadow_warning_2])
 
 
 def test_shadow_warning_implementation(snippetcompiler):
@@ -124,12 +132,13 @@ implement A using std::none
     )
     message: str = "Variable `x` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(w) == 1
-        w1 = w[0]
-        assert issubclass(w1.category, VariableShadowWarning)
-        assert str(w1.message) == message % (2, 8)
+
+        assert len(caught_warnings) >= 1
+        assert any(
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 8) for w in caught_warnings
+        )
 
 
 def test_1918_shadow_warning_for_loop(snippetcompiler):
@@ -143,12 +152,13 @@ end
     )
     message: str = "Variable `i` shadowed: originally declared at {dir}/main.cf:%d, shadowed at {dir}/main.cf:%d"
     message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(w) == 1
-        w1 = w[0]
-        assert issubclass(w1.category, VariableShadowWarning)
-        assert str(w1.message) == message % (2, 4)
+
+        assert len(caught_warnings) >= 1
+        assert any(
+            issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings
+        )
 
 
 def test_deprecation_warning_nullable(snippetcompiler):
@@ -227,30 +237,32 @@ implement A using std::none
         " Use inheritance instead. (reported in typedef MyType as A(n=42) ({dir}/main.cf:2))"
     )
     message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_2030_type_overwrite_warning(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 typedef string as number matching self > 0
             """,
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerRuntimeWarning)
-        assert str(w[0].message) == (
-            f"Trying to override a built-in type: string (reported in Type(string) ({snippetcompiler.project_dir}/main.cf:2:9))"
+        message = (
+            "Trying to override a built-in type: string (reported in Type(string) "
+            f"({snippetcompiler.project_dir}/main.cf:2:9))"
         )
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_entity_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
     entity Entity-a:
@@ -262,13 +274,13 @@ def test_deprecation_minus_in_entity_name(snippetcompiler):
             f"(reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_attribute_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
     entity Entity:
@@ -281,13 +293,13 @@ def test_deprecation_minus_in_attribute_name(snippetcompiler):
             f"(reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_implementation_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 entity Car:
@@ -304,13 +316,13 @@ end
             f"(reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_typedef_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 typedef tcp-port as int matching self > 0 and self < 65535
@@ -321,13 +333,13 @@ typedef tcp-port as int matching self > 0 and self < 65535
             f"(reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 entity Car:
@@ -342,13 +354,13 @@ typedef Corsa-opel as Car(brand="opel")
             f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
         )
         compiler.do_compile()
-        assert len(w) == 2
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 var-hello = "hello"
@@ -359,13 +371,13 @@ var-hello = "hello"
             f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_import_as(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 import std as std-std
@@ -376,13 +388,13 @@ import std as std-std
             f"(reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
         )
         compiler.do_compile()
-        assert len(w) == 1
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_deprecation_minus_relation(snippetcompiler):
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
 entity Host:
@@ -405,10 +417,19 @@ Host.files-hehe [0:] -- File.host-hoho [1]
             f"(reported in host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
         )
         compiler.do_compile()
-        assert len(w) == 2
-        assert issubclass(w[0].category, CompilerDeprecationWarning)
-        assert str(w[0].message) == message1
-        assert str(w[1].message) == message2
+
+        compiler_warning_1: bool = False
+        compiler_warning_2: bool = False
+
+        for w in caught_warnings:
+            if str(w.message) == message1:
+                assert issubclass(w.category, CompilerDeprecationWarning)
+                compiler_warning_1 = True
+            elif str(w.message) == message2:
+                assert issubclass(w.category, CompilerDeprecationWarning)
+                compiler_warning_2 = True
+
+        assert all([compiler_warning_1, compiler_warning_2])
 
 
 def test_import_hypen_in_name(snippetcompiler):
@@ -419,4 +440,5 @@ import st-d
             """
         )
         compiler.do_compile()
+
     assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg
