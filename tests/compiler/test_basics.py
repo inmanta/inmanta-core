@@ -483,10 +483,8 @@ def get_one() -> "int":
             if replaced_by:
                 replaced_by_name = replaced_by.replace('"', "")
                 assert (
-                    f"function 'get_one' in plugins of module 'inmanta_plugins.test_module' is deprecated. It should be "
-                    f"replaced by function '{replaced_by_name}'" in str(warning.message)
+                    f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
+                    f"replaced by '{replaced_by_name}'" in str(warning.message)
                 )
             else:
-                assert f"function 'get_one' in plugins of module 'inmanta_plugins.test_module' is deprecated. " in str(
-                    warning.message
-                )
+                assert f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. " in str(warning.message)

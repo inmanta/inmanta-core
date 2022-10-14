@@ -204,6 +204,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
         self.namespace = namespace
+
         self._context = -1
         self._return = None
 
@@ -426,9 +427,9 @@ class Plugin(NamedType, metaclass=PluginMeta):
         """
         self.check_requirements()
         if self.deprecated:
-            msg: str = f"function '{self.__function_name__}' in plugins of module '{self.__module__}' is deprecated. "
+            msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated. "
             if self.replaced_by:
-                msg += f"It should be replaced by function '{self.replaced_by}'"
+                msg += f"It should be replaced by '{self.replaced_by}'"
             inmanta.warnings.warn(PluginDeprecationWarning(msg))
 
         def new_arg(arg: object) -> object:

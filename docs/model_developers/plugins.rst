@@ -73,6 +73,31 @@ that converts a string to uppercase:
         return value.upper()
 
 
+The plugin decorator also accept the ``deprecated`` and ``replaced_by`` fields. When the ``deprecated`` field
+is set to ``True`` it prints out a warning that the plugin is deprecated. with the ``replaced_by`` string it is possible
+to tell by which plugin the current one has been replaced. for example if the code below is run
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    @plugin(deprecated=True, replaced_by="my_new_plugin")
+    def printf():
+        """
+            Prints inmanta
+        """
+        print("inmanta")
+
+
+it wil give following warning:
+
+.. code-block::
+
+    Plugin 'get_one' in module 'inmanta_plugins.<module_name>' is deprecated. It should be replaced by 'my_new_plugin'
+
+
+
 This plugin can be tested with:
 
 .. code-block:: inmanta
