@@ -54,6 +54,37 @@ def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
     compiler.do_compile()
 
 
+def test_relations_implicit_inverse_composite_index(snippetcompiler) -> None:
+    """
+    Verify that implicit inverse relations on index attributes work for an index consisting of multiple fields.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity A: end
+        entity B:
+            int id
+        end
+        implement A using std::none
+        implement B using std::none
+
+        A.b [0:1] -- B.a [1]
+
+        index B(id, a)
+
+        # nested constructors
+        a1 = A(b=B(id=0))
+        # attribute assignment
+        a2 = A()
+        a2.b = B(id=0)
+
+        assert = true
+        assert = a1.b.a == a1
+        assert = a2.b.a == a2
+        """
+    )
+    compiler.do_compile()
+
+
 def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
     """
     Verify that implicit inverse relations on index attributes work if the constructor appears as an element in a composite
@@ -62,30 +93,26 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         """
         entity A: end
-        entity B: end
+        entity B:
+            int id = 0
+        end
         implement A using std::none
         implement B using std::none
 
         A.b [0:] -- B.a [1]
 
         # not very realistic model, but still a good case to check
-        index B(a)
+        index B(id, a)
 
         # nested constructors
-        a1 = A(b=[B(), true ? B() : B()])
+        a1 = A(b=[B(id=0), true ? B(id=1) : B(id=2)])
         # attribute assignment
         a2 = A()
-        a2.b = false ? [B(), B()] : [B(), B(), B()]
+        a2.b = false ? [B(id=10), B(id=20)] : [B(id=30), B(id=40), B(id=50)]
 
         assert = true
-        assert = std::count(a1.b) == 1  # indexes match
-        for b in a1.b:
-            assert = b.a == a1
-        end
-        assert = std::count(a2.b) == 1  # indexes match
-        for b in a2.b:
-            assert = b.a == a2
-        end
+        assert = a1.b == [B[id=0, a=a1], B[id=1, a=a1]]
+        assert = a2.b == [B[id=30, a=a2], B[id=40, a=a2], B[id=50, a=a2]]
         """
     )
     compiler.do_compile()
