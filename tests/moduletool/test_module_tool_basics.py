@@ -474,7 +474,6 @@ install_requires =
     assert mod.metadata.license == "Apache 2.0"
 
 
-# @pytest.mark.parametrize("deprecated", ["deprecated: true", "deprecated: false", ""])
 @pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
 def test_module_v2_deprecation(inmanta_module_v2: InmantaModule, deprecated):
     inmanta_module_v2.write_metadata_file(
