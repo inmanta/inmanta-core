@@ -2522,14 +2522,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         :param project: A reference to the project this module belongs to.
         :param path: Where is the module stored
-
         """
         if not os.path.exists(path):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
         if self.metadata.deprecated:
-            inmanta.warnings.warn(ModuleDeprecationWarning("aie aie"))
+            inmanta.warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)

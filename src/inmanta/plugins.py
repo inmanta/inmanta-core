@@ -22,6 +22,7 @@ import subprocess
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
+import inmanta
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
@@ -38,6 +39,10 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import DynamicStatement, ExpressionStatement
     from inmanta.ast.statements.call import FunctionCall
     from inmanta.compiler import Compiler
+
+
+class PluginDeprecationWarning(inmanta.warnings.InmantaWarning):
+    pass
 
 
 @stable_api
@@ -199,7 +204,6 @@ class Plugin(NamedType, metaclass=PluginMeta):
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
         self.namespace = namespace
-
         self._context = -1
         self._return = None
 
@@ -421,6 +425,11 @@ class Plugin(NamedType, metaclass=PluginMeta):
         The function call itself
         """
         self.check_requirements()
+        if self.deprecated:
+            msg: str = f"function '{self.__function_name__}' in plugins of module '{self.__module__}' is deprecated. "
+            if self.replaced_by:
+                msg += f"It should be replaced by function '{self.replaced_by}'"
+            inmanta.warnings.warn(PluginDeprecationWarning(msg))
 
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
@@ -483,6 +492,8 @@ def plugin(
     commands: Optional[List[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
+    deprecated: bool = False,
+    replaced_by: Optional[str] = None,
 ) -> Callable:  # noqa: H801
     """
     Python decorator to register functions with inmanta as plugin
@@ -527,6 +538,8 @@ def plugin(
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
+            dictionary["deprecated"] = deprecated
+            dictionary["replaced_by"] = replaced_by
 
             bases = (Plugin,)
             PluginMeta.__new__(PluginMeta, name, bases, dictionary)

@@ -396,7 +396,7 @@ version: 1.0.0
         if len(w):
             warning = w[0]
             assert issubclass(warning.category, ModuleDeprecationWarning)
-            assert "aie aie" in str(warning.message)
+            assert "Module mod has been deprecated" in str(warning.message) in str(warning.message)
 
 
 def test_module_requires_single(inmanta_module_v1):
@@ -492,7 +492,7 @@ license = Apache 2.0
         if len(w):
             warning = w[0]
             assert issubclass(warning.category, ModuleDeprecationWarning)
-            assert "aie aie" in str(warning.message)
+            assert "Module mod1 has been deprecated" in str(warning.message)
 
 
 @pytest.mark.parametrize("underscore", [True, False])

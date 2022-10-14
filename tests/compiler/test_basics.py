@@ -16,11 +16,13 @@
     Contact: code@inmanta.com
 """
 import os
+import warnings
 
 import pytest
 
 from inmanta import compiler, const
 from inmanta.ast import DoubleSetException
+from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
 
@@ -427,3 +429,64 @@ std::print(hi_world)
             "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
         ),
     )
+
+
+@pytest.mark.parametrize_any(
+    "deprecated, replaced_by",
+    [(True, None), (True, '"new_function"'), (False, None), (False, '"new_function"')],
+)
+def test_modules_plugin_deprecation(
+    tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, deprecated: bool, replaced_by: str
+) -> None:
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin
+
+@plugin(deprecated={deprecated}, replaced_by={replaced_by})
+def get_one() -> "int":
+    return 1
+        """.strip()
+
+    print(test_module_plugin_contents)
+
+    v2_module_path: str = os.path.join(str(tmpdir), test_module)
+    module_from_template(
+        v2_template_path,
+        v2_module_path,
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+        install=True,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+   import {test_module}
+
+   value = {test_module}::get_one()
+               """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1 if deprecated else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, PluginDeprecationWarning)
+            if replaced_by:
+                replaced_by_name = replaced_by.replace('"', "")
+                assert (
+                    f"function 'get_one' in plugins of module 'inmanta_plugins.test_module' is deprecated. It should be "
+                    f"replaced by function '{replaced_by_name}'" in str(warning.message)
+                )
+            else:
+                assert f"function 'get_one' in plugins of module 'inmanta_plugins.test_module' is deprecated. " in str(
+                    warning.message
+                )
