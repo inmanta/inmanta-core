@@ -1066,8 +1066,7 @@ class VariableResolver(Resolver):
         )
 
     def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
-        # TODO: what is root exactly?
-        if name == self.name:
+        if root is None and name == self.name:
             return self.variable
         return self.parent.lookup(name, root)
 
