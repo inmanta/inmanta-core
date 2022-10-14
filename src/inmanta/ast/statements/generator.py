@@ -470,7 +470,7 @@ class Constructor(ExpressionStatement):
         "type",
         "_self_ref",
         "_lhs_attribute",
-        "required_kwargs",
+        "_required_late_args",
         "_direct_attributes",
         "_indirect_attributes",
     )
@@ -497,7 +497,7 @@ class Constructor(ExpressionStatement):
             LocatableString(str(uuid.uuid4()), Range("__internal__", 1, 1, 1, 1), -1, self.namespace)
         )
         self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
-        self.required_kwargs: list[str] = []  # index attributes required from kwargs or lhs_attribute
+        self._required_late_args: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -535,16 +535,16 @@ class Constructor(ExpressionStatement):
         for index in self.type.get_entity().get_indices():
             for attr in index:
                 if attr not in all_attributes:
-                    self.required_kwargs.append(attr)
+                    self._required_late_args.append(attr)
                     continue
                 inindex.add(attr)
 
-        if self.required_kwargs:
+        if self._required_late_args:
             # Limit dynamic compile-time overhead: ignore lhs if this constructor doesn't need it for instantiation.
             # Concretely, only store it if not all index attributes are explicitly set in the constructor.
             self._lhs_attribute = lhs_attribute
-            if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self.required_kwargs) > 1):
-                raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
+            if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self._required_late_args) > 1):
+                raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self._required_late_args)
 
         self._normalize_rhs(inindex)
 
@@ -648,8 +648,11 @@ class Constructor(ExpressionStatement):
             ):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
 
-        missing_attrs: List[str] = [
-            attr for attr in self.required_kwargs if attr not in kwarg_attrs and attr != lhs_inverse_assignment[0]
+        # TODO: test
+        # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by the LHS
+        late_args = {**dict([lhs_inverse_assignment] if lhs_inverse_assignment is not None else []), **kwarg_attrs}
+        missing_attrs: abc.Sequence[str] = [
+            attr for attr in self._required_late_args if attr not in late_args
         ]
         if missing_attrs:
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
@@ -659,14 +662,12 @@ class Constructor(ExpressionStatement):
         direct_attributes: Dict[str, object] = {
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
-        direct_attributes.update(kwarg_attrs)
-        if lhs_inverse_assignment is not None:
-            direct_attributes.update([lhs_inverse_assignment])
+        direct_attributes.update(late_args)
 
         # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
         # is raised above when they are not.
         indirect_attributes: Dict[str, ExpressionStatement] = {
-            k: v for k, v in self._indirect_attributes.items() if k not in kwarg_attrs
+            k: v for k, v in self._indirect_attributes.items() if k not in late_args
         }
 
         # check if the instance already exists in the index (if there is one)

@@ -196,3 +196,6 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
         """
     )
     compiler.do_compile()
+
+
+# TODO: test performance? Both normal compilerscaling and performance where it's actually used?
