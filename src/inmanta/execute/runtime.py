@@ -1061,10 +1061,10 @@ class VariableResolver(Resolver):
         "variable",
     )
 
-    def __init__(self, parent: Resolver, name: str, variable: VariableABC) -> None:
+    def __init__(self, parent: Resolver, name: str, variable: ResultVariable[T]) -> None:
         self.parent: Resolver = parent
         self.name: str = name
-        self.variable: VariableABC = variable
+        self.variable: ResultVariable[T] = variable
         self.dataflow_graph = (
             DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
         )

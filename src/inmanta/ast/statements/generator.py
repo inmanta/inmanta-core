@@ -441,13 +441,13 @@ class IndexAttributeMissingInConstructorException(TypingException):
     Raised when an index attribute was not set in the constructor call for an entity.
     """
 
-    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: List[str]):
+    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: abc.Sequence[str]):
         if not unset_attributes:
             raise Exception("Argument `unset_attributes` should contain at least one element")
         error_message = self._get_error_message(entity, unset_attributes)
         super(IndexAttributeMissingInConstructorException, self).__init__(stmt, error_message)
 
-    def _get_error_message(self, entity: "Entity", unset_attributes: List[str]) -> str:
+    def _get_error_message(self, entity: "Entity", unset_attributes: abc.Sequence[str]) -> str:
         exc_message = "Invalid Constructor call:"
         for attribute_name in unset_attributes:
             attribute: Optional[Attribute] = entity.get_attribute(attribute_name)
@@ -734,7 +734,9 @@ class Constructor(ExpressionStatement):
 
         # deferred execution for indirect attributes
         # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs
-        self_resolver: VariableResolver = VariableResolver(resolver, self._self_ref.name, WrappedValueVariable(object_instance))
+        self_var: ResultVariable[Instance] = ResultVariable()
+        self_var.set_value(object_instance, self.location)
+        self_resolver: VariableResolver = VariableResolver(resolver, self._self_ref.name, self_var)
         for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():

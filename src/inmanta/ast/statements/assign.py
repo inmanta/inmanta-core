@@ -226,7 +226,7 @@ class SetAttribute(AssignStatement, Resumer):
         self.list_only = list_only
         self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
 
