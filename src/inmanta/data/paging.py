@@ -56,6 +56,14 @@ class PagingMetadata:
         self.after = after
         self.page_size = page_size
 
+    def to_dict(self):
+        return {
+            "total": self.total,
+            "before": self.before,
+            "after": self.after,
+            "page_size": self.page_size,
+        }
+
 
 class QueryIdentifier(BaseModel):
     """The identifier for a paged query"""
@@ -188,6 +196,7 @@ class VersionedResourcePagingCountsProvider(PagingCountsProvider[VersionedQueryI
         end: Optional[object] = None,
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
+
         return await Resource.count_versioned_resources_for_paging(
             query_identifier.environment,
             query_identifier.version,

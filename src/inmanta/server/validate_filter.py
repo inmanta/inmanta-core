@@ -282,13 +282,14 @@ class FilterValidator(ABC):
         """A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         raise NotImplementedError()
 
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
         """
         Processes filters and returns a structured query filter object.
 
         :raises InvalidFilter: The supplied filter is invalid.
         """
-
+        if filter is None:
+            return {}
         query: Dict[str, QueryFilter] = {}
         for filter_name, filter_class in self.allowed_filters.items():
             try:
