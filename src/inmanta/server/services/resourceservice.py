@@ -30,6 +30,7 @@ from tornado.httputil import url_concat
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
+from inmanta.data.dataview import ResourcesInVersionView
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -1093,53 +1094,16 @@ class ResourceService(protocol.ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
     ) -> ReturnValue[List[VersionedResource]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
 
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(VersionedResourceFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
         try:
-            resource_order = VersionedResourceOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourcesInVersionView(env, version, limit, filter, sort, first_id, last_id, start, end)
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        try:
-            dtos = await data.Resource.get_versioned_resources(
-                version=version,
-                database_order=resource_order,
-                limit=limit,
-                environment=env.id,
-                first_id=first_id,
-                last_id=last_id,
-                start=start,
-                end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
 
-        paging_handler = VersionedResourcePagingHandler(VersionedResourcePagingCountsProvider(), version)
-        metadata = await paging_handler.prepare_paging_metadata(
-            VersionedQueryIdentifier(environment=env.id, version=version), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
+        dtos = await handler.get_data()
+        paging_boundaries = handler._get_paging_boundaries(dtos)
+        metadata = await handler._get_page_count(paging_boundaries)
+        links = await handler.prepare_paging_links(dtos, paging_boundaries, metadata)
 
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 

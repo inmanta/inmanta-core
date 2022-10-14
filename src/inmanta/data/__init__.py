@@ -419,36 +419,27 @@ class DatabaseOrder:
         return f" ORDER BY {order_by_part}"
 
 
-class VersionedResourceOrder(DatabaseOrder):
-    """Represents the ordering by which resources should be sorted"""
-
-    @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id_value": str}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Resource
-
-    @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("resource_id")
-
-
 class ColumnType:
     def __init__(self, base_type: Type, nullable: bool):
         self.base_type = base_type
         self.nullable = nullable
 
-    def get_value(self, value):
+    def get_value(self, value: object) -> object:
+        """
+        Prepare the actual value for use as an argument a prepared statemet for this type
+        """
         if value is None:
             if not self.nullable:
                 raise ValueError()  # todo
             else:
                 return None
         return self.base_type(value)
+
+    def get_accessor(self, collumn_name: str):
+        """
+        return the sql statement to get this collumn, as used in filter and other statements
+        """
+        return collumn_name
 
     def coalesce_to_min(self, value_reference: str) -> str:
         """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
@@ -471,13 +462,38 @@ StringColumn = ColumnType(base_type=str, nullable=False)
 IntColumn = ColumnType(base_type=int, nullable=False)
 
 
+class VersionedResourceOrder(DatabaseOrder):
+    """Represents the ordering by which resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {"resource_type": str, "agent": str, "resource_id_value": str}
+
+    def get_valid_sort_columns_new(self) -> Dict[str, ColumnType]:
+        return {
+            "resource_type": StringColumn,
+            "agent": StringColumn,
+            "resource_id_value": StringColumn,
+        }
+
+    @classmethod
+    def validator_dataclass(cls) -> Type["BaseDocument"]:
+        return Resource
+
+    @property
+    def id_column(self) -> ColumnNameStr:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("resource_id")
+
+
 class ResourceOrder(VersionedResourceOrder):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id": str, "resource_id_value": str}
+        return {"resource_type": str, "agent": str, "resource_id": str, "resource_id_value": str, "status": str}
 
     def get_valid_sort_columns_new(self) -> Dict[str, ColumnType]:
         return {
@@ -485,6 +501,7 @@ class ResourceOrder(VersionedResourceOrder):
             "agent": StringColumn,
             "resource_id": StringColumn,
             "resource_id_value": StringColumn,
+            "status": StringColumn,
         }
 
     def get_order_by_column_db_name(self) -> ColumnNameStr:
@@ -839,9 +856,8 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             elif self.limit > 0:
                 full_query += " LIMIT " + str(self.limit)
         if self.db_order and self.backward_paging:
-            full_query = f"""SELECT * FROM ({full_query}) AS matching_records
-                            ORDER BY {self.db_order.get_order_by_column_db_name()} {self.db_order.get_order().db_form},
-                                     {self.db_order.id_column} {self.db_order.get_order().db_form}"""
+            order_by = self.db_order.get_order_by_statement(table="matching_records")
+            full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
         return full_query, self.values
 
@@ -4990,9 +5006,13 @@ class Resource(BaseDocument):
 
         reversed = order == PagingOrder.DESC
 
-        after_filter_statements, after_values = database_order.as_filter(len(values), end, last_id, start=not reversed)
+        if reversed:
+            end, start = start, end
+            last_id, first_id = first_id, last_id
+
+        after_filter_statements, after_values = database_order.as_filter(len(values), start, first_id, start=not reversed)
         values.extend(after_values)
-        before_filter_statements, before_values = database_order.as_filter(len(values), start, first_id, start=reversed)
+        before_filter_statements, before_values = database_order.as_filter(len(values), end, last_id, start=reversed)
         values.extend(before_values)
 
         before_filter = cls._join_filter_statements(before_filter_statements)
