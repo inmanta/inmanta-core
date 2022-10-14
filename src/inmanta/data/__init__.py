@@ -487,6 +487,10 @@ class VersionedResourceOrder(DatabaseOrder):
         """Name of the id column of this database order"""
         return ColumnNameStr("resource_id")
 
+    def get_id_from_dto(self, dto: object) -> object:
+        """Name of the id field of the dto"""
+        return dto.resource_id
+
 
 class ResourceOrder(VersionedResourceOrder):
     """Represents the ordering by which resources should be sorted"""
@@ -518,6 +522,10 @@ class ResourceOrder(VersionedResourceOrder):
     def id_column(self) -> ColumnNameStr:
         """Name of the id column of this database order"""
         assert False, "broken"
+
+    def get_id_from_dto(self, dto: object) -> object:
+        """Name of the id field of the dto"""
+        return dto.resource_version_id
 
     def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
         """
@@ -562,7 +570,7 @@ class ResourceOrder(VersionedResourceOrder):
         if len(filter_elements) == 0:
             return [], []
 
-        ac = ArgumentCollector(offset=offset)
+        ac = ArgumentCollector(offset=offset - 1)
         if len(filter_elements) == 1:
             col_name, coll_type, value = filter_elements[0]
             filter = f"{col_name} {relation} ${ac(coll_type.get_value(value))}"
@@ -783,6 +791,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         db_order: Optional[DatabaseOrder] = None,
         limit: Optional[int] = None,
         backward_paging: Optional[bool] = False,
+        prelude: Optional[str] = None,
     ) -> None:
         """
         :param select_clause: The select clause of the query
@@ -793,11 +802,13 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         :param limit: Limit the results to this amount
         :param backward_paging: Whether the ordering of the results should be inverted,
                                 used when going backward through the pages
+        :param prelude: part of the query preceding all else, for use with 'with' binding
         """
         super().__init__(select_clause, from_clause, filter_statements, values)
         self.db_order = db_order
         self.limit = limit
         self.backward_paging = backward_paging
+        self.prelude = prelude
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """Set the select clause of the query"""
@@ -809,6 +820,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
@@ -821,6 +833,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def order_and_limit(
@@ -828,7 +841,14 @@ class SimpleQueryBuilder(BaseQueryBuilder):
     ) -> "SimpleQueryBuilder":
         """Set the order and limit of the query"""
         return SimpleQueryBuilder(
-            self.select_clause, self._from_clause, self.filter_statements, self.values, db_order, limit, backward_paging
+            self.select_clause,
+            self._from_clause,
+            self.filter_statements,
+            self.values,
+            db_order,
+            limit,
+            backward_paging,
+            self.prelude,
         )
 
     def filter(self, filter_statements: List[str], values: List[object]) -> "SimpleQueryBuilder":
@@ -840,6 +860,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def build(self) -> Tuple[str, List[object]]:
@@ -849,6 +870,8 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
                          """
+        if self.prelude:
+            full_query = self.prelude + full_query
         if self.db_order:
             full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:

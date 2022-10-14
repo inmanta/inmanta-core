@@ -30,7 +30,7 @@ from tornado.httputil import url_concat
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
-from inmanta.data.dataview import ResourcesInVersionView
+from inmanta.data.dataview import ResourcesInVersionView, ResourceView
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -68,12 +68,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import (
-    InvalidFilter,
-    ResourceFilterValidator,
-    ResourceLogFilterValidator,
-    VersionedResourceFilterValidator,
-)
+from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator, ResourceLogFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -918,60 +913,18 @@ class ResourceService(protocol.ServerSlice):
         deploy_summary: bool = False,
     ) -> ReturnValue[List[LatestReleasedResource]]:
 
-        # TODO: optimize for no orphans
-
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ResourceFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
         try:
-            resource_order = ResourceOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourceView(env, limit, first_id, last_id, start, end, filter, sort, deploy_summary)
+
+            out = await handler.execute()
+            if deploy_summary:
+                out.metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
+            return out
+
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        try:
-            dtos = await data.Resource.get_released_resources(
-                database_order=resource_order,
-                limit=limit,
-                environment=env.id,
-                first_id=first_id,
-                last_id=last_id,
-                start=start,
-                end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
 
-        paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
-        paging_metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=paging_metadata.after > 0,
-            has_prev=paging_metadata.before > 0,
-            deploy_summary=deploy_summary,
-        )
-        metadata = vars(paging_metadata)
-        if deploy_summary:
-            metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata)
+        # TODO: optimize for no orphans
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
@@ -1104,15 +1057,9 @@ class ResourceService(protocol.ServerSlice):
 
         try:
             handler = ResourcesInVersionView(env, version, limit, filter, sort, first_id, last_id, start, end)
+            return await handler.execute()
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-
-        dtos = await handler.get_data()
-        paging_boundaries = handler._get_paging_boundaries(dtos)
-        metadata = await handler._get_page_count(paging_boundaries)
-        links = await handler.prepare_paging_links(dtos, paging_boundaries, metadata)
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
     @handle(methods_v2.versioned_resource_details, env="tid")
     async def versioned_resource_details(
