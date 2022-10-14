@@ -1,7 +1,7 @@
 import abc
 import json
 from abc import ABC
-from typing import Dict, Generic, Iterable, List, Optional, Type, TypeVar, Union, cast, Sequence
+from typing import Dict, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, Union, cast
 from urllib import parse
 
 from asyncpg import Record
@@ -19,7 +19,7 @@ from inmanta.data import (
     VersionedResourceOrder,
     model,
 )
-from inmanta.data.model import PagingBoundaries, ResourceVersionIdStr, VersionedResource, BaseModel, LatestReleasedResource
+from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr, VersionedResource
 from inmanta.data.paging import PagingMetadata
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest
