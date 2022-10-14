@@ -86,30 +86,6 @@ def test_direct_execute_error(snippetcompiler):
     )
 
 
-def test_optional_value_exception(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
-entity Test:
-    number? n
-    number m
-end
-
-implementation i for Test:
-    self.m = self.n
-end
-
-implement Test using i
-
-Test()
-        """,
-        "Could not set attribute `m` on instance `__config__::Test (instantiated at {dir}/main.cf:13)` (reported in self.m ="
-        " self.n ({dir}/main.cf:8))"
-        "\ncaused by:"
-        "\n  Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at"
-        " {dir}/main.cf:13)`) (reported in self.m = self.n ({dir}/main.cf:8))",
-    )
-
-
 def test_plugin_exception(snippetcompiler):
     snippetcompiler.setup_for_error(
         """

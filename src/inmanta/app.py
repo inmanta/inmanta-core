@@ -113,7 +113,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format a record with added indentation."""
-        indent = " " * self.get_header_length(record)
+        indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)
 
