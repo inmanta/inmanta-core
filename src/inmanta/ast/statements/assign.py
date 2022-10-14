@@ -205,7 +205,7 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
-class SetAttribute(AssignStatement, Resumer):
+class SetAttribute(AssignStatement, AttributeAssignmentABC, Resumer):
     """
     Set an attribute of a given instance to a given value
     """
@@ -219,6 +219,10 @@ class SetAttribute(AssignStatement, Resumer):
         self.value = value
         self.list_only = list_only
         self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
+
+    def normalize(self) -> None:
+        # register this assignment as left hand side to the value on the right hand side
+        self.rhs.normalize(lhs_attribute=(self.instance, self.attribute_name))
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks

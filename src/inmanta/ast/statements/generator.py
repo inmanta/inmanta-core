@@ -486,7 +486,10 @@ class Constructor(ExpressionStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["EntityLike"] = None
-        self.required_kwargs: List[str] = []
+        self._self_ref: "Reference" = Reference(uuid.uuid4())
+        # TODO: make this a dataclass/NamedTuple: same for normalize method arg, also fix all uses
+        self._lhs_attribute: Optional[tuple["Reference", str]] = None
+        self.required_kwargs: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -502,17 +505,19 @@ class Constructor(ExpressionStatement):
             ),
         )
 
+    def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
+        for (k, v) in self.__attributes.items():
+            # don't notify the rhs for index attributes because it won't be able to resolve the reference
+            # (index attributes need to be resolved before the instance can be constructed)
+            v.normalize(lhs_attribute=(self._self_ref, k) if k not in index_attributes else None)
+        for wrapped_kwargs in self.wrapped_kwargs:
+            wrapped_kwargs.normalize()
+
     def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         mytype: "EntityLike" = self.namespace.get_type(self.class_type)
         self.type = mytype
 
-        for (k, v) in self.__attributes.items():
-            v.normalize()
-
-        for wrapped_kwargs in self.wrapped_kwargs:
-            wrapped_kwargs.normalize()
-
-        inindex = set()
+        inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())
         all_attributes.update(self.__attributes)
@@ -525,8 +530,16 @@ class Constructor(ExpressionStatement):
                     self.required_kwargs.append(attr)
                     continue
                 inindex.add(attr)
-        if self.required_kwargs and not self.wrapped_kwargs:
-            raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
+
+        if self.required_kwargs:
+            # Limit dynamic compile-time overhead: ignore lhs if this constructor doesn't need it for instantiation.
+            # Concretely, only store it if not all index attributes are explicitly set in the constructor.
+            # TODO: extend to attributes with a default? Also requires change in execute
+            self._lhs_attribute = lhs_attribute
+            if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self.required_kwargs) > 1):
+                raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
+
+        self._normalize_rhs(inindex)
 
         for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
@@ -563,6 +576,12 @@ class Constructor(ExpressionStatement):
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
         direct_requires.update(
             {rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()}
+        )
+        direct_requires.update(
+            # TODO: write test verifying that this resolver does not contain attribute names: if lhs_attribute has same name it
+            #   should still work
+            # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
+            self._lhs_attribute[0].requires_emit(resolver, queue)
         )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
@@ -601,7 +620,19 @@ class Constructor(ExpressionStatement):
                     raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
                 kwarg_attrs[k] = v
 
-        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
+        lhs_inverse_assignment: Optional[tuple[str, object]] = None
+        # add inverse relation if it is part of an index
+        if self._lhs_attribute is not None:
+            lhs_instance: object = self._lhs_attribute[0].execute(requires, resolver, queue)
+            # TODO: implement this
+            inverse: Optional[str] = get_inverse_relation(lhs_instance, self.lhs_attribute[1])
+            # TODO: implement is_index_attr check
+            if inverse is not None and inverse not in self._direct_attributes and inverse not in kwarg_attrs and is_index_attr(self.type, inverse):
+                lhs_inverse_assignment (inverse, lhs_instance)
+
+        missing_attrs: List[str] = [
+            attr for attr in self.required_kwargs if attr not in kwarg_attrs and attr != lhs_inverse_assignment[0]
+        ]
         if missing_attrs:
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
 
@@ -611,6 +642,7 @@ class Constructor(ExpressionStatement):
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
         direct_attributes.update(kwarg_attrs)
+        direct_attributes.update([lhs_inverse_assignment])
 
         # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
         # is raised above when they are not.
@@ -657,6 +689,7 @@ class Constructor(ExpressionStatement):
                 direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
             )
 
+        # TODO: inject self._self_ref
         # deferred execution for indirect attributes
         for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
