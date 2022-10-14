@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import contextlib
+import textwrap
 
 from inmanta import compiler
 from inmanta.ast.statements.generator import IndexAttributeMissingInConstructorException
@@ -196,6 +197,108 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
         """
     )
     compiler.do_compile()
+
+
+
+def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
+    """
+    Verify that implicit inverse relations on index attributes don't hide conflicts with explicit assignments through kwargs.
+    """
+    snippetcompiler.setup_for_error(
+        """
+        entity A: end
+        entity B: end
+        implement A using std::none
+        implement B using std::none
+
+        A.b [0:1] -- B.a [1]
+
+        index B(a)
+
+        # nested constructors
+        b_kwargs = {"a": A()}
+        a1 = A(b=B(**b_kwargs))
+
+        assert = true
+        assert = a1.b.a == a1
+        """,
+        textwrap.dedent(
+            """
+            Could not set attribute `a` on instance `__config__::B (instantiated at {dir}/main.cf:13)` (reported in __config__::B (instantiated at {dir}/main.cf:13) ({dir}/main.cf:13))
+            caused by:
+              value set twice:
+            \told value: __config__::A (instantiated at {dir}/main.cf:12)
+            \t\tset at {dir}/main.cf:13
+            \tnew value: __config__::A (instantiated at {dir}/main.cf:13)
+            \t\tset at {dir}/main.cf:13
+             (reported in Construct(A) ({dir}/main.cf:13))
+            """.lstrip("\n").rstrip()
+        )
+
+    )
+
+
+
+def test_relation_implicit_inverse_on_plain_attribute(snippetcompiler) -> None:
+    """
+    Verify that implicit inverse relations on index attributes don't hide errors due to relation assignment to a plain attribute
+    """
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            int b
+        end
+        entity B: end
+        implement A using std::none
+        implement B using std::none
+
+        B.a [1] -- A
+        index B(a)
+
+        A(b=B())
+        """,
+        textwrap.dedent(
+            """
+            Could not set attribute `b` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
+            caused by:
+              Attempting to assign constructor of type __config__::B to attribute that is not a relation attribute: b on __config__::A (instantiated at {dir}/main.cf:12) (reported in Construct(B) ({dir}/main.cf:12))
+            """.lstrip("\n").rstrip()
+        )
+
+    )
+
+
+
+def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> None:
+    """
+    Verify that implicit inverse relations on index attributes don't hide errors due to relation assignment to a wrong
+    entity type.
+    """
+    snippetcompiler.setup_for_error(
+        """
+        entity A: end
+        entity B: end
+        entity C: end
+        implement A using std::none
+        implement B using std::none
+        implement C using std::none
+
+        A.b [0:1] -- C.a [1]
+        B.a [1] -- A
+        index B(a)
+
+        A(b=B())
+        """,
+        textwrap.dedent(
+            """
+            Could not set attribute `b` on instance `__config__::A (instantiated at {dir}/main.cf:13)` (reported in Construct(A) ({dir}/main.cf:13))
+            caused by:
+              Invalid Constructor call:
+            \t* Missing relation 'a'. The relation __config__::B.a is part of an index. (reported in Construct(B) ({dir}/main.cf:13))
+            """.lstrip("\n").rstrip()
+        )
+
+    )
 
 
 # TODO: test performance? Both normal compilerscaling and performance where it's actually used?

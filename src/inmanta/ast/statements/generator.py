@@ -586,8 +586,6 @@ class Constructor(ExpressionStatement):
         )
         if self._lhs_attribute is not None:
             direct_requires.update(
-                # TODO: write test verifying that this resolver does not contain attribute names: if lhs_attribute has same name it
-                #   should still work
                 # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
                 self._lhs_attribute.instance.requires_emit(resolver, queue)
             )
@@ -629,27 +627,36 @@ class Constructor(ExpressionStatement):
                     raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
                 kwarg_attrs[k] = v
 
+        # TODO: move into separate method?
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
             lhs_instance: object = self._lhs_attribute.instance.execute(requires, resolver, queue)
             if not isinstance(lhs_instance, Instance):
+                # bug in internal implementation
                 raise Exception("Invalid state: received lhs_attribute that is not an instance")
             lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute.attribute)
             if not isinstance(lhs_attribute, RelationAttribute):
-                # TODO: this one could actually be a modelling error -> add test + raise proper exception or ignore it
-                raise Exception("Invalid state: received lhs_attribute that is not a relation attribute")
+                # bug in the model
+                raise RuntimeException(
+                    self,
+                    (
+                        f"Attempting to assign constructor of type {type_class} to attribute that is not a relation attribute:"
+                        f" {lhs_attribute} on {lhs_instance}"
+                    ),
+                )
             inverse: Optional[RelationAttribute] = lhs_attribute.end
+            print(list(chain.from_iterable(indexes)))
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
+                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by the LHS
                 and inverse.name not in kwarg_attrs
                 and inverse.name in chain.from_iterable(indexes)
+                and inverse.entity == type_class
             ):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
 
-        # TODO: test
-        # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by the LHS
         late_args = {**dict([lhs_inverse_assignment] if lhs_inverse_assignment is not None else []), **kwarg_attrs}
         missing_attrs: abc.Sequence[str] = [
             attr for attr in self._required_late_args if attr not in late_args
