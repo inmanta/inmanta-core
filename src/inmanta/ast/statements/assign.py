@@ -39,6 +39,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
+    AttributeAssignmentLHS,
     AssignStatement,
     ExpressionStatement,
     RequiresEmitStatement,
@@ -85,6 +86,11 @@ class CreateList(ReferenceStatement):
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        for item in self.items:
+            # pass on lhs_attribute to children
+            item.normalize(lhs_attribute=lhs_attribute)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -222,7 +228,7 @@ class SetAttribute(AssignStatement, Resumer):
 
     def normalize(self) -> None:
         # register this assignment as left hand side to the value on the right hand side
-        self.rhs.normalize(lhs_attribute=(self.instance, self.attribute_name))
+        self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
@@ -437,7 +443,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
@@ -501,7 +507,7 @@ class ShortIndexLookup(IndexLookup):
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
         self.wrapped_querypart: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None

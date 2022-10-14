@@ -201,10 +201,16 @@ class RequiresEmitStatement(DynamicStatement):
             promise.fulfill()
 
 
+@dataclass(frozen=True)
+class AttributeAssignmentLHS:
+    instance: "Reference"
+    attribute: str
+
+
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
         :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
             If not None, that caller is responsible for making sure the reference resolves to the correct instance as soon as this
@@ -471,7 +477,7 @@ class ReferenceStatement(ExpressionStatement):
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         for c in self.children:
             c.normalize()
 
@@ -532,7 +538,7 @@ class Literal(ExpressionStatement):
         self.value = value
         self.lexpos: Optional[int] = None
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         pass
 
     def __repr__(self) -> str:

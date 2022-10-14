@@ -33,7 +33,7 @@ from inmanta.ast import (
     TypeReferenceAnchor,
     WrappingRuntimeException,
 )
-from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
+from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
@@ -84,7 +84,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):

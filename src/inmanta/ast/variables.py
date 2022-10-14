@@ -22,6 +22,7 @@ from typing import Dict, Generic, List, Optional, TypeVar
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import (
+    AttributeAssignmentLHS,
     AssignStatement,
     ExpressionStatement,
     RawResumer,
@@ -66,7 +67,7 @@ class Reference(ExpressionStatement):
         self.name = str(name)
         self.full_name = str(name)
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         pass
 
     def requires(self) -> List[str]:

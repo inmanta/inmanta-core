@@ -34,13 +34,14 @@ from inmanta.ast import (
     Location,
     Namespace,
     NotFoundException,
+    Range,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
+from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.ast.variables import Reference
 from inmanta.const import LOG_LEVEL_TRACE
@@ -88,7 +89,7 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
         self.location = self.implements.get_location()
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
@@ -276,7 +277,7 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
@@ -333,10 +334,11 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(if_expression.get_anchors())
         self.anchors.extend(else_expression.get_anchors())
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
-        self.if_expression.normalize()
-        self.else_expression.normalize()
+        # pass on lhs_attribute to branches
+        self.if_expression.normalize(lhs_attribute=lhs_attribute)
+        self.else_expression.normalize(lhs_attribute=lhs_attribute)
         self._own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
@@ -491,10 +493,10 @@ class Constructor(ExpressionStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["EntityLike"] = None
-        # TODO: LocatableString
-        self._self_ref: "Reference" = Reference(uuid.uuid4())
-        # TODO: make this a dataclass/NamedTuple: same for normalize method arg, also fix all uses
-        self._lhs_attribute: Optional[tuple["Reference", str]] = None
+        self._self_ref: "Reference" = Reference(
+            LocatableString(str(uuid.uuid4()), Range("__internal__", 1, 1, 1, 1), -1, self.namespace)
+        )
+        self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
         self.required_kwargs: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -515,11 +517,11 @@ class Constructor(ExpressionStatement):
         for (k, v) in self.__attributes.items():
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
-            v.normalize(lhs_attribute=(self._self_ref, k) if k not in index_attributes else None)
+            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k) if k not in index_attributes else None)
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         mytype: "EntityLike" = self.namespace.get_type(self.class_type)
         self.type = mytype
 
@@ -587,7 +589,7 @@ class Constructor(ExpressionStatement):
                 # TODO: write test verifying that this resolver does not contain attribute names: if lhs_attribute has same name it
                 #   should still work
                 # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
-                self._lhs_attribute[0].requires_emit(resolver, queue)
+                self._lhs_attribute.instance.requires_emit(resolver, queue)
             )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
@@ -608,11 +610,11 @@ class Constructor(ExpressionStatement):
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
-        # TODO: is it required everywhere here?
         super().execute(requires, resolver, queue)
 
         # the type to construct
         type_class = self.type.get_entity()
+        indexes: abc.Sequence[abc.Sequence[str]] = type_class.get_indices()
 
         # kwargs
         kwarg_attrs: Dict[str, object] = {}
@@ -630,20 +632,19 @@ class Constructor(ExpressionStatement):
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
-            lhs_instance: object = self._lhs_attribute[0].execute(requires, resolver, queue)
+            lhs_instance: object = self._lhs_attribute.instance.execute(requires, resolver, queue)
             if not isinstance(lhs_instance, Instance):
                 raise Exception("Invalid state: received lhs_attribute that is not an instance")
-            lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute[1])
+            lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute.attribute)
             if not isinstance(lhs_attribute, RelationAttribute):
-                # TODO: this one could actually be a modelling error -> raise proper exception or ignore it + add test
+                # TODO: this one could actually be a modelling error -> add test + raise proper exception or ignore it
                 raise Exception("Invalid state: received lhs_attribute that is not a relation attribute")
             inverse: Optional[RelationAttribute] = lhs_attribute.end
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
                 and inverse.name not in kwarg_attrs
-                # TODO: review is_index_attr check implementation
-                and inverse.name in chain.from_iterable(self.type.get_entity().get_indices())
+                and inverse.name in chain.from_iterable(indexes)
             ):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
 
@@ -670,7 +671,7 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
-        for index in type_class.get_indices():
+        for index in indexes:
             params = []
             for attr in index:
                 params.append((attr, direct_attributes[attr]))
@@ -711,7 +712,6 @@ class Constructor(ExpressionStatement):
         # deferred execution for indirect attributes
         # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs
         self_resolver: VariableResolver = VariableResolver(resolver, self._self_ref.name, WrappedValueVariable(object_instance))
-        # TODO: original design used resolver.with_var
         for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
@@ -800,7 +800,7 @@ class WrappedKwargs(ExpressionStatement):
     def __repr__(self) -> str:
         return "**%s" % repr(self.dictionary)
 
-    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.dictionary.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
