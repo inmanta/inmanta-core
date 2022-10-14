@@ -372,16 +372,6 @@ class DesiredStateVersionFilterValidator(FilterValidator):
         }
 
 
-class VersionedResourceFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "resource_type": ContainsPartialFilter,
-            "agent": ContainsPartialFilter,
-            "resource_id_value": ContainsPartialFilter,
-        }
-
-
 class ParameterFilterValidator(FilterValidator):
     @property
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
