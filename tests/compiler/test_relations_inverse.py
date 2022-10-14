@@ -79,7 +79,6 @@ def test_relations_implicit_inverse_composite_rhs(snippetcompiler) -> None:
 
         assert = true
         assert = std::count(a1.b) == 1  # indexes match
-        std::print(a1.b)
         for b in a1.b:
             assert = b.a == a1
         end
@@ -299,6 +298,3 @@ def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> 
             ).rstrip()
         ),
     )
-
-
-# TODO: test performance? Both normal compilerscaling and performance where it's actually used?
