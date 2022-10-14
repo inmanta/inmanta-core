@@ -609,31 +609,28 @@ class Constructor(ExpressionStatement):
 
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
+    def _collect_late_args(
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
+    ) -> abc.Mapping[str, object]:
         """
-        Evaluate this statement.
+        Part of the execute flow: returns values for kwargs and the inverse relation derived from the lhs for which this
+        constructor is the rhs, if appliccable.
         """
-        LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
-        super().execute(requires, resolver, queue)
-
-        # the type to construct
         type_class = self.type.get_entity()
-        indexes: abc.Sequence[abc.Sequence[str]] = type_class.get_indices()
 
         # kwargs
-        kwarg_attrs: Dict[str, object] = {}
+        kwarg_attrs: dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
             for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
                         self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
                     )
-                attribute = self.type.get_entity().get_attribute(k)
+                attribute = type_class.get_attribute(k)
                 if attribute is None:
                     raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
                 kwarg_attrs[k] = v
 
-        # TODO: move into separate method?
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
@@ -652,14 +649,13 @@ class Constructor(ExpressionStatement):
                     ),
                 )
             inverse: Optional[RelationAttribute] = lhs_attribute.end
-            print(list(chain.from_iterable(indexes)))
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
                 # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by
                 # the LHS
                 and inverse.name not in kwarg_attrs
-                and inverse.name in chain.from_iterable(indexes)
+                and inverse.name in chain.from_iterable(type_class.get_indices())
                 and inverse.entity == type_class
             ):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
@@ -668,6 +664,20 @@ class Constructor(ExpressionStatement):
         missing_attrs: abc.Sequence[str] = [attr for attr in self._required_late_args if attr not in late_args]
         if missing_attrs:
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
+        return late_args
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
+        """
+        Evaluate this statement.
+        """
+        LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+        super().execute(requires, resolver, queue)
+
+        # the type to construct
+        type_class = self.type.get_entity()
+
+        # kwargs and implicit inverse from lhs
+        late_args: abc.Mapping[str, object] = self._collect_late_args(requires, resolver, queue)
 
         # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
         # because a RuntimeException is raised above when they are not.
@@ -684,7 +694,7 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
-        for index in indexes:
+        for index in type_class.get_indices():
             params = []
             for attr in index:
                 params.append((attr, direct_attributes[attr]))
