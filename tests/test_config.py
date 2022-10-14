@@ -310,8 +310,8 @@ async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
     caplog.clear()
     await assert_port_bound()
     log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.contains("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
+    log_sequence.contains("inmanta.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.assert_not("inmanta.warnings", logging.WARNING, ignoring_log_line)
 
     # Old config option server_rest_transport.port and new config option server.bind-port are set together
     Config.load_config()
@@ -321,8 +321,8 @@ async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
     caplog.clear()
     await assert_port_bound()
     log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.contains("py.warnings", logging.WARNING, ignoring_log_line)
+    log_sequence.assert_not("inmanta.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.contains("inmanta.warnings", logging.WARNING, ignoring_log_line)
 
     # The new config option server.bind-port is set
     Config.load_config()
@@ -331,8 +331,8 @@ async def test_bind_port(unused_tcp_port, async_finalizer, caplog):
     caplog.clear()
     await assert_port_bound()
     log_sequence = LogSequence(caplog, allow_errors=False)
-    log_sequence.assert_not("py.warnings", logging.WARNING, deprecation_line_log_line)
-    log_sequence.assert_not("py.warnings", logging.WARNING, ignoring_log_line)
+    log_sequence.assert_not("inmanta.warnings", logging.WARNING, deprecation_line_log_line)
+    log_sequence.assert_not("inmanta.warnings", logging.WARNING, ignoring_log_line)
 
 
 def test_option_is_list():

@@ -25,7 +25,6 @@ import logging
 import re
 import typing
 import uuid
-import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import RawConfigParser
@@ -60,6 +59,7 @@ from asyncpg import Connection
 from asyncpg.protocol import Record
 
 import inmanta.db.versions
+import inmanta.warnings
 from crontab import CronTab
 from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
@@ -1128,7 +1128,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if attribute.startswith("_"):
                 continue
             elif isinstance(value, Field):
-                warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
+                inmanta.warnings.warn(f"Field {attribute} should be defined using annotations instead of Field.")
                 cls._fields_metadata[attribute] = value
             elif cls.__annotations__ and attribute in cls.__annotations__:
                 annotation = cls.__annotations__[attribute]
@@ -2447,10 +2447,7 @@ class Environment(BaseDocument):
         if key in self._renamed_settings_map:
             name_deprecated_setting = self._renamed_settings_map[key]
             if name_deprecated_setting in self.settings and key not in self.settings:
-                warnings.warn(
-                    "Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
-                    category=DeprecationWarning,
-                )
+                inmanta.warnings.warn("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key))
                 return self.settings[name_deprecated_setting]
 
         if key in self.settings:

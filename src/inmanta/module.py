@@ -28,7 +28,6 @@ import sys
 import tempfile
 import traceback
 import types
-import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
@@ -2204,9 +2203,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
         if isinstance(module, ModuleV1):
-            warnings.warn(
-                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
-                category=DeprecationWarning,
+            inmanta.warnings.warn(
+                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead."
             )
         self.modules[module_name] = module
         return module

@@ -168,8 +168,11 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
-def warn(warning: InmantaWarning) -> None:
+def warn(warning: Union[InmantaWarning, str]) -> None:
     """
     Warn using the supplied InmantaWarning instance.
     """
-    warnings.warn(warning)
+    if isinstance(warning, str):
+        warnings.warn(InmantaWarning(warning))
+    else:
+        warnings.warn(warning)

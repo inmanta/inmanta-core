@@ -29,7 +29,6 @@ import os
 import socket
 import time
 import uuid
-import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
@@ -41,6 +40,7 @@ from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, Lis
 from tornado import gen
 from tornado.ioloop import IOLoop
 
+import inmanta.warnings
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
@@ -363,7 +363,7 @@ class Scheduler(object):
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
-            warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
+            inmanta.warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
 
 
 def get_free_tcp_port() -> str:

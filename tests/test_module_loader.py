@@ -155,7 +155,7 @@ def test_v1_module_depends_on_v1_and_v2_module(
     for v1_module_name in [module_name, "elaboratev1module"]:
         log_contains(
             caplog,
-            "py.warnings",
+            "inmanta.warnings",
             logging.WARNING,
             f"Loaded V1 module {v1_module_name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
         )
