@@ -44,7 +44,7 @@ from inmanta.module import (
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
-from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
+from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -130,10 +130,7 @@ def test_v1_and_v2_module_installed_simultaneously(
     assert isinstance(Project.get().modules[module_name], ModuleV2)
 
 
-def test_v1_module_depends_on_v1_and_v2_module(
-    tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str, caplog
-) -> None:
-    caplog.set_level(logging.WARNING)
+def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
     module_dir = os.path.join(modules_v2_dir, "elaboratev2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
@@ -150,15 +147,6 @@ def test_v1_module_depends_on_v1_and_v2_module(
     output = capsys.readouterr().out
     assert "Print from v2 module" in output
     assert "Hello world" in output
-
-    # Assert deprecation warnings regarding the use of V1 modules
-    for v1_module_name in [module_name, "elaboratev1module"]:
-        log_contains(
-            caplog,
-            "inmanta.warnings",
-            logging.WARNING,
-            f"Loaded V1 module {v1_module_name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
-        )
 
 
 def test_install_module_no_v2_source(snippetcompiler) -> None:
