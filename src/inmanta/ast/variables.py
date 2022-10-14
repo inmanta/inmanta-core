@@ -66,7 +66,7 @@ class Reference(ExpressionStatement):
         self.name = str(name)
         self.full_name = str(name)
 
-    def normalize(self, *, lhs_attribute: Optional[tuple[Reference, str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         pass
 
     def requires(self) -> List[str]:

@@ -205,7 +205,7 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
-class SetAttribute(AssignStatement, AttributeAssignmentABC, Resumer):
+class SetAttribute(AssignStatement, Resumer):
     """
     Set an attribute of a given instance to a given value
     """

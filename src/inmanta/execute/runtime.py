@@ -1050,6 +1050,31 @@ class Resolver(object):
             return root_graph.get_own_variable(name)
 
 
+class VariableResolver(Resolver):
+    """
+    Resolver that resolves a single variable to a value, and delegates the rest to its parent resolver.
+    """
+
+    __slots__ = ("parent", "name", "variable",)
+
+    def __init__(self, parent: Resolver, name: str, variable: VariableABC) -> None:
+        self.parent: Resolver = parent
+        self.name: str = name
+        self.variable: VariableABC = variable
+        self.dataflow_graph = (
+            DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
+        )
+
+    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+        # TODO: what is root exactly?
+        if name == self.name:
+            return self.variable
+        return self.parent.lookup(name, root)
+
+    def get_root_resolver(self) -> "Resolver":
+        return self.parent.get_root_resolver()
+
+
 class NamespaceResolver(Resolver):
 
     __slots__ = ("parent", "root")

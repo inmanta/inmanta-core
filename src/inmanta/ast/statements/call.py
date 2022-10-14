@@ -18,7 +18,7 @@
 
 import logging
 from itertools import chain
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow

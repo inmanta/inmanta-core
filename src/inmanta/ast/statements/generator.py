@@ -19,6 +19,8 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
+import uuid
+from collections import abc
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
@@ -40,6 +42,7 @@ from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
+from inmanta.ast.variables import Reference
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -51,6 +54,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     VariableABC,
+    VariableResolver,
     WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
@@ -63,7 +67,6 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
-    from inmanta.ast.variables import Reference
 
 LOGGER = logging.getLogger(__name__)
 
@@ -463,6 +466,8 @@ class Constructor(ExpressionStatement):
         "__wrapped_kwarg_attributes",
         "location",
         "type",
+        "_self_ref",
+        "_lhs_attribute",
         "required_kwargs",
         "_direct_attributes",
         "_indirect_attributes",
@@ -486,6 +491,7 @@ class Constructor(ExpressionStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["EntityLike"] = None
+        # TODO: LocatableString
         self._self_ref: "Reference" = Reference(uuid.uuid4())
         # TODO: make this a dataclass/NamedTuple: same for normalize method arg, also fix all uses
         self._lhs_attribute: Optional[tuple["Reference", str]] = None
@@ -534,7 +540,6 @@ class Constructor(ExpressionStatement):
         if self.required_kwargs:
             # Limit dynamic compile-time overhead: ignore lhs if this constructor doesn't need it for instantiation.
             # Concretely, only store it if not all index attributes are explicitly set in the constructor.
-            # TODO: extend to attributes with a default? Also requires change in execute
             self._lhs_attribute = lhs_attribute
             if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self.required_kwargs) > 1):
                 raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
@@ -577,12 +582,13 @@ class Constructor(ExpressionStatement):
         direct_requires.update(
             {rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()}
         )
-        direct_requires.update(
-            # TODO: write test verifying that this resolver does not contain attribute names: if lhs_attribute has same name it
-            #   should still work
-            # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
-            self._lhs_attribute[0].requires_emit(resolver, queue)
-        )
+        if self._lhs_attribute is not None:
+            direct_requires.update(
+                # TODO: write test verifying that this resolver does not contain attribute names: if lhs_attribute has same name it
+                #   should still work
+                # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
+                self._lhs_attribute[0].requires_emit(resolver, queue)
+            )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
@@ -602,6 +608,7 @@ class Constructor(ExpressionStatement):
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+        # TODO: is it required everywhere here?
         super().execute(requires, resolver, queue)
 
         # the type to construct
@@ -624,11 +631,21 @@ class Constructor(ExpressionStatement):
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
             lhs_instance: object = self._lhs_attribute[0].execute(requires, resolver, queue)
-            # TODO: implement this
-            inverse: Optional[str] = get_inverse_relation(lhs_instance, self.lhs_attribute[1])
-            # TODO: implement is_index_attr check
-            if inverse is not None and inverse not in self._direct_attributes and inverse not in kwarg_attrs and is_index_attr(self.type, inverse):
-                lhs_inverse_assignment (inverse, lhs_instance)
+            if not isinstance(lhs_instance, Instance):
+                raise Exception("Invalid state: received lhs_attribute that is not an instance")
+            lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute[1])
+            if not isinstance(lhs_attribute, RelationAttribute):
+                # TODO: this one could actually be a modelling error -> raise proper exception or ignore it + add test
+                raise Exception("Invalid state: received lhs_attribute that is not a relation attribute")
+            inverse: Optional[RelationAttribute] = lhs_attribute.end
+            if (
+                inverse is not None
+                and inverse.name not in self._direct_attributes
+                and inverse.name not in kwarg_attrs
+                # TODO: review is_index_attr check implementation
+                and inverse.name in chain.from_iterable(self.type.get_entity().get_indices())
+            ):
+                lhs_inverse_assignment = (inverse.name, lhs_instance)
 
         missing_attrs: List[str] = [
             attr for attr in self.required_kwargs if attr not in kwarg_attrs and attr != lhs_inverse_assignment[0]
@@ -642,7 +659,8 @@ class Constructor(ExpressionStatement):
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
         direct_attributes.update(kwarg_attrs)
-        direct_attributes.update([lhs_inverse_assignment])
+        if lhs_inverse_assignment is not None:
+            direct_attributes.update([lhs_inverse_assignment])
 
         # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
         # is raised above when they are not.
@@ -664,6 +682,7 @@ class Constructor(ExpressionStatement):
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
+        object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if len(instances) > 0:
             if graph is not None:
@@ -689,8 +708,10 @@ class Constructor(ExpressionStatement):
                 direct_attributes, resolver, queue, self.location, self.get_dataflow_node(graph) if graph is not None else None
             )
 
-        # TODO: inject self._self_ref
         # deferred execution for indirect attributes
+        # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs
+        self_resolver: VariableResolver = VariableResolver(resolver, self._self_ref.name, WrappedValueVariable(object_instance))
+        # TODO: original design used resolver.with_var
         for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
@@ -698,11 +719,11 @@ class Constructor(ExpressionStatement):
                 # to preserve order on lists used in attributes
                 # while allowing gradual execution on relations
                 reqs = valueexpression.requires_emit_gradual(
-                    resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
+                    self_resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
                 )
             else:
-                reqs = valueexpression.requires_emit(resolver, queue)
-            SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
+                reqs = valueexpression.requires_emit(self_resolver, queue)
+            SetAttributeHelper(queue, self_resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
         # generate an implementation
         for stmt in type_class.get_sub_constructor():

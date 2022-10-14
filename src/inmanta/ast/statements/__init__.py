@@ -471,7 +471,7 @@ class ReferenceStatement(ExpressionStatement):
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
-    def normalize(self, *, lhs_attribute: Optional[tuple[Reference, str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         for c in self.children:
             c.normalize()
 
@@ -532,7 +532,7 @@ class Literal(ExpressionStatement):
         self.value = value
         self.lexpos: Optional[int] = None
 
-    def normalize(self, *, lhs_attribute: Optional[tuple[Reference, str]] = None) -> None:
+    def normalize(self, *, lhs_attribute: Optional[tuple["Reference", str]] = None) -> None:
         pass
 
     def __repr__(self) -> str:
