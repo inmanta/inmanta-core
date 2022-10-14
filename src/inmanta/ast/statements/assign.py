@@ -39,8 +39,8 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
-    AttributeAssignmentLHS,
     AssignStatement,
+    AttributeAssignmentLHS,
     ExpressionStatement,
     RequiresEmitStatement,
     Resumer,

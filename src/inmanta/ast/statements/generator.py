@@ -41,7 +41,13 @@ from inmanta.ast import (
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
+from inmanta.ast.statements import (
+    AttributeAssignmentLHS,
+    ExpressionStatement,
+    RawResumer,
+    RequiresEmitStatement,
+    StaticEagerPromise,
+)
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
 from inmanta.ast.variables import Reference
 from inmanta.const import LOG_LEVEL_TRACE
@@ -650,7 +656,8 @@ class Constructor(ExpressionStatement):
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
-                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by the LHS
+                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by
+                # the LHS
                 and inverse.name not in kwarg_attrs
                 and inverse.name in chain.from_iterable(indexes)
                 and inverse.entity == type_class
@@ -658,9 +665,7 @@ class Constructor(ExpressionStatement):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
 
         late_args = {**dict([lhs_inverse_assignment] if lhs_inverse_assignment is not None else []), **kwarg_attrs}
-        missing_attrs: abc.Sequence[str] = [
-            attr for attr in self._required_late_args if attr not in late_args
-        ]
+        missing_attrs: abc.Sequence[str] = [attr for attr in self._required_late_args if attr not in late_args]
         if missing_attrs:
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
 

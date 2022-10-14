@@ -1055,7 +1055,11 @@ class VariableResolver(Resolver):
     Resolver that resolves a single variable to a value, and delegates the rest to its parent resolver.
     """
 
-    __slots__ = ("parent", "name", "variable",)
+    __slots__ = (
+        "parent",
+        "name",
+        "variable",
+    )
 
     def __init__(self, parent: Resolver, name: str, variable: VariableABC) -> None:
         self.parent: Resolver = parent

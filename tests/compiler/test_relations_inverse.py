@@ -18,10 +18,10 @@
 import contextlib
 import textwrap
 
+import pytest
+
 from inmanta import compiler
 from inmanta.ast.statements.generator import IndexAttributeMissingInConstructorException
-
-import pytest
 
 
 def test_relations_implicit_inverse_simple(snippetcompiler) -> None:
@@ -114,12 +114,13 @@ def test_relations_implicit_inverse_left_index(snippetcompiler, double_index: bo
         %s
 
         A(b=B())
-        """ % ("index B(a)" if double_index else "")
+        """
+        % ("index B(a)" if double_index else "")
     )
     with (
         pytest.raises(
             IndexAttributeMissingInConstructorException,
-            match="Missing relation 'a'. The relation __config__::B.a is part of an index."
+            match="Missing relation 'a'. The relation __config__::B.a is part of an index.",
         )
         if double_index
         else contextlib.nullcontext()
@@ -161,7 +162,6 @@ def test_relation_implicit_inverse_deeply_nested_constructors(snippetcompiler) -
     compiler.do_compile()
 
 
-
 def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompiler) -> None:
     """
     Verify that implicit inverse relations on index attributes for deeply nested constructors for the same entity type work as
@@ -199,7 +199,6 @@ def test_relation_implicit_inverse_nested_constructors_same_entity(snippetcompil
     compiler.do_compile()
 
 
-
 def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
     """
     Verify that implicit inverse relations on index attributes don't hide conflicts with explicit assignments through kwargs.
@@ -232,11 +231,11 @@ def test_relation_implicit_inverse_kwargs_conflict(snippetcompiler) -> None:
             \tnew value: __config__::A (instantiated at {dir}/main.cf:13)
             \t\tset at {dir}/main.cf:13
              (reported in Construct(A) ({dir}/main.cf:13))
-            """.lstrip("\n").rstrip()
-        )
-
+            """.lstrip(  # noqa: E501
+                "\n"
+            ).rstrip()
+        ),
     )
-
 
 
 def test_relation_implicit_inverse_on_plain_attribute(snippetcompiler) -> None:
@@ -262,11 +261,11 @@ def test_relation_implicit_inverse_on_plain_attribute(snippetcompiler) -> None:
             Could not set attribute `b` on instance `__config__::A (instantiated at {dir}/main.cf:12)` (reported in Construct(A) ({dir}/main.cf:12))
             caused by:
               Attempting to assign constructor of type __config__::B to attribute that is not a relation attribute: b on __config__::A (instantiated at {dir}/main.cf:12) (reported in Construct(B) ({dir}/main.cf:12))
-            """.lstrip("\n").rstrip()
-        )
-
+            """.lstrip(  # noqa: E501
+                "\n"
+            ).rstrip()
+        ),
     )
-
 
 
 def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> None:
@@ -295,9 +294,10 @@ def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> 
             caused by:
               Invalid Constructor call:
             \t* Missing relation 'a'. The relation __config__::B.a is part of an index. (reported in Construct(B) ({dir}/main.cf:13))
-            """.lstrip("\n").rstrip()
-        )
-
+            """.lstrip(  # noqa: E501
+                "\n"
+            ).rstrip()
+        ),
     )
 
 

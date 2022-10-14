@@ -18,7 +18,7 @@
 
 import logging
 from itertools import chain
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
@@ -39,9 +39,6 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable, VariableABC, Waiter
 from inmanta.execute.util import NoneValue, Unknown
-
-if TYPE_CHECKING:
-    from inmanta.ast.variables import Reference
 
 LOGGER = logging.getLogger(__name__)
 

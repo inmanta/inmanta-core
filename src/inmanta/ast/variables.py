@@ -22,8 +22,8 @@ from typing import Dict, Generic, List, Optional, TypeVar
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import (
-    AttributeAssignmentLHS,
     AssignStatement,
+    AttributeAssignmentLHS,
     ExpressionStatement,
     RawResumer,
     Statement,
