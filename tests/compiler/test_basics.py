@@ -487,4 +487,4 @@ def get_one() -> "int":
                     f"replaced by '{replaced_by_name}'" in str(warning.message)
                 )
             else:
-                assert f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. " in str(warning.message)
+                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. " in str(warning.message)
