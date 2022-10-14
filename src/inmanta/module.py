@@ -2202,7 +2202,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
                 " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
-
+        if isinstance(module, ModuleV1):
+            inmanta.warnings.warn(
+                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead."
+            )
         self.modules[module_name] = module
         return module
 
