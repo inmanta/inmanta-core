@@ -297,7 +297,7 @@ typedef Corsa-opel as Car(brand="opel")
         )
         compiler.do_compile()
 
-        assert len(caught_warnings) >= 2
+        assert len(caught_warnings) >= 1
         assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
