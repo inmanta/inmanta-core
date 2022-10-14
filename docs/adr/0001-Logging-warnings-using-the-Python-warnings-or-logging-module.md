@@ -12,7 +12,7 @@ Python has two different ways to report warnings to the user. Warnings can be lo
 
 We don't want Deprecation warnings in third-party libraries to be visible to end-users.
 
-## Pros and Cons 
+## Pros and Cons
 
 * LOGGER.warning():
    * This logger just writes a message to the log.
