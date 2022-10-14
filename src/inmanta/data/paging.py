@@ -100,33 +100,6 @@ class PagingCountsProvider(ABC, Generic[IQuery]):
         pass
 
 
-class ResourcePagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
-    def __init__(self, data_class: Type[Resource]) -> None:
-        self.data_class = data_class
-
-    async def count_items_for_paging(
-        self,
-        query_identifier: QueryIdentifier,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        sql_query, values = self.data_class._get_paging_item_count_query_new(
-            query_identifier.environment,
-            database_order,
-            first_id,
-            last_id,
-            start,
-            end,
-            **query,
-        )
-        result = await self.data_class.select_query(sql_query, values, no_obj=True)
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-
 class ResourceHistoryPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifier]):
     def __init__(self, data_class: Type[Resource]) -> None:
         self.data_class = data_class
@@ -183,30 +156,6 @@ class ResourceLogPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifi
         )
         result = await self.data_class.select_query(sql_query, values, no_obj=True)
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-
-class VersionedResourcePagingCountsProvider(PagingCountsProvider[VersionedQueryIdentifier]):
-    async def count_items_for_paging(
-        self,
-        query_identifier: VersionedQueryIdentifier,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-
-        return await Resource.count_versioned_resources_for_paging(
-            query_identifier.environment,
-            query_identifier.version,
-            database_order,
-            first_id,
-            last_id,
-            start,
-            end,
-            **query,
-        )
 
 
 class CompileReportPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
@@ -495,33 +444,6 @@ class PagingHandler(ABC, Generic[T, IQuery]):
         return f"{base_url}?{parse.urlencode(params, doseq=True)}"
 
 
-class ResourcePagingHandler(PagingHandler[LatestReleasedResource, QueryIdentifier]):
-    def __init__(
-        self,
-        counts_provider: PagingCountsProvider[QueryIdentifier],
-    ) -> None:
-        super().__init__(counts_provider)
-
-    def get_base_url(self) -> str:
-        return "/api/v2/resource"
-
-    def _get_paging_boundaries(self, dtos: List[LatestReleasedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[0].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[-1].resource_version_id,
-            )
-        else:
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[-1].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[0].resource_version_id,
-            )
-
-
 class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory, ResourceQueryIdentifier]):
     def __init__(
         self,
@@ -630,31 +552,6 @@ class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion, QueryI
                 first_id=None,
                 end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
                 last_id=None,
-            )
-
-
-class VersionedResourcePagingHandler(PagingHandler[VersionedResource, VersionedQueryIdentifier]):
-    def __init__(self, counts_provider: PagingCountsProvider[VersionedQueryIdentifier], version: int) -> None:
-        super().__init__(counts_provider)
-        self.version = version
-
-    def get_base_url(self) -> str:
-        return f"/api/v2/desiredstate/{self.version}"
-
-    def _get_paging_boundaries(self, dtos: List[VersionedResource], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[0].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[-1].resource_version_id,
-            )
-        else:
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].all_fields[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[-1].resource_version_id,
-                end=sort_order.ensure_boundary_type(dtos[0].all_fields[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[0].resource_version_id,
             )
 
 

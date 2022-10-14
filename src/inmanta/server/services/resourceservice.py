@@ -47,17 +47,11 @@ from inmanta.data.model import (
     VersionedResourceDetails,
 )
 from inmanta.data.paging import (
-    QueryIdentifier,
     ResourceHistoryPagingCountsProvider,
     ResourceHistoryPagingHandler,
     ResourceLogPagingCountsProvider,
     ResourceLogPagingHandler,
-    ResourcePagingCountsProvider,
-    ResourcePagingHandler,
     ResourceQueryIdentifier,
-    VersionedQueryIdentifier,
-    VersionedResourcePagingCountsProvider,
-    VersionedResourcePagingHandler,
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
@@ -68,7 +62,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import InvalidFilter, ResourceFilterValidator, ResourceLogFilterValidator
+from inmanta.server.validate_filter import InvalidFilter, ResourceLogFilterValidator
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)

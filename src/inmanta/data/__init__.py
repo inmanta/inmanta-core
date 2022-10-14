@@ -5010,81 +5010,6 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    def _get_paging_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            offset=len(values) + 1,
-        )
-        values.append(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
-
-    @classmethod
-    def _get_paging_item_count_query_new(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-
-        order = database_order.get_order()
-        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        reversed = order == PagingOrder.DESC
-
-        if reversed:
-            end, start = start, end
-            last_id, first_id = first_id, last_id
-
-        after_filter_statements, after_values = database_order.as_filter(len(values), start, first_id, start=not reversed)
-        values.extend(after_values)
-        before_filter_statements, before_values = database_order.as_filter(len(values), end, last_id, start=reversed)
-        values.extend(before_values)
-
-        before_filter = cls._join_filter_statements(before_filter_statements)
-        after_filter = cls._join_filter_statements(after_filter_statements)
-
-        select_clause = (
-            f"SELECT COUNT(*) as count_total, "
-            f"COUNT(*) filter ({before_filter}) as count_before, "
-            f"COUNT(*) filter ({after_filter}) as count_after "
-        )
-
-        sql_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            offset=len(values) + 1,
-        )
-        values.append(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
-
-    @classmethod
     async def get(
         cls,
         environment: uuid.UUID,
@@ -5468,35 +5393,6 @@ class Resource(BaseDocument):
             filter_statements=[" environment = $1 ", " model = $2"],
             values=[cls._get_value(environment), cls._get_value(version)],
         )
-
-    @classmethod
-    async def count_versioned_resources_for_paging(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        base_query = cls.versioned_resources_subquery(environment, version)
-        page_query = PageCountQueryBuilder(
-            from_clause=base_query._from_clause,
-            filter_statements=base_query.filter_statements,
-            values=base_query.values,
-        )
-        paging_query = page_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
 
     @classmethod
     async def get_versioned_resources(
