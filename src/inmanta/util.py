@@ -57,6 +57,8 @@ S = TypeVar("S")
 class Timeout(Exception):
     """The operation exceeded the given deadline."""
 
+    pass
+
 
 def get_compiler_version() -> str:
     return COMPILER_VERSION
