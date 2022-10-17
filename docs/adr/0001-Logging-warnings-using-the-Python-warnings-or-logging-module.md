@@ -10,7 +10,7 @@ Accepted
 
 Python has two different ways to report warnings to the user. Warnings can be logged via the logger (`LOGGER.warning()`) or using the Python warnings module (`warnings.warn()`). It was unclear to developers which type of logger has to used in which circumstances.
 
-We don't want Deprecation warnings in third-party libraries to be visible to end-users.
+By default we don't want Deprecation warnings in third-party libraries to be visible to end-users.
 
 ## Pros and Cons
 
@@ -20,6 +20,7 @@ We don't want Deprecation warnings in third-party libraries to be visible to end
 * warnings.warn():
    * Each message is displayed only once.
    * Pytest provides a nice overview of all warning logged during the executing of the test suite.
+   * Warnings are highly configurable through e.g. `warnings.filterwarnings`.
 
 ## Decision
 
