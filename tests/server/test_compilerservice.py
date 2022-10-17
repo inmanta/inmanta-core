@@ -560,6 +560,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
     assert f1 < s2
 
 
+@pytest.mark.slowtest
 async def test_server_partial_compile(server, client, environment, monkeypatch):
     """
     Test a partial_compile on the server
@@ -609,7 +610,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
     )
 
-    await retry_limited(wait_for_report, 0.001)
+    await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial")
     assert not verify_command_report(report, "--removed_resource_sets")
@@ -619,7 +620,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         env, force_update=False, do_export=False, remote_id=remote_id1, partial=True, removed_resource_sets=["a", "b", "c"]
     )
 
-    await retry_limited(wait_for_report, 0.001)
+    await retry_limited(wait_for_report, 10)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial --delete-resource-set a --delete-resource-set b --delete-resource-set c")
 
