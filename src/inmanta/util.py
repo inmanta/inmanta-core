@@ -490,7 +490,7 @@ async def retry_limited(
     """
     This function makes use of the INMANTA_RETRY_LIMITED_MULTIPLIER env variable. If set, INMANTA_RETRY_LIMITED_MULTIPLIER
     serves as multiplier: The timeout given as argument becomes a 'soft limit' and the 'soft limit' multiplied by the
-    multiplier (form the env var) becomes a "hard limit". If the hard limit is reached before the wait condition is fulfilled
+    multiplier (from the env var) becomes a "hard limit". If the hard limit is reached before the wait condition is fulfilled
     a Timeout exception is raised. If the wait condition is fulfilled before the hard limit is reached but after the soft
     limit is reached, a different Timeout exception is raised. if the Env var is not set, then the soft and hard limit are
     the same.
