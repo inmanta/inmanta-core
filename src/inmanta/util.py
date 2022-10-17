@@ -55,7 +55,7 @@ S = TypeVar("S")
 
 
 class Timeout(Exception):
-    """The operation exceeded the given deadline."""
+    """The operation exceeded the given timeout."""
 
     pass
 
