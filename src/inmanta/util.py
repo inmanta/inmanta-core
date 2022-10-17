@@ -54,12 +54,6 @@ T = TypeVar("T")
 S = TypeVar("S")
 
 
-class Timeout(Exception):
-    """The operation exceeded the given timeout."""
-
-    pass
-
-
 def get_compiler_version() -> str:
     return COMPILER_VERSION
 
@@ -509,14 +503,16 @@ async def retry_limited(
             return fun(*args, **kwargs)
 
     multiplier: int = int(os.environ.get("INMANTA_RETRY_LIMITED_MULTIPLIER", 1))
+    if multiplier < 1:
+        raise ValueError("value of INMANTA_RETRY_LIMITED_MULTIPLIER must be bigger or equal to 1.")
     hard_timeout = timeout * multiplier
     start = time.time()
     while time.time() - start < hard_timeout and not (await fun_wrapper()):
         await asyncio.sleep(interval)
     if not (await fun_wrapper()):
-        raise Timeout(f"Wait condition was not reach after hard limit of {hard_timeout} seconds")
+        raise asyncio.TimeoutError(f"Wait condition was not reach after hard limit of {hard_timeout} seconds")
     if time.time() - start > timeout:
-        raise Timeout(
+        raise asyncio.TimeoutError(
             f"Wait condition was met after {time.time() - start} seconds, but soft limit was set to {timeout} seconds"
         )
 
