@@ -33,7 +33,7 @@ from pytest import MonkeyPatch
 from inmanta import moduletool
 from inmanta.const import CF_CACHE_DIR
 from inmanta.module import ModuleMetadataFileNotFound
-from inmanta.moduletool import V2ModuleBuilder
+from inmanta.moduletool import ModuleBuildFailedError, V2ModuleBuilder
 from packaging import version
 from utils import v1_module_from_template
 
@@ -257,3 +257,39 @@ def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explici
         assert re.search(r"1.2.3\.dev[0-9]{14}", path_to_wheel)
     else:
         assert "1.2.3.dev0" in path_to_wheel
+
+
+@pytest.mark.parametrize_any(
+    "module_name, is_empty",
+    [
+        ("minimalv1module", True),
+        ("minimalv1module", False),
+        ("elaboratev1module", True),
+        ("elaboratev1module", False),
+    ],
+)
+def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name, is_empty) -> None:
+    """
+    Verify that an exception is thrown if the inmanta_plugins/{module_name} directory already exists and is not empty
+    and that the build succeeds if the directory already exists and is empty
+    """
+    module_dir = os.path.join(modules_dir, module_name)
+    module_copy_dir = os.path.join(tmpdir, module_name)
+    shutil.copytree(module_dir, module_copy_dir)
+
+    assert os.path.isdir(module_copy_dir)
+
+    inmanta_plugins_path = os.path.join(module_copy_dir, "inmanta_plugins")
+    os.mkdir(inmanta_plugins_path)
+    my_module_path = os.path.join(inmanta_plugins_path, module_name)
+    os.mkdir(my_module_path)
+    if not is_empty:
+        with open(os.path.join(my_module_path, "smt.txt"), "w") as fh:
+            fh.write("test")
+        with pytest.raises(
+            ModuleBuildFailedError,
+            match=f"Could not build module: inmanta_plugins/{module_name} directory already exists and is not empty",
+        ):
+            moduletool.ModuleTool().build(module_copy_dir)
+    else:
+        moduletool.ModuleTool().build(module_copy_dir)

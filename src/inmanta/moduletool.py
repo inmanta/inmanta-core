@@ -1293,11 +1293,14 @@ class ModuleConverter:
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
         if os.path.exists(new_plugins) and os.listdir(new_plugins):
             raise ModuleBuildFailedError(
-                msg="Could not build module: inmanta_plugins directory already exists and is not empty"
+                msg=f"Could not build module: inmanta_plugins/{self._module.name} directory already exists and is not empty"
             )
         elif os.path.exists(new_plugins) and os.path.exists(old_plugins):
             shutil.copytree(old_plugins, new_plugins, dirs_exist_ok=True)
-        elif os.path.exists(old_plugins):
+        elif os.path.exists(new_plugins) and not os.path.exists(old_plugins):
+            with open(os.path.join(new_plugins, "__init__.py"), "w"):
+                pass
+        elif not os.path.exists(old_plugins) and os.path.exists(old_plugins):
             shutil.move(old_plugins, new_plugins)
         else:
             os.makedirs(new_plugins)
