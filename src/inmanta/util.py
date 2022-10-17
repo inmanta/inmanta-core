@@ -510,7 +510,7 @@ async def retry_limited(
     while time.time() - start < hard_timeout and not (await fun_wrapper()):
         await asyncio.sleep(interval)
     if not (await fun_wrapper()):
-        raise asyncio.TimeoutError(f"Wait condition was not reach after hard limit of {hard_timeout} seconds")
+        raise asyncio.TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
     if time.time() - start > timeout:
         raise asyncio.TimeoutError(
             f"Wait condition was met after {time.time() - start} seconds, but soft limit was set to {timeout} seconds"
