@@ -3,8 +3,9 @@ import os
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from datetime import datetime
-from enum import IntFlag, auto
+from enum import auto, Enum
 from typing import Any, List, Mapping, Sequence, Tuple
 
 import requests
@@ -12,7 +13,7 @@ import requests
 LOGGER = logging.getLogger(__name__)
 
 
-class CommonFileExtension(IntFlag):
+class CommonFileExtension(Enum):
     other = auto()
     mo = auto()
     po = auto()
@@ -21,6 +22,14 @@ class CommonFileExtension(IntFlag):
     dat = auto()
     pyi = auto()
     py = auto()
+
+
+@dataclass
+class CodeChange:
+    commit_hash: str
+    file_cardinality: int
+    file_extension: List[int]
+    n_changes: List[int]
 
 
 class DataParser:
@@ -41,8 +50,9 @@ class DataParser:
             x test_failed -> integer denoting whether this test failed or not.
     """
 
+
     def __init__(self):
-        self.code_change_data: Mapping[str, Any] = {}
+        self.code_change_data = None
         self.test_result_data: Mapping[str, int] = {}
 
     def parse_code_change(self) -> None:
@@ -53,29 +63,23 @@ class DataParser:
         - the file extensions of modified files
         - the number of changes to the modified files in the past 3, 14 and 56 days
         """
-        data = {
-            "commit_hash": None,
-            "file_cardinality": None,
-            "file_extension": None,
-            "n_changes": None,
-        }
 
         # Get latest commit hash:
-        data["commit_hash"] = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip()
+        commit_hash: str = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
 
         # Get current branch
         cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-        current_branch = subprocess.check_output(cmd).strip().decode()
+        current_branch: str = subprocess.check_output(cmd).strip().decode()
 
         cmd = ["git", "diff", f"master...{current_branch}", "--name-only"]
-        changed_files = [line for line in subprocess.check_output(cmd, env=os.environ.copy()).decode().split("\n") if line]
+        changed_files: List[str] = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
-        data["file_cardinality"] = len(changed_files)
+        file_cardinality: int = len(changed_files)
 
         def get_extension_vector() -> List[int]:
             extensions = set([os.path.splitext(file)[1].replace(".", "") for file in changed_files])
 
-            out = [0] * 8
+            out = [0] * len(CommonFileExtension)
             known_exts = [ext for ext in CommonFileExtension]
             for ext in extensions:
                 try:
@@ -85,7 +89,7 @@ class DataParser:
                 out[idx] = 1
             return out
 
-        data["file_extension"] = get_extension_vector()
+        file_extension: List[int] = get_extension_vector()
 
         def get_changes() -> List[int]:
             n_changes: List[int] = []
@@ -97,14 +101,16 @@ class DataParser:
                         stdout=subprocess.PIPE,
                     )
                     acc += int(subprocess.check_output(["wc", "-l"], stdin=ps.stdout))
+                    ps.stdout.close()
                     ps.wait()
 
                 n_changes.append(acc)
             return n_changes
 
-        data["n_changes"] = get_changes()
+        n_changes: List[int] = get_changes()
 
-        self.code_change_data = data
+        self.code_change_data = CodeChange(commit_hash,file_cardinality,file_extension,n_changes)
+
 
     def parse_xml_test_results(self, path: str = "junit-py39.xml") -> None:
         """
