@@ -49,32 +49,57 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.page_boundaries = PagingBoundaries(start, end, first_id, last_id)  # TODO: types
         self.validate_paging_parameters()
 
+    @abc.abstractmethod
+    def get_base_url(self) -> str:
+        """
+         Return the base URL used to construct the paging links
+
+         e.g. "/api/v2/resource"
+         """
+        pass
+
     def get_extra_url_parameters(self) -> Dict[str, str]:
+        """
+        Return additional URL query parameters required to construct the paging links
+        """
         return {}
 
     @abc.abstractmethod
     async def get_data(self) -> Sequence[T_DTO]:
+        """
+        Fetch the data and construct dto's
+
+        See existing implementations for typical usage
+        """
+        pass
+
+    @property
+    @abc.abstractmethod
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        """
+        Return the specification of the allowed filters, see FilterValidator
+        """
         pass
 
     def clip_to_page(self, query_builder: SimpleQueryBuilder) -> SimpleQueryBuilder:
-        # TODO document
-        return query_builder.filter(
-            *self.order.as_start_filter(query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id)
-        ).filter(*self.order.as_end_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id))
-
-    def order_and_limit(self, query_builder: SimpleQueryBuilder) -> SimpleQueryBuilder:
+        """
+        Update the query builder to constrain it to the page boundaries, order and size
+        """
         order = self.order.get_order()
         backward_paging: bool = (order == PagingOrder.ASC and self.page_boundaries.end is not None) or (
             order == PagingOrder.DESC and self.page_boundaries.start is not None
         )
-        return query_builder.order_and_limit(self.order, self.limit, backward_paging)
 
-        # Main entry point
+        return query_builder.filter(
+            *self.order.as_start_filter(query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id)
+        ).filter(
+            *self.order.as_end_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id)
+        ).order_and_limit(self.order, self.limit, backward_paging)
 
     async def execute(self) -> ReturnValue[Sequence[T_DTO]]:
         dtos = await self.get_data()
         if dtos:
-            paging_boundaries = self._get_paging_boundaries(dtos)
+            paging_boundaries = self._get_paging_boundaries_for(dtos)
         else:
             # nothing found now, use the current page to determine if something exists before us
             paging_boundaries = self.page_boundaries
@@ -84,7 +109,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         # Paging helpers
 
-    def _get_paging_boundaries(self, dtos: Sequence[T_DTO]) -> PagingBoundaries:
+    def _get_paging_boundaries_for(self, dtos: Sequence[T_DTO]) -> PagingBoundaries:
+        """ Return the page boundaries for the list of dtos """
         if self.order.get_order() == "DESC":
             first = dtos[0]
             last = dtos[-1]
@@ -95,6 +121,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         order_column_name = self.order.order_by_column
         order_type: ColumnType = self.order.get_valid_sort_columns_new()[self.order.order_by_column]
 
+        # TODO get data from records instead of DTO's to have one less domain to mess with?
         return PagingBoundaries(
             start=order_type.get_value(first.all_fields[order_column_name]),  # TODO allfields is not very nice
             first_id=self.order.get_id_from_dto(first),
@@ -149,7 +176,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     async def prepare_paging_links(
         self,
-        dtos: List[model.VersionedResource],
+        dtos: Sequence[T_DTO],
         paging_boundaries: PagingBoundaries,
         meta: PagingMetadata,
     ) -> Dict[str, str]:
@@ -344,7 +371,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             *data.Resource.get_composed_filter_with_query_types(offset=query_builder.offset, **self.filter)
         )
         query_builder = self.clip_to_page(query_builder)
-        query_builder = self.order_and_limit(query_builder)
         sql_query, values = query_builder.build()
 
         resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
@@ -419,7 +445,6 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
             *data.Resource.get_composed_filter_with_query_types(offset=query_builder.offset, **self.filter)
         )
         query_builder = self.clip_to_page(query_builder)
-        query_builder = self.order_and_limit(query_builder)
         sql_query, values = query_builder.build()
 
         versioned_resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
