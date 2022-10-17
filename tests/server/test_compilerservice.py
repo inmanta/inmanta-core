@@ -610,7 +610,7 @@ async def test_server_partial_compile(server, client, environment, monkeypatch):
         env, force_update=False, do_export=False, remote_id=remote_id1, partial=True
     )
 
-    await retry_limited(wait_for_report, 10)
+    await retry_limited(wait_for_report, 0.1)
     report = await client.get_report(compile_id)
     assert verify_command_report(report, "--partial")
     assert not verify_command_report(report, "--removed_resource_sets")
