@@ -498,6 +498,7 @@ async def retry_limited(
             return fun(*args, **kwargs)
 
     multiplier: int = os.environ.get("INMANTA_RETRY_LIMITED_MULTIPLIER", 1)
+    print(multiplier)
     hard_timeout = timeout * multiplier
     start = time.time()
     while time.time() - start < hard_timeout and not (await fun_wrapper()):
