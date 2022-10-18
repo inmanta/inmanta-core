@@ -368,17 +368,34 @@ async def retry_limited(
     *args: object,
     **kwargs: object,
 ) -> None:
+    """
+    This function makes use of the INMANTA_RETRY_LIMITED_MULTIPLIER env variable. If set, INMANTA_RETRY_LIMITED_MULTIPLIER
+    serves as multiplier: The timeout given as argument becomes a 'soft limit' and the 'soft limit' multiplied by the
+    multiplier (from the env var) becomes a 'hard limit'. If the hard limit is reached before the wait condition is fulfilled
+    a Timeout exception is raised. If the wait condition is fulfilled before the hard limit is reached but after the soft
+    limit is reached, a different Timeout exception is raised. if the Env var is not set, then the soft and hard limit are
+    the same.
+    """
+
     async def fun_wrapper() -> bool:
         if inspect.iscoroutinefunction(fun):
             return await fun(*args, **kwargs)
         else:
             return fun(*args, **kwargs)
 
+    multiplier: int = int(os.environ.get("INMANTA_RETRY_LIMITED_MULTIPLIER", 1))
+    if multiplier < 1:
+        raise ValueError("value of INMANTA_RETRY_LIMITED_MULTIPLIER must be bigger or equal to 1.")
+    hard_timeout = timeout * multiplier
     start = time.time()
-    while time.time() - start < timeout and not (await fun_wrapper()):
+    while time.time() - start < hard_timeout and not (await fun_wrapper()):
         await asyncio.sleep(interval)
     if not (await fun_wrapper()):
-        raise asyncio.TimeoutError()
+        raise asyncio.TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
+    if time.time() - start > timeout:
+        raise asyncio.TimeoutError(
+            f"Wait condition was met after {time.time() - start} seconds, but soft limit was set to {timeout} seconds"
+        )
 
 
 class StoppedException(Exception):
