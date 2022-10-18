@@ -94,7 +94,7 @@ it wil give following warning:
 
 .. code-block::
 
-    Plugin 'get_one' in module 'inmanta_plugins.<module_name>' is deprecated. It should be replaced by 'my_new_plugin'
+    Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated. It should be replaced by 'my_new_plugin'
 
 
 
