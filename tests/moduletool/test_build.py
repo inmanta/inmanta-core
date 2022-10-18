@@ -288,7 +288,7 @@ def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name,
             fh.write("test")
         with pytest.raises(
             ModuleBuildFailedError,
-            match=f"Could not build module: inmanta_plugins/{module_name} directory " f"already exists and is not empty",
+            match=f"Could not build module: inmanta_plugins/{module_name} directory already exists and is not empty",
         ):
             moduletool.ModuleTool().build(module_copy_dir)
     else:
