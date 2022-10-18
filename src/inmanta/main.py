@@ -219,7 +219,7 @@ def project_show(client: Client, project: str) -> None:
 @click.option("--name", "-n", help="The name of the new project", required=True)
 @click.pass_obj
 def project_create(client: Client, name: str) -> None:
-    """ Create a new project on the server """
+    """Create a new project on the server"""
     project = client.get_dict("create_project", "project", {"name": name})
     print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
 

@@ -83,7 +83,7 @@ class FileService(protocol.ServerSlice):
         return 200, {"content": base64.b64encode(content).decode("ascii")}
 
     def get_file_internal(self, file_hash: str) -> bytes:
-        """get_file, but on return code 200, content is not encoded """
+        """get_file, but on return code 200, content is not encoded"""
 
         file_name = os.path.join(self.server_slice._server_storage["files"], file_hash)
 

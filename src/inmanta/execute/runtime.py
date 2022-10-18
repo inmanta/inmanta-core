@@ -260,7 +260,7 @@ class DelayedResultVariable(ResultVariable[T]):
         raise NotImplementedError()
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
+        """How many are actually waiting for us"""
         return len(self.waiters)
 
 
@@ -373,7 +373,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return self.get_waiting_providers() == 0
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
+        """How many are actually waiting for us"""
         return len(self.waiters) - len(self.listeners)
 
     def receive_result(self, value: ListValue, location: Location) -> None:

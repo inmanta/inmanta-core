@@ -146,12 +146,12 @@ server_fact_expire = Option(
 
 
 def default_fact_renew() -> int:
-    """:inmanta.config:option:`server.fact-expire` /3 """
+    """:inmanta.config:option:`server.fact-expire` /3"""
     return int(server_fact_expire.get() / 3)
 
 
 def validate_fact_renew(value: object) -> int:
-    """ time; < :inmanta.config:option:`server.fact-expire` """
+    """time; < :inmanta.config:option:`server.fact-expire`"""
     out = int(value)
     if not out < server_fact_expire.get():
         LOGGER.warn(

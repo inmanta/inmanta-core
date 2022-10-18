@@ -291,7 +291,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     name = property(lambda self: self._name)
 
     def get_handlers(self) -> List[routing.Rule]:
-        """Get the list of """
+        """Get the list of"""
         return self._handlers
 
     # utility methods for extensions developers

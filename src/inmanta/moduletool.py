@@ -64,7 +64,7 @@ def set_yaml_order_preserving():
 
 
 class ModuleLikeTool(object):
-    """Shared code for modules and projects """
+    """Shared code for modules and projects"""
 
     def execute(self, cmd, args):
         """
