@@ -13,14 +13,14 @@ jinja2==3.1.2
 more-itertools==8.14.0
 netifaces==0.11.0
 packaging==21.3
-pip==22.2.2
+pip==22.3
 ply==3.11
 pydantic==1.10.2
 pyformance==0.4
 PyJWT==2.5.0
 python-dateutil==2.8.2
 pyyaml==6.0
-setuptools==65.4.1
+setuptools==65.5.0
 texttable==1.6.4
 tornado==6.2
 toml==0.10.2
