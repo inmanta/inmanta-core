@@ -325,3 +325,36 @@ def test_relation_implicit_inverse_on_different_entity_type(snippetcompiler) -> 
             ).rstrip()
         ),
     )
+
+
+def test_relation_implicit_inverse_inheritance(snippetcompiler) -> None:
+    """
+    Verify that implicit inverse relations on index attributes work as expected when combined with inheritance: relations and
+    indexes defined on parent entities should allow implicit inverses on their children.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity AABC: end
+        entity BABC: end
+        entity ChildA extends AABC: end
+        entity ChildB extends BABC: end
+        implement ChildA using std::none
+        implement ChildB using std::none
+
+        # relation and index on ABC
+        AABC.b [0:1] -- BABC.a [1]
+
+        index BABC(a)
+
+        # nested constructors
+        a1 = ChildA(b=ChildB())
+        # attribute assignment
+        a2 = ChildA()
+        a2.b = ChildB()
+
+        assert = true
+        assert = a1.b.a == a1
+        assert = a2.b.a == a2
+        """
+    )
+    compiler.do_compile()

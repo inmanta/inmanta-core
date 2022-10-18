@@ -656,7 +656,7 @@ class Constructor(ExpressionStatement):
                 # the LHS
                 and inverse.name not in kwarg_attrs
                 and inverse.name in chain.from_iterable(type_class.get_indices())
-                and inverse.entity == type_class
+                and (inverse.entity == type_class or type_class.is_parent(inverse.entity))
             ):
                 lhs_inverse_assignment = (inverse.name, lhs_instance)
 
