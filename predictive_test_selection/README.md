@@ -1,8 +1,30 @@
+# Overview
+
+    This project is based off this [paper](https://arxiv.org/abs/1810.05286)
+    The main idea is to get faster feedback when pushing changes to a feature branch by only running a small subset of
+    the test suite. To find which tests to run we use a predictive model that takes 2 inputs:
+
+    graph model;
+        Code change-->Model;
+        Test Case fqn -->Model;
+        Model-->Failure proba;
+
+    ## A code change
+
+    This is a set of files that were modified in this pull request
+
+    ## A test case
+
+    This is the fully qualified name of the
+
 # Data collector design
 
 
-    In order to train the Predictive Test Selection algorithm, we need a dataset.
-    This dataset holds historic information about past test runs:
+    In order to train the Predictive Test Selection algorithm, we need a dataset. This dataset holds historic
+    information about past test runs. It can be consulted [here](https://grafana.inmanta.com/d/YsUw7VSVk/test-failure-rates?orgId=1&from=now%2Fy&to=now)
+
+    Generic information about the influx db data point format can be found [here](https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/)
+
 
     """
     x date text NOT NULL,
