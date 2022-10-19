@@ -1295,9 +1295,8 @@ class ModuleConverter:
             raise ModuleBuildFailedError(
                 msg=f"Could not build module: inmanta_plugins/{self._module.name} directory already exists and is not empty"
             )
-        elif os.path.exists(new_plugins) and os.path.exists(old_plugins):
-            shutil.copytree(old_plugins, new_plugins, dirs_exist_ok=True)
-        elif not os.path.exists(new_plugins) and os.path.exists(old_plugins):
+        os.rmdir(new_plugins)
+        if os.path.exists(old_plugins):
             shutil.move(old_plugins, new_plugins)
         else:
             if not os.path.exists(new_plugins):
