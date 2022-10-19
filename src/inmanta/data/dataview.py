@@ -52,10 +52,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
     @abc.abstractmethod
     def get_base_url(self) -> str:
         """
-         Return the base URL used to construct the paging links
+        Return the base URL used to construct the paging links
 
-         e.g. "/api/v2/resource"
-         """
+        e.g. "/api/v2/resource"
+        """
         pass
 
     def get_extra_url_parameters(self) -> Dict[str, str]:
@@ -90,11 +90,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             order == PagingOrder.DESC and self.page_boundaries.start is not None
         )
 
-        return query_builder.filter(
-            *self.order.as_start_filter(query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id)
-        ).filter(
-            *self.order.as_end_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id)
-        ).order_and_limit(self.order, self.limit, backward_paging)
+        return (
+            query_builder.filter(
+                *self.order.as_start_filter(query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id)
+            )
+            .filter(*self.order.as_end_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id))
+            .order_and_limit(self.order, self.limit, backward_paging)
+        )
 
     async def execute(self) -> ReturnValue[Sequence[T_DTO]]:
         dtos = await self.get_data()
@@ -110,7 +112,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         # Paging helpers
 
     def _get_paging_boundaries_for(self, dtos: Sequence[T_DTO]) -> PagingBoundaries:
-        """ Return the page boundaries for the list of dtos """
+        """Return the page boundaries for the list of dtos"""
         if self.order.get_order() == "DESC":
             first = dtos[0]
             last = dtos[-1]

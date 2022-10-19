@@ -291,9 +291,10 @@ class DatabaseOrder:
         self.order_by_column = order_by_column
         self.order = order
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
         """The validated column name string as it should be used in the database queries"""
-        return self.order_by_column
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        return ColumnNameStr(table_prefix_value + self.order_by_column)
 
     def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
@@ -403,20 +404,26 @@ class DatabaseOrder:
         """Get the end and last_id values as end filters"""
         return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
 
-    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
+    def get_order_elements(self, invert: bool, table_prefix: Optional[str] = None) -> List[Tuple[ColumnNameStr, PagingOrder]]:
         """
         return a list of column/order pairs, to format an ORDER VBY statement
 
+        :param table_prefix: the name of the table to find the collumns in
+
         the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
         """
-        # Moved legacy code
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
         order = self.get_order(invert)
-        return [(self.get_order_by_column_db_name(), order), (self.id_column, order)]
+        return [
+            (self.get_order_by_column_db_name(table_prefix), order),
+            (ColumnNameStr(table_prefix_value + self.id_column), order),
+        ]
 
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
         """Return the actual order by statement, as derived from get_order_elements"""
-        table_prefix = "" if table is None else table + "."
-        order_by_part = ", ".join((f"{table_prefix}{col} {order.db_form}" for col, order in self.get_order_elements(invert)))
+        order_by_part = ", ".join(
+            (f"{col} {order.db_form}" for col, order in self.get_order_elements(invert, table_prefix=table))
+        )
         return f" ORDER BY {order_by_part}"
 
 
@@ -509,9 +516,9 @@ class ResourceOrder(VersionedResourceOrder):
             "status": StringColumn,
         }
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
         return ColumnNameStr(
-            f"{super().get_order_by_column_db_name()}{'::text' if self._should_be_treated_as_string() else ''}"
+            f"{super().get_order_by_column_db_name(table_prefix)}{'::text' if self._should_be_treated_as_string() else ''}"
         )
 
     def _should_be_treated_as_string(self) -> bool:
@@ -650,9 +657,9 @@ class AgentOrder(DatabaseOrder):
         """Name of the id column of this database order"""
         return ColumnNameStr("name")
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
         # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+        return self.coalesce_to_min(super().get_order_by_column_db_name(table_prefix))
 
 
 class DesiredStateVersionOrder(DatabaseOrder):
@@ -691,9 +698,9 @@ class ParameterOrder(DatabaseOrder):
     def validator_dataclass(cls) -> Type["BaseDocument"]:
         return Parameter
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
+    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
         # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+        return self.coalesce_to_min(super().get_order_by_column_db_name(table_prefix))
 
 
 class FactOrder(DatabaseOrder):
