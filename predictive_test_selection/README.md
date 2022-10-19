@@ -4,11 +4,12 @@
     The main idea is to get faster feedback when pushing changes to a feature branch by only running a small subset of
     the test suite. To find which tests to run we use a predictive model that takes 2 inputs:
 
+```mermaid
     graph model;
         Code change-->Model;
         Test Case fqn -->Model;
         Model-->Failure proba;
-
+```
     ## A code change
 
     This is a set of files that were modified in this pull request
