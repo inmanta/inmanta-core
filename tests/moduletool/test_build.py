@@ -268,7 +268,7 @@ def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explici
         ("elaboratev1module", False),
     ],
 )
-def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name, is_empty) -> None:
+def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name, is_empty) -> None:
     """
     Verify that an exception is thrown if the inmanta_plugins/{module_name} directory already exists and is not empty
     and that the build succeeds if the directory already exists and is empty
