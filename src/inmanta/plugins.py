@@ -28,14 +28,14 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
+from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
 
 T = TypeVar("T")
 
 if TYPE_CHECKING:
-    from inmanta.ast.statements import DynamicStatement, ExpressionStatement
+    from inmanta.ast.statements import DynamicStatement
     from inmanta.ast.statements.call import FunctionCall
     from inmanta.compiler import Compiler
 
@@ -64,15 +64,6 @@ class Context(object):
         self.plugin = plugin
         self.result = result
         self.compiler = queue.get_compiler()
-
-    def emit_expression(self, stmt: "ExpressionStatement") -> None:
-        """
-        Add a new statement
-        """
-        self.owner.copy_location(stmt)
-        stmt.normalize(self.resolver)
-        reqs = stmt.requires_emit(self.resolver, self.queue)
-        ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt, provides=False)
 
     def get_resolver(self) -> Resolver:
         return self.resolver
