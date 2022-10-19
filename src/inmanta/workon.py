@@ -23,9 +23,13 @@ from collections import abc
 from typing import Optional, Union
 from dataclasses import dataclass
 
+from inmanta.protocol.common import Result
+from inmanta.protocol.endpoints import SyncClient
+
 
 DEFAULT_COLUMN_WIDTH_NAME: int = 20
 
+# TODO: config.Config.set("cmdline_rest_transport", "port", 8888), config.Config.set("cmdline_rest_transport", "host", "localhost")? Or use config file?
 
 @dataclass(frozen=True)
 class EnvironmentABC:
@@ -48,11 +52,28 @@ EnvironmentSequence = Union[abc.Sequence[NamelessEnvironment], abc.Sequence[Name
 
 def get_environments() -> EnvironmentSequence:
     # TODO docstring
-    # TODO implement
-    raise NotImplementedError()
+    client = SyncClient("cmdline")
+    result: Result = client.list_environments()
+    if result.code == 200:
+        assert "environments" in result.result
+        environments: object = result.result["environments"]
+        print(environments)
+        # TODO implement
+        raise NotImplementedError()
+    else:
+        reason: str = f" Reason: {result.result['message']}" if "message" in result.result else ""
+        click.echo(
+            (
+                "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
+                f"{reason}"
+            ),
+            err=True,
+        )
+        # TODO implement
+        raise NotImplementedError()
 
 
-def click_list_environments() -> None:
+def echo_environments() -> None:
     # TODO docstring
     environments: EnvironmentSequence = get_environments()
     if not environments:
@@ -67,17 +88,32 @@ def click_list_environments() -> None:
             click.echo(str(nameless.id))
 
 
+def echo_environments_callback(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+    if not value or ctx.resilient_parsing:
+        return
+    echo_environments()
+    ctx.exit()
+
+
 # TODO: what if this is called on a non-server machine?
 @click.command(no_args_is_help=True)
-@click.option("-l", "--list", "l", is_flag=True, default=False, help="List all environments with their ids")
-@click.argument("environment", type=str, required=False)
+@click.option(
+    "-l",
+    "--list",
+    "l",
+    is_flag=True,
+    default=False,
+    help="List all environments with their ids",
+    # different execution flow for --list: use eager parameter with callback
+    is_eager=True,
+    expose_value=False,
+    callback=echo_environments_callback,
+)
+@click.argument("environment", type=str)
 def workon(l: bool, environment: str) -> None:
     """
     Work on an inmanta environment. ENVIRONMENT can be an environment name or id.
     """
-    if l:
-        click_list_environments()
-        return
     # TODO implement
     raise NotImplementedError()
 
