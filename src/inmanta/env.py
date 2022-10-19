@@ -678,8 +678,8 @@ class CommandRunner:
             shell=shell,
             env=env_vars,
         )
+        assert process.stdout is not None  # Make mypy happy
         try:
-            assert process.stdout is not None  # Make mypy happy
             for line in process.stdout:
                 # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
                 output = line.decode().strip()
