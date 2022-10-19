@@ -297,6 +297,7 @@ def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name,
             moduletool.ModuleTool().build(module_copy_dir)
     else:
         moduletool.ModuleTool().build(module_copy_dir)
+
         dist_dir = os.path.join(module_copy_dir, "dist")
         dist_dir_content = os.listdir(dist_dir)
         assert len(dist_dir_content) == 1
