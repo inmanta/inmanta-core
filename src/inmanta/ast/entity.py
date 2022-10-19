@@ -227,7 +227,7 @@ class Entity(EntityLike, NamedType):
 
     def is_parent(self, entity: "Entity") -> bool:
         """
-        Check if the given entity is a parent of this entity
+        Check if the given entity is a parent of this entity. Does not consider an entity its own parent.
         """
         if entity in self.parent_entities:
             return True
@@ -337,7 +337,7 @@ class Entity(EntityLike, NamedType):
 
     def is_subclass(self, cls: "Entity") -> bool:
         """
-        Is the given class a subclass of this class
+        Is the given class a subclass of this class. Does not consider entities a subclass of themselves.
         """
         return cls.is_parent(self)
 
