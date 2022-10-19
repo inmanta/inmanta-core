@@ -5,8 +5,8 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
-from enum import auto, Enum
-from typing import Any, List, Mapping, Sequence, Tuple, MutableMapping
+from enum import Enum, auto
+from typing import Any, List, Mapping, MutableMapping, Sequence, Tuple
 
 import requests
 
@@ -19,6 +19,7 @@ CHANGE_LOOK_BACK: List[int] = [3, 14, 56]
 
 # Url of the influx db into which we store the collected data
 INFLUX_DB_URL = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
+
 
 class CommonFileExtension(Enum):
     other = auto()
@@ -34,13 +35,14 @@ class CommonFileExtension(Enum):
 @dataclass
 class CodeChange:
     """
-        Collects all data pertaining to the code change in the currently checked out branch:
-        - commit_hash -> The latest commit hash
-        - modification_count -> Number of modifications made to the files involved in this change in the last 3, 14 and 56 days.
-          The points in time at which we look back is configured by the CHANGE_LOOK_BACK parameter.
-        - file_cardinality -> Number of files involved in this change
-        - file_extension -> File extensions of the files involved in this change
+    Collects all data pertaining to the code change in the currently checked out branch:
+    - commit_hash -> The latest commit hash
+    - modification_count -> Number of modifications made to the files involved in this change in the last 3, 14 and 56 days.
+      The points in time at which we look back is configured by the CHANGE_LOOK_BACK parameter.
+    - file_cardinality -> Number of files involved in this change
+    - file_extension -> File extensions of the files involved in this change
     """
+
     commit_hash: str
     modification_count: List[int]
     file_cardinality: int
@@ -96,11 +98,12 @@ class CodeChange:
 @dataclass
 class TestResult:
     """
-        Collects all data pertaining to the test cases by parsing the test result xml file (produced by
-        '$ py.test --junit-xml=junit-py39.xml'):
-        - test_result_data -> Maps the fully qualified test name <test_file_name>.<test_case> to an integer denoting whether
-          this test failed or not.
+    Collects all data pertaining to the test cases by parsing the test result xml file (produced by
+    '$ py.test --junit-xml=junit-py39.xml'):
+    - test_result_data -> Maps the fully qualified test name <test_file_name>.<test_case> to an integer denoting whether
+      this test failed or not.
     """
+
     test_result_data: MutableMapping[str, int]
 
     def __init__(self):
@@ -133,22 +136,23 @@ class TestResult:
 
 class DataParser:
     """
-        This class fetches all information regarding a specific code change and the tests that are run on this specific commit
-        and sends it all to the influxdb database.
+    This class fetches all information regarding a specific code change and the tests that are run on this specific commit
+    and sends it all to the influxdb database.
 
 
     """
+
     def __init__(self):
         self.code_change_data: CodeChange = CodeChange()
         self.test_result_data: TestResult = TestResult()
 
     def _create_data_payload(self) -> str:
         """
-            Anatomy of each line of the payload:
-            Measurement: test_result
-            tag_set: fqn, commit_hash
-            field_set: failed_as_int, modification_count, file_extension, file_cardinality
-            timestamp: Use influx_db auto-generated timestamp
+        Anatomy of each line of the payload:
+        Measurement: test_result
+        tag_set: fqn, commit_hash
+        field_set: failed_as_int, modification_count, file_extension, file_cardinality
+        timestamp: Use influx_db auto-generated timestamp
         """
         data_points: List[str] = [
             (
