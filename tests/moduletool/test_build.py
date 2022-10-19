@@ -259,6 +259,7 @@ def test_create_dev_build_of_pre_tagged_module(tmpdir, modules_dir: str, explici
         assert "1.2.3.dev0" in path_to_wheel
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize_any(
     "module_name, is_empty",
     [
