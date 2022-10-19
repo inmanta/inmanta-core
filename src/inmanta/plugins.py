@@ -493,8 +493,6 @@ def plugin(
     commands: Optional[List[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-    deprecated: bool = False,
-    replaced_by: Optional[str] = None,
 ) -> Callable:  # noqa: H801
     """
     Python decorator to register functions with inmanta as plugin
@@ -539,8 +537,8 @@ def plugin(
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
-            dictionary["deprecated"] = deprecated
-            dictionary["replaced_by"] = replaced_by
+            # dictionary["deprecated"] = deprecated
+            # dictionary["replaced_by"] = replaced_by
 
             bases = (Plugin,)
             PluginMeta.__new__(PluginMeta, name, bases, dictionary)
@@ -558,3 +556,14 @@ def plugin(
     elif function is not None:
         fnc = curry_name(commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
         return fnc(function)
+
+
+@stable_api
+def deprecated(
+    function: Optional[Callable] = None,
+) -> Callable:  # noqa: H801
+    def wrapper_accepting_arguments(arg1, arg2):
+        print("My arguments are: {0}, {1}".format(arg1, arg2))
+        function(arg1, arg2)
+
+    return wrapper_accepting_arguments
