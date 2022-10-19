@@ -1,5 +1,5 @@
 ---
-description: Fix issue with "inmanta module build" command if inmanta_plugins dir already exists
+description: Fix issue with "inmanta module build" command on a v1 module if inmanta_plugins dir already exists
 issue-nr: 4954
 change-type: patch
 destination-branches: [master, iso5]
