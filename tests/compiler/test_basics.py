@@ -445,9 +445,10 @@ def test_modules_plugin_deprecation(
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
     test_module_plugin_contents: str = f"""
-from inmanta.plugins import plugin
+from inmanta.plugins import plugin, deprecated
 
-@plugin(deprecated={deprecated}, replaced_by={replaced_by})
+@deprecated(replaced_by="newplugin")
+@plugin
 def get_one() -> "int":
     return 1
         """.strip()

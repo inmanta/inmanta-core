@@ -250,7 +250,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
             spec_type = arg_spec.annotations[arg]
             if spec_type == Context:
-                self._context = i
+                self._context = PluginMeta.get_functions()
             else:
                 if default_start is not None and default_start <= i:
                     default_value = arg_spec.defaults[default_start - i]
@@ -425,11 +425,11 @@ class Plugin(NamedType, metaclass=PluginMeta):
         """
         The function call itself
         """
-        if self.deprecated:
-            msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
-            if self.replaced_by:
-                msg += f" It should be replaced by '{self.replaced_by}'"
-            inmanta.warnings.warn(PluginDeprecationWarning(msg))
+        # if self.deprecated:
+        #     msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
+        #     if self.replaced_by:
+        #         msg += f" It should be replaced by '{self.replaced_by}'"
+        #     inmanta.warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
         def new_arg(arg: object) -> object:
@@ -537,8 +537,6 @@ def plugin(
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
-            # dictionary["deprecated"] = deprecated
-            # dictionary["replaced_by"] = replaced_by
 
             bases = (Plugin,)
             PluginMeta.__new__(PluginMeta, name, bases, dictionary)
@@ -561,9 +559,18 @@ def plugin(
 @stable_api
 def deprecated(
     function: Optional[Callable] = None,
+    replaced_by: Optional[str] = None,
 ) -> Callable:  # noqa: H801
-    def wrapper_accepting_arguments(arg1, arg2):
-        print("My arguments are: {0}, {1}".format(arg1, arg2))
-        function(arg1, arg2)
+    def wrapper(fnc):
+        name = fnc.__name__
+        ns_parts = str(fnc.__module__).split(".")
+        ns_parts.append(name)
+        full_name = "::".join(ns_parts[1:])
+        if full_name in PluginMeta.get_functions():
+            print("ok")
+        else:
+            raise Exception("Can not deprecate a plugin that was not found in the context")
 
-    return wrapper_accepting_arguments
+        return fnc(function)
+
+    return wrapper
