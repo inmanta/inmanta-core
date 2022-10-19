@@ -283,9 +283,13 @@ def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name,
     os.mkdir(inmanta_plugins_path)
     my_module_path = os.path.join(inmanta_plugins_path, module_name)
     os.mkdir(my_module_path)
+
+    assert os.path.isdir(my_module_path)
+
     if not is_empty:
         with open(os.path.join(my_module_path, "smt.txt"), "w") as fh:
             fh.write("test")
+
         with pytest.raises(
             ModuleBuildFailedError,
             match=f"Could not build module: inmanta_plugins/{module_name} directory already exists and is not empty",
@@ -293,3 +297,23 @@ def test_build_module_existing_plugin_dir(tmpdir, modules_dir: str, module_name,
             moduletool.ModuleTool().build(module_copy_dir)
     else:
         moduletool.ModuleTool().build(module_copy_dir)
+        dist_dir = os.path.join(module_copy_dir, "dist")
+        dist_dir_content = os.listdir(dist_dir)
+        assert len(dist_dir_content) == 1
+        wheel_file = os.path.join(dist_dir, dist_dir_content[0])
+        assert wheel_file.endswith(".whl")
+        extract_dir = os.path.join(tmpdir, "extract")
+        with zipfile.ZipFile(wheel_file) as z:
+            z.extractall(extract_dir)
+
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
+        assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
+
+        if "elaborate" in module_name:
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "files", "test.txt"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "templates", "template.txt.j2"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "other.cf"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "py.typed"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "other_module.py"))
+            assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "subpkg", "__init__.py"))
