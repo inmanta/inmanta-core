@@ -32,28 +32,35 @@ from inmanta.warnings import InmantaWarning, WarningsManager
     "option,expected_error,expected_warning",
     [(None, False, True), ("warn", False, True), ("ignore", False, False), ("error", True, False)],
 )
-@pytest.mark.parametrize("raise_external_warning", [True, False])
-def test_warnings(option: Optional[str], expected_error: bool, expected_warning: bool, raise_external_warning: bool):
-    message: str = "Some compiler runtime warning"
-    internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message)
-    external_warning: Warning = Warning(None, "Some external warning")
+@pytest.mark.parametrize("use_inmanta_warning", [True, False])
+def test_warnings(
+    monkeypatch, option: Optional[str], expected_error: bool, expected_warning: bool, use_inmanta_warning: bool
+) -> None:
+    message: str = "Some runtime warning"
     WarningsManager.apply_config({"default": option} if option is not None else None)
+    warning_category = CompilerRuntimeWarning if use_inmanta_warning else DeprecationWarning
+
+    def emit_warning():
+        if use_inmanta_warning:
+            inmanta_warnings.warn(CompilerRuntimeWarning(None, message))
+        else:
+            inmanta_warnings.warn(message, category=DeprecationWarning)
+
+    def warning_was_logged(caught_warnings) -> bool:
+        return any(issubclass(w.category, warning_category) and str(w.message) == message for w in caught_warnings)
+
     with warnings.catch_warnings(record=True) as caught_warnings:
         if expected_error:
-            with pytest.raises(CompilerRuntimeWarning):
-                if raise_external_warning:
-                    # make sure external warnings are ignored (#1905)
-                    warnings.warn(external_warning)
-                inmanta_warnings.warn(internal_warning)
+            with pytest.raises(warning_category):
+                emit_warning()
         else:
-            inmanta_warnings.warn(internal_warning)
+            emit_warning()
+
         if expected_warning:
             assert len(caught_warnings) >= 1
-            assert any(issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings)
+            assert warning_was_logged(caught_warnings)
         else:
-            assert not any(
-                issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings
-            )
+            assert not warning_was_logged(caught_warnings)
 
 
 @pytest.mark.parametrize(

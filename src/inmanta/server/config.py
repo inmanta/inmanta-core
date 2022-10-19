@@ -17,9 +17,9 @@
 """
 
 import logging
-import warnings
 
 import inmanta.warnings
+import inmanta.warnings as inmanta_warnings
 from inmanta.config import (
     Config,
     Option,
@@ -106,14 +106,14 @@ def get_bind_port() -> int:
     if Config.is_set("server", "bind-port") or Config.is_set("server", "bind-address"):
         # Use new bind-port option
         if Config.is_set("server_rest_transport", "port"):
-            inmanta.warnings.warn(
+            inmanta_warnings.warn(
                 "Ignoring the server_rest_transport.port config option since the new config options "
                 "server.bind-port/server.bind-address are used.",
             )
         return server_bind_port.get()
     else:
         # Fallback to old option
-        inmanta.warnings.warn(
+        inmanta_warnings.warn(
             "The server_rest_transport.port config option is deprecated in favour of the server.bind-port option.",
         )
         return Config.get("server_rest_transport", "port", 8888)

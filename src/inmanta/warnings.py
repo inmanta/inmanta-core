@@ -40,15 +40,19 @@ class WarningBehaviour(Enum):
 class WarningRule:
     """
     A single rule for warning handling. Describes the desired behaviour when an error occurs.
-    When type is set, the rule is only applied to subclasses of the warning type.
+
+    :param module: A regex that must match the name of the module generating the warning.
     """
 
-    def __init__(self, action: WarningBehaviour, tp: Optional[Type[InmantaWarning]] = None) -> None:
+    def __init__(self, action: WarningBehaviour, module: Optional[str] = None) -> None:
         self.action: WarningBehaviour = action
-        self.type: Type[Warning] = tp if tp is not None else InmantaWarning
+        self.module: Optional[str] = module
 
     def apply(self) -> None:
-        warnings.filterwarnings(self.action.value, category=self.type)
+        if self.module is not None:
+            warnings.filterwarnings(self.action.value, module=self.module)
+        else:
+            warnings.filterwarnings(self.action.value)
 
 
 class WarningOption:
@@ -118,9 +122,9 @@ class WarningsManager:
         # Control how warnings are shown
         warnings.showwarning = cls._showwarning
         # Ignore all external warnings.
-        warnings.filterwarnings(WarningBehaviour.IGNORE.value, category=Warning)
-        # Warn all InmantaWarnings by default. Behaviour can be controlled using the config.
-        warnings.filterwarnings(WarningBehaviour.WARN.value, category=InmantaWarning)
+        warnings.filterwarnings(WarningBehaviour.IGNORE.value)
+        # Warn all Inmanta-related warnings by default. Behaviour can be controlled using the config.
+        warnings.filterwarnings(WarningBehaviour.WARN.value, module=r"^(inmanta|inmanta\..*|inmanta_.*)$")
 
     @classmethod
     def _showwarning(
@@ -168,11 +172,14 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
-def warn(warning: Union[InmantaWarning, str]) -> None:
+def warn(warning: Union[InmantaWarning, str], category: Optional[Type[Warning]] = None) -> None:
     """
-    Warn using the supplied InmantaWarning instance.
+    A proxy to `warnings.warn()` with support for the InmantaWarning.
     """
-    if isinstance(warning, str):
-        warnings.warn(InmantaWarning(warning))
-    else:
+    if isinstance(warning, InmantaWarning):
+        if category is not None:
+            raise Exception("Category cannot be set when an InmantaWarning is provided")
         warnings.warn(warning)
+    else:
+        kwargs = {"category": category} if category is not None else {}
+        warnings.warn(warning, **kwargs)
