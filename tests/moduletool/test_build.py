@@ -307,6 +307,7 @@ def test_build_v1_module_existing_plugin_dir(tmpdir, modules_dir: str, module_na
         with zipfile.ZipFile(wheel_file) as z:
             z.extractall(extract_dir)
 
+        assert not os.path.exists(os.path.join(extract_dir, "plugins"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "setup.cfg"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "__init__.py"))
         assert os.path.exists(os.path.join(extract_dir, "inmanta_plugins", module_name, "model", "_init.cf"))
