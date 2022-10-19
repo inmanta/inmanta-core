@@ -19,7 +19,7 @@
 import logging
 import warnings
 from enum import Enum
-from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
+from typing import Dict, List, Literal, Mapping, Optional, TextIO, Type, Union, overload
 
 
 class InmantaWarning(Warning):
@@ -32,9 +32,9 @@ class InmantaWarning(Warning):
 
 
 class WarningBehaviour(Enum):
-    WARN: str = "default"
-    IGNORE: str = "ignore"
-    ERROR: str = "error"
+    WARN: Literal["default"] = "default"
+    IGNORE: Literal["ignore"] = "ignore"
+    ERROR: Literal["error"] = "error"
 
 
 class WarningRule:
@@ -172,6 +172,16 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
+@overload
+def warn(warning: InmantaWarning) -> None:
+    ...
+
+
+@overload
+def warn(warning: str, category: Optional[Type[Warning]] = None) -> None:
+    ...
+
+
 def warn(warning: Union[InmantaWarning, str], category: Optional[Type[Warning]] = None) -> None:
     """
     A proxy to `warnings.warn()` with support for the InmantaWarning.
@@ -181,5 +191,7 @@ def warn(warning: Union[InmantaWarning, str], category: Optional[Type[Warning]] 
             raise Exception("Category cannot be set when an InmantaWarning is provided")
         warnings.warn(warning)
     else:
-        kwargs = {"category": category} if category is not None else {}
-        warnings.warn(warning, **kwargs)
+        if category is not None:
+            warnings.warn(warning, category=category)
+        else:
+            warnings.warn(warning)
