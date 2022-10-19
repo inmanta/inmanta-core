@@ -685,7 +685,7 @@ class CommandRunner:
             output = line.decode().strip()
             full_output.append(output)
             self.logger.debug(output)
-
+        process.stdout.close()
         return_code = process.wait(timeout=timeout)
 
         return return_code, full_output
