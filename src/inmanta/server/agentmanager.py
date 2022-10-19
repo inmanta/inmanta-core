@@ -1299,7 +1299,6 @@ ssl=True
             if errfile is not None:
                 errhandle = open(errfile, "wb+")
 
-            # TODO: perhaps show in dashboard?
             return await asyncio.create_subprocess_exec(
                 sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
             )

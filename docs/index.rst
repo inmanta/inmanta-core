@@ -40,7 +40,6 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
 
     quickstart
     install
-    dashboard
     architecture
     language
     moduleguides

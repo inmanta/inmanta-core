@@ -261,7 +261,12 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # New version with only file3
     version = await clienthelper.get_version()
@@ -373,7 +378,12 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["released"]
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # New version with only file3
     version = await clienthelper.get_version()
@@ -600,7 +610,12 @@ async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelpe
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    async def is_success() -> bool:
+        result = await client.get_version(environment, version)
+        return result.result["model"]["result"] == const.VersionState.success.name
+
+    await retry_limited(is_success, timeout=10)
 
     # Empty version
     version = await clienthelper.get_version()
