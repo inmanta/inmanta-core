@@ -27,7 +27,7 @@ from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import SyncClient
 
 
-DEFAULT_COLUMN_WIDTH_NAME: int = 20
+MIN_COLUMN_WIDTH_NAME: int = 20
 
 # TODO: config.Config.set("cmdline_rest_transport", "port", 8888), config.Config.set("cmdline_rest_transport", "host", "localhost")? Or use config file?
 
@@ -57,9 +57,8 @@ def get_environments() -> EnvironmentSequence:
     if result.code == 200:
         assert "environments" in result.result
         environments: object = result.result["environments"]
-        print(environments)
-        # TODO implement
-        raise NotImplementedError()
+        # TODO: make type-safe
+        return [NamedEnvironment(id=env["id"], name=env["name"]) for env in environments]
     else:
         reason: str = f" Reason: {result.result['message']}" if "message" in result.result else ""
         click.echo(
@@ -80,7 +79,7 @@ def echo_environments() -> None:
         return
     if isinstance(environments[0], NamedEnvironment):
         named_envs: abc.Sequence[NamedEnvironment] = typing.cast(abc.Sequence[NamedEnvironment], environments)
-        name_length: int = max(DEFAULT_COLUMN_WIDTH_NAME, max(len(named.name) for named in named_envs))
+        name_length: int = max(MIN_COLUMN_WIDTH_NAME, max(len(named.name) for named in named_envs))
         for named in named_envs:
             click.echo(f"{named.name:<{name_length}} {named.id}")
     else:

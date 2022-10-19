@@ -89,7 +89,7 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
-            # TODO:
+            "inmanta-workon = inmanta.workon:main",
         ],
     },
 )
