@@ -1300,7 +1300,7 @@ class ModuleConverter:
         elif not os.path.exists(new_plugins) and os.path.exists(old_plugins):
             shutil.move(old_plugins, new_plugins)
         else:
-            if not os.path.exists(new_plugins) and not os.path.exists(old_plugins):
+            if not os.path.exists(new_plugins):
                 os.makedirs(new_plugins)
             with open(os.path.join(new_plugins, "__init__.py"), "w"):
                 pass
