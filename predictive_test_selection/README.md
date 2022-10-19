@@ -5,11 +5,11 @@
     the test suite. To find which tests to run we use a predictive model that takes 2 inputs:
 
 ```mermaid
-    graph model;
+    flowchart LR;
         Code change-->Model;
         Test Case fqn -->Model;
         Model-->Failure proba;
-```
+``
     ## A code change
 
     This is a set of files that were modified in this pull request
