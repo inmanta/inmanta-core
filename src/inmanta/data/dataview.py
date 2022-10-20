@@ -328,7 +328,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             cte AS (
                (
                /* specify the necessary columns */
-               SELECT r.resource_id, r.attributes, r.resource_type,
+               SELECT r.resource_id, r.resource_version_id, r.attributes, r.resource_type,
                     r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
                             (SELECT r.model < cm_version.max_version
                             FROM cm_version)
@@ -345,7 +345,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                FROM   cte c
                CROSS JOIN LATERAL
                /* specify the same columns in the recursive part */
-                (SELECT r.resource_id, r.attributes, r.resource_type,
+                (SELECT r.resource_id,  r.resource_version_id, r.attributes, r.resource_type,
                     r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
                             (SELECT r.model < cm_version.max_version
                             FROM cm_version)

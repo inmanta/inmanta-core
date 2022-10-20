@@ -533,7 +533,7 @@ class ResourceOrder(VersionedResourceOrder):
         """Name of the id field of the dto"""
         return dto.resource_version_id
 
-    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
+    def get_order_elements(self, invert: bool, table_prefix: Optional[str] = None) -> List[Tuple[ColumnNameStr, PagingOrder]]:
         """
         return a list of column/order pairs, to format an ORDER VBY statement
 
@@ -541,7 +541,13 @@ class ResourceOrder(VersionedResourceOrder):
         """
         # Moved legacy code
         order = self.get_order(invert)
-        return [(self.order_by_column, order), (ColumnNameStr("resource_id"), order), (ColumnNameStr("model"), order)]
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+
+        return [
+            (table_prefix_value + self.order_by_column, order),
+            (ColumnNameStr(table_prefix_value + "resource_id"), order),
+            (ColumnNameStr(table_prefix_value + "model"), order),
+        ]
 
     def as_filter(
         self,
@@ -567,9 +573,7 @@ class ResourceOrder(VersionedResourceOrder):
 
         if id_value is not None:
             # Have ID
-            parsed_id = Id.parse_resource_version_id(id_value)  # TODO handle exception
-            filter_elements.append(("resource_id", StringColumn, parsed_id.resource_str()))
-            filter_elements.append(("model", IntColumn, parsed_id.version))
+            filter_elements.append(("resource_version_id", StringColumn, id_value))
 
         relation = ">" if start else "<"
 
@@ -4820,6 +4824,8 @@ class Resource(BaseDocument):
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
                         parsed_id = resources.Id.parse_id(record["resource_version_id"])
+                        record["id"] = record["resource_version_id"]
+                        record["resource_type"] = parsed_id.entity_type
                         resources_list.append(record)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
@@ -4850,136 +4856,6 @@ class Resource(BaseDocument):
         if len(resources) > 0:
             return resources[0]
         return None
-
-    @classmethod
-    def _get_released_resources_base_query(cls, select_clause: str, environment: uuid.UUID, offset: int) -> Tuple[str, object]:
-        """A partial query describing the conditions for selecting the latest released resources,
-        according to the model version number."""
-        environment_db_value = cls._get_value(environment)
-        # Emulate a loose index scan with a recursive common table expression (CTE),
-        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
-        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
-        # btree index efficiently; rather than scanning all equal values of a key,
-        # as soon as a new value is found, restart the search by looking for a larger value"
-        # In this case we don't scan all equal values of a resource_id
-        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
-        # and move on to the next resource_id
-        return (
-            f"""
-            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-            /* The cm_version CTE finds the maximum released version number in the environment  */
-            WITH RECURSIVE cm_version AS (
-                  SELECT
-                    MAX(public.configurationmodel.version) as max_version
-                    FROM public.configurationmodel
-                WHERE public.configurationmodel.released=TRUE
-                AND environment=${offset}
-                ),
-            /* emulate a loose (or skip) index scan */
-            cte AS (
-               (
-               /* specify the necessary columns */
-               SELECT r.resource_id, r.attributes, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned' -- use the CTE to check the status
-                    ELSE r.status::text END) as status
-               FROM   resource r
-               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-               WHERE  r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY resource_id, model DESC
-               LIMIT  1
-               )
-               UNION ALL
-               SELECT r.*
-               FROM   cte c
-               CROSS JOIN LATERAL
-               /* specify the same columns in the recursive part */
-                (SELECT r.resource_id, r.attributes, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned'
-                    ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
-               /* One result from the recursive call is the latest released version of one specific resource.
-                  We always start looking for this based on the previous resource_id. */
-               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY r.resource_id, r.model DESC
-               LIMIT  1) r
-               )
-            {select_clause}
-            FROM   cte
-            """,
-            environment_db_value,
-        )
-
-    @classmethod
-    async def get_released_resources(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.LatestReleasedResource]:
-        """
-        Get all resources that are in a released version, sorted, paged and filtered
-        """
-
-        # Inlined _get_list_query_pagination_parameters
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        # TODO this is a mess
-        start_filter_statements, start_values = database_order.as_start_filter(len(values), start, first_id)
-        filter_statements.extend(start_filter_statements)
-        values.extend(start_values)
-
-        end_filter_statements, end_values = database_order.as_end_filter(len(values), end, last_id)
-        filter_statements.extend(end_filter_statements)
-        values.extend(end_values)
-
-        order = database_order.get_order()
-
-        db_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause="SELECT * ", environment=environment, offset=len(values) + 1
-        )
-        values.append(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end is not None) or (order == PagingOrder.DESC and start is not None)
-        db_query += database_order.get_order_by_statement(backward_paging)
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records""" + database_order.get_order_by_statement(
-                table="matching_records"
-            )
-
-        resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
-        resource_records = cast(Iterable[Record], resource_records)
-
-        dtos = [
-            m.LatestReleasedResource(
-                resource_id=resource["resource_id"],
-                resource_version_id=resource["resource_id"] + ",v=" + str(resource["model"]),
-                id_details=cls.get_details_from_resource_id(resource["resource_id"]),
-                status=resource["status"],
-                requires=json.loads(resource["attributes"]).get("requires", []),
-            )
-            for resource in resource_records
-        ]
-        return dtos
 
     @staticmethod
     def get_details_from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
