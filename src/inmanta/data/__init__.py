@@ -97,7 +97,6 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    @staticmethod
     def _generate_next_value_(name: str, start: int, count: int, last_values: List[Any]) -> Any:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
