@@ -1,6 +1,6 @@
 # Logging warnings using the python warnings or logging module
 
-* Status: proposed
+* Status: tentative
 * Date: 2022-10-18
 
 ## Context and Problem Statement

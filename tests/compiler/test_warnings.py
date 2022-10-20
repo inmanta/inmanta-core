@@ -26,41 +26,55 @@ import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import InmantaWarning, WarningsManager
+from utils import log_doesnt_contain
 
 
 @pytest.mark.parametrize(
     "option,expected_error,expected_warning",
     [(None, False, True), ("warn", False, True), ("ignore", False, False), ("error", True, False)],
 )
-@pytest.mark.parametrize("use_inmanta_warning", [True, False])
-def test_warnings(
-    monkeypatch, option: Optional[str], expected_error: bool, expected_warning: bool, use_inmanta_warning: bool
-) -> None:
-    message: str = "Some runtime warning"
+def test_warnings(option: Optional[str], expected_error: bool, expected_warning: bool) -> None:
+    """
+    Verify whether the setting to configure warnings works correctly.
+    """
+    message_compiler_warning: str = "Some compiler runtime warning"
+    internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message_compiler_warning)
+    message_internal_warning: str = "Some external warning"
+    external_warning: Warning = Warning(None, message_internal_warning)
+
+    def contains_warning(caught_warnings, category: Type[Warning], message: str) -> bool:
+        return any(issubclass(w.category, category) and str(w.message) == message for w in caught_warnings)
+
+    # Apply config
     WarningsManager.apply_config({"default": option} if option is not None else None)
-    warning_category = CompilerRuntimeWarning if use_inmanta_warning else DeprecationWarning
-
-    def emit_warning():
-        if use_inmanta_warning:
-            inmanta_warnings.warn(CompilerRuntimeWarning(None, message))
-        else:
-            inmanta_warnings.warn(message, category=DeprecationWarning)
-
-    def warning_was_logged(caught_warnings) -> bool:
-        return any(issubclass(w.category, warning_category) and str(w.message) == message for w in caught_warnings)
-
     with warnings.catch_warnings(record=True) as caught_warnings:
+        # Log an external warning
+        warnings.warn(external_warning)
+        # Log an internal warning
         if expected_error:
-            with pytest.raises(warning_category):
-                emit_warning()
+            with pytest.raises(CompilerRuntimeWarning):
+                inmanta_warnings.warn(internal_warning)
         else:
-            emit_warning()
-
+            inmanta_warnings.warn(internal_warning)
+        # Verify that the CompilerWarnings are filtered correctly with respect to the provided config option.
         if expected_warning:
             assert len(caught_warnings) >= 1
-            assert warning_was_logged(caught_warnings)
+            assert contains_warning(caught_warnings, category=CompilerRuntimeWarning, message=message_compiler_warning)
         else:
-            assert not warning_was_logged(caught_warnings)
+            assert not contains_warning(caught_warnings, category=CompilerRuntimeWarning, message=message_compiler_warning)
+        # Verify that the external warning is not logged
+        assert not contains_warning(caught_warnings, category=Warning, message=message_internal_warning)
+
+
+def test_filter_external_warnings(caplog) -> None:
+    """
+    Verify that warnings triggered from non-inmanta code are not displayed to the user.
+    """
+    message = "test message"
+    # Raising a warning from the test suite is considered an external exception.
+    # The file is not part of an inmanta package.
+    warnings.warn(message, category=DeprecationWarning)
+    log_doesnt_contain(caplog, "py.warnings", logging.WARNING, message)
 
 
 @pytest.mark.parametrize(

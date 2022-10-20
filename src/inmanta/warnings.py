@@ -40,19 +40,15 @@ class WarningBehaviour(Enum):
 class WarningRule:
     """
     A single rule for warning handling. Describes the desired behaviour when an error occurs.
-
-    :param module: A regex that must match the name of the module generating the warning.
+    When type is set, the rule is only applied to subclasses of the warning type.
     """
 
-    def __init__(self, action: WarningBehaviour, module: Optional[str] = None) -> None:
+    def __init__(self, action: WarningBehaviour, tp: Optional[Type[InmantaWarning]] = None) -> None:
         self.action: WarningBehaviour = action
-        self.module: Optional[str] = module
+        self.type: Type[Warning] = tp if tp is not None else InmantaWarning
 
     def apply(self) -> None:
-        if self.module is not None:
-            warnings.filterwarnings(self.action.value, module=self.module)
-        else:
-            warnings.filterwarnings(self.action.value)
+        warnings.filterwarnings(self.action.value, category=self.type)
 
 
 class WarningOption:
