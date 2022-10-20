@@ -3,7 +3,7 @@ import os
 import subprocess
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from typing import Any, List, Mapping, MutableMapping, Sequence, Tuple
@@ -41,14 +41,16 @@ class CodeChange:
       The points in time at which we look back is configured by the CHANGE_LOOK_BACK parameter.
     - file_cardinality -> Number of files involved in this change
     - file_extension -> File extensions of the files involved in this change
+    - dev_branches -> List of the dev branches
     """
 
-    commit_hash: str
-    modification_count: List[int]
-    file_cardinality: int
-    file_extension: List[int]
+    commit_hash: str = field(init=False)
+    modification_count: List[int] = field(init=False)
+    file_cardinality: int = field(init=False)
+    file_extension: List[int] = field(init=False)
+    dev_branches: List[str] = field(init=False)
 
-    def __init__(self):
+    def parse(self):
         # Get latest commit hash:
         self.commit_hash = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
 
@@ -104,12 +106,9 @@ class TestResult:
       this test failed or not.
     """
 
-    test_result_data: MutableMapping[str, int]
+    test_result_data: MutableMapping[str, int] = field(init=False)
 
-    def __init__(self):
-        self._parse_xml_test_results()
-
-    def _parse_xml_test_results(self) -> None:
+    def parse(self) -> None:
         self.test_result_data = {}
         path: str = "junit-py39.xml"
         tree = ET.parse(path)
@@ -134,34 +133,37 @@ class TestResult:
         yield from self.test_result_data.items()
 
 
+@dataclass
 class DataParser:
     """
     This class fetches all information regarding a specific code change and the tests that are run on this specific commit
     and sends it all to the influxdb database.
-
-
     """
+    code_change_data: CodeChange = field(default_factory=lambda: CodeChange())
+    test_result_data: TestResult = field(default_factory=lambda: TestResult())
 
-    def __init__(self):
-        self.code_change_data: CodeChange = CodeChange()
-        self.test_result_data: TestResult = TestResult()
+    def parse(self):
+        self.code_change_data.parse()
+        self.test_result_data.parse()
 
     def _create_data_payload(self) -> str:
         """
         Anatomy of each line of the payload:
         Measurement: test_result
-        tag_set: fqn, commit_hash
+        tag_set: fqn, commit_hash, dev_branch
         field_set: failed_as_int, modification_count, file_extension, file_cardinality
         timestamp: Use influx_db auto-generated timestamp
         """
         data_points: List[str] = [
             (
-                f"test_result,fqn={test_fqn},commit_hash={self.code_change_data.commit_hash}"
+                f"test_result,fqn={test_fqn},commit_hash={self.code_change_data.commit_hash},"
+                f"dev_branch={dev_branch}"
                 f" failed_as_int={failed},modification_count={self.code_change_data.modification_count},"
                 f"file_extension={self.code_change_data.file_extension},"
                 f"file_cardinality={self.code_change_data.file_cardinality}"
             )
             for test_fqn, failed in self.test_result_data
+            for dev_branch in self.code_change_data.dev_branches
         ]
         return "\n".join(data_points)
 
@@ -177,4 +179,4 @@ class DataParser:
 
 if __name__ == "__main__":
     data_parser = DataParser()
-    data_parser.send_influxdb_data()
+    data_parser.parse()
