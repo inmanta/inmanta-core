@@ -25,7 +25,6 @@ from inmanta.data import (
     Agent,
     ColumnNameStr,
     Compile,
-    ConfigurationModel,
     DatabaseOrder,
     InvalidFieldNameException,
     InvalidQueryParameter,
@@ -38,7 +37,7 @@ from inmanta.data import (
     ResourceAction,
 )
 from inmanta.data.model import Agent as AgentModel
-from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact
+from inmanta.data.model import BaseModel, Fact
 from inmanta.data.model import Notification as NotificationModel
 from inmanta.data.model import PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
@@ -186,22 +185,6 @@ class AgentPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await Agent.count_items_for_paging(
-            query_identifier.environment, database_order, first_id, last_id, start, end, **query
-        )
-
-
-class DesiredStateVersionPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
-    async def count_items_for_paging(
-        self,
-        query_identifier: QueryIdentifier,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        return await ConfigurationModel.count_items_for_paging(
             query_identifier.environment, database_order, first_id, last_id, start, end, **query
         )
 
@@ -505,27 +488,6 @@ class ResourceLogPagingHandler(PagingHandler[ResourceLog, ResourceQueryIdentifie
 class AgentPagingHandler(PagingHandler[AgentModel, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/agents"
-
-
-class DesiredStateVersionPagingHandler(PagingHandler[DesiredStateVersion, QueryIdentifier]):
-    def get_base_url(self) -> str:
-        return "/api/v2/desiredstate"
-
-    def _get_paging_boundaries(self, dtos: List[DesiredStateVersion], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
-                first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
-                last_id=None,
-            )
-        else:
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
-                first_id=None,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
-                last_id=None,
-            )
 
 
 class ParameterPagingHandler(PagingHandler[ParameterModel, QueryIdentifier]):

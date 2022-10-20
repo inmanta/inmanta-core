@@ -31,8 +31,11 @@ from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
     CompileReportOrder,
+    ConfigurationModel,
     DatabaseOrderV2,
+    DesiredStateVersionOrder,
     InvalidQueryParameter,
+    InvalidSort,
     PagingOrder,
     QueryFilter,
     ResourceOrder,
@@ -40,7 +43,15 @@ from inmanta.data import (
     VersionedResourceOrder,
     model,
 )
-from inmanta.data.model import BaseModel, CompileReport, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr
+from inmanta.data.model import (
+    BaseModel,
+    CompileReport,
+    DesiredStateLabel,
+    DesiredStateVersion,
+    LatestReleasedResource,
+    PagingBoundaries,
+    ResourceVersionIdStr,
+)
 from inmanta.data.paging import PagingMetadata
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
@@ -48,10 +59,13 @@ from inmanta.server.validate_filter import (
     BooleanEqualityFilter,
     BooleanIsNotNullFilter,
     CombinedContainsFilterResourceState,
+    ContainsFilter,
     ContainsPartialFilter,
     DateRangeFilter,
     Filter,
     FilterValidator,
+    IntRangeFilter,
+    InvalidFilter,
 )
 from inmanta.types import SimpleTypes
 from inmanta.util import datetime_utc_isoformat
@@ -77,6 +91,7 @@ class RequestedPagingBoundaries:
 
     def validate(
         self,
+        allow_single_order: bool = False,
     ) -> None:
         start = self.start
         end = self.end
@@ -91,6 +106,10 @@ class RequestedPagingBoundaries:
                 f"Only one of first_id and last_id parameters is allowed at the same time. "
                 f"Received first_id: {first_id}, last_id: {last_id}"
             )
+
+        if allow_single_order and first_id is None and last_id is None:
+            return
+
         if (first_id and not start) or (first_id and end):
             raise InvalidQueryParameter(
                 f"The first_id parameter should be used in combination with the start parameter. "
@@ -119,7 +138,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
         self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
-        self.requested_page_boundaries.validate()
+        self.requested_page_boundaries.validate(self.order.is_single_valued())
 
     @abc.abstractmethod
     def get_base_url(self) -> str:
@@ -201,19 +220,21 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         :return: Complete API ReturnValueWithMeta ready to go out
         """
-        dtos, paging_boundaries_in = await self.get_data()
+        try:
+            dtos, paging_boundaries_in = await self.get_data()
 
-        paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
-        if paging_boundaries_in:
-            paging_boundaries = paging_boundaries_in
-        else:
-            # nothing found now, use the current page boundaries to determine if something exists before us
-            paging_boundaries = self.requested_page_boundaries
+            paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
+            if paging_boundaries_in:
+                paging_boundaries = paging_boundaries_in
+            else:
+                # nothing found now, use the current page boundaries to determine if something exists before us
+                paging_boundaries = self.requested_page_boundaries
 
-        metadata = await self._get_page_count(paging_boundaries)
-        links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
-
+            metadata = await self._get_page_count(paging_boundaries)
+            links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
+            return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
         # Paging helpers
 
     async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
@@ -604,7 +625,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         }
 
     def get_base_url(self) -> str:
-        return f"/api/v2/compilereport"
+        return "/api/v2/compilereport"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -652,4 +673,78 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         paging_boundaries = None
         if dtos:
             paging_boundaries = self.order.get_paging_boundaries(dict(compile_records[0]), dict(compile_records[-1]))
+        return dtos, paging_boundaries
+
+
+class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVersion]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+    ) -> None:
+        super().__init__(
+            order=DesiredStateVersionOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "version": IntRangeFilter,
+            "date": DateRangeFilter,
+            "status": ContainsFilter,
+        }
+
+    def get_base_url(self) -> str:
+        return "/api/v2/desiredstate"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
+        query_builder = SimpleQueryBuilder(
+            from_clause=f" FROM ({subquery}) as result",
+            values=subquery_values,
+        )
+        return query_builder
+
+    async def get_data(self) -> Tuple[Sequence[DesiredStateVersion], Optional[PagingBoundaries]]:
+        query_builder = self.get_base_query()
+
+        # Project
+        query_builder = query_builder.select(select_clause="""SELECT *""")
+        query_builder = query_builder.filter(
+            *data.Compile.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **self.filter)
+        )
+        query_builder = self.clip_to_page(query_builder)
+        sql_query, values = query_builder.build()
+
+        desired_state_version_records = await data.ConfigurationModel.select_query(sql_query, values, no_obj=True)
+
+        dtos = [
+            DesiredStateVersion(
+                version=desired_state["version"],
+                date=desired_state["date"],
+                total=desired_state["total"],
+                labels=[DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
+                if desired_state["type"] and desired_state["message"]
+                else [],
+                status=desired_state["status"],
+            )
+            for desired_state in desired_state_version_records
+        ]
+
+        paging_boundaries = None
+        if dtos:
+            paging_boundaries = self.order.get_paging_boundaries(
+                dict(desired_state_version_records[0]), dict(desired_state_version_records[-1])
+            )
         return dtos, paging_boundaries

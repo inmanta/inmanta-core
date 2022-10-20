@@ -534,18 +534,21 @@ class DatabaseOrderV2(ABC):
         """Return the page boundaries, given the first and last record of the page"""
         pass
 
+    @abstractmethod
+    def is_single_valued(self) -> bool:
+        """Can this order be paged without the additional start and end id?"""
+        pass
+
 
 T_SELF = TypeVar("T_SELF", bound="AbstractDatabaseOrderV2")
 
 
-class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
+class SingleDatabaseOrder(DatabaseOrderV2, ABC):
     """
     Abstract Base class for ordering when using
-    - a user specified order
-    - an additional built in order to make the ordering unique (the id_collumn)
+    - a user specified order, that is always unique
     """
 
-    # Factory
     def __init__(
         self,
         order_by_column: ColumnNameStr,
@@ -560,12 +563,6 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
-        """Name and type of the id column of this database order"""
-        pass
 
     #  Factory
     @classmethod
@@ -585,7 +582,8 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
-    # Internal helpers
+        # Internal helpers
+
     def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
         return self.order.invert() if invert else self.order
@@ -600,6 +598,82 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
     def get_order_by_column_api_name(self) -> str:
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
+
+        # External API
+
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: Optional[bool] = True,
+    ) -> Tuple[List[str], List[object]]:
+        """Get the column and id values as filters"""
+        relation = ">" if start else "<"
+
+        if column_value is None:
+            return [], []
+
+        coll_type = self.get_valid_sort_columns()[self.order_by_column]
+        col_name = self.order_by_column
+        value = coll_type.get_value(column_value)
+
+        ac = ArgumentCollector(offset=offset - 1)
+        filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
+        return [filter], ac.args
+
+    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
+        """
+        order = self.get_order(invert)
+        return [
+            (self.order_by_column, self.get_valid_sort_columns()[self.order_by_column], order),
+        ]
+
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Return the actual order by statement, as derived from get_order_elements"""
+        order_by_part = ", ".join(
+            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+        )
+        return f" ORDER BY {order_by_part}"
+
+    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_valid_sort_columns()[self.order_by_column]
+
+        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
+            # Make mypy happy
+            assert in_value is not None
+            return in_value
+
+        return PagingBoundaries(
+            start=assert_not_null(order_type.get_value(first[order_column_name])),
+            first_id=None,
+            end=assert_not_null(order_type.get_value(last[order_column_name])),
+            last_id=None,
+        )
+
+    def is_single_valued(self) -> bool:
+        return False
+
+
+class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
+    """
+    Abstract Base class for ordering when using
+    - a user specified order
+    - an additional built in order to make the ordering unique (the id_collumn)
+    """
+
+    @property
+    @abstractmethod
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        pass
 
     # External API
     def as_filter(
@@ -625,11 +699,10 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             )
 
         if id_value is not None:
-            if isinstance(id_value, datetime.datetime):
-                raise Exception("Unsupported type, must be backported from Databaseorder v1")
             # Have ID
             id_name, id_type = self.id_column
-            filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
+            if id_name != self.order_by_column:
+                filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
 
         relation = ">" if start else "<"
 
@@ -639,7 +712,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
         ac = ArgumentCollector(offset=offset - 1)
         if len(filter_elements) == 1:
             col_name, coll_type, value = filter_elements[0]
-            filter = f"{coll_type.get_accessor(col_name)} {relation} ${ac(value)}"
+            filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
             return [filter], ac.args
         else:
             # composed filter:
@@ -663,13 +736,6 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             (id_name, id_type, order),
         ]
 
-    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
-        """Return the actual order by statement, as derived from get_order_elements"""
-        order_by_part = ", ".join(
-            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
-        )
-        return f" ORDER BY {order_by_part}"
-
     def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
         if self.get_order() == PagingOrder.ASC:
@@ -691,6 +757,9 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             end=assert_not_null(order_type.get_value(last[order_column_name])),
             last_id=assert_not_null(id_type.get_value(last[id_column])),
         )
+
+    def is_single_valued(self) -> bool:
+        return False
 
 
 class VersionedResourceOrder(AbstractDatabaseOrderV2):
@@ -798,24 +867,19 @@ class AgentOrder(DatabaseOrder):
         return self.coalesce_to_min(super().get_order_by_column_db_name(table_prefix))
 
 
-class DesiredStateVersionOrder(DatabaseOrder):
+class DesiredStateVersionOrder(SingleDatabaseOrder):
     """Represents the ordering by which desired state versions should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "version": int,
+            ColumnNameStr("version"): IntColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ConfigurationModel
-
     @property
-    def id_column(self) -> ColumnNameStr:
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("version")
+        return ColumnNameStr("version"), IntColumn
 
 
 class ParameterOrder(DatabaseOrder):
@@ -5847,53 +5911,6 @@ class ConfigurationModel(BaseDocument):
         if not result:
             raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_desired_state_versions(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.DesiredStateVersion]:
-        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        desired_state_version_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-
-        dtos = [
-            m.DesiredStateVersion(
-                version=desired_state["version"],
-                date=desired_state["date"],
-                total=desired_state["total"],
-                labels=[m.DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
-                status=desired_state["status"],
-            )
-            for desired_state in desired_state_version_records
-        ]
-        return dtos
 
 
 class Code(BaseDocument):

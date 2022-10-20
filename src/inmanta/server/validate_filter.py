@@ -340,16 +340,6 @@ class AgentFilterValidator(FilterValidator):
         }
 
 
-class DesiredStateVersionFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "version": IntRangeFilter,
-            "date": DateRangeFilter,
-            "status": ContainsFilter,
-        }
-
-
 class ParameterFilterValidator(FilterValidator):
     @property
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
