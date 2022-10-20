@@ -493,8 +493,10 @@ class ForcedStringCollumn(ColumnType):
 
 
 StringColumn = ColumnType(base_type=str, nullable=False)
+DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
 IntColumn = ColumnType(base_type=int, nullable=False)
 TextColumn = ForcedStringCollumn("text")
+UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 
 
 class DatabaseOrderV2(ABC):
@@ -754,17 +756,18 @@ class ResourceLogOrder(DatabaseOrder):
         return ResourceAction
 
 
-class CompileReportOrder(DatabaseOrder):
+class CompileReportOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which compile reports should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"requested": datetime.datetime}
+        return {ColumnNameStr("requested"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Compile
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
 class AgentOrder(DatabaseOrder):
@@ -1975,7 +1978,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
             filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index_count)
             filter_statements.append(filter_statement)
@@ -3947,62 +3949,6 @@ class Compile(BaseDocument):
         if not result:
             raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
         return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_compile_reports(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.CompileReport]:
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT id, remote_id, environment, requested,
-                    started, completed, do_export, force_update,
-                    metadata, environment_variables, success, version """,
-            from_clause=f" FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        compile_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        compile_records = cast(Iterable[Record], compile_records)
-
-        dtos = [
-            m.CompileReport(
-                id=compile["id"],
-                remote_id=compile["remote_id"],
-                environment=compile["environment"],
-                requested=compile["requested"],
-                started=compile["started"],
-                completed=compile["completed"],
-                success=compile["success"],
-                version=compile["version"],
-                do_export=compile["do_export"],
-                force_update=compile["force_update"],
-                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
-            )
-            for compile in compile_records
-        ]
-        return dtos
 
     @classmethod
     async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:

@@ -29,6 +29,8 @@ from asyncpg import Record
 from inmanta import data
 from inmanta.data import (
     APILIMIT,
+    PRIMITIVE_SQL_TYPES,
+    CompileReportOrder,
     DatabaseOrderV2,
     InvalidQueryParameter,
     PagingOrder,
@@ -38,11 +40,19 @@ from inmanta.data import (
     VersionedResourceOrder,
     model,
 )
-from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr
+from inmanta.data.model import BaseModel, CompileReport, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr
 from inmanta.data.paging import PagingMetadata
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
-from inmanta.server.validate_filter import CombinedContainsFilterResourceState, ContainsPartialFilter, Filter, FilterValidator
+from inmanta.server.validate_filter import (
+    BooleanEqualityFilter,
+    BooleanIsNotNullFilter,
+    CombinedContainsFilterResourceState,
+    ContainsPartialFilter,
+    DateRangeFilter,
+    Filter,
+    FilterValidator,
+)
 from inmanta.types import SimpleTypes
 from inmanta.util import datetime_utc_isoformat
 
@@ -55,10 +65,10 @@ class RequestedPagingBoundaries:
 
     def __init__(
         self,
-        start: Optional[str],
-        end: Optional[str],
-        first_id: Optional[str],
-        last_id: Optional[str],
+        start: Optional[PRIMITIVE_SQL_TYPES],
+        end: Optional[PRIMITIVE_SQL_TYPES],
+        first_id: Optional[PRIMITIVE_SQL_TYPES],
+        last_id: Optional[PRIMITIVE_SQL_TYPES],
     ) -> None:
         self.start = start
         self.end = end
@@ -98,10 +108,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self,
         order: T_ORDER,
         limit: Optional[int] = None,
-        first_id: Optional[ResourceVersionIdStr] = None,
-        last_id: Optional[ResourceVersionIdStr] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        first_id: Optional[PRIMITIVE_SQL_TYPES] = None,
+        last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: Optional[PRIMITIVE_SQL_TYPES] = None,
+        end: Optional[PRIMITIVE_SQL_TYPES] = None,
         filter: Optional[Dict[str, List[str]]] = None,
     ) -> None:
         self.limit = self.validate_limit(limit)
@@ -216,7 +226,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         query_builder = self.get_base_query()
 
         query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(
+            *data.BaseDocument.get_composed_filter_with_query_types(
                 offset=query_builder.offset, col_name_prefix=None, **self.filter
             )
         )
@@ -558,4 +568,88 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
             paging_boundaries = self.order.get_paging_boundaries(
                 dict(versioned_resource_records[0]), dict(versioned_resource_records[-1])
             )
+        return dtos, paging_boundaries
+
+
+class CompileReportView(DataView[CompileReportOrder, CompileReport]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+        sort: str = "resource_type.desc",
+        first_id: Optional[UUID] = None,
+        last_id: Optional[UUID] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> None:
+        super().__init__(
+            order=CompileReportOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "requested": DateRangeFilter,
+            "success": BooleanEqualityFilter,
+            "started": BooleanIsNotNullFilter,
+            "completed": BooleanIsNotNullFilter,
+        }
+
+    def get_base_url(self) -> str:
+        return f"/api/v2/compilereport"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            from_clause=f" FROM {data.Compile.table_name()}",
+            filter_statements=["environment = $1"],
+            values=[self.environment.id],
+        )
+        return query_builder
+
+    async def get_data(self) -> Tuple[Sequence[CompileReport], Optional[PagingBoundaries]]:
+        query_builder = self.get_base_query()
+
+        # Project
+        query_builder = query_builder.select(
+            select_clause="""SELECT id, remote_id, environment, requested,
+                    started, completed, do_export, force_update,
+                    metadata, environment_variables, success, version"""
+        )
+        query_builder = query_builder.filter(
+            *data.Compile.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **self.filter)
+        )
+        query_builder = self.clip_to_page(query_builder)
+        sql_query, values = query_builder.build()
+
+        compile_records = await data.Compile.select_query(sql_query, values, no_obj=True)
+
+        dtos = [
+            CompileReport(
+                id=compile["id"],
+                remote_id=compile["remote_id"],
+                environment=compile["environment"],
+                requested=compile["requested"],
+                started=compile["started"],
+                completed=compile["completed"],
+                success=compile["success"],
+                version=compile["version"],
+                do_export=compile["do_export"],
+                force_update=compile["force_update"],
+                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
+                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
+            )
+            for compile in compile_records
+        ]
+
+        paging_boundaries = None
+        if dtos:
+            paging_boundaries = self.order.get_paging_boundaries(dict(compile_records[0]), dict(compile_records[-1]))
         return dtos, paging_boundaries

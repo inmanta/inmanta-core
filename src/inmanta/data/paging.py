@@ -502,33 +502,6 @@ class ResourceLogPagingHandler(PagingHandler[ResourceLog, ResourceQueryIdentifie
             )
 
 
-class CompileReportPagingHandler(PagingHandler[CompileReport, QueryIdentifier]):
-    def __init__(
-        self,
-        counts_provider: PagingCountsProvider[QueryIdentifier],
-    ) -> None:
-        super().__init__(counts_provider)
-
-    def get_base_url(self) -> str:
-        return "/api/v2/compilereport"
-
-    def _get_paging_boundaries(self, dtos: List[CompileReport], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=dtos[0].requested,
-                first_id=dtos[0].id,
-                end=dtos[-1].requested,
-                last_id=dtos[-1].id,
-            )
-        else:
-            return PagingBoundaries(
-                start=dtos[-1].requested,
-                first_id=dtos[-1].id,
-                end=dtos[0].requested,
-                last_id=dtos[0].id,
-            )
-
-
 class AgentPagingHandler(PagingHandler[AgentModel, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/agents"

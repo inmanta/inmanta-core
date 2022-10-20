@@ -330,17 +330,6 @@ class ResourceLogFilterValidator(FilterValidator):
         return query
 
 
-class CompileReportFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "requested": DateRangeFilter,
-            "success": BooleanEqualityFilter,
-            "started": BooleanIsNotNullFilter,
-            "completed": BooleanIsNotNullFilter,
-        }
-
-
 class AgentFilterValidator(FilterValidator):
     @property
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
