@@ -11,6 +11,7 @@ from inmanta.data import (
     APILIMIT,
     ColumnType,
     DatabaseOrder,
+    DatabaseOrderV2,
     InvalidQueryParameter,
     PagingOrder,
     QueryFilter,
@@ -27,7 +28,7 @@ from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server.validate_filter import CombinedContainsFilterResourceState, ContainsPartialFilter, Filter, FilterValidator
 from inmanta.types import SimpleTypes
 
-T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrder)
+T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
 
 
@@ -92,9 +93,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         return (
             query_builder.filter(
-                *self.order.as_start_filter(query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id)
+                *self.order.as_filter(
+                    query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id, start=True
+                )
             )
-            .filter(*self.order.as_end_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id))
+            .filter(
+                *self.order.as_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id, start=False)
+            )
             .order_and_limit(self.order, self.limit, backward_paging)
         )
 
@@ -121,7 +126,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             last = dtos[0]
 
         order_column_name = self.order.order_by_column
-        order_type: ColumnType = self.order.get_valid_sort_columns_new()[self.order.order_by_column]
+        order_type: ColumnType = self.order.get_valid_sort_columns()[self.order.order_by_column]
 
         # TODO get data from records instead of DTO's to have one less domain to mess with?
         return PagingBoundaries(

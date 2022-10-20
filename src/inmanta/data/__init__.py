@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import abc
 import asyncio
 import copy
 import datetime
@@ -442,11 +443,12 @@ class ColumnType:
                 return None
         return self.base_type(value)
 
-    def get_accessor(self, collumn_name: str):
+    def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
         """
         return the sql statement to get this collumn, as used in filter and other statements
         """
-        return collumn_name
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        return table_prefix_value + collumn_name
 
     def coalesce_to_min(self, value_reference: str) -> str:
         """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
@@ -465,89 +467,96 @@ class ColumnType:
         return value_reference
 
 
+class ForcedStringCollumn(ColumnType):
+    def __init__(self) -> None:
+        super().__init__(base_type=str, nullable=False)
+
+    def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this collumn, as used in filter and other statements
+        """
+        return super().get_accessor(collumn_name, table_prefix) + "::text"
+
+
 StringColumn = ColumnType(base_type=str, nullable=False)
 IntColumn = ColumnType(base_type=int, nullable=False)
 
+T_SELF = TypeVar("T_SELF", bound="DatabaseOrderV2")
 
-class VersionedResourceOrder(DatabaseOrder):
-    """Represents the ordering by which resources should be sorted"""
+
+class DatabaseOrderV2(ABC):
+    """Refactoring of DatabaseOrder"""
+
+    # Factory
+    def __init__(
+        self,
+        order_by_column: ColumnNameStr,
+        order: PagingOrder,
+    ) -> None:
+        """The order_by_column and order parameters should be validated"""
+        self.order_by_column = order_by_column
+        self.order = order
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id_value": str}
-
-    def get_valid_sort_columns_new(self) -> Dict[str, ColumnType]:
-        return {
-            "resource_type": StringColumn,
-            "agent": StringColumn,
-            "resource_id_value": StringColumn,
-        }
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Resource
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        raise NotImplementedError()
 
     @property
-    def id_column(self) -> ColumnNameStr:
+    @abstractmethod
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_id")
+        pass
 
+    @abstractmethod
     def get_id_from_dto(self, dto: object) -> object:
-        """Name of the id field of the dto"""
-        return dto.resource_id
-
-
-class ResourceOrder(VersionedResourceOrder):
-    """Represents the ordering by which resources should be sorted"""
+        pass
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id": str, "resource_id_value": str, "status": str}
-
-    def get_valid_sort_columns_new(self) -> Dict[str, ColumnType]:
-        return {
-            "resource_type": StringColumn,
-            "agent": StringColumn,
-            "resource_id": StringColumn,
-            "resource_id_value": StringColumn,
-            "status": StringColumn,
-        }
-
-    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
-        return ColumnNameStr(
-            f"{super().get_order_by_column_db_name(table_prefix)}{'::text' if self._should_be_treated_as_string() else ''}"
+    def parse_from_string(
+        cls: Type[T_SELF],
+        sort: str,
+    ) -> T_SELF:
+        valid_sort_pattern: Pattern[str] = re.compile(
+            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
         )
+        match = valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            # Verify there is no escaping from the regex by exact match
+            assert order_by_column in cls.get_valid_sort_columns()
+            order = match.groups()[1].upper()
+            return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
 
-    def _should_be_treated_as_string(self) -> bool:
-        assert False
-        """Ensure that records are sorted alphabetically by status instead of the enum order"""
-        return self.order_by_column == "status"
+    def get_order(self, invert: bool = False) -> PagingOrder:
+        """The order string representing the direction the results should be sorted by"""
+        return self.order.invert() if invert else self.order
 
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        assert False, "broken"
-
-    def get_id_from_dto(self, dto: object) -> object:
-        """Name of the id field of the dto"""
-        return dto.resource_version_id
-
-    def get_order_elements(self, invert: bool, table_prefix: Optional[str] = None) -> List[Tuple[ColumnNameStr, PagingOrder]]:
+    def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, for example, because comparing a value to
+        NULL always yields NULL.
         """
-        return a list of column/order pairs, to format an ORDER VBY statement
+        if self.is_nullable_column():
+            column_type = self.get_order_by_column_type()
+            if typing_inspect.get_args(column_type)[0] == datetime.datetime:
+                return ColumnNameStr(f"COALESCE({value_reference}, to_timestamp(0))")
+            elif typing_inspect.get_args(column_type)[0] == bool:
+                return ColumnNameStr(f"COALESCE({value_reference}, FALSE)")
+            else:
+                return ColumnNameStr(f"COALESCE({value_reference}, '')")
+        return ColumnNameStr(value_reference)
 
-        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
-        """
-        # Moved legacy code
-        order = self.get_order(invert)
-        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+    def __str__(self) -> str:
+        return f"{self.order_by_column}.{self.order}"
 
-        return [
-            (table_prefix_value + self.order_by_column, order),
-            (ColumnNameStr(table_prefix_value + "resource_id"), order),
-            (ColumnNameStr(table_prefix_value + "model"), order),
-        ]
+    def get_order_by_column_type(self) -> ColumnType:
+        """The type of the order by column"""
+        return self.get_valid_sort_columns()[self.order_by_column]
+
+    def get_order_by_column_api_name(self) -> str:
+        """The name of the column that the results should be ordered by"""
+        return self.order_by_column
 
     def as_filter(
         self,
@@ -566,14 +575,15 @@ class ResourceOrder(VersionedResourceOrder):
 
         if column_value is not None:
             # Have column value
-            order_by_collumns_type = self.get_valid_sort_columns_new()[self.order_by_column]
+            order_by_collumns_type = self.get_valid_sort_columns()[self.order_by_column]
             filter_elements.append(
                 (self.order_by_column, order_by_collumns_type, order_by_collumns_type.get_value(column_value))
             )
 
         if id_value is not None:
             # Have ID
-            filter_elements.append(("resource_version_id", StringColumn, id_value))
+            id_name, id_type = self.id_column
+            filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
 
         relation = ">" if start else "<"
 
@@ -583,18 +593,85 @@ class ResourceOrder(VersionedResourceOrder):
         ac = ArgumentCollector(offset=offset - 1)
         if len(filter_elements) == 1:
             col_name, coll_type, value = filter_elements[0]
-            filter = f"{col_name} {relation} ${ac(coll_type.get_value(value))}"
+            filter = f"{coll_type.get_accessor(col_name)} {relation} ${ac(value)}"
             return [filter], ac.args
         else:
             # composed filter:
             # 1. comparison of two tuples (c_a, c_b) < (c_a, c_b)
             # 2. nulls must be removed to get proper comparison
-            names_tuple = ", ".join([col_name for col_name, coll_type, value in filter_elements])
+            names_tuple = ", ".join([coll_type.get_accessor(col_name) for col_name, coll_type, value in filter_elements])
             values_references_tuple = ", ".join(
                 [coll_type.coalesce_to_min(ac(value)) for col_name, coll_type, value in filter_elements]
             )
             filter = f"({names_tuple}) {relation} ({values_references_tuple})"
             return [filter], ac.args
+
+    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/order pairs, to format an ORDER VBY statement
+
+        :param table_prefix: the name of the table to find the collumns in
+
+        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
+        """
+        order = self.get_order(invert)
+
+        id_name, id_type = self.id_column
+        return [
+            (self.order_by_column, self.get_valid_sort_columns()[self.order_by_column], order),
+            (id_name, id_type, order),
+        ]
+
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Return the actual order by statement, as derived from get_order_elements"""
+        order_by_part = ", ".join(
+            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+        )
+        return f" ORDER BY {order_by_part}"
+
+
+class VersionedResourceOrder(DatabaseOrderV2):
+    """Represents the ordering by which resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, ColumnType]:
+        return {
+            "resource_type": StringColumn,
+            "agent": StringColumn,
+            "resource_id_value": StringColumn,
+        }
+
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name of the id column of this database order"""
+        return (ColumnNameStr("resource_id"), StringColumn)
+
+    def get_id_from_dto(self, dto: object) -> object:
+        """Name of the id field of the dto"""
+        return dto.resource_id
+
+
+class ResourceOrder(VersionedResourceOrder):
+    """Represents the ordering by which resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[str, ColumnType]:
+        return {
+            "resource_type": StringColumn,
+            "agent": StringColumn,
+            "resource_id": StringColumn,
+            "resource_id_value": StringColumn,
+            "status": ForcedStringCollumn(),
+        }
+
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name of the id column of this database order"""
+        return ("resource_version_id", StringColumn)
+
+    def get_id_from_dto(self, dto: object) -> object:
+        """Name of the id field of the dto"""
+        return dto.resource_version_id
 
 
 class ResourceHistoryOrder(DatabaseOrder):
