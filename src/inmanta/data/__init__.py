@@ -428,17 +428,23 @@ class DatabaseOrder:
 
 
 class ColumnType:
+    """
+    Class encapsulating all handling of specific collumn types
+
+    This type supports the base types, for more specific behavior, make a subclass.
+    """
+
     def __init__(self, base_type: Type, nullable: bool):
         self.base_type = base_type
         self.nullable = nullable
 
     def get_value(self, value: object) -> object:
         """
-        Prepare the actual value for use as an argument a prepared statemet for this type
+        Prepare the actual value for use as an argument in a prepared statement for this type
         """
         if value is None:
             if not self.nullable:
-                raise ValueError()  # todo
+                raise ValueError("None is not a valid value")
             else:
                 return None
         return self.base_type(value)
@@ -468,24 +474,62 @@ class ColumnType:
 
 
 class ForcedStringCollumn(ColumnType):
-    def __init__(self) -> None:
+    """A string that is explicitly cast to a specific string type"""
+
+    def __init__(self, forced_type: str) -> None:
         super().__init__(base_type=str, nullable=False)
+        self.forced_type = forced_type
 
     def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
         """
         return the sql statement to get this collumn, as used in filter and other statements
         """
-        return super().get_accessor(collumn_name, table_prefix) + "::text"
+        return super().get_accessor(collumn_name, table_prefix) + "::" + self.forced_type
 
 
 StringColumn = ColumnType(base_type=str, nullable=False)
 IntColumn = ColumnType(base_type=int, nullable=False)
+TextColumn = ForcedStringCollumn("text")
 
 T_SELF = TypeVar("T_SELF", bound="DatabaseOrderV2")
 
 
 class DatabaseOrderV2(ABC):
-    """Refactoring of DatabaseOrder"""
+    """
+
+    Helper API for handling database order and filtering
+
+    This class defines the consumer interface, in order to use the typing to keep API creep under control
+    """
+
+    @abstractmethod
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[object] = None,
+        id_value: Optional[Union[uuid.UUID, str]] = None,
+        start: Optional[bool] = True,
+    ) -> Tuple[List[str], List[object]]:
+        pass
+
+    @abstractmethod
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        pass
+
+    @abstractmethod
+    def get_id_from_dto(self, dto: object) -> object:
+        """Extract the id value from our associated DTO, for construction of paging queries"""
+        pass
+
+
+class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
+    """
+
+    Helper for handling database order and filtering in the base case:
+    there is
+    - a user specified order
+    - an additional built in order to make the ordering unique
+    """
 
     # Factory
     def __init__(
@@ -497,20 +541,19 @@ class DatabaseOrderV2(ABC):
         self.order_by_column = order_by_column
         self.order = order
 
+    ### Configuration methods
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Return all valid columns for lookup and their type"""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
-        """Name of the id column of this database order"""
+        """Name and type of the id column of this database order"""
         pass
 
-    @abstractmethod
-    def get_id_from_dto(self, dto: object) -> object:
-        pass
-
+    ###  Factory
     @classmethod
     def parse_from_string(
         cls: Type[T_SELF],
@@ -528,24 +571,10 @@ class DatabaseOrderV2(ABC):
             return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
+    ## Internal helpers
     def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
         return self.order.invert() if invert else self.order
-
-    def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, for example, because comparing a value to
-        NULL always yields NULL.
-        """
-        if self.is_nullable_column():
-            column_type = self.get_order_by_column_type()
-            if typing_inspect.get_args(column_type)[0] == datetime.datetime:
-                return ColumnNameStr(f"COALESCE({value_reference}, to_timestamp(0))")
-            elif typing_inspect.get_args(column_type)[0] == bool:
-                return ColumnNameStr(f"COALESCE({value_reference}, FALSE)")
-            else:
-                return ColumnNameStr(f"COALESCE({value_reference}, '')")
-        return ColumnNameStr(value_reference)
 
     def __str__(self) -> str:
         return f"{self.order_by_column}.{self.order}"
@@ -558,6 +587,7 @@ class DatabaseOrderV2(ABC):
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
+    ## External API
     def as_filter(
         self,
         offset: int,
@@ -608,14 +638,9 @@ class DatabaseOrderV2(ABC):
 
     def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
         """
-        return a list of column/order pairs, to format an ORDER VBY statement
-
-        :param table_prefix: the name of the table to find the collumns in
-
-        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
+        return a list of column/column type/order tripples, to format an ORDER BY or FILTER statement
         """
         order = self.get_order(invert)
-
         id_name, id_type = self.id_column
         return [
             (self.order_by_column, self.get_valid_sort_columns()[self.order_by_column], order),
@@ -644,7 +669,7 @@ class VersionedResourceOrder(DatabaseOrderV2):
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return (ColumnNameStr("resource_id"), StringColumn)
+        return ColumnNameStr("resource_id"), StringColumn
 
     def get_id_from_dto(self, dto: object) -> object:
         """Name of the id field of the dto"""
@@ -661,13 +686,13 @@ class ResourceOrder(VersionedResourceOrder):
             "agent": StringColumn,
             "resource_id": StringColumn,
             "resource_id_value": StringColumn,
-            "status": ForcedStringCollumn(),
+            "status": TextColumn,
         }
 
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ("resource_version_id", StringColumn)
+        return "resource_version_id", StringColumn
 
     def get_id_from_dto(self, dto: object) -> object:
         """Name of the id field of the dto"""
