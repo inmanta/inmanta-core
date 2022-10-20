@@ -28,8 +28,8 @@ from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
+import inmanta.data
 from inmanta import const, protocol, resources
-from inmanta.data import PRIMITIVE_SQL_TYPES
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -476,10 +476,10 @@ class PagingBoundaries:
 
     def __init__(
         self,
-        start: PRIMITIVE_SQL_TYPES,
-        end: PRIMITIVE_SQL_TYPES,
-        first_id: Optional[PRIMITIVE_SQL_TYPES],
-        last_id: Optional[PRIMITIVE_SQL_TYPES],
+        start: "inmanta.data.PRIMITIVE_SQL_TYPES",
+        end: "inmanta.data.PRIMITIVE_SQL_TYPES",
+        first_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],
+        last_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],
     ) -> None:
         self.start = start
         self.end = end

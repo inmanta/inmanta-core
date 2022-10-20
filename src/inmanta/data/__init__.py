@@ -433,7 +433,7 @@ class ColumnType:
     """
     Class encapsulating all handling of specific collumn types
 
-    This type supports the base types, for more specific behavior, make a subclass.
+    This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
     """
 
     def __init__(self, base_type: Type[PRIMITIVE_SQL_TYPES], nullable: bool):
@@ -466,7 +466,7 @@ class ColumnType:
 
     def coalesce_to_min(self, value_reference: str) -> str:
         """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, for example, because comparing a value to
+        This is required for the comparisons used for paging, because comparing a value to
         NULL always yields NULL.
         """
         if self.nullable:
@@ -502,10 +502,11 @@ TextColumn = ForcedStringCollumn("text")
 
 class DatabaseOrderV2(ABC):
     """
-
     Helper API for handling database order and filtering
 
-    This class defines the consumer interface, in order to use the typing to keep API creep under control
+    This class defines the consumer interface,
+
+    It is made into a separate type, to make it very explicit what is exposed externally, to limit feature creep
     """
 
     @abstractmethod
@@ -516,10 +517,12 @@ class DatabaseOrderV2(ABC):
         id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[bool] = True,
     ) -> Tuple[List[str], List[object]]:
+        """Get the column and id values as filters, for use in paging"""
         pass
 
     @abstractmethod
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Get this order as an order_by statement"""
         pass
 
     @abstractmethod
@@ -529,7 +532,7 @@ class DatabaseOrderV2(ABC):
 
     @abstractmethod
     def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
-        """Return the page boundaries, given the first and last record returned"""
+        """Return the page boundaries, given the first and last record of the page"""
         pass
 
 
@@ -538,11 +541,9 @@ T_SELF = TypeVar("T_SELF", bound="AbstractDatabaseOrderV2")
 
 class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
     """
-
-    Helper for handling database order and filtering in the base case:
-    there is
+    Abstract Base class for ordering when using
     - a user specified order
-    - an additional built in order to make the ordering unique
+    - an additional built in order to make the ordering unique (the id_collumn)
     """
 
     # Factory
@@ -625,7 +626,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             )
 
         if id_value is not None:
-            if isinstance(id_value, datetime):
+            if isinstance(id_value, datetime.datetime):
                 raise Exception("Unsupported type, must be backported from Databaseorder v1")
             # Have ID
             id_name, id_type = self.id_column
@@ -654,7 +655,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
 
     def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
         """
-        return a list of column/column type/order tripples, to format an ORDER BY or FILTER statement
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
         """
         order = self.get_order(invert)
         id_name, id_type = self.id_column
@@ -707,6 +708,7 @@ class VersionedResourceOrder(AbstractDatabaseOrderV2):
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
+        return ColumnNameStr("resource_id"), StringColumn
 
 
 class ResourceOrder(VersionedResourceOrder):
@@ -5369,59 +5371,6 @@ class Resource(BaseDocument):
         for row in raw_results:
             results[row["status"]] = row["count"]
         return m.ResourceDeploySummary.create_from_db_result(results)
-
-    @classmethod
-    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> SimpleQueryBuilder:
-        return SimpleQueryBuilder(
-            select_clause="""SELECT resource_id, attributes, resource_id, resource_type,
-                                    agent, resource_id_value, environment""",
-            from_clause=f" FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 ", " model = $2"],
-            values=[cls._get_value(environment), cls._get_value(version)],
-        )
-
-    @classmethod
-    async def get_versioned_resources(
-        cls,
-        version: int,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.VersionedResource]:
-        query_builder = Resource.versioned_resources_subquery(environment, version)
-
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        versioned_resource_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        versioned_resource_records = cast(Iterable[Record], versioned_resource_records)
-
-        dtos = [
-            m.VersionedResource(
-                resource_id=versioned_resource["resource_id"],
-                resource_version_id=versioned_resource["resource_id"] + f",v={version}",
-                id_details=cls.get_details_from_resource_id(versioned_resource["resource_id"]),
-                requires=json.loads(versioned_resource["attributes"]).get("requires", []),
-            )
-            for versioned_resource in versioned_resource_records
-        ]
-        return dtos
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()

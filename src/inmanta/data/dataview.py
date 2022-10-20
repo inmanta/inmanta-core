@@ -183,14 +183,21 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         )
 
     async def execute(self) -> ReturnValueWithMeta[Sequence[T_DTO]]:
+        """
+        Main entry point:
+        - get the data from the DB
+        - get page counts
+        - format paging links
 
+        :return: Complete API ReturnValueWithMeta ready to go out
+        """
         dtos, paging_boundaries_in = await self.get_data()
 
         paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
         if paging_boundaries_in:
             paging_boundaries = paging_boundaries_in
         else:
-            # nothing found now, use the current page to determine if something exists before us
+            # nothing found now, use the current page boundaries to determine if something exists before us
             paging_boundaries = self.requested_page_boundaries
 
         metadata = await self._get_page_count(paging_boundaries)
@@ -226,11 +233,29 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         values = query_builder.values
         after_filter_statements, after_values = self.order.as_filter(len(values) + 1, start, first_id, start=not reversed)
         values.extend(after_values)
+        after_filter = data.BaseDocument._join_filter_statements(after_filter_statements)
+
         before_filter_statements, before_values = self.order.as_filter(len(values) + 1, end, last_id, start=reversed)
         values.extend(before_values)
-
         before_filter = data.BaseDocument._join_filter_statements(before_filter_statements)
-        after_filter = data.BaseDocument._join_filter_statements(after_filter_statements)
+
+        # If the currently requested page was empty,
+        # we are working from RequestedPagingBoundaries instead of PagingBoundaries
+        # If the RequestedPagingBoundaries has only nulls, we are not paging and the total count is null
+        # If the RequestedPagingBoundaries has one pair of nulls,
+        #   we are paging but the current page is empty and so are the next ones
+        # the `as_filter` method will return empty if the input is null
+        # so we can conclude that the value for an empty filter is always 0
+
+        if not before_filter and not after_filter:
+            # Table is empty
+            # Don't even make the query
+            return PagingMetadata(
+                total=0,
+                before=0,
+                after=0,
+                page_size=self.limit,
+            )
 
         select_clause = (
             "SELECT COUNT(*) as count_total"
@@ -258,6 +283,9 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
         meta: PagingMetadata,
     ) -> Dict[str, str]:
+        """
+        Construct the paging links
+        """
         links = {}
 
         url_query_params: Dict[str, Optional[Union[SimpleTypes, List[str]]]] = {
