@@ -38,11 +38,11 @@ from inmanta.data import (
     ResourceAction,
 )
 from inmanta.data.model import Agent as AgentModel
-from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact, LatestReleasedResource
+from inmanta.data.model import BaseModel, CompileReport, DesiredStateVersion, Fact
 from inmanta.data.model import Notification as NotificationModel
 from inmanta.data.model import PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
-from inmanta.data.model import ResourceHistory, ResourceIdStr, ResourceLog, VersionedResource
+from inmanta.data.model import ResourceHistory, ResourceIdStr, ResourceLog
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes
 
@@ -56,7 +56,7 @@ class PagingMetadata:
         self.after = after
         self.page_size = page_size
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, int]:
         return {
             "total": self.total,
             "before": self.before,

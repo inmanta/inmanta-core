@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import abc
 import asyncio
 import copy
 import datetime
@@ -51,6 +50,7 @@ from typing import (
     cast,
     overload,
 )
+from uuid import UUID
 
 import asyncpg
 import dateutil
@@ -66,7 +66,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import PagingBoundaries, ResourceIdStr
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -84,6 +84,7 @@ APILIMIT = 1000
 # Used as the 'default' parameter value for the Field class, when no default value has been set
 default_unset = object()
 
+PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
 
 """
 Locking order rules:
@@ -96,7 +97,8 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
+    @staticmethod
+    def _generate_next_value_(name: str, start: int, count: int, last_values: List[Any]) -> Any:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -434,11 +436,11 @@ class ColumnType:
     This type supports the base types, for more specific behavior, make a subclass.
     """
 
-    def __init__(self, base_type: Type, nullable: bool):
+    def __init__(self, base_type: Type[PRIMITIVE_SQL_TYPES], nullable: bool):
         self.base_type = base_type
         self.nullable = nullable
 
-    def get_value(self, value: object) -> object:
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
         """
         Prepare the actual value for use as an argument in a prepared statement for this type
         """
@@ -447,7 +449,13 @@ class ColumnType:
                 raise ValueError("None is not a valid value")
             else:
                 return None
-        return self.base_type(value)
+        if isinstance(value, self.base_type):
+            # It is as expected
+            return value
+        if issubclass(self.base_type, (str, int, bool)) and isinstance(value, (str, int, bool)):
+            # We can cast between those types
+            return self.base_type(value)
+        raise ValueError(f"{value} is not a valid value")
 
     def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
         """
@@ -491,8 +499,6 @@ StringColumn = ColumnType(base_type=str, nullable=False)
 IntColumn = ColumnType(base_type=int, nullable=False)
 TextColumn = ForcedStringCollumn("text")
 
-T_SELF = TypeVar("T_SELF", bound="DatabaseOrderV2")
-
 
 class DatabaseOrderV2(ABC):
     """
@@ -506,8 +512,8 @@ class DatabaseOrderV2(ABC):
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[object] = None,
-        id_value: Optional[Union[uuid.UUID, str]] = None,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[bool] = True,
     ) -> Tuple[List[str], List[object]]:
         pass
@@ -517,9 +523,17 @@ class DatabaseOrderV2(ABC):
         pass
 
     @abstractmethod
-    def get_id_from_dto(self, dto: object) -> object:
-        """Extract the id value from our associated DTO, for construction of paging queries"""
+    def get_order(self) -> PagingOrder:
+        """Return the order of this paging request"""
         pass
+
+    @abstractmethod
+    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        pass
+
+
+T_SELF = TypeVar("T_SELF", bound="AbstractDatabaseOrderV2")
 
 
 class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
@@ -541,7 +555,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
         self.order_by_column = order_by_column
         self.order = order
 
-    ### Configuration methods
+    # Configuration methods
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Return all valid columns for lookup and their type"""
@@ -553,7 +567,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
         """Name and type of the id column of this database order"""
         pass
 
-    ###  Factory
+    #  Factory
     @classmethod
     def parse_from_string(
         cls: Type[T_SELF],
@@ -571,7 +585,7 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
-    ## Internal helpers
+    # Internal helpers
     def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
         return self.order.invert() if invert else self.order
@@ -587,12 +601,12 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
-    ## External API
+    # External API
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[object] = None,
-        id_value: Optional[Union[uuid.UUID, str]] = None,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[bool] = True,
     ) -> Tuple[List[str], List[object]]:
         """Get the column and id values as filters"""
@@ -611,6 +625,8 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
             )
 
         if id_value is not None:
+            if isinstance(id_value, datetime):
+                raise Exception("Unsupported type, must be backported from Databaseorder v1")
             # Have ID
             id_name, id_type = self.id_column
             filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
@@ -654,49 +670,62 @@ class AbstractDatabaseOrderV2(DatabaseOrderV2, ABC):
         )
         return f" ORDER BY {order_by_part}"
 
+    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
 
-class VersionedResourceOrder(DatabaseOrderV2):
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_valid_sort_columns()[self.order_by_column]
+
+        id_column, id_type = self.id_column
+
+        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
+            # Make mypy happy
+            assert in_value is not None
+            return in_value
+
+        return PagingBoundaries(
+            start=assert_not_null(order_type.get_value(first[order_column_name])),
+            first_id=assert_not_null(id_type.get_value(first[id_column])),
+            end=assert_not_null(order_type.get_value(last[order_column_name])),
+            last_id=assert_not_null(id_type.get_value(last[id_column])),
+        )
+
+
+class VersionedResourceOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, ColumnType]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "resource_type": StringColumn,
-            "agent": StringColumn,
-            "resource_id_value": StringColumn,
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
         }
 
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_id"), StringColumn
-
-    def get_id_from_dto(self, dto: object) -> object:
-        """Name of the id field of the dto"""
-        return dto.resource_id
 
 
 class ResourceOrder(VersionedResourceOrder):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, ColumnType]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "resource_type": StringColumn,
-            "agent": StringColumn,
-            "resource_id": StringColumn,
-            "resource_id_value": StringColumn,
-            "status": TextColumn,
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
+            ColumnNameStr("status"): TextColumn,
         }
 
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return "resource_version_id", StringColumn
-
-    def get_id_from_dto(self, dto: object) -> object:
-        """Name of the id field of the dto"""
-        return dto.resource_version_id
+        return ColumnNameStr("resource_version_id"), StringColumn
 
 
 class ResourceHistoryOrder(DatabaseOrder):
@@ -900,9 +929,9 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         from_clause: Optional[str] = None,
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
-        db_order: Optional[DatabaseOrder] = None,
+        db_order: Optional[Union[DatabaseOrder, DatabaseOrderV2]] = None,
         limit: Optional[int] = None,
-        backward_paging: Optional[bool] = False,
+        backward_paging: bool = False,
         prelude: Optional[str] = None,
     ) -> None:
         """
@@ -949,7 +978,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def order_and_limit(
-        self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
+        self, db_order: Union[DatabaseOrder, DatabaseOrderV2], limit: Optional[int] = None, backward_paging: bool = False
     ) -> "SimpleQueryBuilder":
         """Set the order and limit of the query"""
         return SimpleQueryBuilder(
@@ -4918,17 +4947,17 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources_list = []
+        resources_list: Union[List[Resource], List[Dict[str, object]]] = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
-                        record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
-                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
-                        record["id"] = record["resource_version_id"]
-                        record["resource_type"] = parsed_id.entity_type
-                        resources_list.append(record)
+                        drecord = dict(record)
+                        drecord["attributes"] = json.loads(drecord["attributes"])
+                        parsed_id = resources.Id.parse_id(drecord["resource_version_id"])
+                        drecord["id"] = drecord["resource_version_id"]
+                        drecord["resource_type"] = parsed_id.entity_type
+                        resources_list.append(drecord)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
         return resources_list

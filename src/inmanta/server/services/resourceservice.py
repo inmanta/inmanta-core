@@ -29,7 +29,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
+from inmanta.data import APILIMIT, InvalidSort, QueryType
 from inmanta.data.dataview import ResourcesInVersionView, ResourceView
 from inmanta.data.model import (
     AttributeStateChange,
@@ -898,7 +898,7 @@ class ResourceService(protocol.ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
-    ) -> ReturnValue[List[LatestReleasedResource]]:
+    ) -> ReturnValueWithMeta[Sequence[LatestReleasedResource]]:
 
         try:
             handler = ResourceView(env, limit, first_id, last_id, start, end, filter, sort, deploy_summary)
@@ -1040,7 +1040,7 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
-    ) -> ReturnValue[List[VersionedResource]]:
+    ) -> ReturnValueWithMeta[Sequence[VersionedResource]]:
 
         try:
             handler = ResourcesInVersionView(env, version, limit, filter, sort, first_id, last_id, start, end)

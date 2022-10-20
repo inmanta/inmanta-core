@@ -1,16 +1,34 @@
+"""
+    Copyright 2022 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
 import abc
 import json
 from abc import ABC
-from typing import Dict, Generic, Iterable, List, Optional, Sequence, Type, TypeVar, Union, cast
+from datetime import datetime
+from typing import Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
 from urllib import parse
+from uuid import UUID
 
 from asyncpg import Record
 
 from inmanta import data
 from inmanta.data import (
     APILIMIT,
-    ColumnType,
-    DatabaseOrder,
     DatabaseOrderV2,
     InvalidQueryParameter,
     PagingOrder,
@@ -20,16 +38,59 @@ from inmanta.data import (
     VersionedResourceOrder,
     model,
 )
-from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr, VersionedResource
+from inmanta.data.model import BaseModel, LatestReleasedResource, PagingBoundaries, ResourceVersionIdStr
 from inmanta.data.paging import PagingMetadata
-from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server.validate_filter import CombinedContainsFilterResourceState, ContainsPartialFilter, Filter, FilterValidator
 from inmanta.types import SimpleTypes
+from inmanta.util import datetime_utc_isoformat
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
+
+
+class RequestedPagingBoundaries:
+    """Represents the lower and upper bounds that the user requested for the paging boundaries"""
+
+    def __init__(
+        self,
+        start: Optional[str],
+        end: Optional[str],
+        first_id: Optional[str],
+        last_id: Optional[str],
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.first_id = first_id
+        self.last_id = last_id
+
+    def validate(
+        self,
+    ) -> None:
+        start = self.start
+        end = self.end
+        first_id = self.first_id
+        last_id = self.last_id
+        if start and end:
+            raise InvalidQueryParameter(
+                f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
+            )
+        if first_id and last_id:
+            raise InvalidQueryParameter(
+                f"Only one of first_id and last_id parameters is allowed at the same time. "
+                f"Received first_id: {first_id}, last_id: {last_id}"
+            )
+        if (first_id and not start) or (first_id and end):
+            raise InvalidQueryParameter(
+                f"The first_id parameter should be used in combination with the start parameter. "
+                f"Received first_id: {first_id}, start: {start}, end: {end}"
+            )
+        if (last_id and not end) or (last_id and start):
+            raise InvalidQueryParameter(
+                f"The last_id parameter should be used in combination with the end parameter. "
+                f"Received last_id: {last_id}, start: {start}, end: {end}"
+            )
 
 
 class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
@@ -47,8 +108,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.raw_filter = filter or {}
         self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
-        self.page_boundaries = PagingBoundaries(start, end, first_id, last_id)  # TODO: types
-        self.validate_paging_parameters()
+        self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
+        self.requested_page_boundaries.validate()
 
     @abc.abstractmethod
     def get_base_url(self) -> str:
@@ -66,11 +127,21 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         return {}
 
     @abc.abstractmethod
-    async def get_data(self) -> Sequence[T_DTO]:
+    async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
         """
         Fetch the data and construct dto's
 
         See existing implementations for typical usage
+
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_base_query(self) -> SimpleQueryBuilder:
+        """
+        Return the base query to get the data.
+
+        Must contain form clause and where clause if specific filtering is required
         """
         pass
 
@@ -87,60 +158,60 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         Update the query builder to constrain it to the page boundaries, order and size
         """
         order = self.order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and self.page_boundaries.end is not None) or (
-            order == PagingOrder.DESC and self.page_boundaries.start is not None
+        backward_paging: bool = (order == PagingOrder.ASC and self.requested_page_boundaries.end is not None) or (
+            order == PagingOrder.DESC and self.requested_page_boundaries.start is not None
         )
 
         return (
             query_builder.filter(
                 *self.order.as_filter(
-                    query_builder.offset, self.page_boundaries.start, self.page_boundaries.first_id, start=True
+                    query_builder.offset,
+                    self.requested_page_boundaries.start,
+                    self.requested_page_boundaries.first_id,
+                    start=True,
                 )
             )
             .filter(
-                *self.order.as_filter(query_builder.offset, self.page_boundaries.end, self.page_boundaries.last_id, start=False)
+                *self.order.as_filter(
+                    query_builder.offset,
+                    self.requested_page_boundaries.end,
+                    self.requested_page_boundaries.last_id,
+                    start=False,
+                )
             )
             .order_and_limit(self.order, self.limit, backward_paging)
         )
 
-    async def execute(self) -> ReturnValue[Sequence[T_DTO]]:
-        dtos = await self.get_data()
-        if dtos:
-            paging_boundaries = self._get_paging_boundaries_for(dtos)
+    async def execute(self) -> ReturnValueWithMeta[Sequence[T_DTO]]:
+
+        dtos, paging_boundaries_in = await self.get_data()
+
+        paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
+        if paging_boundaries_in:
+            paging_boundaries = paging_boundaries_in
         else:
             # nothing found now, use the current page to determine if something exists before us
-            paging_boundaries = self.page_boundaries
+            paging_boundaries = self.requested_page_boundaries
+
         metadata = await self._get_page_count(paging_boundaries)
         links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
         return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
         # Paging helpers
 
-    def _get_paging_boundaries_for(self, dtos: Sequence[T_DTO]) -> PagingBoundaries:
-        """Return the page boundaries for the list of dtos"""
-        if self.order.get_order() == "DESC":
-            first = dtos[0]
-            last = dtos[-1]
-        else:
-            first = dtos[-1]
-            last = dtos[0]
+    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
+        """
+        Construct the page counts,
 
-        order_column_name = self.order.order_by_column
-        order_type: ColumnType = self.order.get_valid_sort_columns()[self.order.order_by_column]
-
-        # TODO get data from records instead of DTO's to have one less domain to mess with?
-        return PagingBoundaries(
-            start=order_type.get_value(first.all_fields[order_column_name]),  # TODO allfields is not very nice
-            first_id=self.order.get_id_from_dto(first),
-            end=order_type.get_value(last.all_fields[order_column_name]),
-            last_id=self.order.get_id_from_dto(last),
-        )
-
-    async def _get_page_count(self, bounds: PagingBoundaries) -> PagingMetadata:
+        either from the PagingBoundaries if we have a valid page,
+        or from the RequestedPagingBoundaries if we got an empty page
+        """
         query_builder = self.get_base_query()
 
         query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(offset=query_builder.offset, **self.filter)
+            *data.Resource.get_composed_filter_with_query_types(
+                offset=query_builder.offset, col_name_prefix=None, **self.filter
+            )
         )
 
         order = self.order.get_order()
@@ -162,7 +233,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         after_filter = data.BaseDocument._join_filter_statements(after_filter_statements)
 
         select_clause = (
-            f"SELECT COUNT(*) as count_total"
+            "SELECT COUNT(*) as count_total"
             + (f", COUNT(*) filter ({before_filter}) as count_before" if before_filter else "")
             + (f", COUNT(*) filter ({after_filter}) as count_after " if after_filter else "")
         )
@@ -173,18 +244,18 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         result = await data.Resource.select_query(sql_query, values, no_obj=True)
         result = cast(List[Record], result)
         if not result:
-            raise InvalidQueryParameter(f"Environment {self.environment} doesn't exist")  # TODO???
+            raise InvalidQueryParameter("Could not determine page bounds")
         return PagingMetadata(
-            total=result[0]["count_total"],
-            before=result[0].get("count_before", 0),
-            after=result[0].get("count_after", 0),
+            total=cast(int, result[0]["count_total"]),
+            before=cast(int, result[0].get("count_before", 0)),
+            after=cast(int, result[0].get("count_after", 0)),
             page_size=self.limit,
         )
 
     async def prepare_paging_links(
         self,
         dtos: Sequence[T_DTO],
-        paging_boundaries: PagingBoundaries,
+        paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
         meta: PagingMetadata,
     ) -> Dict[str, str]:
         links = {}
@@ -203,9 +274,16 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         if dtos:
             base_url = self.get_base_url()
 
-            def make_link(**args: str) -> str:
+            def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
+                if isinstance(value, datetime):
+                    # Accross API boundaries, all naive datetime instances are assumed UTC.
+                    # Returns ISO timestamp implicitly in UTC.
+                    return datetime_utc_isoformat(value, naive_utc=True)
+                return str(value)
+
+            def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
                 params = url_query_params.copy()
-                params.update({k: v for k, v in args.items() if v is not None})
+                params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
                 return f"{base_url}?{parse.urlencode(params, doseq=True)}"
 
             link_with_end = make_link(
@@ -248,33 +326,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         if limit > APILIMIT:
             raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
         return limit
-
-    def validate_paging_parameters(
-        self,
-    ) -> None:
-        start = self.page_boundaries.start
-        end = self.page_boundaries.end
-        first_id = self.page_boundaries.first_id
-        last_id = self.page_boundaries.last_id
-        if start and end:
-            raise InvalidQueryParameter(
-                f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
-            )
-        if first_id and last_id:
-            raise InvalidQueryParameter(
-                f"Only one of first_id and last_id parameters is allowed at the same time. "
-                f"Received first_id: {first_id}, last_id: {last_id}"
-            )
-        if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameter(
-                f"The first_id parameter should be used in combination with the start parameter. "
-                f"Received first_id: {first_id}, start: {start}, end: {end}"
-            )
-        if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameter(
-                f"The last_id parameter should be used in combination with the end parameter. "
-                f"Received last_id: {last_id}, start: {start}, end: {end}"
-            )
 
 
 class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
@@ -364,24 +415,25 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                LIMIT  1) r
                )
             """,
-            from_clause=f"FROM cte",
+            from_clause="FROM cte",
             values=[self.environment.id],
         )
         return query_builder
 
-    async def get_data(self) -> Sequence[model.LatestReleasedResource]:
+    async def get_data(self) -> Tuple[Sequence[model.LatestReleasedResource], Optional[PagingBoundaries]]:
         query_builder = self.get_base_query()
 
         # Project
         query_builder = query_builder.select(select_clause="""SELECT *""")
         query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(offset=query_builder.offset, **self.filter)
+            *data.Resource.get_composed_filter_with_query_types(
+                offset=query_builder.offset, col_name_prefix=None, **self.filter
+            )
         )
         query_builder = self.clip_to_page(query_builder)
         sql_query, values = query_builder.build()
 
         resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
-        resource_records = cast(Iterable[Record], resource_records)
 
         dtos: Sequence[LatestReleasedResource] = [
             model.LatestReleasedResource(
@@ -393,7 +445,11 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             )
             for resource in resource_records
         ]
-        return dtos
+
+        paging_boundaries = None
+        if dtos:
+            paging_boundaries = self.order.get_paging_boundaries(dict(resource_records[0]), dict(resource_records[-1]))
+        return dtos, paging_boundaries
 
 
 class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedResource]):
@@ -421,7 +477,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         self.environment = environment
         self.version = version
 
-    ## Per view config
+    # Per view config
     def get_base_url(self) -> str:
         return f"/api/v2/desiredstate/{self.version}"
 
@@ -441,7 +497,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         )
         return query_builder
 
-    async def get_data(self) -> Sequence[model.VersionedResource]:
+    async def get_data(self) -> Tuple[Sequence[model.VersionedResource], Optional[PagingBoundaries]]:
         query_builder = self.get_base_query()
 
         # Project
@@ -449,13 +505,14 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
             select_clause="""SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment"""
         )
         query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(offset=query_builder.offset, **self.filter)
+            *data.Resource.get_composed_filter_with_query_types(
+                offset=query_builder.offset, col_name_prefix=None, **self.filter
+            )
         )
         query_builder = self.clip_to_page(query_builder)
         sql_query, values = query_builder.build()
 
         versioned_resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
-        versioned_resource_records = cast(Iterable[Record], versioned_resource_records)
 
         dtos = [
             model.VersionedResource(
@@ -466,4 +523,10 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
             )
             for versioned_resource in versioned_resource_records
         ]
-        return dtos
+
+        paging_boundaries = None
+        if dtos:
+            paging_boundaries = self.order.get_paging_boundaries(
+                dict(versioned_resource_records[0]), dict(versioned_resource_records[-1])
+            )
+        return dtos, paging_boundaries

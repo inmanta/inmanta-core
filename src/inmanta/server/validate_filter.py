@@ -318,7 +318,7 @@ class ResourceLogFilterValidator(FilterValidator):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
