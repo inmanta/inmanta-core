@@ -183,7 +183,6 @@ class PluginMeta(type):
         ns_parts = str(fnc.__module__).split(".")
         ns_parts.append(name)
         full_name = "::".join(ns_parts[1:])
-        print(full_name)
         if full_name in cls.get_functions():
             cls.__functions[full_name].deprecated = True
             cls.__functions[full_name].replaced_by = replaced_by
