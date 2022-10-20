@@ -178,6 +178,19 @@ class PluginMeta(type):
         return dict(cls.__functions)
 
     @classmethod
+    def deprecate_function(cls, fnc: Callable, replaced_by: Optional[str] = None) -> None:
+        name = fnc.__name__
+        ns_parts = str(fnc.__module__).split(".")
+        ns_parts.append(name)
+        full_name = "::".join(ns_parts[1:])
+        print(full_name)
+        if full_name in cls.get_functions():
+            cls.__functions[full_name].deprecated = True
+            cls.__functions[full_name].replaced_by = replaced_by
+        else:
+            raise Exception("Can not deprecate a plugin that was not found in the context")
+
+    @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
         """
         Clears registered plugin functions.
@@ -428,7 +441,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         if self.deprecated:
             msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
             if self.replaced_by:
-                msg += f" It should be replaced by '{self.replaced_by}'"
+                msg += f" It should be replaced by '{self.replaced_by}'."
             inmanta.warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
@@ -537,6 +550,8 @@ def plugin(
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
+            dictionary["deprecated"] = False
+            dictionary["replaced_by"] = None
 
             bases = (Plugin,)
             PluginMeta.__new__(PluginMeta, name, bases, dictionary)
@@ -561,16 +576,10 @@ def deprecated(
     function: Optional[Callable] = None,
     replaced_by: Optional[str] = None,
 ) -> Callable:  # noqa: H801
-    def wrapper(fnc):
-        name = fnc.__name__
-        ns_parts = str(fnc.__module__).split(".")
-        ns_parts.append(name)
-        full_name = "::".join(ns_parts[1:])
-        if full_name in PluginMeta.get_functions():
-            print("ok")
-        else:
-            raise Exception("Can not deprecate a plugin that was not found in the context")
+    def inner(fnc: Callable):
+        PluginMeta.deprecate_function(fnc, replaced_by)
+        return fnc
 
-        return fnc(function)
-
-    return wrapper
+    if function is not None:
+        return inner(function)
+    return inner
