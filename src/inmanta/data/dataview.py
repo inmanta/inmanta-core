@@ -141,7 +141,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Return the base query to get the data.
 
-        Must contain form clause and where clause if specific filtering is required
+        Must contain from clause and where clause if specific filtering is required
         """
         pass
 
@@ -241,7 +241,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         # If the currently requested page was empty,
         # we are working from RequestedPagingBoundaries instead of PagingBoundaries
-        # If the RequestedPagingBoundaries has only nulls, we are not paging and the total count is null
+        # If the RequestedPagingBoundaries has only nulls, we are not paging and the total count is 0
         # If the RequestedPagingBoundaries has one pair of nulls,
         #   we are paging but the current page is empty and so are the next ones
         # the `as_filter` method will return empty if the input is null
@@ -397,6 +397,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
+        # Todo: when not including 'orphaned' in the filter, use a simple query
         query_builder = SimpleQueryBuilder(
             prelude="""
             /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */

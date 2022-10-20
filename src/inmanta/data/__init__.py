@@ -411,8 +411,6 @@ class DatabaseOrder:
         return a list of column/order pairs, to format an ORDER VBY statement
 
         :param table_prefix: the name of the table to find the collumns in
-
-        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
         """
         table_prefix_value = "" if table_prefix is None else table_prefix + "."
         order = self.get_order(invert)
