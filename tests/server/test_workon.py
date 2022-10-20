@@ -17,6 +17,7 @@
 """
 import asyncio
 import click.testing
+import py
 import pytest
 import subprocess
 import uuid
@@ -80,32 +81,45 @@ async def compiled_environments(client: protocol.Client, environment_factory: En
             result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
         )
 
-    await utils.retry_limited(all_compiles_done, 20)
+    await utils.retry_limited(all_compiles_done, 10)
 
     yield environments
 
 
 @pytest.mark.parametrize_any("short_option", [True, False])
-def test_workon_list(server, simple_environments: abc.Sequence[uuid.UUID], cli_runner: click.testing.CliRunner, short_option: bool):
+def test_workon_list(
+    server, simple_environments: abc.Sequence[uuid.UUID], cli_runner: click.testing.CliRunner, short_option: bool
+) -> None:
     """
     Verify output of `inmanta-workon --list`.
     """
     result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["-l" if short_option else "--list"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0, (result.stderr, result.output)
     assert len(simple_environments) <= 10, "Not strictly an issue but the assertion below assumes 1 digit"
     assert result.output.strip() == "\n".join(
         f"env-{i}                {env}" for i, env in enumerate(simple_environments)
     )
+    assert result.stderr.strip() == ""
 
 
+def test_workon_list_no_environments(server, cli_runner: click.testing.CliRunner) -> None:
+    """
+    Verify output of `inmanta-workon --list` when no environments are present in the database.
+    """
+    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
+    assert result.exit_code == 0, (result.stderr, result.output)
+    assert result.output.strip() == ""
+    assert result.stderr.strip() == ""
+
+
+@pytest.mark.slowtest
 def test_workon_list_no_api(
     server,
     # fallback environment discovery is file system based and works only for environments that have had at least one compile
     compiled_environments: abc.Sequence[data.Environment],
     cli_runner: click.testing.CliRunner,
-    sync_client: protocol.SyncClient,
     unused_tcp_port: int,
-):
+) -> None:
     """
     Verify output of `inmanta-workon --list` when API call to fetch environment names fails.
     """
@@ -113,7 +127,7 @@ def test_workon_list_no_api(
     config.Config.set("cmdline_rest_transport", "port", str(unused_tcp_port))
 
     result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0, (result.stderr, result.output)
     assert result.stderr.strip() == (
         "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
         " Reason: [Errno 111] Connection refused"
@@ -121,6 +135,37 @@ def test_workon_list_no_api(
     assert result.output.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
 
 
-# TODO: test list on non-server machine
+@pytest.mark.parametrize_any("server_dir_exists", [True, False])
+def test_workon_list_no_api_no_environments(
+    server, cli_runner: click.testing.CliRunner, tmpdir: py.path.local, unused_tcp_port: int, server_dir_exists: bool
+) -> None:
+    """
+    Verify output of `inmanta-workon --list` when no environments were found at all in the server state dir.
+    """
+    # set port incorrectly so the API call will fail
+    config.Config.set("cmdline_rest_transport", "port", str(unused_tcp_port))
+    if not server_dir_exists:
+        # set state dir to directory that does not exist
+        config.Config.set("config", "state-dir", str(tmpdir.join("doesnotexist")))
+
+    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
+    if server_dir_exists:
+        assert result.exit_code == 0, (result.stderr, result.output)
+        assert result.stderr.strip() == (
+            "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
+            " Reason: [Errno 111] Connection refused"
+        )
+        assert result.output == ""
+    else:
+        assert result.exit_code == 1
+        assert result.stderr.strip() == (
+            "Error: Failed to fetch environment details from the server or to find the server state directory. Please check"
+            " you're running this command from the inmanta server host and `cmdline_rest_transport.port` and"
+            " `config.state-dir` settings are set correctly."
+        )
+        assert result.output == ""
+
+
+# TODO: similar tests for actual workon
 
 # TODO: more tests

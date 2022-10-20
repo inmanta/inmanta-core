@@ -32,6 +32,7 @@ from inmanta.protocol.endpoints import SyncClient
 
 MIN_COLUMN_WIDTH_NAME: int = 20
 
+# TODO: think about flow consistency
 # TODO: config.Config.set("cmdline_rest_transport", "port", 8888), config.Config.set("cmdline_rest_transport", "host", "localhost")? Or use config file?
 
 @dataclass(frozen=True)
@@ -70,8 +71,15 @@ def get_environments() -> EnvironmentSequence:
         # TODO: make dict gets type-safe
         return sorted(NamedEnvironment(id=env["id"], name=env["name"]) for env in environments)
     else:
+        # TODO: check that this works on actual orchestrator
+        server_envs_dir: str = os.path.join(config.Config.get("config", "state-dir"), "server", "environments")
+        if not os.path.exists(server_envs_dir):
+            raise click.ClickException(
+                "Failed to fetch environment details from the server or to find the server state directory. Please make sure"
+                " to run this command from the inmanta server host and to correctly set `cmdline_rest_transport.port` and"
+                " `config.state-dir` settings."
+            )
         reason: str = f" Reason: {result.result['message']}" if "message" in result.result else ""
-        # TODO: this shouldn't use click
         click.echo(
             (
                 "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
@@ -80,7 +88,6 @@ def get_environments() -> EnvironmentSequence:
             err=True,
         )
         def read_from_state_dir() -> abc.Iterator[NamedEnvironment]:
-            server_envs_dir: str = os.path.join(config.Config.get("config", "state-dir"), "server", "environments")
             for d in os.listdir(server_envs_dir):
                 try:
                     yield uuid.UUID(d)
@@ -90,7 +97,9 @@ def get_environments() -> EnvironmentSequence:
 
 
 def echo_environments() -> None:
-    # TODO docstring
+    """
+    Pretty-prints a list of available environments.
+    """
     environments: EnvironmentSequence = get_environments()
     if not environments:
         return
