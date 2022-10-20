@@ -49,6 +49,8 @@ from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, v1_module_from_template, wait_for_version
 
+from server.conftest import EnvironmentFactory
+
 logger = logging.getLogger("inmanta.test.server.compilerservice")
 
 
@@ -67,69 +69,6 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
     await notification_service.stop()
     await cs.prestop()
     await cs.stop()
-
-
-@pytest.fixture
-async def environment_factory(tmpdir) -> AsyncIterator["EnvironmentFactory"]:
-    """
-    Provides a factory for environments with a main.cf file.
-    """
-    yield EnvironmentFactory(str(tmpdir))
-
-
-class EnvironmentFactory:
-    def __init__(self, dir: str) -> None:
-        self.src_dir: str = os.path.join(dir, "src")
-        self.libs_dir: str = os.path.join(self.src_dir, "libs")
-        self.project: data.Project = data.Project(name="test")
-        self._ready: bool = False
-
-    async def setup(self) -> None:
-        if self._ready:
-            return
-
-        project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
-        shutil.copytree(project_template, self.src_dir)
-
-        # Set up git
-        subprocess.check_output(["git", "init"], cwd=self.src_dir)
-        subprocess.check_output(["git", "add", "*"], cwd=self.src_dir)
-        subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=self.src_dir)
-        subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=self.src_dir)
-
-        await self.project.insert()
-
-        self._ready = True
-
-    async def create_environment(self, main: str) -> data.Environment:
-        await self.setup()
-        branch: str = str(uuid.uuid4())
-        subprocess.check_output(["git", "checkout", "-b", branch], cwd=self.src_dir)
-        self.write_main(main)
-        environment: data.Environment = data.Environment(
-            name=branch, project=self.project.id, repo_url=self.src_dir, repo_branch=branch
-        )
-        await environment.insert()
-        return environment
-
-    def write_main(self, main: str, environment: Optional[data.Environment] = None) -> None:
-        if environment is not None:
-            subprocess.check_output(["git", "checkout", environment.repo_branch], cwd=self.src_dir)
-        with open(os.path.join(self.src_dir, "main.cf"), "w", encoding="utf-8") as fd:
-            fd.write(main)
-        subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
-
-    def add_v1_module(self, module_name: str, *, plugin_code: str, template_dir: str) -> None:
-        v1_module_from_template(
-            source_dir=template_dir,
-            dest_dir=os.path.join(self.libs_dir, module_name),
-            new_content_init_py=plugin_code,
-            new_name=module_name,
-        )
-        subprocess.check_output(["git", "add", f"{self.libs_dir}"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "add_v1_module", "--allow-empty"], cwd=self.src_dir)
 
 
 async def compile_and_assert(

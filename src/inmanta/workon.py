@@ -17,12 +17,15 @@
 """
 # TODO: ADR
 import click
+import functools
+import os
 import typing
 import uuid
 from collections import abc
 from typing import Optional, Union
 from dataclasses import dataclass
 
+from inmanta import config
 from inmanta.protocol.common import Result
 from inmanta.protocol.endpoints import SyncClient
 
@@ -42,9 +45,16 @@ class NamelessEnvironment(EnvironmentABC):
     pass
 
 
+@functools.total_ordering
 @dataclass(frozen=True)
 class NamedEnvironment(EnvironmentABC):
     name: str
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, NamedEnvironment):
+            return NotImplemented
+        # order by name with id as the tie-breaker
+        return (self.name, self.id) < (other.name, other.id)
 
 
 EnvironmentSequence = Union[abc.Sequence[NamelessEnvironment], abc.Sequence[NamedEnvironment]]
@@ -57,10 +67,11 @@ def get_environments() -> EnvironmentSequence:
     if result.code == 200:
         assert "environments" in result.result
         environments: object = result.result["environments"]
-        # TODO: make type-safe
-        return [NamedEnvironment(id=env["id"], name=env["name"]) for env in environments]
+        # TODO: make dict gets type-safe
+        return sorted(NamedEnvironment(id=env["id"], name=env["name"]) for env in environments)
     else:
         reason: str = f" Reason: {result.result['message']}" if "message" in result.result else ""
+        # TODO: this shouldn't use click
         click.echo(
             (
                 "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
@@ -68,8 +79,14 @@ def get_environments() -> EnvironmentSequence:
             ),
             err=True,
         )
-        # TODO implement
-        raise NotImplementedError()
+        def read_from_state_dir() -> abc.Iterator[NamedEnvironment]:
+            server_envs_dir: str = os.path.join(config.Config.get("config", "state-dir"), "server", "environments")
+            for d in os.listdir(server_envs_dir):
+                try:
+                    yield uuid.UUID(d)
+                except ValueError:
+                    pass
+        return [NamelessEnvironment(id=str(uuid)) for uuid in sorted(read_from_state_dir())]
 
 
 def echo_environments() -> None:
