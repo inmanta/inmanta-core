@@ -494,7 +494,7 @@ def get_one() -> "int":
 )
 def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str) -> None:
     """
-    to ensure backwards compatibility of modules when using the deprecated decorator
+    to ensure backwards compatibility of modules when using the @deprecated decorator
     a little piece of code is proposed in the docs:
     try:
         from inmanta.plugins import deprecated
