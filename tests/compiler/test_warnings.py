@@ -25,7 +25,7 @@ import pytest
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
 from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
-from inmanta.warnings import InmantaWarning, WarningsManager
+from inmanta.warnings import WarningsManager
 from utils import log_doesnt_contain
 
 
@@ -38,7 +38,7 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
     Verify whether the setting to configure warnings works correctly.
     """
     message_compiler_warning: str = "Some compiler runtime warning"
-    internal_warning: InmantaWarning = CompilerRuntimeWarning(None, message_compiler_warning)
+    internal_warning: CompilerRuntimeWarning = CompilerRuntimeWarning(None, message_compiler_warning)
     message_internal_warning: str = "Some external warning"
     external_warning: Warning = Warning(None, message_internal_warning)
 
@@ -90,16 +90,13 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: Type[War
     warnings.resetwarnings()
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
-    if isinstance(warning, InmantaWarning):
-        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s" % (category.__name__, warning))]
-    else:
-        assert caplog.record_tuples == [
-            (
-                "py.warnings",
-                logging.WARNING,
-                warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
-            )
-        ]
+    assert caplog.record_tuples == [
+        (
+            "py.warnings",
+            logging.WARNING,
+            warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
+        )
+    ]
 
 
 def test_shadow_warning(snippetcompiler):

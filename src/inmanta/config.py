@@ -24,6 +24,7 @@ import re
 import ssl
 import sys
 import uuid
+import warnings
 from collections import defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
 from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast, overload
@@ -33,7 +34,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
-import inmanta.warnings as inmanta_warnings
 from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
@@ -301,7 +301,7 @@ class Option(Generic[T]):
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
-                inmanta_warnings.warn(
+                warnings.warn(
                     "Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
                     category=DeprecationWarning,
                 )
