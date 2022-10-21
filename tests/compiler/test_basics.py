@@ -436,7 +436,7 @@ std::print(hi_world)
     "decorator, replaced_by",
     [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', '"newplugin"')],
 )
-def test_modules_plugin_deprecation(
+def test_modules_plugin_deprecated(
     tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
 ) -> None:
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
@@ -454,7 +454,6 @@ def get_one() -> "int":
     return 1
         """.strip()
 
-    print(test_module_plugin_contents)
     v1_module_from_template(
         v1_template_path,
         os.path.join(libs_dir, f"{test_module}"),
@@ -487,3 +486,56 @@ def get_one() -> "int":
                 )
             else:
                 assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+
+
+@pytest.mark.parametrize_any(
+    "decorator",
+    ["@deprecated", "@deprecated()", '@deprecated(replaced_by="newplugin")'],
+)
+def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str) -> None:
+    """
+    to ensure backwards compatibility of modules when using the deprecated decorator
+    a little piece of code is proposed in the docs:
+    try:
+        from inmanta.plugins import deprecated
+    except ImportError:
+        deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
+    if deprecated can't be imported the decorator should just be ignored and not crash de compilation.
+    this test verifies the lambda expression works as expected
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
+from inmanta.plugins import plugin
+
+{decorator}
+@plugin
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::get_one()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+
+    compiler.do_compile()

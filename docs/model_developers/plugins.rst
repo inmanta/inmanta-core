@@ -115,7 +115,6 @@ see :ref:`moddev-module`.
 Deprecate plugins
 ========================
 
-
 To deprecate a plugin the :func:`~inmanta.plugins.deprecated` decorator can be used in combination with the :func:`~inmanta.plugins.plugin`
 decorator. Using this decorator will log a warning message when the function is called. This decorator also accepts an
 optional argument ``replaced_by`` which can be used to potentially improve the warning message by telling which other
