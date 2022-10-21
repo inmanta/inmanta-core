@@ -262,7 +262,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
             spec_type = arg_spec.annotations[arg]
             if spec_type == Context:
-                self._context = PluginMeta.get_functions()
+                self._context = i
             else:
                 if default_start is not None and default_start <= i:
                     default_value = arg_spec.defaults[default_start - i]
