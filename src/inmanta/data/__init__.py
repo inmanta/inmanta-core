@@ -534,11 +534,6 @@ class DatabaseOrderV2(ABC):
         """Return the page boundaries, given the first and last record of the page"""
         pass
 
-    @abstractmethod
-    def is_single_valued(self) -> bool:
-        """Can this order be paged without the additional start and end id?"""
-        pass
-
 
 T_SELF = TypeVar("T_SELF", bound="AbstractDatabaseOrderV2")
 
@@ -658,9 +653,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
             last_id=None,
         )
 
-    def is_single_valued(self) -> bool:
-        return False
-
 
 class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
     """
@@ -757,9 +749,6 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
             end=assert_not_null(order_type.get_value(last[order_column_name])),
             last_id=assert_not_null(id_type.get_value(last[id_column])),
         )
-
-    def is_single_valued(self) -> bool:
-        return False
 
 
 class VersionedResourceOrder(AbstractDatabaseOrderV2):

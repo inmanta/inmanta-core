@@ -91,7 +91,6 @@ class RequestedPagingBoundaries:
 
     def validate(
         self,
-        allow_single_order: bool = False,
     ) -> None:
         start = self.start
         end = self.end
@@ -106,9 +105,6 @@ class RequestedPagingBoundaries:
                 f"Only one of first_id and last_id parameters is allowed at the same time. "
                 f"Received first_id: {first_id}, last_id: {last_id}"
             )
-
-        if allow_single_order and first_id is None and last_id is None:
-            return
 
         if (first_id and not start) or (first_id and end):
             raise InvalidQueryParameter(
@@ -138,7 +134,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
         self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
-        self.requested_page_boundaries.validate(self.order.is_single_valued())
+        self.requested_page_boundaries.validate()
 
     @abc.abstractmethod
     def get_base_url(self) -> str:
