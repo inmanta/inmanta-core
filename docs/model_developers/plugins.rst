@@ -161,7 +161,7 @@ the previous example would then look like this:
     try:
         from inmanta.plugins import deprecated
     except ImportError:
-    deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
+        deprecated = lambda function=None, **kwargs: function if function is not None else deprecated
 
 
     @deprecated(replaced_by="my_new_plugin")
