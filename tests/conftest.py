@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import warnings
+
 import toml
 
 """
@@ -116,6 +118,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 
@@ -872,8 +875,12 @@ def clienthelper(client, environment):
 
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
+    # Ensure that the test suite uses the same config for warnings as the default config used by the CLI tools.
     logging.captureWarnings(True)
+    cmd_parser = inmanta.app.cmd_parser()
+    WarningsManager.apply_config({"default": cmd_parser.get_default("warnings")})
     yield
+    warnings.resetwarnings()
     logging.captureWarnings(False)
 
 
