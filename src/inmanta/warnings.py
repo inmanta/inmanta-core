@@ -19,7 +19,7 @@
 import logging
 import warnings
 from enum import Enum
-from typing import Dict, List,  Mapping, Optional, TextIO, Type, Union
+from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 
 REGEX_INMANTA_MODULE: str = r"^(inmanta|inmanta\..*|inmanta_.*)$"
 
