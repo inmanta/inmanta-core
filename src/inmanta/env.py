@@ -549,7 +549,7 @@ class PythonEnvironment:
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
             raise PipInstallError(
-                f"Process {cmd} exited with return code {return_code}."
+                f"Process {cmd} exited with return code {return_code}. "
                 "Increase the verbosity level with the -v option for more information."
             )
 
