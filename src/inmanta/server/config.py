@@ -193,16 +193,6 @@ server_purge_version_interval = Option(
     is_time,
 )
 
-server_version_to_keep = Option(
-    "server",
-    "available-versions-to-keep",
-    10,
-    """[DEPRECATED: use AVAILABLE_VERSIONS_TO_KEEP environment setting]
-                                On boot and at regular intervals the server will purge older versions.
-                                This is the number of most recent versions to keep available.""",
-    is_int,
-)
-
 server_compiler_report_retention = Option(
     "server",
     "compiler-report-retention",
