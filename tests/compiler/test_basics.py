@@ -539,3 +539,52 @@ def get_one() -> "int":
     )
 
     compiler.do_compile()
+
+
+@pytest.mark.parametrize_any(
+    "decorator1,decorator2",
+    [("@plugin", "@deprecated"), ("", "@deprecated")],
+)
+def test_modules_fail_deprecated(
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator1: str, decorator2: str
+) -> None:
+    """
+    Test that en exception is raised when the @deprecated decorator is wrongly used
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin, deprecated
+
+{decorator1}
+{decorator2}
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::get_one()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+
+    with pytest.raises(Exception) as e:
+        compiler.do_compile()
+    assert "Can not deprecate a plugin test_module::get_one as it does not exist" in e.value.msg
