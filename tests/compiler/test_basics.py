@@ -587,4 +587,4 @@ def get_one() -> "int":
 
     with pytest.raises(Exception) as e:
         compiler.do_compile()
-    assert "Can not deprecate a plugin test_module::get_one as it does not exist" in e.value.msg
+    assert "Can not deprecate plugin test_module::get_one as it does not exist" in e.value.msg
