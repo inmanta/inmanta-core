@@ -148,7 +148,7 @@ Should the replace_by argument be omitted, the warning would look like this:
 
     Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated.
 
-If you want your module to stay backwards compatible you will also need to add a little piece of code that changes how
+If you want your module to stay compatible with older versions of inmanta you will also need to add a little piece of code that changes how
 :func:`~inmanta.plugins.deprecated` is imported as it does not exist in all versions.
 
 the previous example would then look like this:
