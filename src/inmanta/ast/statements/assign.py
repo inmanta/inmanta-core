@@ -19,12 +19,12 @@
 # pylint: disable-msg=W0613
 
 import typing
+import warnings
 from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
@@ -357,7 +357,7 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
         if "-" in str(self.name):
-            inmanta_warnings.warn(HyphenDeprecationWarning(self.name))
+            warnings.warn(HyphenDeprecationWarning(self.name))
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
