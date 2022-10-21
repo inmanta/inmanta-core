@@ -19,9 +19,9 @@
 
 import logging
 import typing
+import warnings
 from typing import Dict, Iterator, List, Optional, Tuple
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
@@ -423,7 +423,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.comment = None
         if self.name in TYPES:
-            inmanta_warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
+            warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
 
     def get_expression(self) -> ExpressionStatement:
         """
@@ -512,7 +512,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
-        inmanta_warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
+        warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 
