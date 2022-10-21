@@ -125,7 +125,7 @@ for example if the plugin below is called:
 .. code-block:: python
     :linenos:
 
-    from inmanta.plugins import plugin,deprecated
+    from inmanta.plugins import plugin, deprecated
 
     @deprecated(replaced_by="my_new_plugin")
     @plugin
