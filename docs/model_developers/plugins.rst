@@ -142,7 +142,7 @@ it will give following warning:
 
     Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated. It should be replaced by 'my_new_plugin'
 
-Should de replace_by argument be omitted, the warning would look like this:
+Should the replace_by argument be omitted, the warning would look like this:
 
 .. code-block::
 
