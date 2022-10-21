@@ -17,6 +17,7 @@
 """
 import os
 import warnings
+from typing import Optional
 
 import pytest
 
@@ -432,37 +433,34 @@ std::print(hi_world)
 
 
 @pytest.mark.parametrize_any(
-    "deprecated, replaced_by",
-    [(True, None), (True, '"new_function"'), (False, None), (False, '"new_function"')],
+    "decorator, replaced_by",
+    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', '"newplugin"')],
 )
 def test_modules_plugin_deprecation(
-    tmpdir: str, snippetcompiler_clean, modules_v2_dir: str, deprecated: bool, replaced_by: str
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
 ) -> None:
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
-    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
     test_module_plugin_contents: str = f"""
 from inmanta.plugins import plugin, deprecated
 
-@deprecated(replaced_by="newplugin")
+{decorator}
 @plugin
 def get_one() -> "int":
     return 1
         """.strip()
 
     print(test_module_plugin_contents)
-
-    v2_module_path: str = os.path.join(str(tmpdir), test_module)
-    module_from_template(
-        v2_template_path,
-        v2_module_path,
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
         new_name=test_module,
         new_content_init_cf="",  # original .cf needs std
         new_content_init_py=test_module_plugin_contents,
-        install=True,
     )
 
     snippetcompiler_clean.setup_for_snippet(
@@ -477,7 +475,7 @@ def get_one() -> "int":
     )
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        assert len(w) == 1 if deprecated else len(w) == 0
+        assert len(w) == 1 if decorator else len(w) == 0
         if len(w):
             warning = w[0]
             assert issubclass(warning.category, PluginDeprecationWarning)
@@ -488,4 +486,4 @@ def get_one() -> "int":
                     f"replaced by '{replaced_by_name}'" in str(warning.message)
                 )
             else:
-                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. " in str(warning.message)
+                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
