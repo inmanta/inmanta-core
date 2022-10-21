@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import warnings
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -84,6 +85,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from inmanta.warnings import WarningsManager
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -737,8 +739,12 @@ def clienthelper(client, environment):
 
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
+    # Ensure that the test suite uses the same config for warnings as the default config used by the CLI tools.
     logging.captureWarnings(True)
+    cmd_parser = inmanta.app.cmd_parser()
+    WarningsManager.apply_config({"default": cmd_parser.get_default("warnings")})
     yield
+    warnings.resetwarnings()
     logging.captureWarnings(False)
 
 

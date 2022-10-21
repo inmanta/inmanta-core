@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import traceback
+import warnings
 from abc import ABC, abstractmethod
 from io import BytesIO, TextIOBase
 from subprocess import CalledProcessError
@@ -52,7 +53,6 @@ import yaml
 from pkg_resources import parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, validator
 
-import inmanta.warnings
 from inmanta import env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, ModuleNotFoundException, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
@@ -121,7 +121,7 @@ class InvalidMetadata(CompilerException):
         return msg
 
 
-class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
+class MetadataDeprecationWarning(Warning):
     pass
 
 
@@ -372,7 +372,7 @@ class Metadata(BaseModel):
     def requires_to_list(cls, v: object) -> object:
         if isinstance(v, dict):
             # transform legacy format for backwards compatibility
-            inmanta.warnings.warn(
+            warnings.warn(
                 MetadataDeprecationWarning(
                     "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
                     " documented list syntax instead."
