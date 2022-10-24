@@ -675,7 +675,16 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[bool] = True,
     ) -> Tuple[List[str], List[object]]:
-        """Get the column and id values as filters"""
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
 
         # All the filter elements:
         # 1. name of the actual collumn in the DB
