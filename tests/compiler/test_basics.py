@@ -588,3 +588,52 @@ def get_one() -> "int":
     with pytest.raises(Exception) as e:
         compiler.do_compile()
     assert "Can not deprecate plugin test_module::get_one as it does not exist" in e.value.msg
+
+
+def test_modules_plugin_custom_name_deprecated(
+    tmpdir: str,
+    snippetcompiler_clean,
+    modules_dir: str,
+) -> None:
+    """
+    Test that a plugin with a custom name can be deprecated
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin, deprecated
+
+@deprecated
+@plugin("custom_name")
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::get_one()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        warning = w[0]
+        assert issubclass(warning.category, PluginDeprecationWarning)
+        assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)

@@ -151,7 +151,7 @@ Should the replace_by argument be omitted, the warning would look like this:
 If you want your module to stay compatible with older versions of inmanta you will also need to add a little piece of code that changes how
 :func:`~inmanta.plugins.deprecated` is imported as it does not exist in all versions.
 
-The previous example would then look like this. For older inmanta versions, the replace the decorator with a no-op.
+The previous example would then look like this. For older inmanta versions, replace the decorator with a no-op.
 
 .. code-block:: python
     :linenos:
