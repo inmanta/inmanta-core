@@ -1,0 +1,10 @@
+---
+description: Drop some inmanta module commands
+issue-nr: 4975
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: |
+    * The `inmanta module update` command was removed. Use the `inmanta project update` command instead.
+    * The `-r` option of the `inmanta module list` command was removed. Use the `inmanta module freeze` command instead.
