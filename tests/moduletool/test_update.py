@@ -71,7 +71,7 @@ def test_module_update_with_install_mode_master(
         assert not os.path.exists(path_extra_file)
 
     # Update module(s) of masterproject_multi_mod
-    ModuleTool().update(**kwargs_update_method)
+    ProjectTool().update(**kwargs_update_method)
 
     # Assert availability of test_file in masterproject_multi_mod
     extra_file_mod2 = os.path.join(libs_folder, "mod2", file_name_extra_file)
@@ -177,7 +177,7 @@ def test_module_update_with_v2_module(
     assert_version_installed(module_name="module1", version="1.2.3")
     assert_version_installed(module_name="module2", version="2.0.1")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
-    ModuleTool().update()
+    ProjectTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0" if install_mode == InstallMode.release else "2.2.1.dev0")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
@@ -238,4 +238,4 @@ def test_module_update_dependencies(
 def test_module_update_syntax_error_in_project(tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean) -> None:
     snippetcompiler_clean.setup_for_snippet(snippet="entity", autostd=False, install_project=False)
     with pytest.raises(ParserException):
-        ModuleTool().update()
+        ProjectTool().update()

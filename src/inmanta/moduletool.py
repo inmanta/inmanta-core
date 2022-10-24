@@ -454,30 +454,9 @@ class ModuleTool(ModuleLikeTool):
         )
 
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
-        lst.add_argument(
-            "-r",
-            help="(deprecated) Output a list of requires that can be included in project.yml",
-            dest="requires",
-            action="store_true",
-        )
 
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar="command", help="the command to  execute")
-
-        update = subparser.add_parser(
-            "update",
-            help=(
-                "(deprecated: use `inmanta project update` instead) Update all modules to the latest version compatible with"
-                " the module version constraints and install missing modules"
-            ),
-            description="""
-Update all modules to the latest version compatible with the module version constraints and install missing modules.
-
-This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
-compatible with the dependencies specified by the updated modules.
-            """.strip(),
-        )
-        add_deps_check_arguments(update)
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -754,7 +733,7 @@ version: 0.0.1dev0"""
             except Exception as e:
                 print(e)
 
-    def list(self, requires: bool = False) -> None:
+    def list(self) -> None:
         """
         List all modules in a table
         """
@@ -804,18 +783,13 @@ version: 0.0.1dev0"""
 
             table.append((name, generation, editable, version, reqv, matches))
 
-        if requires:
-            LOGGER.warning("The `inmanta module list -r` command has been deprecated.")
-            for name, _, _, version, _, _ in table:
-                print("    - %s==%s" % (name, version))
-        else:
-            t = texttable.Texttable()
-            t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Type", "Editable", "Installed version", "Expected in project", "Matches"))
-            t.set_cols_dtype(("t", "t", show_bool, "t", "t", show_bool))
-            for row in table:
-                t.add_row(row)
-            print(t.draw())
+        t = texttable.Texttable()
+        t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+        t.header(("Name", "Type", "Editable", "Installed version", "Expected in project", "Matches"))
+        t.set_cols_dtype(("t", "t", show_bool, "t", "t", show_bool))
+        for row in table:
+            t.add_row(row)
+        print(t.draw())
 
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
@@ -841,19 +815,6 @@ version: 0.0.1dev0"""
             with tempfile.TemporaryDirectory() as build_dir:
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
-
-    def update(
-        self,
-        module: Optional[str] = None,
-        project: Optional[Project] = None,
-        no_strict_deps_check: bool = False,
-        strict_deps_check: bool = False,
-    ) -> None:
-        """
-        Update all modules to the latest version compatible with the given module version constraints.
-        """
-        LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
-        ProjectTool().update(module, project, no_strict_deps_check, strict_deps_check)
 
     def status(self, module: Optional[str] = None) -> None:
         """
