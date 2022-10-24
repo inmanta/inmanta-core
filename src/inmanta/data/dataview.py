@@ -151,13 +151,32 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         return {}
 
-    @abc.abstractmethod
     async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+        query_builder = self.get_base_query()
+
+        # Project
+        query_builder = query_builder.select(select_clause="""SELECT *""")
+        query_builder = query_builder.filter(
+            *data.Resource.get_composed_filter_with_query_types(
+                offset=query_builder.offset, col_name_prefix=None, **self.filter
+            )
+        )
+        query_builder = self.clip_to_page(query_builder)
+        sql_query, values = query_builder.build()
+
+        records = await data.Resource.select_query(sql_query, values, no_obj=True)
+
+        dtos = self.construct_dtos(records)
+
+        paging_boundaries = None
+        if dtos:
+            paging_boundaries = self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
+        return dtos, paging_boundaries
+
+    @abc.abstractmethod
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[T_DTO]:
         """
-        Fetch the data and construct dto's
-
-        See existing implementations for typical usage
-
+        Convert the sequence of records into a sequence of DTO's
         """
         pass
 
@@ -166,7 +185,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Return the base query to get the data.
 
-        Must contain from clause and where clause if specific filtering is required
+        Must contain select, from and where clause if specific filtering is required
         """
         pass
 
@@ -426,6 +445,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
     def get_base_query(self) -> SimpleQueryBuilder:
         # Todo: when not including 'orphaned' in the filter, use a simple query
         query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT *""",
             prelude="""
             /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
             /* The cm_version CTE finds the maximum released version number in the environment  */
@@ -476,21 +496,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         )
         return query_builder
 
-    async def get_data(self) -> Tuple[Sequence[model.LatestReleasedResource], Optional[PagingBoundaries]]:
-        query_builder = self.get_base_query()
-
-        # Project
-        query_builder = query_builder.select(select_clause="""SELECT *""")
-        query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(
-                offset=query_builder.offset, col_name_prefix=None, **self.filter
-            )
-        )
-        query_builder = self.clip_to_page(query_builder)
-        sql_query, values = query_builder.build()
-
-        resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
-
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.LatestReleasedResource]:
         dtos: Sequence[LatestReleasedResource] = [
             model.LatestReleasedResource(
                 resource_id=resource["resource_id"],
@@ -499,13 +505,9 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 status=resource["status"],
                 requires=json.loads(resource["attributes"]).get("requires", []),
             )
-            for resource in resource_records
+            for resource in records
         ]
-
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(dict(resource_records[0]), dict(resource_records[-1]))
-        return dtos, paging_boundaries
+        return dtos
 
 
 class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedResource]):
@@ -547,45 +549,23 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
+            select_clause="SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment",
             from_clause=f" FROM {data.Resource.table_name()}",
             filter_statements=["environment = $1", "model = $2"],
             values=[self.environment.id, self.version],
         )
         return query_builder
 
-    async def get_data(self) -> Tuple[Sequence[model.VersionedResource], Optional[PagingBoundaries]]:
-        query_builder = self.get_base_query()
-
-        # Project
-        query_builder = query_builder.select(
-            select_clause="""SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment"""
-        )
-        query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(
-                offset=query_builder.offset, col_name_prefix=None, **self.filter
-            )
-        )
-        query_builder = self.clip_to_page(query_builder)
-        sql_query, values = query_builder.build()
-
-        versioned_resource_records = await data.Resource.select_query(sql_query, values, no_obj=True)
-
-        dtos = [
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.VersionedResource]:
+        return [
             model.VersionedResource(
                 resource_id=versioned_resource["resource_id"],
                 resource_version_id=versioned_resource["resource_id"] + f",v={self.version}",
                 id_details=data.Resource.get_details_from_resource_id(versioned_resource["resource_id"]),
                 requires=json.loads(versioned_resource["attributes"]).get("requires", []),  # todo: broken
             )
-            for versioned_resource in versioned_resource_records
+            for versioned_resource in records
         ]
-
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(
-                dict(versioned_resource_records[0]), dict(versioned_resource_records[-1])
-            )
-        return dtos, paging_boundaries
 
 
 class CompileReportView(DataView[CompileReportOrder, CompileReport]):
@@ -625,30 +605,17 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
+            select_clause="""SELECT id, remote_id, environment, requested,
+                            started, completed, do_export, force_update,
+                            metadata, environment_variables, success, version""",
             from_clause=f" FROM {data.Compile.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
         )
         return query_builder
 
-    async def get_data(self) -> Tuple[Sequence[CompileReport], Optional[PagingBoundaries]]:
-        query_builder = self.get_base_query()
-
-        # Project
-        query_builder = query_builder.select(
-            select_clause="""SELECT id, remote_id, environment, requested,
-                    started, completed, do_export, force_update,
-                    metadata, environment_variables, success, version"""
-        )
-        query_builder = query_builder.filter(
-            *data.Compile.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **self.filter)
-        )
-        query_builder = self.clip_to_page(query_builder)
-        sql_query, values = query_builder.build()
-
-        compile_records = await data.Compile.select_query(sql_query, values, no_obj=True)
-
-        dtos = [
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.CompileReport]:
+        return [
             CompileReport(
                 id=compile["id"],
                 remote_id=compile["remote_id"],
@@ -663,13 +630,8 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
                 environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
             )
-            for compile in compile_records
+            for compile in records
         ]
-
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(dict(compile_records[0]), dict(compile_records[-1]))
-        return dtos, paging_boundaries
 
 
 class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVersion]):
@@ -707,25 +669,14 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
     def get_base_query(self) -> SimpleQueryBuilder:
         subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
         query_builder = SimpleQueryBuilder(
+            select_clause="SELECT *",
             from_clause=f" FROM ({subquery}) as result",
             values=subquery_values,
         )
         return query_builder
 
-    async def get_data(self) -> Tuple[Sequence[DesiredStateVersion], Optional[PagingBoundaries]]:
-        query_builder = self.get_base_query()
-
-        # Project
-        query_builder = query_builder.select(select_clause="""SELECT *""")
-        query_builder = query_builder.filter(
-            *data.Compile.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **self.filter)
-        )
-        query_builder = self.clip_to_page(query_builder)
-        sql_query, values = query_builder.build()
-
-        desired_state_version_records = await data.ConfigurationModel.select_query(sql_query, values, no_obj=True)
-
-        dtos = [
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[DesiredStateVersion]:
+        return [
             DesiredStateVersion(
                 version=desired_state["version"],
                 date=desired_state["date"],
@@ -735,12 +686,5 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                 else [],
                 status=desired_state["status"],
             )
-            for desired_state in desired_state_version_records
+            for desired_state in records
         ]
-
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(
-                dict(desired_state_version_records[0]), dict(desired_state_version_records[-1])
-            )
-        return dtos, paging_boundaries

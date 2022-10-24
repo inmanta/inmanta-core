@@ -97,7 +97,7 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name: str, start: int, count: int, last_values: List[Any]) -> Any:  # noqa: N805
+    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -485,7 +485,7 @@ class ForcedStringCollumn(ColumnType):
         super().__init__(base_type=str, nullable=False)
         self.forced_type = forced_type
 
-    def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
@@ -535,7 +535,7 @@ class DatabaseOrderV2(ABC):
         pass
 
 
-T_SELF = TypeVar("T_SELF", bound="AbstractDatabaseOrderV2")
+T_SELF = TypeVar("T_SELF", bound="SingleDatabaseOrder")
 
 
 class SingleDatabaseOrder(DatabaseOrderV2, ABC):
