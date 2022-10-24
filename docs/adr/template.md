@@ -1,6 +1,6 @@
 # [short title of solved problem and solution]
 
-* Status: [proposed | rejected | accepted | deprecated | ... | superseded by [ADR-0005](0005-example.md)] <!-- optional -->
+* Status: [proposed | rejected | accepted | deprecated | ... | superseded by [ADR-0000](0000-logging-warnings-using-the-python-warnings-or-logging-module.md)] <!-- optional -->
 * Deciders: [list everyone involved in the decision] <!-- optional -->
 * Date: [YYYY-MM-DD when the decision was last updated] <!-- optional -->
 
