@@ -25,7 +25,7 @@ from pkg_resources import Requirement
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
-from inmanta.moduletool import ModuleTool, ProjectTool
+from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, clone_repo
 from packaging.version import Version
