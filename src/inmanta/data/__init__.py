@@ -407,9 +407,9 @@ class DatabaseOrder:
 
     def get_order_elements(self, invert: bool, table_prefix: Optional[str] = None) -> List[Tuple[ColumnNameStr, PagingOrder]]:
         """
-        return a list of column/order pairs, to format an ORDER VBY statement
+        return a list of column/order pairs, to format an ORDER BY statement
 
-        :param table_prefix: the name of the table to find the collumns in
+        :param table_prefix: the name of the table to find the columns in
         """
         table_prefix_value = "" if table_prefix is None else table_prefix + "."
         order = self.get_order(invert)
@@ -428,7 +428,7 @@ class DatabaseOrder:
 
 class ColumnType:
     """
-    Class encapsulating all handling of specific collumn types
+    Class encapsulating all handling of specific column types
 
     This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
     """
@@ -454,12 +454,12 @@ class ColumnType:
             return self.base_type(value)
         raise ValueError(f"{value} is not a valid value")
 
-    def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
         """
-        return the sql statement to get this collumn, as used in filter and other statements
+        return the sql statement to get this column, as used in filter and other statements
         """
         table_prefix_value = "" if table_prefix is None else table_prefix + "."
-        return table_prefix_value + collumn_name
+        return table_prefix_value + column_name
 
     def coalesce_to_min(self, value_reference: str) -> str:
         """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
@@ -487,9 +487,9 @@ class ForcedStringCollumn(ColumnType):
 
     def get_accessor(self, collumn_name: str, table_prefix: Optional[str] = None) -> str:
         """
-        return the sql statement to get this collumn, as used in filter and other statements
+        return the sql statement to get this column, as used in filter and other statements
         """
-        return super().get_accessor(collumn_name, table_prefix) + "::" + self.forced_type
+        return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
 
 
 StringColumn = ColumnType(base_type=str, nullable=False)
