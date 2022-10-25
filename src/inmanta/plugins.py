@@ -208,7 +208,8 @@ class PluginMeta(type):
             cls.__functions[function_name].replaced_by = replaced_by
         else:
             raise Exception(
-                f"Can not deprecate plugin '{full_name}': The '@deprecated' decorator should be used right before the '@plugin' decorator."
+                f"Can not deprecate plugin '{full_name}': The '@deprecated' decorator should be used right before the "
+                f"'@plugin' decorator. "
             )
 
     @classmethod
