@@ -238,8 +238,8 @@ class Environment(BaseModel):
     id: uuid.UUID
     name: str
     project_id: uuid.UUID
-    repo_url: str
-    repo_branch: str
+    repo_url: Optional[str]
+    repo_branch: Optional[str]
     settings: Dict[str, EnvSettingType]
     halted: bool
     description: Optional[str]
