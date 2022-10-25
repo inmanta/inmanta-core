@@ -207,10 +207,6 @@ class EnvironmentService(protocol.ServerSlice):
     async def create_environment(
         self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
     ) -> Apireturn:
-        if repository is None:
-            repository = ""
-        if branch is None:
-            branch = ""
         return (
             200,
             {"environment": rename_fields(await self.environment_create(project_id, name, repository, branch, environment_id))},
