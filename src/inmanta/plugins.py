@@ -155,6 +155,7 @@ class PluginMeta(type):
         return subclass
 
     __functions: Dict[str, Type["Plugin"]] = {}
+    __function_name_mapping: Dict[str, str] = {}
 
     @classmethod
     def add_function(cls, plugin_class: Type["Plugin"]) -> None:
@@ -168,8 +169,18 @@ class PluginMeta(type):
             raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
 
         name = "::".join(ns_parts[1:])
+        name = cls._build_name(str(plugin_class.__function_name__), str(plugin_class.__module__))
+        original_name = cls._build_name(str(plugin_class.__function_name__), str(plugin_class.__module__))
         cls.__functions[name] = plugin_class
+        cls.__function_name_mapping["a"] = name
 
+    def _build_name(cls,name:str, module: str):
+        ns_parts = module.split(".")
+        ns_parts.append(name)
+        if ns_parts[0] != const.PLUGINS_PACKAGE:
+            raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
+
+        return "::".join(ns_parts[1:])
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
@@ -549,8 +560,10 @@ def plugin(
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
+            dictionary[""] = fnc
             dictionary["deprecated"] = False
             dictionary["replaced_by"] = None
+            dictionary["original_name"] = fnc.__name__
 
             bases = (Plugin,)
             PluginMeta.__new__(PluginMeta, name, bases, dictionary)
