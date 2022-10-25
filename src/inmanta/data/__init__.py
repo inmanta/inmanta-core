@@ -2013,9 +2013,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         result.append(record)
                     else:
                         result.append(cls(from_postgres=True, **record))
-                        import pudb
-
-                        pu.db
                 return result
 
     def to_dict(self) -> JsonType:
