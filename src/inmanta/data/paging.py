@@ -27,7 +27,6 @@ from inmanta.data import (
     DatabaseOrder,
     InvalidFieldNameException,
     InvalidQueryParameter,
-    Notification,
     PagingCounts,
     PagingOrder,
     Parameter,
@@ -35,7 +34,6 @@ from inmanta.data import (
 )
 from inmanta.data.model import Agent as AgentModel
 from inmanta.data.model import BaseModel
-from inmanta.data.model import Notification as NotificationModel
 from inmanta.data.model import PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
 from inmanta.protocol import exceptions
@@ -135,22 +133,6 @@ class ParameterPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
         **query: Tuple[QueryType, object],
     ) -> PagingCounts:
         return await Parameter.count_parameters_for_paging(
-            query_identifier.environment, database_order, first_id, last_id, start, end, **query
-        )
-
-
-class NotificationPagingCountsProvider(PagingCountsProvider[QueryIdentifier]):
-    async def count_items_for_paging(
-        self,
-        query_identifier: QueryIdentifier,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        return await Notification.count_notifications_for_paging(
             query_identifier.environment, database_order, first_id, last_id, start, end, **query
         )
 
@@ -353,8 +335,3 @@ class AgentPagingHandler(PagingHandler[AgentModel, QueryIdentifier]):
 class ParameterPagingHandler(PagingHandler[ParameterModel, QueryIdentifier]):
     def get_base_url(self) -> str:
         return "/api/v2/parameters"
-
-
-class NotificationPagingHandler(PagingHandler[NotificationModel, QueryIdentifier]):
-    def get_base_url(self) -> str:
-        return "/api/v2/notification"

@@ -326,15 +326,3 @@ class ParameterFilterValidator(FilterValidator):
             "source": ContainsPartialFilter,
             "updated": DateRangeFilter,
         }
-
-
-class NotificationFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "title": ContainsPartialFilter,
-            "message": ContainsPartialFilter,
-            "read": BooleanEqualityFilter,
-            "cleared": BooleanEqualityFilter,
-            "severity": ContainsFilter,
-        }

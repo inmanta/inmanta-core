@@ -921,19 +921,20 @@ class FactOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-class NotificationOrder(DatabaseOrder):
+class NotificationOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which notifications should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            "created": datetime.datetime,
+            ColumnNameStr("created"): DateTimeColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Notification
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
 class BaseQueryBuilder(ABC):
@@ -5758,94 +5759,6 @@ class Notification(BaseDocument):
     uri: str
     read: bool = False
     cleared: bool = False
-
-    @classmethod
-    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT n.*""",
-            from_clause=f" FROM {cls.table_name()} as n",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_notifications_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def list_notifications(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Notification]:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        notification_records = cast(Iterable[Record], notification_records)
-        dtos = [
-            m.Notification(
-                id=notification["id"],
-                title=notification["title"],
-                message=notification["message"],
-                severity=notification["severity"],
-                created=notification["created"],
-                read=notification["read"],
-                cleared=notification["cleared"],
-                uri=notification["uri"],
-                environment=notification["environment"],
-            )
-            for notification in notification_records
-        ]
-        return dtos
 
     @classmethod
     async def clean_up_notifications(cls) -> None:

@@ -38,6 +38,8 @@ from inmanta.data import (
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
+    Notification,
+    NotificationOrder,
     PagingOrder,
     Parameter,
     QueryFilter,
@@ -924,4 +926,65 @@ class FactsView(DataView[FactOrder, Fact]):
                 environment=fact["environment"],
             )
             for fact in records
+        ]
+
+
+class NotificationsView(DataView[NotificationOrder, model.Notification]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        first_id: Optional[UUID] = None,
+        last_id: Optional[UUID] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
+        super().__init__(
+            order=NotificationOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "title": ContainsPartialFilter,
+            "message": ContainsPartialFilter,
+            "read": BooleanEqualityFilter,
+            "cleared": BooleanEqualityFilter,
+            "severity": ContainsFilter,
+        }
+
+    def get_base_url(self) -> str:
+        return "/api/v2/notification"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        return SimpleQueryBuilder(
+            select_clause="""SELECT n.*""",
+            from_clause=f" FROM {Notification.table_name()} as n",
+            filter_statements=[" environment = $1 "],
+            values=[self.environment.id],
+        )
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Notification]:
+        return [
+            model.Notification(
+                id=notification["id"],
+                title=notification["title"],
+                message=notification["message"],
+                severity=notification["severity"],
+                created=notification["created"],
+                read=notification["read"],
+                cleared=notification["cleared"],
+                uri=notification["uri"],
+                environment=notification["environment"],
+            )
+            for notification in records
         ]
