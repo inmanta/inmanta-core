@@ -162,25 +162,26 @@ class PluginMeta(type):
         """
         Add a function plugin class
         """
-        name = plugin_class.__function_name__
-        ns_parts = str(plugin_class.__module__).split(".")
-        ns_parts.append(name)
-        if ns_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
-
-        name = "::".join(ns_parts[1:])
+        # name = plugin_class.__function_name__
+        # ns_parts = str(plugin_class.__module__).split(".")
+        # ns_parts.append(name)
+        # if ns_parts[0] != const.PLUGINS_PACKAGE:
+        #     raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
+        #
+        # name = "::".join(ns_parts[1:])
         name = cls._build_name(str(plugin_class.__function_name__), str(plugin_class.__module__))
-        original_name = cls._build_name(str(plugin_class.__function_name__), str(plugin_class.__module__))
+        original_name = cls._build_name(str(plugin_class.original_name), str(plugin_class.__module__))
         cls.__functions[name] = plugin_class
-        cls.__function_name_mapping["a"] = name
+        cls.__function_name_mapping[original_name] = name
 
-    def _build_name(cls,name:str, module: str):
+    def _build_name(name: str, module: str):
         ns_parts = module.split(".")
         ns_parts.append(name)
         if ns_parts[0] != const.PLUGINS_PACKAGE:
             raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
 
         return "::".join(ns_parts[1:])
+
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
         """
@@ -189,14 +190,22 @@ class PluginMeta(type):
         return dict(cls.__functions)
 
     @classmethod
+    def get_originals(cls) -> Dict[str, str]:
+        """
+        Get the original name of all the functions with the associated function name
+        """
+        return dict(cls.__function_name_mapping)
+
+    @classmethod
     def deprecate_function(cls, fnc: Callable, replaced_by: Optional[str] = None) -> None:
         name = fnc.__name__
         ns_parts = str(fnc.__module__).split(".")
         ns_parts.append(name)
         full_name = "::".join(ns_parts[1:])
-        if full_name in cls.get_functions():
-            cls.__functions[full_name].deprecated = True
-            cls.__functions[full_name].replaced_by = replaced_by
+        if full_name in cls.get_originals():
+            function_name: str = cls.__function_name_mapping[full_name]
+            cls.__functions[function_name].deprecated = True
+            cls.__functions[function_name].replaced_by = replaced_by
         else:
             raise Exception(f"Can not deprecate plugin {full_name} as it does not exist")
 
