@@ -543,7 +543,7 @@ def get_one() -> "int":
 
 @pytest.mark.parametrize_any(
     "decorator1,decorator2",
-    [('@plugin("custom_name")', "@deprecated"), ("@plugin", "@deprecated"), ("", "@deprecated")],
+    [("@plugin", "@deprecated"), ("", "@deprecated")],
 )
 def test_modules_fail_deprecated(
     tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator1: str, decorator2: str
