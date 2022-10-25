@@ -196,7 +196,7 @@ class PluginMeta(type):
         else:
             raise Exception(
                 f"Can not deprecate plugin '{full_name}': The '@deprecated' decorator should be used in combination with the "
-                f"'@plugin' decorator and should be set first."
+                f"'@plugin' decorator and should be placed first."
             )
 
     @classmethod

@@ -589,7 +589,7 @@ def get_one() -> "int":
         compiler.do_compile()
     assert (
         "Can not deprecate plugin 'test_module::get_one': The '@deprecated' decorator should be used in combination with the "
-        f"'@plugin' decorator and should be set first." in e.value.msg
+        f"'@plugin' decorator and should be placed first." in e.value.msg
     )
 
 
