@@ -1183,10 +1183,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             # when a default value is used, make sure it is copied
             if field.default:
                 setattr(self, name, copy.deepcopy(field.default_value))
-                if name == "returncode":
-                    print(name)
-                    print(field.default_value)
-                    print(self.returncode)
             # update the list of required fields
             elif fields[name].required:
                 required_fields.append(name)
