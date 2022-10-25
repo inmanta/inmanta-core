@@ -1055,6 +1055,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         required: bool = not has_value
         default: object = default_unset
         is_many: bool = False
+
         # Only union with None (optional) is support
         if typing_inspect.is_union_type(annotation) and not typing_inspect.is_optional_type(annotation):
             raise InvalidAttribute(f"A union that is not an optional in field {attribute} is not supported.")
@@ -1159,6 +1160,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     def __process_kwargs(self, from_postgres: bool, kwargs: Dict[str, object]) -> None:
         """This helper method process the kwargs provided to the constructor and populates the fields of the object."""
         fields = self.get_field_metadata()
+
         if "id" in fields and "id" not in kwargs:
             kwargs["id"] = uuid.uuid4()
 
@@ -1182,7 +1184,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, field in fields.items():
             # when a default value is used, make sure it is copied
             if field.default:
-                setattr(self, name, copy.deepcopy(field.default_value))
+                setattr(self, name, copy.deepcopy(field.default_value)
+
             # update the list of required fields
             elif fields[name].required:
                 required_fields.append(name)
