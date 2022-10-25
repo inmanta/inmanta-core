@@ -99,35 +99,6 @@ class PagingCountsProvider(ABC, Generic[IQuery]):
         pass
 
 
-class ResourceHistoryPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifier]):
-    def __init__(self, data_class: Type[Resource]) -> None:
-        self.data_class = data_class
-
-    async def count_items_for_paging(
-        self,
-        query_identifier: ResourceQueryIdentifier,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        sql_query, values = self.data_class._get_paging_history_item_count_query(
-            query_identifier.environment,
-            query_identifier.resource_id,
-            database_order,
-            ColumnNameStr("attribute_hash"),
-            first_id,
-            last_id,
-            start,
-            end,
-            **query,
-        )
-        result = await self.data_class.select_query(sql_query, values, no_obj=True)
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-
 class ResourceLogPagingCountsProvider(PagingCountsProvider[ResourceQueryIdentifier]):
     def __init__(self, data_class: Type[ResourceAction]) -> None:
         self.data_class = data_class
@@ -425,35 +396,6 @@ class PagingHandler(ABC, Generic[T, IQuery]):
 
     def _encode_paging_url(self, base_url: str, params: Mapping[str, Union[SimpleTypes, List[str]]]) -> str:
         return f"{base_url}?{parse.urlencode(params, doseq=True)}"
-
-
-class ResourceHistoryPagingHandler(PagingHandler[ResourceHistory, ResourceQueryIdentifier]):
-    def __init__(
-        self,
-        counts_provider: PagingCountsProvider[ResourceQueryIdentifier],
-        resource_id: str,
-    ) -> None:
-        super().__init__(counts_provider)
-        self.resource_id = resource_id
-
-    def get_base_url(self) -> str:
-        return f"/api/v2/resource/{parse.quote(self.resource_id, safe='')}/history"
-
-    def _get_paging_boundaries(self, dtos: List[ResourceHistory], sort_order: DatabaseOrder) -> PagingBoundaries:
-        if sort_order.get_order() == "DESC":
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[0].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[-1].attribute_hash,
-            )
-        else:
-            return PagingBoundaries(
-                start=sort_order.ensure_boundary_type(dtos[-1].dict()[sort_order.get_order_by_column_api_name()]),
-                first_id=dtos[-1].attribute_hash,
-                end=sort_order.ensure_boundary_type(dtos[0].dict()[sort_order.get_order_by_column_api_name()]),
-                last_id=dtos[0].attribute_hash,
-            )
 
 
 class ResourceLogPagingHandler(PagingHandler[ResourceLog, ResourceQueryIdentifier]):

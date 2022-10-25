@@ -22,6 +22,7 @@ from abc import ABC
 from datetime import datetime
 from typing import Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
 from urllib import parse
+from urllib.parse import quote
 from uuid import UUID
 
 from asyncpg import Record
@@ -38,6 +39,8 @@ from inmanta.data import (
     InvalidSort,
     PagingOrder,
     QueryFilter,
+    ResourceHistoryOrder,
+    ResourceIdStr,
     ResourceOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
@@ -50,11 +53,13 @@ from inmanta.data.model import (
     DesiredStateVersion,
     LatestReleasedResource,
     PagingBoundaries,
+    ResourceHistory,
     ResourceVersionIdStr,
 )
 from inmanta.data.paging import PagingMetadata
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
+from inmanta.resources import Id
 from inmanta.server.validate_filter import (
     BooleanEqualityFilter,
     BooleanIsNotNullFilter,
@@ -155,7 +160,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         query_builder = self.get_base_query()
 
         # Project
-        query_builder = query_builder.select(select_clause="""SELECT *""")
         query_builder = query_builder.filter(
             *data.Resource.get_composed_filter_with_query_types(
                 offset=query_builder.offset, col_name_prefix=None, **self.filter
@@ -687,4 +691,88 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                 status=desired_state["status"],
             )
             for desired_state in records
+        ]
+
+
+class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> None:
+        super().__init__(
+            order=ResourceHistoryOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter={},
+        )
+        self.environment = environment
+        self.rid = rid
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {}
+
+    def get_base_url(self) -> str:
+        return f"/api/v2/resource/{quote(self.rid,safe='')}/history"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            prelude="""
+            /* Assign a sequence id to the rows, which is used for grouping consecutive ones with the same hash */
+                WITH resourcewithsequenceids AS (
+                  SELECT
+                    attribute_hash,
+                    model,
+                    attributes,
+                    date,
+                    ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
+                      PARTITION BY attribute_hash
+                      ORDER BY date
+                    ) AS seqid
+                  FROM resource JOIN configurationmodel cm
+                    ON resource.model = cm.version AND resource.environment = cm.environment
+                  WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
+                )
+            """,
+            select_clause="SELECT attribute_hash, date, attributes",
+            from_clause=f"""
+            FROM (SELECT
+                    attribute_hash,
+                    min(date) as date,
+                        (SELECT distinct on (attribute_hash) attributes
+                            FROM resourcewithsequenceids
+                            WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
+                            AND resourcewithsequenceids.seqid = rs.seqid
+                            ORDER BY attribute_hash, model
+                        ) as attributes
+                    FROM resourcewithsequenceids rs
+                    GROUP BY attribute_hash,  seqID) as sub
+            """,
+            values=[self.environment.id, self.rid],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
+        return [
+            ResourceHistory(
+                resource_id=self.rid,
+                attribute_hash=record["attribute_hash"],
+                attributes=json.loads(record["attributes"]),
+                date=record["date"],
+                requires=[
+                    Id.parse_resource_version_id(rvid).resource_str()
+                    for rvid in json.loads(record["attributes"]).get("requires", [])
+                ],
+            )
+            for record in records
         ]

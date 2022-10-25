@@ -59,6 +59,7 @@ import pydantic.tools
 import typing_inspect
 from asyncpg import Connection
 from asyncpg.protocol import Record
+from pydantic.validators import bool_validator
 
 import inmanta.db.versions
 from crontab import CronTab
@@ -293,7 +294,11 @@ class DatabaseOrder:
         self.order = order
 
     def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
-        """The validated column name string as it should be used in the database queries"""
+        """
+        The validated column name string as it should be used in the database queries
+
+        :param table_prefix: the name of the table to find the column in, without "."
+        """
         table_prefix_value = "" if table_prefix is None else table_prefix + "."
         return ColumnNameStr(table_prefix_value + self.order_by_column)
 
@@ -449,7 +454,9 @@ class ColumnType:
         if isinstance(value, self.base_type):
             # It is as expected
             return value
-        if issubclass(self.base_type, (str, int, bool)) and isinstance(value, (str, int, bool)):
+        if self.base_type == bool:
+            return pydantic.validators.bool_validator(value)
+        if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
             # We can cast between those types
             return self.base_type(value)
         raise ValueError(f"{value} is not a valid value")
@@ -473,8 +480,13 @@ class ColumnType:
                 return f"COALESCE({value_reference}, FALSE)"
             elif self.base_type == int:
                 return f"COALESCE({value_reference}, 0)"
-            else:
+            elif self.base_type == str:
                 return f"COALESCE({value_reference}, '')"
+            elif self.base_type == UUID:
+                return f"COALESCE({value_reference}, '00000000-0000-0000-0000-000000000000'::uuid)"
+            else:
+                assert False, "Unexpected argument type received, this should not happen"
+
         return value_reference
 
 
@@ -494,7 +506,8 @@ class ForcedStringCollumn(ColumnType):
 
 StringColumn = ColumnType(base_type=str, nullable=False)
 DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
-IntColumn = ColumnType(base_type=int, nullable=False)
+PositiveIntColumn = ColumnType(base_type=int, nullable=False)
+# Negatives ints require updating coalesce_to_min
 TextColumn = ForcedStringCollumn("text")
 UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 
@@ -796,18 +809,18 @@ class ResourceOrder(VersionedResourceOrder):
         return ColumnNameStr("resource_version_id"), StringColumn
 
 
-class ResourceHistoryOrder(DatabaseOrder):
+class ResourceHistoryOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resource history should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"date": datetime.datetime}
+        return {ColumnNameStr("date"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        # Sorting based on the date of the configuration model
-        return ConfigurationModel
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("attribute_hash"), StringColumn)
 
 
 class ResourceLogOrder(DatabaseOrder):
@@ -871,13 +884,13 @@ class DesiredStateVersionOrder(SingleDatabaseOrder):
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            ColumnNameStr("version"): IntColumn,
+            ColumnNameStr("version"): PositiveIntColumn,
         }
 
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("version"), IntColumn
+        return ColumnNameStr("version"), PositiveIntColumn
 
 
 class ParameterOrder(DatabaseOrder):
@@ -5219,147 +5232,6 @@ class Resource(BaseDocument):
             version=resource.model,
             attributes=resource.attributes,
         )
-
-    @classmethod
-    def get_history_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        query = f"""
-                /* Assign a sequence id to the rows, which is used for grouping consecutive ones with the same hash */
-                WITH resourcewithsequenceids AS (
-                  SELECT
-                    attribute_hash,
-                    model,
-                    attributes,
-                    date,
-                    ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
-                      PARTITION BY attribute_hash
-                      ORDER BY date
-                    ) AS seqid
-                  FROM resource JOIN configurationmodel cm
-                    ON resource.model = cm.version AND resource.environment = cm.environment
-                  WHERE resource.environment = ${offset} AND resource_id = ${offset + 1} AND cm.released = TRUE
-                )
-                   {select_clause}
-                    FROM
-                    (SELECT
-                        attribute_hash,
-                        min(date) as date,
-                        (SELECT distinct on (attribute_hash) attributes
-                            FROM resourcewithsequenceids
-                            WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
-                            AND resourcewithsequenceids.seqid = rs.seqid
-                            ORDER BY attribute_hash, model
-                        ) as attributes
-                    FROM resourcewithsequenceids rs
-                    GROUP BY attribute_hash,  seqID) as sub
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_resource_history(
-        cls,
-        env: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        limit: Optional[int] = None,
-    ) -> List[m.ResourceHistory]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-
-        select_clause = """
-        SELECT
-        attribute_hash,
-        date,
-        attributes """
-
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("attribute_hash"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-        )
-        query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause, environment=env, resource_id=resource_id, offset=len(values) + 1
-        )
-        if len(filter_statements) > 0:
-            query += cls._join_filter_statements(filter_statements)
-        values.extend(base_query_values)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
-        else:
-            query += f" ORDER BY {order_by_column} {order}, attribute_hash {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                query += " LIMIT " + str(limit)
-        else:
-            query += f" LIMIT {DBLIMIT} "
-
-        if backward_paging:
-            query = f"""SELECT * FROM ({query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.attribute_hash {order}"""
-        result = await cls.select_query(query, values, no_obj=True)
-        result = cast(List[Record], result)
-
-        return [
-            m.ResourceHistory(
-                resource_id=resource_id,
-                attribute_hash=record["attribute_hash"],
-                attributes=json.loads(record["attributes"]),
-                date=record["date"],
-                requires=[
-                    resources.Id.parse_resource_version_id(rvid).resource_str()
-                    for rvid in json.loads(record["attributes"]).get("requires", [])
-                ],
-            )
-            for record in result
-        ]
-
-    @classmethod
-    def _get_paging_history_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
