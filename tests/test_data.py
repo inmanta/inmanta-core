@@ -2472,7 +2472,7 @@ async def test_update_to_none_value(init_dataclasses_and_load_schema):
     assert env.repo_url is None
 
     env = await data.Environment.get_by_id(env.id)
-    assert env.repo_url == ""
+    assert env.repo_url is None
 
 
 async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
