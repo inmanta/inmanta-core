@@ -2970,7 +2970,7 @@ def test_arg_collector():
 
 async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_schema):
     """
-    verify 'returncode' (optional field with no default value) exists on a report.
+    verify that an optional field with no default value (returncode) exists on an object retrieved from the DB.
     """
     project = data.Project(name="test")
     await project.insert()
