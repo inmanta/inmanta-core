@@ -7,4 +7,4 @@ destination-branches: [master]
 sections:
   deprecation-note: |
     * The `inmanta module update` command was removed. Use the `inmanta project update` command instead.
-    * The `-r` option of the `inmanta module list` command was removed. Use the `inmanta module freeze` command instead.
+    * The `-r` option of the `inmanta module list` command was removed. Use the `inmanta project freeze` command instead.
