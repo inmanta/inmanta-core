@@ -823,17 +823,14 @@ class ResourceHistoryOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("attribute_hash"), StringColumn)
 
 
-class ResourceLogOrder(DatabaseOrder):
+class ResourceLogOrder(SingleDatabaseOrder):
     """Represents the ordering by which resource logs should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"timestamp": datetime.datetime}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ResourceAction
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("timestamp"): DateTimeColumn,
+        }
 
 
 class CompileReportOrder(AbstractDatabaseOrderV2):
@@ -886,11 +883,6 @@ class DesiredStateVersionOrder(SingleDatabaseOrder):
         return {
             ColumnNameStr("version"): PositiveIntColumn,
         }
-
-    @property
-    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("version"), PositiveIntColumn
 
 
 class ParameterOrder(DatabaseOrder):
@@ -4311,126 +4303,6 @@ class ResourceAction(BaseDocument):
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
         return super().get_valid_field_names() + ["timestamp", "level", "msg"]
-
-    @classmethod
-    def _get_resource_logs_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
-        # characters in the query
-        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
-
-        query = f"""{select_clause}
-                    FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_logs_paged(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List["m.ResourceLog"]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=None,
-            last_id=None,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause="SELECT action_id, action, timestamp, unnested_message ",
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                                ORDER BY matching_records.{order_by_column} {order}"""
-
-        records = cast(Iterable[Record], await cls.select_query(db_query, values, no_obj=True, connection=connection))
-        logs = []
-        for record in records:
-            message = json.loads(record["unnested_message"])
-            logs.append(
-                m.ResourceLog(
-                    action_id=record["action_id"],
-                    action=record["action"],
-                    timestamp=record["timestamp"],
-                    level=message.get("level"),
-                    msg=message.get("msg"),
-                    args=message.get("args", []),
-                    kwargs=message.get("kwargs", {}),
-                )
-            )
-        return logs
-
-    @classmethod
-    def _get_paging_resource_log_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":

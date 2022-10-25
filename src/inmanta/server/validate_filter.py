@@ -308,28 +308,6 @@ class FilterValidator(ABC):
         return query
 
 
-class ResourceLogFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "minimal_log_level": LogLevelFilter,
-            "timestamp": DateRangeFilter,
-            "message": ContainsPartialFilter,
-            "action": ContainsFilterResourceAction,
-        }
-
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
-        # Change the api names of the filters to the names used internally in the database
-        query = super().process_filters(filter)
-        if query.get("minimal_log_level"):
-            filter_value = query.pop("minimal_log_level")
-            query["level"] = filter_value
-        if query.get("message"):
-            filter_value = query.pop("message")
-            query["msg"] = filter_value
-        return query
-
-
 class AgentFilterValidator(FilterValidator):
     @property
     def allowed_filters(self) -> Dict[str, Type[Filter]]:

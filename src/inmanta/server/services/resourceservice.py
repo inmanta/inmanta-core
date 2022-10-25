@@ -29,8 +29,8 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, QueryType
-from inmanta.data.dataview import ResourceHistoryView, ResourcesInVersionView, ResourceView
+from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -46,7 +46,6 @@ from inmanta.data.model import (
     VersionedResource,
     VersionedResourceDetails,
 )
-from inmanta.data.paging import ResourceLogPagingCountsProvider, ResourceLogPagingHandler, ResourceQueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -56,7 +55,7 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import InvalidFilter, ResourceLogFilterValidator
+from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -953,45 +952,13 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[datetime.datetime] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "timestamp.desc",
-    ) -> ReturnValue[List[ResourceLog]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+    ) -> ReturnValue[Sequence[ResourceLog]]:
         try:
-            resource_order = data.ResourceLogOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourceLogsView(environment=env, rid=rid, limit=limit, sort=sort, start=start, end=end, filter=filter)
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ResourceLogFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
-        try:
-            dtos = await data.ResourceAction.get_logs_paged(
-                resource_order, limit, env.id, rid, start=start, end=end, connection=None, **query
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction), rid)
-        metadata = await paging_handler.prepare_paging_metadata(
-            ResourceQueryIdentifier(environment=env.id, resource_id=rid), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=None,
-            last_id=None,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
     @handle(methods_v2.get_resources_in_version, env="tid")
     async def get_resources_in_version(

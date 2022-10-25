@@ -39,8 +39,10 @@ from inmanta.data import (
     InvalidSort,
     PagingOrder,
     QueryFilter,
+    ResourceAction,
     ResourceHistoryOrder,
     ResourceIdStr,
+    ResourceLogOrder,
     ResourceOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
@@ -54,6 +56,7 @@ from inmanta.data.model import (
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
+    ResourceLog,
     ResourceVersionIdStr,
 )
 from inmanta.data.paging import PagingMetadata
@@ -65,12 +68,14 @@ from inmanta.server.validate_filter import (
     BooleanIsNotNullFilter,
     CombinedContainsFilterResourceState,
     ContainsFilter,
+    ContainsFilterResourceAction,
     ContainsPartialFilter,
     DateRangeFilter,
     Filter,
     FilterValidator,
     IntRangeFilter,
     InvalidFilter,
+    LogLevelFilter,
 )
 from inmanta.types import SimpleTypes
 from inmanta.util import datetime_utc_isoformat
@@ -776,3 +781,86 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
             )
             for record in records
         ]
+
+
+class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        rid: ResourceIdStr,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        filter: Optional[Dict[str, List[str]]] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> None:
+        super().__init__(
+            order=ResourceLogOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+        self.rid = rid
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "minimal_log_level": LogLevelFilter,
+            "timestamp": DateRangeFilter,
+            "message": ContainsPartialFilter,
+            "action": ContainsFilterResourceAction,
+        }
+
+    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+        # Change the api names of the filters to the names used internally in the database
+        query = super().process_filters(filter)
+        if query.get("minimal_log_level"):
+            filter_value = query.pop("minimal_log_level")
+            query["level"] = filter_value
+        if query.get("message"):
+            filter_value = query.pop("message")
+            query["msg"] = filter_value
+        return query
+
+    def get_base_url(self) -> str:
+        return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
+        # characters in the query
+        resource_id = self.rid.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+        query_builder = SimpleQueryBuilder(
+            select_clause="SELECT action_id, action, timestamp, unnested_message",
+            from_clause=f"""
+            FROM
+                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
+                    unnested_message ->> 'level' as level,
+                    unnested_message ->> 'msg' as msg,
+                    unnested_message
+                    FROM {ResourceAction.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
+                    WHERE environment = $1 AND rvid LIKE $2 ESCAPE '#') unnested
+            """,
+            values=[self.environment.id, resource_id],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceLog]:
+        logs = []
+        for record in records:
+            message = json.loads(record["unnested_message"])
+            logs.append(
+                ResourceLog(
+                    action_id=record["action_id"],
+                    action=record["action"],
+                    timestamp=record["timestamp"],
+                    level=message.get("level"),
+                    msg=message.get("msg"),
+                    args=message.get("args", []),
+                    kwargs=message.get("kwargs", {}),
+                )
+            )
+        return logs
