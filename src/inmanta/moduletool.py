@@ -153,7 +153,7 @@ class ProjectTool(ModuleLikeTool):
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new project.yml, default is the existing project.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
@@ -288,25 +288,25 @@ class ModuleTool(ModuleLikeTool):
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new module.yml, default is the existing module.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
             "-r",
             "--recursive",
-            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-            "which defaults to False",
+            help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
+            " which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " project.yml is used which defaults to ~=",
+            " module.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
