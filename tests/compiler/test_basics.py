@@ -543,7 +543,7 @@ def get_one() -> "int":
 
 @pytest.mark.parametrize_any(
     "decorator1,decorator2",
-    [("@plugin", "@deprecated"), ("", "@deprecated")],
+    [('@plugin("custom_name")', "@deprecated"), ("@plugin", "@deprecated"), ("", "@deprecated")],
 )
 def test_modules_fail_deprecated(
     tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator1: str, decorator2: str
@@ -587,7 +587,10 @@ def get_one() -> "int":
 
     with pytest.raises(Exception) as e:
         compiler.do_compile()
-    assert "Can not deprecate plugin test_module::get_one as it does not exist" in e.value.msg
+    assert (
+        "Can not deprecate plugin 'test_module::get_one': The '@deprecated' decorator should be used right before the '@plugin' decorator."
+        in e.value.msg
+    )
 
 
 def test_modules_plugin_custom_name_deprecated(
@@ -625,7 +628,7 @@ def get_one() -> "int":
         f"""
        import {test_module}
 
-       value = {test_module}::get_one()
+       value = {test_module}::custom_name()
                    """.strip(),
         add_to_module_path=[libs_dir],
         autostd=False,

@@ -207,7 +207,9 @@ class PluginMeta(type):
             cls.__functions[function_name].deprecated = True
             cls.__functions[function_name].replaced_by = replaced_by
         else:
-            raise Exception(f"Can not deprecate plugin {full_name} as it does not exist")
+            raise Exception(
+                f"Can not deprecate plugin '{full_name}': The '@deprecated' decorator should be used right before the '@plugin' decorator."
+            )
 
     @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
