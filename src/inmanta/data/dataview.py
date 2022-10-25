@@ -35,9 +35,11 @@ from inmanta.data import (
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
+    FactOrder,
     InvalidQueryParameter,
     InvalidSort,
     PagingOrder,
+    Parameter,
     QueryFilter,
     ResourceAction,
     ResourceHistoryOrder,
@@ -53,6 +55,7 @@ from inmanta.data.model import (
     CompileReport,
     DesiredStateLabel,
     DesiredStateVersion,
+    Fact,
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
@@ -750,7 +753,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 )
             """,
             select_clause="SELECT attribute_hash, date, attributes",
-            from_clause=f"""
+            from_clause="""
             FROM (SELECT
                     attribute_hash,
                     min(date) as date,
@@ -864,3 +867,61 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 )
             )
         return logs
+
+
+class FactsView(DataView[FactOrder, Fact]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        first_id: Optional[UUID] = None,
+        last_id: Optional[UUID] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
+        super().__init__(
+            order=FactOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "resource_id": ContainsPartialFilter,
+        }
+
+    def get_base_url(self) -> str:
+        return "/api/v2/facts"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            select_clause="SELECT p.id, p.name, p.value, p.source, p.resource_id, p.updated, p.metadata, p.environment",
+            from_clause=f"FROM {Parameter.table_name()} as p",
+            filter_statements=["p.environment = $1 ", "p.source = 'fact'"],
+            values=[self.environment.id],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[Fact]:
+        return [
+            Fact(
+                id=fact["id"],
+                name=fact["name"],
+                value=fact["value"],
+                source=fact["source"],
+                updated=fact["updated"],
+                resource_id=fact["resource_id"],
+                metadata=json.loads(fact["metadata"]) if fact["metadata"] else None,
+                environment=fact["environment"],
+            )
+            for fact in records
+        ]
