@@ -2966,3 +2966,25 @@ def test_arg_collector():
     assert args("a") == "$4"
     assert args("b") == "$5"
     assert args.get_values() == ["a", "b"]
+
+
+async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_schema):
+    """
+    verify 'returncode' (optional field with no default value) exists on a report.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    started = datetime.datetime(2018, 7, 15, 12, 30)
+    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    compile1 = data.Compile(environment=env.id, started=started, completed=completed)
+    await compile1.insert()
+
+    report = data.Report(started=datetime.datetime.now(), command="cmd", name="test", compile=compile1.id)
+    await report.insert()
+
+    report = await data.Report.get_by_id(report.id)
+    assert report.returncode is None
