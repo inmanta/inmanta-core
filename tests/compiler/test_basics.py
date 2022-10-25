@@ -588,8 +588,8 @@ def get_one() -> "int":
     with pytest.raises(Exception) as e:
         compiler.do_compile()
     assert (
-        "Can not deprecate plugin 'test_module::get_one': The '@deprecated' decorator should be used right before the '@plugin' decorator."
-        in e.value.msg
+        "Can not deprecate plugin 'test_module::get_one': The '@deprecated' decorator should be used in combination with the "
+        f"'@plugin' decorator and should be set first." in e.value.msg
     )
 
 
