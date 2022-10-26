@@ -176,17 +176,17 @@ class TestResult:
         yield from self.test_result_data.items()
 
 
-@dataclass
 class DataParser:
     """
     This class fetches all information regarding a specific code change and the tests that are run on this specific commit
     and sends it all to the influxdb database.
     """
 
-    code_change_data: CodeChange = field(default_factory=lambda: CodeChange())
-    test_result_data: TestResult = field(default_factory=lambda: TestResult())
+    def __init__(self):
+        self.code_change_data: CodeChange = CodeChange()
+        self.test_result_data: TestResult = TestResult()
 
-    def parse(self, dry_run: bool):
+    def run(self, dry_run: bool):
         try:
             self.code_change_data.parse()
             self.test_result_data.parse()
@@ -229,7 +229,7 @@ class DataParser:
 @click.option("--dry-run/--full-run", default=True, help="If Dry-run only: no data will be sent to the db.")
 def main(dry_run: bool):
     data_parser = DataParser()
-    data_parser.parse(dry_run)
+    data_parser.run(dry_run)
 
 
 if __name__ == "__main__":
