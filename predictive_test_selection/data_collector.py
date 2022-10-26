@@ -8,6 +8,8 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import Any, List, Mapping, MutableMapping, Sequence, Set, Tuple, Union
 
+import click
+
 import requests
 
 logging.basicConfig(level=logging.INFO)
@@ -184,12 +186,12 @@ class DataParser:
     code_change_data: CodeChange = field(default_factory=lambda: CodeChange())
     test_result_data: TestResult = field(default_factory=lambda: TestResult())
 
-    def parse(self):
+    def parse(self, dry_run: bool):
         try:
             self.code_change_data.parse()
             self.test_result_data.parse()
 
-            self.send_influxdb_data()
+            self.send_influxdb_data(dry_run)
         except AbortDataCollection as e:
             LOGGER.debug(f"Data collection was aborted because {str(e)}")
 
@@ -223,6 +225,12 @@ class DataParser:
             LOGGER.info(payload)
 
 
-if __name__ == "__main__":
+@click.command()
+@click.option("--dry-run/--full-run", default=True, help="If Dry-run only: no data will be sent to the db.")
+def main(dry_run: bool):
     data_parser = DataParser()
-    data_parser.parse()
+    data_parser.parse(dry_run)
+
+
+if __name__ == "__main__":
+    main()
