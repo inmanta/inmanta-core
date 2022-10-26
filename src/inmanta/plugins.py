@@ -589,7 +589,7 @@ def plugin(
 
 @stable_api
 def deprecated(
-    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: Dict[str, object]
+    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: abc.Mapping[str, object]
 ) -> Callable:  # noqa: H801
     def inner(fnc: Callable):
         PluginMeta.deprecate_function(fnc, replaced_by)
