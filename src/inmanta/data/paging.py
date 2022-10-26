@@ -33,8 +33,7 @@ from inmanta.data import (
     QueryType,
 )
 from inmanta.data.model import Agent as AgentModel
-from inmanta.data.model import BaseModel
-from inmanta.data.model import PagingBoundaries
+from inmanta.data.model import BaseModel, PagingBoundaries
 from inmanta.data.model import Parameter as ParameterModel
 from inmanta.protocol import exceptions
 from inmanta.types import SimpleTypes

@@ -455,6 +455,8 @@ class ColumnType:
             return value
         if self.base_type == bool:
             return pydantic.validators.bool_validator(value)
+        if self.base_type == datetime.datetime and isinstance(value, str):
+            return dateutil.parser.isoparse(value)
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
             # We can cast between those types
             return self.base_type(value)
@@ -505,6 +507,7 @@ class ForcedStringCollumn(ColumnType):
 
 StringColumn = ColumnType(base_type=str, nullable=False)
 DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
+OptionalDateTimeColumn  = ColumnType(base_type=datetime.datetime, nullable=True)
 PositiveIntColumn = ColumnType(base_type=int, nullable=False)
 # Negatives ints require updating coalesce_to_min
 TextColumn = ForcedStringCollumn("text")
@@ -702,11 +705,14 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         # 1. name of the actual collumn in the DB
         # 2. type of the collumn
         # 3. sanitized value of the collumn
+
         filter_elements: List[Tuple[str, ColumnType, object]] = []
 
-        if column_value is not None:
-            # Have column value
-            order_by_collumns_type = self.get_valid_sort_columns()[self.order_by_column]
+        order_by_collumns_type = self.get_valid_sort_columns()[self.order_by_column]
+        paging_on_nullable = order_by_collumns_type.nullable and id_value is not None
+
+        if column_value is not None or paging_on_nullable:
+            # Have column value or paging on nullable
             filter_elements.append(
                 (self.order_by_column, order_by_collumns_type, order_by_collumns_type.get_value(column_value))
             )
@@ -759,16 +765,11 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
 
         id_column, id_type = self.id_column
 
-        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
-            # Make mypy happy
-            assert in_value is not None
-            return in_value
-
         return PagingBoundaries(
-            start=assert_not_null(order_type.get_value(first[order_column_name])),
-            first_id=assert_not_null(id_type.get_value(first[id_column])),
-            end=assert_not_null(order_type.get_value(last[order_column_name])),
-            last_id=assert_not_null(id_type.get_value(last[id_column])),
+            start=order_type.get_value(first[order_column_name]),
+            first_id=id_type.get_value(first[id_column]),
+            end=order_type.get_value(last[order_column_name]),
+            last_id=id_type.get_value(last[id_column]),
         )
 
 
@@ -884,25 +885,22 @@ class DesiredStateVersionOrder(SingleDatabaseOrder):
         }
 
 
-class ParameterOrder(DatabaseOrder):
+class ParameterOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which parameters should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "name": str,
-            "source": str,
-            "updated": Optional[datetime.datetime],
+            ColumnNameStr("name"): StringColumn,
+            ColumnNameStr("source"): StringColumn,
+            ColumnNameStr("updated"): OptionalDateTimeColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Parameter
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
-    def get_order_by_column_db_name(self, table_prefix: Optional[str] = None) -> ColumnNameStr:
-        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(super().get_order_by_column_db_name(table_prefix))
 
 
 class FactOrder(AbstractDatabaseOrderV2):

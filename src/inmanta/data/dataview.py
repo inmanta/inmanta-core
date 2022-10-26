@@ -50,7 +50,7 @@ from inmanta.data import (
     ResourceOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
-    model,
+    model, ParameterOrder,
 )
 from inmanta.data.model import (
     BaseModel,
@@ -987,4 +987,61 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
                 environment=notification["environment"],
             )
             for notification in records
+        ]
+
+
+class ParameterView(DataView[ParameterOrder, model.Parameter]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        first_id: Optional[UUID] = None,
+        last_id: Optional[UUID] = None,
+        start: Optional[Union[str, datetime]] = None,
+        end: Optional[Union[str, datetime]] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
+        super().__init__(
+            order=ParameterOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "source": ContainsPartialFilter,
+            "updated": DateRangeFilter,
+        }
+
+    def get_base_url(self) -> str:
+        return "/api/v2/parameters"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        return SimpleQueryBuilder(
+            select_clause="""SELECT p.id, p.name, p.value, p.source, p.updated, p.metadata, p.environment""",
+            from_clause=f"FROM {Parameter.table_name()} as p",
+            filter_statements=["environment = $1", "p.source != 'fact'"],
+            values=[self.environment.id],
+        )
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Parameter]:
+        return [
+            model.Parameter(
+                id=parameter["id"],
+                name=parameter["name"],
+                value=parameter["value"],
+                source=parameter["source"],
+                updated=parameter["updated"],
+                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
+                environment=parameter["environment"],
+            )
+            for parameter in records
         ]

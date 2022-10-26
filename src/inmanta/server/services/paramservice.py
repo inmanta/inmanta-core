@@ -23,19 +23,18 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 from inmanta import data, util
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, InvalidSort, ParameterOrder, QueryType
-from inmanta.data.dataview import FactsView
+from inmanta.data.dataview import FactsView, ParameterView
 from inmanta.data.model import Fact, Parameter, ResourceIdStr
 from inmanta.data.paging import ParameterPagingCountsProvider, ParameterPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
-from inmanta.server.validate_filter import InvalidFilter, ParameterFilterValidator
+from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -304,62 +303,23 @@ class ParameterService(protocol.ServerSlice):
         end: Optional[Union[datetime.datetime, str]] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
-    ) -> ReturnValue[List[Parameter]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ParameterFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValue[Sequence[Parameter]]:
         try:
-            parameter_order = ParameterOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-
-        typed_start, typed_end = None, None
-        if start is not None:
-            typed_start = parameter_order.ensure_boundary_type(start)
-        if end is not None:
-            typed_end = parameter_order.ensure_boundary_type(end)
-
-        try:
-            dtos = await data.Parameter.get_parameter_list(
-                database_order=parameter_order,
+            handler = ParameterView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
-                start=typed_start,
-                end=typed_end,
-                connection=None,
-                **query,
+                start=start,
+                end=end,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
-        paging_handler = ParameterPagingHandler(ParameterPagingCountsProvider())
-        paging_metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            parameter_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=typed_start,
-            end=typed_end,
-            has_next=paging_metadata.after > 0,
-            has_prev=paging_metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))
 
     @handle(methods_v2.get_all_facts, env="tid")
     async def get_all_facts(
