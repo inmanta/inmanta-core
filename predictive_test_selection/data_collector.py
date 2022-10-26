@@ -6,12 +6,12 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, List, Mapping, MutableMapping, Sequence, Tuple, Union
+from typing import Any, List, Mapping, MutableMapping, Sequence, Set, Tuple, Union
 
 import requests
 
+logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
-
 # This parameter is used to configure how far in the past we look back (in days) when computing the number of modifications
 # made to files involved in a specific code change. This parameter is used in the learning algorithm as well and as such it
 # should not be modified in one place without modifying it in the other.
@@ -53,7 +53,7 @@ class CodeChange:
     commit_hash: str = field(init=False)
     modification_count: List[int] = field(init=False)
     file_cardinality: int = field(init=False)
-    file_extensions: str = field(init=False)
+    file_extensions: Set[str] = field(init=False)
     dev_branch: str = field(init=False)
 
     changed_files: List[str] = field(init=False, repr=False)
@@ -70,9 +70,8 @@ class CodeChange:
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
         self._compute_changed_files(current_branch)
-
-        self.file_extensions = self._get_file_extensions()
-        self.modification_count = self._count_modifications()
+        self._compute_file_extensions()
+        self._count_modifications()
 
     def _compute_changed_files(self, current_branch: str) -> None:
         """
@@ -96,7 +95,7 @@ class CodeChange:
             if max_cardinality == 0:
                 raise AbortDataCollection(f"the code change is aligned with dev branch {dev_branch}.")
 
-    def _count_modifications(self) -> List[int]:
+    def _count_modifications(self) -> None:
         """
         Counts the number of modifications that have been made to the files involved in this change for each interval (in days)
         specified in the past CHANGE_LOOK_BACK parameter.
@@ -116,14 +115,27 @@ class CodeChange:
                     ps.wait()
 
             modification_count.append(acc)
-        return modification_count
+        self.modification_count = modification_count
 
-    def _get_file_extensions(self) -> str:
+    def _compute_file_extensions(self) -> None:
         """
-        Returns a string of comma-separated distinct file extensions present in this code change
+        Computes the set of file extensions present in this code change
         """
-        extensions = set([os.path.splitext(file)[1].replace(".", "") for file in self.changed_files])
-        return str(extensions).replace(" ", "")[1:-1]
+        self.file_extensions = set([os.path.splitext(file)[1].replace(".", "") for file in self.changed_files])
+
+    def get_modifications_data_format(self) -> str:
+        """
+        Converts the modification_count (List[int]) to a condensed csv format.
+        e.g [1, 2, 3] becomes "1,2,3"
+        """
+        return str(self.modification_count).replace(" ", "")[1:-1]
+
+    def get_file_extensions_data_format(self) -> str:
+        """
+        Converts the file_extensions (Set[str]) to a condensed csv format.
+        e.g {'txt', 'md', 'py'} becomes 'txt,md,py'
+        """
+        return str(self.file_extensions).replace(" ", "").replace("'", "").replace('"', "")[1:-1]
 
 
 @dataclass
@@ -186,15 +198,15 @@ class DataParser:
         Anatomy of each line of the payload:
         Measurement: test_result
         tag_set: commit_hash, dev_branch, fqn (Tags should be sorted by key for improved performance: https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
-        field_set: failed_as_int, modification_count, file_extension, file_cardinality
+        field_set: failed_as_int, modification_count, file_extensions, file_cardinality
         timestamp: Use influx_db auto-generated timestamp
         """
         data_points: List[str] = [
             (
                 f"test_result,commit_hash={self.code_change_data.commit_hash},"
                 f"dev_branch={self.code_change_data.dev_branch},fqn={test_fqn}"
-                f" failed_as_int={failed},modification_count={self.code_change_data.modification_count},"
-                f'file_extension="{self.code_change_data.file_extensions}",'
+                f' failed_as_int={failed},modification_count="{self.code_change_data.get_modifications_data_format()}",'
+                f'file_extensions="{self.code_change_data.get_file_extensions_data_format()}",'
                 f"file_cardinality={self.code_change_data.file_cardinality}"
             )
             for test_fqn, failed in self.test_result_data
