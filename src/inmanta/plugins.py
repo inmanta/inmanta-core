@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
-
 import inspect
 import os
 import subprocess
+from collections import abc
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
@@ -161,14 +161,7 @@ class PluginMeta(type):
         """
         Add a function plugin class
         """
-        name = plugin_class.__function_name__
-        ns_parts = str(plugin_class.__module__).split(".")
-        ns_parts.append(name)
-        if ns_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
-
-        name = "::".join(ns_parts[1:])
-        cls.__functions[name] = plugin_class
+        cls.__functions[plugin_class.__fq_plugin_name__] = plugin_class
 
     @classmethod
     def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
@@ -176,21 +169,6 @@ class PluginMeta(type):
         Get all functions that are registered
         """
         return dict(cls.__functions)
-
-    @classmethod
-    def deprecate_function(cls, fnc: Callable, replaced_by: Optional[str] = None) -> None:
-        name = fnc.__name__
-        ns_parts = str(fnc.__module__).split(".")
-        ns_parts.append(name)
-        full_name = "::".join(ns_parts[1:])
-        if hasattr(fnc, "plugin_name"):
-            cls.__functions[fnc.plugin_name].deprecated = True
-            cls.__functions[fnc.plugin_name].replaced_by = replaced_by
-        else:
-            raise Exception(
-                f"Can not deprecate plugin '{full_name}': The '@deprecated' decorator should be used in combination with the "
-                f"'@plugin' decorator and should be placed first."
-            )
 
     @classmethod
     def clear(cls, inmanta_module: Optional[str] = None) -> None:
@@ -215,6 +193,9 @@ class Plugin(NamedType, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
     """
+
+    deprecated: bool = False
+    replaced_by: Optional[str] = None
 
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
@@ -436,6 +417,11 @@ class Plugin(NamedType, metaclass=PluginMeta):
                 if len(result[0]) == 0:
                     raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
 
+    @classmethod
+    def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
+        cls.deprecated = True
+        cls.replaced_by = replaced_by
+
     def __call__(self, *args: object, **kwargs: object) -> object:
         """
         The function call itself
@@ -551,20 +537,20 @@ def plugin(
             if ns_parts[0] != const.PLUGINS_PACKAGE:
                 raise Exception("All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
 
-            fnc.plugin_name = "::".join(ns_parts[1:])
+            fq_plugin_name = "::".join(ns_parts[1:])
 
             dictionary = {}
             dictionary["__module__"] = fnc.__module__
+
             dictionary["__function_name__"] = name
+            dictionary["__fq_plugin_name__"] = fq_plugin_name
+
             dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
-            dictionary["deprecated"] = False
-            dictionary["replaced_by"] = None
 
             bases = (Plugin,)
-            PluginMeta.__new__(PluginMeta, name, bases, dictionary)
-
+            fnc.__plugin__ = PluginMeta.__new__(PluginMeta, name, bases, dictionary)
             return fnc
 
         return call
@@ -582,10 +568,20 @@ def plugin(
 
 @stable_api
 def deprecated(
-    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: Dict[str, object]
+    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: abc.Mapping[str, object]
 ) -> Callable:
+    """
+    the kwargs are currently ignored but where added in cas we want to add something later on.
+    """
+
     def inner(fnc: Callable):
-        PluginMeta.deprecate_function(fnc, replaced_by)
+        if hasattr(fnc, "__plugin__"):
+            fnc.__plugin__.deprecate_function(replaced_by)
+        else:
+            raise Exception(
+                f"Can not deprecate '{fnc.__name__}': The '@deprecated' decorator should be used in combination with the "
+                f"'@plugin' decorator and should be placed first."
+            )
         return fnc
 
     if function is not None:
