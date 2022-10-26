@@ -37,6 +37,7 @@ from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.compiler.data import CompileData
+from inmanta.compiler.finalizer import Finalizers
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
@@ -44,6 +45,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta
+from inmanta.stable_api import stable_api
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -75,7 +77,8 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
         success = False
-
+    finally:
+        Finalizers.call_finalizers()
     LOGGER.debug("Compile done")
 
     if not success:
@@ -192,7 +195,6 @@ class Compiler(object):
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
-
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
@@ -314,3 +316,8 @@ class Compiler(object):
         add_trace(exception)
         exception.attach_compile_info(self)
         raise exception
+
+
+@stable_api
+def finalizer(fnc):
+    Finalizers.add_function(fnc)
