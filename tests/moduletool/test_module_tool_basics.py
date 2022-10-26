@@ -228,7 +228,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
 
     with pytest.raises(ParserException):
         # mod 10 is updated to a version that contains a syntax error
-        app(["modules", "update"])
+        app(["project", "update"])
 
     # unfreeze deps to allow update
     pyml["requires"] = ["mod10 == 4.0"]
@@ -247,7 +247,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     Project._project = None
 
     # attempt to update
-    app(["modules", "update"])
+    app(["project", "update"])
 
     # Additional output
     Project._project = None
@@ -258,7 +258,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     assert os.path.exists(os.path.join(m9dir, "model", "b.cf"))
     m10dir = os.path.join(proj, "libs", "mod10")
     assert os.path.exists(os.path.join(m10dir, "secondsignal"))
-    # should not be lastest version
+    # should not be latest version
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
 
 

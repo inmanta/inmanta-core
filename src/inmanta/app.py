@@ -113,7 +113,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format a record with added indentation."""
-        indent = " " * self.get_header_length(record)
+        indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)
 
@@ -451,14 +451,6 @@ def project(options: argparse.Namespace) -> None:
 def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument(
-        "--dashboard",
-        dest="dashboard",
-        help="Start the dashboard and keep the server running. "
-        "The server uses the current project as the source for server recompiles",
-        action="store_true",
-        default=False,
-    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -702,7 +694,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         dest="warnings",
         choices=["warn", "ignore", "error"],
         default="warn",
-        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+        help="The warning behaviour. Must be one of 'warn', 'ignore', 'error'",
     )
     parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False

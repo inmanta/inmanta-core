@@ -18,10 +18,8 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
-    CompilerDeprecationWarning,
     CompilerException,
     DoubleSetException,
     Locatable,
@@ -758,33 +756,6 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return len(self.waiters) + int(self.attribute.has_relation_precedence_rules())
 
 
-class DeprecatedOptionVariable(OptionVariable):
-    """
-    Represents nullable attributes. In the future this class can be removed, and a standard
-    ResultVariable with nullable type should be used.
-    """
-
-    def freeze(self) -> None:
-        if self.value is None:
-            warning: CompilerDeprecationWarning = CompilerDeprecationWarning(
-                None,
-                "No value for attribute %s.%s. Assign null instead of leaving unassigned." % (self.myself.type, self.attribute),
-            )
-            warning.set_location(self.myself.get_location())
-            inmanta_warnings.warn(warning)
-        super().freeze()
-
-    def _get_null_value(self) -> object:
-        return NoneValue()
-
-    def _validate_value(self, value: object) -> None:
-        if isinstance(value, Unknown):
-            return
-        if self.type is None:
-            return
-        self.type.validate(value)
-
-
 class QueueScheduler(object):
     """
     Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
@@ -1077,6 +1048,34 @@ class Resolver(object):
             root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
             assert root_graph is not None
             return root_graph.get_own_variable(name)
+
+
+class VariableResolver(Resolver):
+    """
+    Resolver that resolves a single variable to a value, and delegates the rest to its parent resolver.
+    """
+
+    __slots__ = (
+        "parent",
+        "name",
+        "variable",
+    )
+
+    def __init__(self, parent: Resolver, name: str, variable: ResultVariable[T]) -> None:
+        self.parent: Resolver = parent
+        self.name: str = name
+        self.variable: ResultVariable[T] = variable
+        self.dataflow_graph = (
+            DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
+        )
+
+    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+        if root is None and name == self.name:
+            return self.variable
+        return self.parent.lookup(name, root)
+
+    def get_root_resolver(self) -> "Resolver":
+        return self.parent.get_root_resolver()
 
 
 class NamespaceResolver(Resolver):

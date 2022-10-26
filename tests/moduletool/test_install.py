@@ -108,7 +108,7 @@ def test_complex_checkout(git_modules_dir, modules_repo):
 
     # test all tools, perhaps isolate to other test case
     ModuleTool().execute("list", [])
-    ModuleTool().execute("update", [])
+    ProjectTool().execute("update", [])
     ModuleTool().execute("status", [])
     ModuleTool().execute("push", [])
 
@@ -131,7 +131,7 @@ def test_for_git_failures(git_modules_dir, modules_repo):
         # test all tools, perhaps isolate to other test case
         ProjectTool().execute("install", [])
         ModuleTool().execute("list", [])
-        ModuleTool().execute("update", [])
+        ProjectTool().execute("update", [])
         ModuleTool().execute("status", [])
         ModuleTool().execute("push", [])
     finally:

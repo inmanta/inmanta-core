@@ -1176,8 +1176,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             else:
                 value = None
 
-            if value is not None:
-                setattr(self, name, value)
+            setattr(self, name, value)
 
             del fields[name]
 

@@ -549,7 +549,7 @@ class PythonEnvironment:
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
             raise PipInstallError(
-                f"Process {cmd} exited with return code {return_code}."
+                f"Process {cmd} exited with return code {return_code}. "
                 "Increase the verbosity level with the -v option for more information."
             )
 
@@ -670,6 +670,7 @@ class CommandRunner:
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
         of the sub-process.
         """
+        full_output: List[str] = []
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -677,18 +678,23 @@ class CommandRunner:
             shell=shell,
             env=env_vars,
         )
-
-        full_output: List[str] = []
         assert process.stdout is not None  # Make mypy happy
-        for line in process.stdout:
-            # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
-            output = line.decode().strip()
-            full_output.append(output)
-            self.logger.debug(output)
+        try:
+            for line in process.stdout:
+                # Eagerly consume the buffer to avoid a deadlock in case the subprocess fills it entirely.
+                output = line.decode().strip()
+                full_output.append(output)
+                self.logger.debug(output)
+        finally:
+            process.stdout.close()
 
-        return_code = process.wait(timeout=timeout)
-
-        return return_code, full_output
+        try:
+            return_code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return -1, full_output
+        else:
+            return return_code, full_output
 
 
 @contextlib.contextmanager

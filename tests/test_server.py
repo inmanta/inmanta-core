@@ -259,7 +259,6 @@ async def test_n_versions_env_setting_scope(client, server):
 
     # Create a lot of versions in both environments
     for _ in range(n_many_versions):
-
         env1_version = (await client.reserve_version(env_1_id)).result["data"]
         env2_version = (await client.reserve_version(env_2_id)).result["data"]
 
@@ -1387,3 +1386,19 @@ async def test_start_location_no_redirect(server):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert base_url == response.effective_url
+
+
+@pytest.mark.parametrize("path", ["", "/", "/test"])
+async def test_redirect_dashboard_to_console(server, path):
+    """
+    Ensure that there is a redirection from the dashboard to the webconsole
+    """
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/dashboard%s" % (port, path)
+    result_url = "http://localhost:%s/console%s" % (port, path)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert result_url == response.effective_url
