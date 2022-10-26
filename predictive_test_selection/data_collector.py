@@ -23,11 +23,14 @@ DEV_BRANCHES = ["master", "iso5", "iso4"]
 # Url of the influx db into which we store the collected data
 INFLUX_DB_URL = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
 
+
 class AbortDataCollection(Exception):
     """
     This exception is raised when the current data collection should be aborted.
     """
+
     pass
+
 
 @dataclass
 class CodeChange:
@@ -165,6 +168,7 @@ class DataParser:
     This class fetches all information regarding a specific code change and the tests that are run on this specific commit
     and sends it all to the influxdb database.
     """
+
     code_change_data: CodeChange = field(default_factory=lambda: CodeChange())
     test_result_data: TestResult = field(default_factory=lambda: TestResult())
 
@@ -190,7 +194,7 @@ class DataParser:
                 f"test_result,commit_hash={self.code_change_data.commit_hash},"
                 f"dev_branch={self.code_change_data.dev_branch},fqn={test_fqn}"
                 f" failed_as_int={failed},modification_count={self.code_change_data.modification_count},"
-                f"file_extension=\"{self.code_change_data.file_extensions}\","
+                f'file_extension="{self.code_change_data.file_extensions}",'
                 f"file_cardinality={self.code_change_data.file_cardinality}"
             )
             for test_fqn, failed in self.test_result_data
