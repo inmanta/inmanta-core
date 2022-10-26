@@ -1,5 +1,0 @@
----
-description: Add data collector to record historic test failure rates for future predictive test selection.
-change-type: minor
-destination-branches:
-  - master
