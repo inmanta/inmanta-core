@@ -47,7 +47,7 @@ flowchart LR;
         tag_set:
             - fqn: str -> the test case fully qualified name (used for computing test failure rate)
             - commit_hash: str -> ???
-            - dev_branch: Set[str] -> comma separated list of all dev branches this code change should go to
+            - dev_branch: str -> the dev branch this code change belongs to
         field_set:
             - failed_as_int: int -> denotes if this test failed for this code change
             - modification_count: List[int] -> counts the historic number of modifications made to the files for each
@@ -75,5 +75,4 @@ flowchart LR;
 
 # Predictor design
 
-    Ultimately, the predictor outputs the list of tests to run for a specific code change. In order
-a probability of failure for the given inputs (code_change, test_file)
+    Ultimately, the predictor outputs the list of tests to run for a specific code change.

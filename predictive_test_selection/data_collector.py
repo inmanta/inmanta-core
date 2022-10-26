@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Any, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Any, List, Mapping, MutableMapping, Sequence, Tuple, Union
 
 import requests
 
@@ -17,38 +17,43 @@ LOGGER = logging.getLogger(__name__)
 # should not be modified in one place without modifying it in the other.
 CHANGE_LOOK_BACK: List[int] = [3, 14, 56]
 
+# Currently supported dev_branches
+DEV_BRANCHES = ["master", "iso5", "iso4"]
+
 # Url of the influx db into which we store the collected data
 INFLUX_DB_URL = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
 
-
-class CommonFileExtension(Enum):
-    other = auto()
-    mo = auto()
-    po = auto()
-    pyc = auto()
-    json = auto()
-    dat = auto()
-    pyi = auto()
-    py = auto()
-
+class AbortDataCollection(Exception):
+    """
+    This exception is raised when the current data collection should be aborted.
+    """
+    pass
 
 @dataclass
 class CodeChange:
     """
     Collects all data pertaining to the code change in the currently checked out branch:
-    - commit_hash -> The latest commit hash
-    - modification_count -> Number of modifications made to the files involved in this change in the last 3, 14 and 56 days.
-      The points in time at which we look back is configured by the CHANGE_LOOK_BACK parameter.
-    - file_cardinality -> Number of files involved in this change
-    - file_extension -> File extensions of the files involved in this change
-    - dev_branches -> List of the dev branches
+    Recorded attributes:
+        - commit_hash -> The latest commit hash.
+        - modification_count -> Number of modifications made to the files involved in this change in the last 3, 14 and 56 days.
+          The points in time at which we look back is configured by the CHANGE_LOOK_BACK parameter.
+        - file_cardinality -> Number of files involved in this change.
+        - file_extensions -> File extensions of the files involved in this change.
+        - dev_branch -> The dev branch this code change is closest to.
+
+    Non-recorded attributes:
+        - changed_files -> List of file names involved in this change.
+
+    :raises AbortDataCollection: If this code change was created by the merge tool or if it is aligned with a dev branch
     """
 
     commit_hash: str = field(init=False)
     modification_count: List[int] = field(init=False)
     file_cardinality: int = field(init=False)
-    file_extension: List[int] = field(init=False)
-    dev_branches: List[str] = field(init=False)
+    file_extensions: str = field(init=False)
+    dev_branch: str = field(init=False)
+
+    changed_files: List[str] = field(init=False, repr=False)
 
     def parse(self):
         # Get latest commit hash:
@@ -57,19 +62,46 @@ class CodeChange:
         # Get current branch
         cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
         current_branch: str = subprocess.check_output(cmd).strip().decode()
-        # TODO refactor block
-        cmd = ["git", "diff", f"master...{current_branch}", "--name-only"]
-        changed_files: List[str] = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
-        self.file_cardinality = len(changed_files)
-        self.file_extension = self._get_extension_vector(changed_files)
-        self.modification_count = self._count_modifications(changed_files)
+        if current_branch.startswith("merge-tool/"):
+            raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
-    def _count_modifications(self, changed_files: List[str]) -> List[int]:
+        self._compute_changed_files(current_branch)
+
+        self.file_extensions = self._get_file_extensions()
+        self.modification_count = self._count_modifications()
+
+    def _compute_changed_files(self, current_branch: str) -> None:
+        """
+        Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
+        The distance metric used is the total number of files in the diff with the current branch
+        """
+        max_cardinality: Union[float, int] = float("inf")
+
+        for dev_branch in DEV_BRANCHES:
+            cmd = ["git", "diff", f"{dev_branch}...{current_branch}", "--name-only"]
+            changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
+
+            current_cardinality = len(changed_files)
+
+            if current_cardinality < max_cardinality:
+                max_cardinality = current_cardinality
+                self.dev_branch = dev_branch
+                self.changed_files = changed_files
+                self.file_cardinality = current_cardinality
+
+            if max_cardinality == 0:
+                raise AbortDataCollection(f"the code change is aligned with dev branch {dev_branch}.")
+
+    def _count_modifications(self) -> List[int]:
+        """
+        Counts the number of modifications that have been made to the files involved in this change for each interval (in days)
+        specified in the past CHANGE_LOOK_BACK parameter.
+        """
         modification_count: List[int] = []
         for n_days_ago in CHANGE_LOOK_BACK:
             acc: int = 0
-            for file in changed_files:
+            for file in self.changed_files:
                 ps = subprocess.Popen(
                     ["git", "log", f"--after='{n_days_ago} days ago'", "--format=oneline", f"{file}"],
                     stdout=subprocess.PIPE,
@@ -83,18 +115,12 @@ class CodeChange:
             modification_count.append(acc)
         return modification_count
 
-    def _get_extension_vector(self, changed_files: List[str]) -> List[int]:
-        extensions = set([os.path.splitext(file)[1].replace(".", "") for file in changed_files])
-
-        out = [0] * len(CommonFileExtension)
-        known_exts = [ext for ext in CommonFileExtension]
-        for ext in extensions:
-            try:
-                idx = known_exts.index(CommonFileExtension[ext])
-            except KeyError:
-                idx = known_exts.index(CommonFileExtension["other"])
-            out[idx] = 1
-        return out
+    def _get_file_extensions(self) -> str:
+        """
+        Returns a string of comma-separated distinct file extensions present in this code change
+        """
+        extensions = set([os.path.splitext(file)[1].replace(".", "") for file in self.changed_files])
+        return str(extensions).replace(" ", "")[1:-1]
 
 
 @dataclass
@@ -143,27 +169,31 @@ class DataParser:
     test_result_data: TestResult = field(default_factory=lambda: TestResult())
 
     def parse(self):
-        self.code_change_data.parse()
-        self.test_result_data.parse()
+        try:
+            self.code_change_data.parse()
+            self.test_result_data.parse()
+
+            self.send_influxdb_data()
+        except AbortDataCollection as e:
+            LOGGER.debug(f"Data collection was aborted because {str(e)}")
 
     def _create_data_payload(self) -> str:
         """
         Anatomy of each line of the payload:
         Measurement: test_result
-        tag_set: fqn, commit_hash, dev_branch
+        tag_set: commit_hash, dev_branch, fqn (Tags should be sorted by key for improved performance: https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
         field_set: failed_as_int, modification_count, file_extension, file_cardinality
         timestamp: Use influx_db auto-generated timestamp
         """
         data_points: List[str] = [
             (
-                f"test_result,fqn={test_fqn},commit_hash={self.code_change_data.commit_hash},"
-                f"dev_branch={dev_branch}"
+                f"test_result,commit_hash={self.code_change_data.commit_hash},"
+                f"dev_branch={self.code_change_data.dev_branch},fqn={test_fqn}"
                 f" failed_as_int={failed},modification_count={self.code_change_data.modification_count},"
-                f"file_extension={self.code_change_data.file_extension},"
+                f"file_extension=\"{self.code_change_data.file_extensions}\","
                 f"file_cardinality={self.code_change_data.file_cardinality}"
             )
             for test_fqn, failed in self.test_result_data
-            for dev_branch in self.code_change_data.dev_branches
         ]
         return "\n".join(data_points)
 
