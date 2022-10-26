@@ -178,13 +178,6 @@ class PluginMeta(type):
         return dict(cls.__functions)
 
     @classmethod
-    def get_originals(cls) -> Dict[str, str]:
-        """
-        Get the original name of all the functions with the associated function name
-        """
-        return dict(cls.__function_name_mapping)
-
-    @classmethod
     def deprecate_function(cls, fnc: Callable, replaced_by: Optional[str] = None) -> None:
         name = fnc.__name__
         ns_parts = str(fnc.__module__).split(".")
@@ -515,7 +508,7 @@ def plugin(
     commands: Optional[List[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> Callable:  # noqa: H801
+) -> Callable:
     """
     Python decorator to register functions with inmanta as plugin
 
@@ -590,7 +583,7 @@ def plugin(
 @stable_api
 def deprecated(
     function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: Dict[str, object]
-) -> Callable:  # noqa: H801
+) -> Callable:
     def inner(fnc: Callable):
         PluginMeta.deprecate_function(fnc, replaced_by)
         return fnc
