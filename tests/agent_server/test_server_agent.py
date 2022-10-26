@@ -729,24 +729,6 @@ async def test_get_set_param(resource_container, environment, client, server):
     assert result.code == 200
 
 
-async def test_register_setting(environment, client, server):
-    """
-    Test registering a new setting.
-    """
-    new_setting: Setting = Setting(
-        name="a new boolean setting",
-        default=False,
-        typ="bool",
-        validator=convert_boolean,
-        doc="a new setting",
-    )
-    env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
-    await env_slice.register_setting(new_setting)
-    result = await client.get_setting(tid=environment, id="a new boolean setting")
-    assert result.code == 200
-    assert result.result["value"] is False
-
-
 async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
     """
     Test retrieving facts from the agent

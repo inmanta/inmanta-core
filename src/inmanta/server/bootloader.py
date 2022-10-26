@@ -121,10 +121,12 @@ class InmantaBootloader(object):
         return dict(cls.AVAILABLE_EXTENSIONS)
 
     # Extension loading Phase I: from start to setup functions collected
-    def _discover_plugin_packages(self) -> List[str]:
+    def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> List[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
 
+        :param return_all_available_packages: Return all available plugin packages and independent of whether the extension is
+                                              enabled or not.
         :return: A list of all subpackages defined in inmanta_ext
         """
         available = self.get_available_extensions()
@@ -133,7 +135,9 @@ class InmantaBootloader(object):
         extensions = []
         enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
 
-        if enabled:
+        if return_all_available_packages:
+            extensions.extend(available.values())
+        elif enabled:
             for ext in enabled:
                 if ext not in available:
                     raise PluginLoadFailed(
@@ -154,7 +158,7 @@ class InmantaBootloader(object):
 
         return extensions
 
-    def _load_extension(self, name: str) -> Callable[[ApplicationContext], None]:
+    def _load_extension(self, name: str) -> ModuleType:
         """Import the extension defined in the package in name and return the setup function that needs to be called for the
         extension to register its slices in the application context.
         """
@@ -164,38 +168,49 @@ class InmantaBootloader(object):
             raise PluginLoadFailed(f"Could not load module {name}") from e
 
         try:
-            mod = importlib.import_module(f"{name}.{EXTENSION_MODULE}")
-            return mod.setup
+            return importlib.import_module(f"{name}.{EXTENSION_MODULE}")
         except Exception as e:
             raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
 
-    def _load_extensions(self) -> Dict[str, Callable[[ApplicationContext], None]]:
+    def _load_extensions(self, load_all_extensions: bool = False) -> Dict[str, ModuleType]:
         """Discover all extensions, validate correct naming and load its setup function"""
-        plugins: Dict[str, Callable[[ApplicationContext], None]] = {}
-        for name in self._discover_plugin_packages():
+        plugins: Dict[str, ModuleType] = {}
+        for name in self._discover_plugin_packages(load_all_extensions):
             try:
-                plugin = self._load_extension(name)
+                module = self._load_extension(name)
                 assert name.startswith(f"{EXTENSION_NAMESPACE}.")
                 name = name[len(EXTENSION_NAMESPACE) + 1 :]
-                plugins[name] = plugin
+                plugins[name] = module
             except PluginLoadFailed:
                 LOGGER.warning("Could not load extension %s", name, exc_info=True)
         return plugins
 
-    # Extension loading Phase II: collect slices
-    def _collect_slices(self, extensions: Dict[str, Callable[[ApplicationContext], None]]) -> ApplicationContext:
-        """
-        Call the setup function on all extensions and let them register their slices in the ApplicationContext.
-        """
-        ctx = ApplicationContext()
-        for name, setup in extensions.items():
-            myctx = ConstrainedApplicationContext(ctx, name)
-            setup(myctx)
-        return ctx
+    def _collect_slices(self, ext_name: str, ext_module: ModuleType, app_ctx: ApplicationContext) -> None:
+        try:
+            ext_module.setup(app_ctx)
+        except Exception:
+            LOGGER.warning("Could not load extension %s", ext_name, exc_info=True)
 
-    def load_slices(self) -> ApplicationContext:
+    def _collect_environment_settings(self, ext_name: str, ext_module: ModuleType, app_ctx: ApplicationContext) -> None:
+        try:
+            ext_module.register_environment_settings(app_ctx)
+        except AttributeError:
+            # Extension doesn't defined any environment settings.
+            pass
+        except Exception:
+            LOGGER.warning("Could not load extension %s", ext_name, exc_info=True)
+
+    def load_slices(
+        self, load_all_extensions: bool = False, only_register_environment_settings: bool = False
+    ) -> ApplicationContext:
         """
         Load all slices in the server
         """
-        exts = self._load_extensions()
-        return self._collect_slices(exts)
+        exts = self._load_extensions(load_all_extensions)
+        ctx = ApplicationContext()
+        for name, extension_module in exts.items():
+            myctx = ConstrainedApplicationContext(ctx, name)
+            self._collect_environment_settings(name, extension_module, myctx)
+            if not only_register_environment_settings:
+                self._collect_slices(name, extension_module, myctx)
+        return ctx

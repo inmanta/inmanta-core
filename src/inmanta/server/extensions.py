@@ -26,6 +26,7 @@ import yaml
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
+from inmanta import data
 
 LOGGER = logging.getLogger(__name__)
 
@@ -206,3 +207,9 @@ class ApplicationContext:
 
     def get_extension_statuses(self) -> List[ExtensionStatus]:
         return ServerSlice.get_extension_statuses(list(self._slices))
+
+    def register_environment_settings(self, settting: data.Setting) -> None:
+        data.Environment.register_setting(settting)
+
+    def get_environment_settings(self) -> List[data.Setting]:
+        return sorted(data.Environment._settings.values(), key=lambda x: x.name)

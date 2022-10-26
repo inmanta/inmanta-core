@@ -38,10 +38,11 @@ from inmanta.server import (
     config,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
+from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed, ApplicationContext, ConstrainedApplicationContext
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
+from inmanta import data
 
 
 @contextmanager
@@ -67,9 +68,9 @@ def test_discover_and_load():
 
         assert "inmanta_ext.testplugin" in ibl._discover_plugin_packages()
 
-        tpl = ibl._load_extension("inmanta_ext.testplugin")
+        mod = ibl._load_extension("inmanta_ext.testplugin")
 
-        assert tpl == inmanta_ext.testplugin.extension.setup
+        assert mod == inmanta_ext.testplugin.extension
 
         with pytest.raises(PluginLoadFailed):
             ibl._load_extension("inmanta_ext.noext")
@@ -87,7 +88,7 @@ def test_phase_1(caplog):
         all = ibl._load_extensions()
 
         assert "testplugin" in all
-        assert all["testplugin"] == inmanta_ext.testplugin.extension.setup
+        assert all["testplugin"] == inmanta_ext.testplugin.extension
 
         log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
@@ -97,18 +98,17 @@ def test_phase_2():
         import inmanta_ext.testplugin.extension
 
         ibl = InmantaBootloader()
-        all = {"testplugin": inmanta_ext.testplugin.extension.setup}
+        app_ctx = ConstrainedApplicationContext(parent=ApplicationContext(), namespace="testplugin")
+        ibl._collect_slices("testplugin", inmanta_ext.testplugin.extension.setup, app_ctx)
 
-        ctx = ibl._collect_slices(all)
-
-        byname = {sl.name: sl for sl in ctx._slices}
+        byname = {sl.name: sl for sl in app_ctx._slices}
 
         assert "testplugin.testslice" in byname
 
         # load slice in wrong namespace
         with pytest.raises(InvalidSliceNameException):
-            all = {"test": inmanta_ext.testplugin.extension.setup}
-            ctx = ibl._collect_slices(all)
+            app_ctx = ConstrainedApplicationContext(parent=ApplicationContext(), namespace="test")
+            ibl._collect_slices("test", inmanta_ext.testplugin.extension.setup, app_ctx)
 
 
 def test_phase_3():
@@ -259,3 +259,13 @@ async def test_custom_feature_manager(
 
         assert not fm.enabled(None)
         assert not fm.enabled("a")
+
+
+async def test_register_setting() -> None:
+    """
+    Test registering a new setting.
+    """
+    with splice_extension_in("test_load_env_setting"):
+        ibl = InmantaBootloader()
+        ibl.load_slices(load_all_extensions=True, only_register_environment_settings=True)
+        assert "test" in data.Environment._settings
