@@ -137,7 +137,7 @@ class CodeChange:
         Converts the file_extensions (Set[str]) to a condensed csv format.
         e.g {'txt', 'md', 'py'} becomes 'txt,md,py'
         """
-        return str(self.file_extensions).replace(" ", "").replace("'", "").replace('"', "")[1:-1]
+                return ",".join(self.file_extensions)
 
 
 @dataclass
