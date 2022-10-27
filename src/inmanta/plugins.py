@@ -571,7 +571,7 @@ def deprecated(
     function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: abc.Mapping[str, object]
 ) -> Callable:
     """
-    the kwargs are currently ignored but where added in cas we want to add something later on.
+    the kwargs are currently ignored but where added in case we want to add something later on.
     """
 
     def inner(fnc: Callable):
