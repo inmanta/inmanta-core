@@ -226,7 +226,7 @@ class DataParser:
 
 
 @click.command()
-@click.option("--dry-run/--full-run", default=True, help="If Dry-run only: no data will be sent to the db.")
+@click.option("--dry-run/--full-run", default=True, help="If dry-run only: no data will be sent to the db.")
 def main(dry_run: bool):
     data_parser = DataParser()
     data_parser.run(dry_run)
