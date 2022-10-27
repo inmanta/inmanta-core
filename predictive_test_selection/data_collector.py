@@ -130,7 +130,7 @@ class CodeChange:
         Converts the modification_count (List[int]) to a condensed csv format.
         e.g [1, 2, 3] becomes "1,2,3"
         """
-        return ",".join((str(count) for count in self.modification_count))
+        return ",".join(str(count) for count in self.modification_count)
 
     def get_file_extensions_data_format(self) -> str:
         """
