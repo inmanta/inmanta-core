@@ -1,0 +1,4 @@
+---
+description: Fixes an issue about InmantaWarnings that does not exist anymore.
+change-type: patch
+destination-branches: [master]
