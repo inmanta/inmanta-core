@@ -23,7 +23,7 @@ format:
 .PHONY: pep8
 pep8:
 	pip install -c requirements.txt pep8-naming flake8-black flake8-isort
-	flake8 src tests tests_common
+	flake8 src tests tests_common predictive_test_selection
 
 .PHONY: mypy mypy-diff mypy-save
 RUN_MYPY=MYPYPATH=stubs:src python -m mypy --soft-error-limit=-1 --html-report mypy -p inmanta

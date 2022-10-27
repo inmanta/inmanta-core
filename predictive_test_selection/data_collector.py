@@ -1,12 +1,26 @@
+"""
+    Copyright 2022 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
 import logging
 import os
 import subprocess
-import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum, auto
-from typing import Any, List, Mapping, MutableMapping, Sequence, Set, Tuple, Union
+from typing import List, MutableMapping, Set, Union
 
 import click
 
@@ -151,9 +165,9 @@ class TestResult:
 
     test_result_data: MutableMapping[str, int] = field(init=False)
 
-    def parse(self) -> None:
+    def parse(self, dev_branch: str) -> None:
         self.test_result_data = {}
-        path: str = "junit-py39.xml"
+        path: str = "junit-py36.xml" if dev_branch == "iso4" else "junit-py39.xml"
         tree = ET.parse(path)
         root = tree.getroot()
 
@@ -189,7 +203,7 @@ class DataParser:
     def run(self, dry_run: bool):
         try:
             self.code_change_data.parse()
-            self.test_result_data.parse()
+            self.test_result_data.parse(self.code_change_data.dev_branch)
 
             self.send_influxdb_data(dry_run)
         except AbortDataCollection as e:
@@ -199,7 +213,8 @@ class DataParser:
         """
         Anatomy of each line of the payload:
         Measurement: test_result
-        tag_set: commit_hash, dev_branch, fqn (Tags should be sorted by key for improved performance: https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
+        tag_set: commit_hash, dev_branch, fqn (Tags should be sorted by key for improved performance:
+        https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/
         field_set: failed_as_int, modification_count, file_extensions, file_cardinality
         timestamp: Use influx_db auto-generated timestamp
         """
