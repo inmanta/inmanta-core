@@ -16,11 +16,14 @@
     Contact: code@inmanta.com
 """
 import os
+import warnings
+from typing import Optional
 
 import pytest
 
 from inmanta import compiler, const
 from inmanta.ast import DoubleSetException
+from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
 
@@ -427,3 +430,213 @@ std::print(hi_world)
             "std::replace(hello_world,**dct) ({dir}/main.cf:4))"
         ),
     )
+
+
+@pytest.mark.parametrize_any(
+    "decorator, replaced_by",
+    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', '"newplugin"')],
+)
+def test_modules_plugin_deprecated(
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
+) -> None:
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin, deprecated
+
+{decorator}
+@plugin
+def get_one() -> "int":
+    return 1
+        """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+   import {test_module}
+
+   value = {test_module}::get_one()
+               """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1 if decorator else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, PluginDeprecationWarning)
+            if replaced_by:
+                replaced_by_name = replaced_by.replace('"', "")
+                assert (
+                    f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
+                    f"replaced by '{replaced_by_name}'" in str(warning.message)
+                )
+            else:
+                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+
+
+@pytest.mark.parametrize_any(
+    "decorator",
+    ["@deprecated", "@deprecated()", '@deprecated(replaced_by="newplugin")'],
+)
+def test_modules_failed_import_deprecated(tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str) -> None:
+    """
+    to ensure backwards compatibility of modules when using the @deprecated decorator
+    a little piece of code is proposed in the docs:
+    try:
+        from inmanta.plugins import deprecated
+    except ImportError:
+        deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
+    if deprecated can't be imported the decorator should just be ignored and not crash de compilation.
+    this test verifies the lambda expression works as expected
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+deprecated = lambda f=None, **kwargs: f if f is not None else deprecated
+from inmanta.plugins import plugin
+
+{decorator}
+@plugin
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::get_one()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+
+    compiler.do_compile()
+
+
+@pytest.mark.parametrize_any(
+    "decorator1,decorator2",
+    [("@plugin", "@deprecated"), ("", "@deprecated")],
+)
+def test_modules_fail_deprecated(
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator1: str, decorator2: str
+) -> None:
+    """
+    Test that en exception is raised when the @deprecated decorator is wrongly used
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin, deprecated
+
+{decorator1}
+{decorator2}
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::get_one()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+
+    with pytest.raises(Exception) as e:
+        compiler.do_compile()
+    assert (
+        "Can not deprecate 'get_one': The '@deprecated' decorator should be used in combination with the "
+        "'@plugin' decorator and should be placed at the top." in e.value.msg
+    )
+
+
+def test_modules_plugin_custom_name_deprecated(
+    tmpdir: str,
+    snippetcompiler_clean,
+    modules_dir: str,
+) -> None:
+    """
+    Test that a plugin with a custom name can be deprecated
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = """
+from inmanta.plugins import plugin, deprecated
+
+@deprecated
+@plugin("custom_name")
+def get_one() -> "int":
+    return 1
+            """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+       import {test_module}
+
+       value = {test_module}::custom_name()
+                   """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=False,
+        install_project=False,
+    )
+    with warnings.catch_warnings(record=True) as w:
+        compiler.do_compile()
+        assert len(w) == 1
+        warning = w[0]
+        assert issubclass(warning.category, PluginDeprecationWarning)
+        assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
