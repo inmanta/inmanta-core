@@ -40,7 +40,6 @@ from utils import log_contains, no_error_in_logs
         (False, False, False, False, False),
     ],
 )
-@pytest.mark.parametrize("updated", [True, False])
 def test_CRUD_handler_purged_response(purged_desired, purged_actual, excn, create, delete, updated, caplog):
     """
     purged_actual and excn are conceptually equivalent, this test case serves to prove that they are in fact, equivalent

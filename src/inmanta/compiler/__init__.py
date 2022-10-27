@@ -69,16 +69,17 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     except ParserException as e:
         compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
+    raised_complile_excpetion: bool = False
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
-        success = False
+        raised_complile_excpetion = True
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
+        success = False
     finally:
-        print(success)
-        Finalizers.call_finalizers()
+        Finalizers.call_finalizers(raised_complile_excpetion)
     LOGGER.debug("Compile done")
 
     if not success:
@@ -330,9 +331,19 @@ class Finalizers:
         cls.__finalizers.append(fnc)
 
     @classmethod
-    def call_finalizers(cls):
-        for fnc in cls.__finalizers:
-            fnc()
+    def call_finalizers(cls, should_log: bool = False):
+        """
+        by default this function will raise exception caused by errors in the finalizer functions
+        if 'should_log' is set to True the exceptions will not be raised but logged instead.
+        """
+        try:
+            for fnc in cls.__finalizers:
+                fnc()
+        except Exception as e:
+            if should_log:
+                LOGGER.error(f"Finalizers failed: {e}")
+            else:
+                raise
 
 
 @stable_api
