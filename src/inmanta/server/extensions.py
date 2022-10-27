@@ -211,5 +211,5 @@ class ApplicationContext:
     def register_environment_settings(self, settting: data.Setting) -> None:
         data.Environment.register_setting(settting)
 
-    def get_environment_settings(self) -> List[data.Setting]:
+    def get_environment_settings(self) -> list[data.Setting]:
         return sorted(data.Environment._settings.values(), key=lambda x: x.name)
