@@ -589,7 +589,7 @@ def get_one() -> "int":
         compiler.do_compile()
     assert (
         "Can not deprecate 'get_one': The '@deprecated' decorator should be used in combination with the "
-        "'@plugin' decorator and should be placed first." in e.value.msg
+        "'@plugin' decorator and should be placed at the top." in e.value.msg
     )
 
 
