@@ -72,11 +72,12 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
+        success = False
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
-        success = False
     finally:
+        print(success)
         Finalizers.call_finalizers()
     LOGGER.debug("Compile done")
 
