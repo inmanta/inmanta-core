@@ -333,7 +333,7 @@ class Finalizers:
     @classmethod
     def call_finalizers(cls, should_log: bool = False):
         """
-        by default this function will raise exception caused by errors in the finalizer functions
+        by default this function will raise exceptions caused by errors in the finalizer functions
         if 'should_log' is set to True the exceptions will not be raised but logged instead.
         """
         try:
@@ -347,5 +347,10 @@ class Finalizers:
 
 
 @stable_api
-def finalizer(fnc):
+def finalizer(fnc: Callable):
+    """
+    Python decorator to register functions with inmanta as Finalizers
+    :param fnc: The function to register with inmanta as a finalizer. When used as a decorator this is the function to which the
+     decorator is attached.
+    """
     Finalizers.add_function(fnc)
