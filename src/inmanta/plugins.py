@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from inmanta.compiler import Compiler
 
 
-class PluginDeprecationWarning(inmanta.warnings.InmantaWarning):
+class PluginDeprecationWarning(Warning):
     pass
 
 
