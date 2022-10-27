@@ -580,7 +580,7 @@ def deprecated(
         else:
             raise Exception(
                 f"Can not deprecate '{fnc.__name__}': The '@deprecated' decorator should be used in combination with the "
-                f"'@plugin' decorator and should be placed first."
+                f"'@plugin' decorator and should be placed at the top."
             )
         return fnc
 
