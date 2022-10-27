@@ -474,7 +474,7 @@ def get_one() -> "int":
     )
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        # first warning is about the use of V1 modules that is deprecated.
+        # first warning is about the use of V1 modules that are deprecated.
         assert len(w) == 2 if decorator else len(w) == 1
         if len(w) == 2:
             warning = w[1]
@@ -638,7 +638,7 @@ def get_one() -> "int":
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
         assert len(w)
-        # first warning is about the use of V1 modules that is deprecated.
+        # first warning is about the use of V1 modules that are deprecated.
         warning = w[1]
         assert issubclass(warning.category, PluginDeprecationWarning)
         assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
