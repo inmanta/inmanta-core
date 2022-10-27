@@ -270,7 +270,7 @@ class MetadataDeprecationWarning(Warning):
     pass
 
 
-class ModuleDeprecationWarning(inmanta.warnings.InmantaWarning):
+class ModuleDeprecationWarning(Warning):
     pass
 
 
