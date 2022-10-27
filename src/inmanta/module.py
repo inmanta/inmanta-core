@@ -2532,7 +2532,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         super().__init__(path)
 
         if self.metadata.deprecated:
-            inmanta.warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
+            warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
