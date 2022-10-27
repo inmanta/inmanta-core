@@ -18,7 +18,10 @@
 import os
 from typing import Optional
 
+import pytest
+
 from inmanta import compiler
+from inmanta.ast import DoubleSetException
 from utils import module_from_template, v1_module_from_template
 
 
@@ -27,6 +30,9 @@ def test_modules_compiler_finalizer(
     snippetcompiler_clean,
     modules_dir: str,
 ) -> None:
+    """
+    verify that the finalizers are called at the end of the compilation.
+    """
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
@@ -37,13 +43,32 @@ def test_modules_compiler_finalizer(
 from inmanta.plugins import plugin
 from inmanta import compiler
 
+connection1 = None
+connection2 = None
+
 @plugin
-def get_one() -> "string":
-    return "one"
+def connect1() -> "string":
+   global connection1
+   connection1 = "connected"
+   return connection1
+
+@plugin
+def connect2() -> "string":
+   global connection2
+   connection2 = "connected"
+   return connection2
 
 @compiler.finalizer
-def finalize():
-    print("end")
+def finalize1():
+    global connection1
+    if connection1:
+        connection1 = "closed"
+
+@compiler.finalizer
+def finalize2():
+    global connection2
+    if connection2:
+        connection2 = "closed"
         """.strip()
 
     v1_module_from_template(
@@ -57,12 +82,67 @@ def finalize():
     snippetcompiler_clean.setup_for_snippet(
         f"""
    import {test_module}
-   value = {test_module}::get_one()
-   std::print(value)
+   was_connected1 = {test_module}::connect1() == 'connected'
+   was_connected2 = {test_module}::connect2() == 'connected'
                """.strip(),
         add_to_module_path=[libs_dir],
         autostd=True,
         install_project=False,
     )
 
-    compiler.do_compile()
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert root.lookup("was_connected1").get_value()  # verify that the value of connection1 was changed before the finalizer
+    assert root.lookup("was_connected2").get_value()  # verify that the value of connection2 was changed before the finalizer
+    import inmanta_plugins.test_module
+
+    assert inmanta_plugins.test_module.connection1 == "closed"
+    assert inmanta_plugins.test_module.connection2 == "closed"
+
+
+def test_modules_compiler_expception_finalizer(tmpdir: str, snippetcompiler_clean, modules_dir: str, capsys) -> None:
+    """
+    verify that the finalizers are called even if there is an excpetion raised during compilation
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin
+from inmanta import compiler
+
+connection = None
+
+@compiler.finalizer
+def finalize():
+    global connection
+    connection = "closed"
+        """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+   import {test_module}
+   a = 1
+   a = 2
+               """.strip(),
+        add_to_module_path=[libs_dir],
+        autostd=True,
+        install_project=False,
+    )
+
+    with pytest.raises(DoubleSetException):
+        compiler.do_compile()
+    import inmanta_plugins.test_module
+
+    assert inmanta_plugins.test_module.connection == "closed"
