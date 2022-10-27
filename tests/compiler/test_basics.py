@@ -474,19 +474,22 @@ def get_one() -> "int":
     )
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        # first warning is about the use of V1 modules that are deprecated.
-        assert len(w) == 2 if decorator else len(w) == 1
-        if len(w) == 2:
-            warning = w[1]
-            assert issubclass(warning.category, PluginDeprecationWarning)
-            if replaced_by:
-                replaced_by_name = replaced_by.replace('"', "")
-                assert (
-                    f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
-                    f"replaced by '{replaced_by_name}'" in str(warning.message)
-                )
-            else:
-                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        if decorator:
+            has_warning: bool = False
+            for warning in w:
+                if issubclass(warning.category, PluginDeprecationWarning):
+                    has_warning = True
+                    if replaced_by:
+                        replaced_by_name = replaced_by.replace('"', "")
+                        assert (
+                            f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
+                            f"replaced by '{replaced_by_name}'" in str(warning.message)
+                        )
+                    else:
+                        assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+            assert has_warning
+        else:
+            assert not any(issubclass(warning.category, PluginDeprecationWarning) for warning in w)
 
 
 @pytest.mark.parametrize_any(
@@ -635,10 +638,12 @@ def get_one() -> "int":
         autostd=False,
         install_project=False,
     )
+
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        assert len(w)
-        # first warning is about the use of V1 modules that are deprecated.
-        warning = w[1]
-        assert issubclass(warning.category, PluginDeprecationWarning)
-        assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        has_warning: bool = False
+        for warning in w:
+            if issubclass(warning.category, PluginDeprecationWarning):
+                has_warning = True
+                assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        assert has_warning
