@@ -426,9 +426,9 @@ class Plugin(NamedType, metaclass=PluginMeta):
         """
         The function call itself
         """
-        if Plugin.deprecated:
+        if self.deprecated:
             msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
-            if Plugin.replaced_by:
+            if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
             inmanta.warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
