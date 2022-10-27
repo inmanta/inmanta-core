@@ -434,7 +434,7 @@ std::print(hi_world)
 
 @pytest.mark.parametrize_any(
     "decorator, replaced_by",
-    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', '"newplugin"')],
+    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', "newplugin")],
 )
 def test_modules_plugin_deprecated(
     tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
@@ -480,10 +480,9 @@ def get_one() -> "int":
                 if issubclass(warning.category, PluginDeprecationWarning):
                     has_warning = True
                     if replaced_by:
-                        replaced_by_name = replaced_by.replace('"', "")
                         assert (
                             f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
-                            f"replaced by '{replaced_by_name}'" in str(warning.message)
+                            f"replaced by '{replaced_by}'" in str(warning.message)
                         )
                     else:
                         assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
