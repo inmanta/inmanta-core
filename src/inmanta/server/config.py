@@ -268,9 +268,9 @@ server_access_control_allow_origin = Option(
 # Dashboard
 #############################
 
-dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
-dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
-dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
+dash_realm = Option("web-ui", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
+dash_auth_url = Option("web-ui", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
+dash_client_id = Option("web-ui", "client_id", None, "The client id configured in keycloak for this application.", is_str)
 
 
 def default_hangtime() -> str:

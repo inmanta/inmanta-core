@@ -107,7 +107,7 @@ port=1234
 host=host1
 interval=10
 tags=tag1=value1
-[dashboard]
+[web-ui]
 path=/some/directory
 client-id=test
         """
@@ -150,7 +150,7 @@ port=9999
 host=host3
 [influxdb]
 tags=tag2=value2
-[dashboard]
+[web-ui]
 path=/some/other/directory
         """
         )
@@ -158,7 +158,7 @@ path=/some/other/directory
     with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[dashboard]
+[web-ui]
 path=/directory
 client-id=test123
         """
@@ -167,7 +167,7 @@ client-id=test123
     with open(min_c_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[dashboard]
+[web-ui]
 client-id=test456
         """
         )
@@ -182,8 +182,8 @@ client-id=test456
     assert Config.get("influxdb", "host") == "host3"
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
-    assert Config.get("dashboard", "path") == "/directory"
-    assert Config.get("dashboard", "client-id") == "test456"
+    assert Config.get("web-ui", "path") == "/directory"
+    assert Config.get("web-ui", "client-id") == "test456"
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
