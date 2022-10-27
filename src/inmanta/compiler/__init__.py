@@ -37,7 +37,6 @@ from inmanta.ast.entity import Entity
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.compiler import config as compiler_config
 from inmanta.compiler.data import CompileData
-from inmanta.compiler.finalizer import Finalizers
 from inmanta.execute import scheduler
 from inmanta.execute.dataflow.datatrace import DataTraceRenderer
 from inmanta.execute.dataflow.root_cause import UnsetRootCauseAnalyzer
