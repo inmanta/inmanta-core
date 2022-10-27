@@ -38,6 +38,7 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     MetadataDeprecationWarning,
+    ModuleDeprecationWarning,
     Project,
 )
 from inmanta.moduletool import ModuleTool
@@ -379,6 +380,25 @@ requires:
     assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v1_deprecation(inmanta_module_v1, deprecated):
+    inmanta_module_v1.write_metadata_file(
+        f"""
+name: mod
+license: ASL
+version: 1.0.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod has been deprecated" in str(warning.message) in str(warning.message)
+
+
 def test_module_requires_single(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
@@ -452,6 +472,26 @@ install_requires =
     assert mod.metadata.name == "inmanta-module-mod1"
     assert mod.metadata.version == "1.2.3"
     assert mod.metadata.license == "Apache 2.0"
+
+
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v2_deprecation(inmanta_module_v2: InmantaModule, deprecated):
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mod1
+version = 1.2.3
+license = Apache 2.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod1 has been deprecated" in str(warning.message)
 
 
 @pytest.mark.parametrize("underscore", [True, False])
