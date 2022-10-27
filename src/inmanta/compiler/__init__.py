@@ -18,7 +18,7 @@
 import logging
 import sys
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -316,6 +316,23 @@ class Compiler(object):
         add_trace(exception)
         exception.attach_compile_info(self)
         raise exception
+
+
+class Finalizers:
+    """
+    This class keeps all the finalizers that need to be called right after the compilation finishes
+    """
+
+    __finalizers: Sequence[Callable] = []
+
+    @classmethod
+    def add_function(cls, fnc: Callable) -> None:
+        cls.__finalizers.append(fnc)
+
+    @classmethod
+    def call_finalizers(cls):
+        for fnc in cls.__finalizers:
+            fnc()
 
 
 @stable_api
