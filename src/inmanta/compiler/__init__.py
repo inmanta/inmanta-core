@@ -17,8 +17,8 @@
 """
 import logging
 import sys
-from itertools import chain
 from collections import abc
+from itertools import chain
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
@@ -74,13 +74,13 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
-        raised_complile_excpetion = True
+        raised_compile_exception = True
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
         success = False
     finally:
-        Finalizers.call_finalizers(raised_complile_excpetion)
+        Finalizers.call_finalizers(raised_compile_exception)
     LOGGER.debug("Compile done")
 
     if not success:
@@ -326,10 +326,10 @@ class Finalizers:
     This class keeps all the finalizers that need to be called right after the compilation finishes
     """
 
-    __finalizers: List[Callable[[], None]] = []
+    __finalizers: List[abc.Callable[[], None]] = []
 
     @classmethod
-    def add_function(cls, fnc: Callable[[], None]) -> None:
+    def add_function(cls, fnc: abc.Callable[[], None]) -> None:
         cls.__finalizers.append(fnc)
 
     @classmethod
@@ -353,7 +353,7 @@ class Finalizers:
 
 
 @stable_api
-def finalizer(fnc: Callable[[], None]) -> None:
+def finalizer(fnc: abc.Callable[[], None]) -> None:
     """
     Python decorator to register functions with inmanta as Finalizers
     :param fnc: The function to register with inmanta as a finalizer. When used as a decorator this is the function to which the
