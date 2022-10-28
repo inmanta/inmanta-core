@@ -115,3 +115,8 @@ def test_import_ast(import_entry_point: Callable[[str], Optional[int]]) -> None:
 
 def test_import_env(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.env") == 0
+
+
+def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.server.extensions") == 0
+    assert import_entry_point("inmanta.server.bootloader") == 0
