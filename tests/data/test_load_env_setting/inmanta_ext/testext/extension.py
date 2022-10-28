@@ -1,5 +1,5 @@
 """
-    Copyright 2019 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ def setup(application: ApplicationContext) -> None:
 
 
 def register_environment_settings(application: ApplicationContext) -> None:
-    application.register_environment_settings(
-       data.Setting(
+    application.register_environment_setting(
+        data.Setting(
             name="test",
             typ="bool",
             default=True,

@@ -28,6 +28,7 @@ import yaml
 
 import inmanta.server
 import inmanta_ext
+from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -38,11 +39,10 @@ from inmanta.server import (
     config,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
-from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed, ApplicationContext, ConstrainedApplicationContext
+from inmanta.server.bootloader import InmantaBootloader, PluginLoadFailed
 from inmanta.server.extensions import BoolFeature, FeatureManager, InvalidFeature, InvalidSliceNameException, StringListFeature
 from inmanta.server.protocol import Server, ServerSlice
 from utils import log_contains
-from inmanta import data
 
 
 @contextmanager
@@ -98,17 +98,18 @@ def test_phase_2():
         import inmanta_ext.testplugin.extension
 
         ibl = InmantaBootloader()
-        app_ctx = ConstrainedApplicationContext(parent=ApplicationContext(), namespace="testplugin")
-        ibl._collect_slices("testplugin", inmanta_ext.testplugin.extension.setup, app_ctx)
+        all = {"testplugin": inmanta_ext.testplugin.extension}
 
-        byname = {sl.name: sl for sl in app_ctx._slices}
+        ctx = ibl._collect_slices(all)
+
+        byname = {sl.name: sl for sl in ctx._slices}
 
         assert "testplugin.testslice" in byname
 
         # load slice in wrong namespace
         with pytest.raises(InvalidSliceNameException):
-            app_ctx = ConstrainedApplicationContext(parent=ApplicationContext(), namespace="test")
-            ibl._collect_slices("test", inmanta_ext.testplugin.extension.setup, app_ctx)
+            all = {"test": inmanta_ext.testplugin.extension}
+            ibl._collect_slices(all)
 
 
 def test_phase_3():

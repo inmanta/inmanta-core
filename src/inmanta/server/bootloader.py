@@ -21,12 +21,13 @@ import logging
 import pkgutil
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Callable, Dict, Generator, List, Optional
+from typing import Dict, Generator, List, Optional
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
 from inmanta.server.protocol import Server, ServerSlice
+from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class ConstrainedApplicationContext(ApplicationContext):
         self.parent.set_feature_manager(feature_manager)
 
 
+@stable_api
 class InmantaBootloader(object):
     """The inmanta bootloader is responsible for:
     - discovering extensions
@@ -125,7 +127,7 @@ class InmantaBootloader(object):
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
 
-        :param return_all_available_packages: Return all available plugin packages and independent of whether the extension is
+        :param return_all_available_packages: Return all available plugin packages independent of whether the extension is
                                               enabled or not.
         :return: A list of all subpackages defined in inmanta_ext
         """
@@ -168,9 +170,20 @@ class InmantaBootloader(object):
             raise PluginLoadFailed(f"Could not load module {name}") from e
 
         try:
-            return importlib.import_module(f"{name}.{EXTENSION_MODULE}")
+            mod = importlib.import_module(f"{name}.{EXTENSION_MODULE}")
         except Exception as e:
             raise PluginLoadFailed(f"Could not load module {name}.{EXTENSION_MODULE}") from e
+        else:
+            self._validate_extension(mod)
+            return mod
+
+    def _validate_extension(self, ext_mod: ModuleType) -> None:
+        """
+        Validate whether the given extension module satisfied the mandatory requirements for an Inmanta extension.
+        If the requirements are not satisfied, this method raises an PluginLoadFailed exception.
+        """
+        if not hasattr(ext_mod, "setup"):
+            raise PluginLoadFailed("extension.py doesn't have a setup method.")
 
     def _load_extensions(self, load_all_extensions: bool = False) -> Dict[str, ModuleType]:
         """Discover all extensions, validate correct naming and load its setup function"""
@@ -185,32 +198,35 @@ class InmantaBootloader(object):
                 LOGGER.warning("Could not load extension %s", name, exc_info=True)
         return plugins
 
-    def _collect_slices(self, ext_name: str, ext_module: ModuleType, app_ctx: ApplicationContext) -> None:
-        try:
-            ext_module.setup(app_ctx)
-        except Exception:
-            LOGGER.warning("Could not load extension %s", ext_name, exc_info=True)
+    def _collect_environment_settings(self, ext_module: ModuleType, app_ctx: ApplicationContext) -> None:
+        """
+        Collect the settings of an Inmanta environment defined by the given extension.
+        """
+        if not hasattr(ext_module, "register_environment_settings"):
+            # Extension doesn't define any environment settings.
+            return
+        ext_module.register_environment_settings(app_ctx)
 
-    def _collect_environment_settings(self, ext_name: str, ext_module: ModuleType, app_ctx: ApplicationContext) -> None:
-        try:
-            ext_module.register_environment_settings(app_ctx)
-        except AttributeError:
-            # Extension doesn't defined any environment settings.
-            pass
-        except Exception:
-            LOGGER.warning("Could not load extension %s", ext_name, exc_info=True)
+    # Extension loading Phase II: collect slices
+    def _collect_slices(
+        self, extensions: Dict[str, ModuleType], only_register_environment_settings: bool = False
+    ) -> ApplicationContext:
+        """
+        Call the setup function on all extensions and let them register their slices in the ApplicationContext.
+        """
+        ctx = ApplicationContext()
+        for name, ext_module in extensions.items():
+            myctx = ConstrainedApplicationContext(ctx, name)
+            self._collect_environment_settings(ext_module, myctx)
+            if not only_register_environment_settings:
+                ext_module.setup(myctx)
+        return ctx
 
     def load_slices(
-        self, load_all_extensions: bool = False, only_register_environment_settings: bool = False
+        self, *, load_all_extensions: bool = False, only_register_environment_settings: bool = False
     ) -> ApplicationContext:
         """
         Load all slices in the server
         """
-        exts = self._load_extensions(load_all_extensions)
-        ctx = ApplicationContext()
-        for name, extension_module in exts.items():
-            myctx = ConstrainedApplicationContext(ctx, name)
-            self._collect_environment_settings(name, extension_module, myctx)
-            if not only_register_environment_settings:
-                self._collect_slices(name, extension_module, myctx)
-        return ctx
+        exts: Dict[str, ModuleType] = self._load_extensions(load_all_extensions)
+        return self._collect_slices(exts, only_register_environment_settings)
