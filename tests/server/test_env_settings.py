@@ -326,7 +326,7 @@ async def test_environment_add_new_setting_parameter(server, client, environment
         doc="a new setting",
     )
 
-    await data.Environment.register_setting(new_setting)
+    data.Environment.register_setting(new_setting)
 
     result = await client.get_setting(tid=environment, id="a new setting")
     assert result.code == 200
@@ -351,7 +351,7 @@ async def test_environment_add_new_setting_parameter(server, client, environment
         doc="an existing setting",
     )
     with pytest.raises(KeyError):
-        await data.Environment.register_setting(existing_setting)
+        data.Environment.register_setting(existing_setting)
 
     result = await client.get_setting(tid=environment, id=data.AUTO_DEPLOY)
     assert result.code == 200
@@ -388,7 +388,7 @@ async def test_get_setting_no_longer_exist(server, client, environment):
         doc="new_setting",
     )
 
-    await data.Environment.register_setting(new_setting)
+    data.Environment.register_setting(new_setting)
 
     result = await client.get_setting(tid=environment, id="new_setting")
     assert result.code == 200

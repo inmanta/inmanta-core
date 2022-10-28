@@ -3,8 +3,9 @@ Creating a new server extension
 *******************************
 
 Inmanta server extensions are separate Python packages with their own release cycle that can add additional server slices
-to the orchestrator. Server slices are components in the service orchestrator. A slice can be responsible for API endpoints or
-provide internal services to other slices. The core server extension provides all slices of the core service orchestrator.
+and Inmanta environment settings to the orchestrator. Server slices are components in the service orchestrator.
+A slice can be responsible for API endpoints or provide internal services to other slices. The core server extension
+provides all slices of the core service orchestrator.
 
 
 The package layout of a server extension
@@ -27,18 +28,31 @@ required for a new extension called ``new_extension``.
 * The ``extension.py`` file must contain a ``setup`` function that registers the necessary server slices to the application
   context. An example ``extension.py`` file is shown below. The parameter ``<server-slice-instance>`` should be replaced with
   an instance of the server slice that belongs to the extension. Multiple server slices can be registered.
+* The ``extension.py`` file can contain an optional ``register_environment_settings`` function that allows an extension to
+  register extension-specific settings that can be used to customize an Inmanta environment.
 
 .. code-block:: python
 
     # File: extension.py
     from inmanta.server.extensions import ApplicationContext
+    from inmanta import data
 
     def setup(application: ApplicationContext) -> None:
         application.register_slice(<server-slice-instance>)
 
+    def register_environment_settings(application: ApplicationContext) -> None:
+        application.register_environment_setting(
+            data.Setting(
+                name="my_environment_setting",
+                default=False,
+                typ="bool",
+                validator=data.convert_boolean,
+                doc="Explain what the setting does.",
+            )
+        )
 
-.. tip:: Indicate which version of the Inmanta core is compatible with the developed extension by pinning the version of the
-         Inmanta core in the ``requirements.txt`` file of the extension.
+.. tip:: Indicate which version of the Inmanta core is compatible with the developed extension by constraining the version of the
+         Inmanta core package to a valid range in the ``setup.py`` file of the extension.
 
 
 Adding server slices to the extension
