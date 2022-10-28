@@ -148,52 +148,52 @@ def finalize():
     assert inmanta_plugins.test_module.connection == "closed"
 
 
-# @pytest.mark.parametrize("compile_exception", ["", "a = 2"])
-# def test_modules_compiler_finalizer_exception(
-#     tmpdir: str, snippetcompiler_clean, modules_dir: str, caplog, compile_exception: str
-# ) -> None:
-#     """
-#     verify that the exceptions in the finalizer are raised if there are no exceptions during the compilation,
-#     and that they are logged if there is an exception during compilation.
-#     """
-#     snippetcompiler_clean.setup_for_snippet("", install_project=True)
-#
-#     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
-#     test_module: str = "test_module"
-#     libs_dir: str = os.path.join(str(tmpdir), "libs")
-#
-#     test_module_plugin_contents: str = f"""
-# from inmanta.plugins import plugin
-# from inmanta import compiler
-#
-# @compiler.finalizer
-# def finalize():
-#     connection = 3/0
-#         """.strip()
-#
-#     v1_module_from_template(
-#         v1_template_path,
-#         os.path.join(libs_dir, f"{test_module}"),
-#         new_name=test_module,
-#         new_content_init_cf="",  # original .cf needs std
-#         new_content_init_py=test_module_plugin_contents,
-#     )
-#
-#     snippetcompiler_clean.setup_for_snippet(
-#         f"""
-#    import {test_module}
-#    a = 1
-#    {compile_exception}""".strip(),
-#         add_to_module_path=[libs_dir],
-#         autostd=True,
-#         install_project=False,
-#     )
-#
-#     if compile_exception:
-#         with caplog.at_level(logging.ERROR):
-#             with pytest.raises(DoubleSetException):
-#                 compiler.do_compile()
-#             log_contains(caplog, "inmanta.compiler", logging.ERROR, "Finalizers failed: division by zero")
-#     else:
-#         with pytest.raises(ZeroDivisionError):
-#             compiler.do_compile()
+@pytest.mark.parametrize("compile_exception", ["", "a = 2"])
+def test_modules_compiler_finalizer_exception(
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, caplog, compile_exception: str
+) -> None:
+    """
+    verify that the exceptions in the finalizer are raised if there are no exceptions during the compilation,
+    and that they are logged if there is an exception during compilation.
+    """
+    snippetcompiler_clean.setup_for_snippet("", install_project=True)
+
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    test_module: str = "test_module"
+    libs_dir: str = os.path.join(str(tmpdir), "libs")
+
+    test_module_plugin_contents: str = f"""
+from inmanta.plugins import plugin
+from inmanta import compiler
+
+@compiler.finalizer
+def finalize():
+    connection = 3/0
+        """.strip()
+
+    v1_module_from_template(
+        v1_template_path,
+        os.path.join(libs_dir, f"{test_module}"),
+        new_name=test_module,
+        new_content_init_cf="",  # original .cf needs std
+        new_content_init_py=test_module_plugin_contents,
+    )
+
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+   import {test_module}
+   a = 1
+   {compile_exception}""".strip(),
+        add_to_module_path=[libs_dir],
+        autostd=True,
+        install_project=False,
+    )
+
+    if compile_exception:
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(DoubleSetException):
+                compiler.do_compile()
+            log_contains(caplog, "inmanta.compiler", logging.ERROR, "Finalizers failed: division by zero")
+    else:
+        with pytest.raises(ZeroDivisionError):
+            compiler.do_compile()
