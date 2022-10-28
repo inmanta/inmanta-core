@@ -211,16 +211,22 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         compile runner mock, hang until released
         """
 
-        def __init__(self):
+        def __init__(self, compile: data.Compile):
             self.lock = Semaphore(0)
             self.started = False
             self.done = False
             self.version = None
+            self.request = compile
 
         async def run(self, force_update: Optional[bool] = False):
+            print("Start Run: ", self.request.id, self.request.environment)
+
+            now = datetime.datetime.now().astimezone()
+            await self.request.update_fields(started=now)
             self.started = True
             await self.lock.acquire()
             self.done = True
+            print("END Run: ", self.request.id, self.request.environment)
             return True, None
 
         def release(self):
@@ -236,13 +242,27 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.locks = {}
 
         def _get_compile_runner(self, compile: data.Compile, project_dir: str):
-            print("Get Run: ", compile.remote_id, compile.id)
-            runner = HangRunner()
+            runner = HangRunner(compile)
             self.locks[compile.remote_id] = runner
             return runner
 
         def get_runner(self, remote_id: uuid.UUID) -> HangRunner:
             return self.locks.get(remote_id)
+
+    async def compiler_cache_consistent(expected: int) -> None:
+        async def inner() -> bool:
+            not_done = await data.Compile.get_next_compiles_count()
+            running = sum(1 for task in cs._recompiles.values() if not task.done())
+            print(
+                expected,
+                cs._queue_count_cache,
+                not_done - running,
+                not_done,
+                running,
+            )
+            return cs._queue_count_cache == (not_done - running) == expected
+
+        await retry_limited(inner, 1)
 
     # manual setup of server
     server = Server()
@@ -264,7 +284,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         results = await data.Compile.get_by_remote_id(env.id, u1)
         assert len(results) == 1
         assert results[0].remote_id == u1
-        print("request: ", u1, results[0].id)
+        print("request: ", results[0].id, env.id)
         return u1
 
     # setup projects in the database
@@ -316,9 +336,19 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
             await retry_limited(isdone, 1)
 
+    await compiler_cache_consistent(5)
+
     # run through env1, entire sequence
     for i in range(4):
         await check_compile_in_sequence(env1, e1, i)
+        if i < 2:
+            # First one is never queued, so not counted
+            # Last iteration here doesn't de-queue an item, but allows it to complete
+            # So don't handle last 2
+            compiler_cache_consistent(4 - i)
+
+    await compiler_cache_consistent(3)
+
     collector.verify(e1)
     print("env1 done")
 
@@ -328,6 +358,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     # progress two steps into env2
     for i in range(2):
         await check_compile_in_sequence(env2, e2, i)
+        await compiler_cache_consistent(2 - i)
 
     assert not collector.seen
     print(collector.preseen)
@@ -353,10 +384,13 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     collector = Collector()
     cs.add_listener(collector)
 
+    # one in cache, one running
+    await compiler_cache_consistent(1)
+
     # complete the sequence, expect re-run of third compile
     for i in range(3):
-        print(i)
         await check_compile_in_sequence(env2, e2[2:], i)
+        await compiler_cache_consistent(0)
 
     # all are re-run, entire sequence present
     collector.verify(e2)
@@ -796,6 +830,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert len(result.result["queue"]) == 1
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
     assert result.code == 200
+    # None in the queue, all running
+    assert compilerslice._queue_count_cache == 0
 
     # request a compile
     remote_id2 = uuid.uuid4()
@@ -806,6 +842,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert len(result.result["queue"]) == 2
     assert result.result["queue"][1]["remote_id"] == str(remote_id2)
     assert result.code == 200
+    # 1 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 1
 
     # request a compile with do_export=True
     remote_id3 = uuid.uuid4()
@@ -815,6 +853,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert len(result.result["queue"]) == 3
     assert result.result["queue"][2]["remote_id"] == str(remote_id3)
     assert result.code == 200
+    # 2 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 2
 
     # request a compile with do_export=False -> expect merge with compile2
     remote_id4 = uuid.uuid4()
@@ -824,6 +864,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert len(result.result["queue"]) == 4
     assert result.result["queue"][3]["remote_id"] == str(remote_id4)
     assert result.code == 200
+    # 3 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 3
 
     # request a compile with do_export=True -> expect merge with compile3, expect force_update == True for the compile
     remote_id5 = uuid.uuid4()
@@ -836,6 +878,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][4]["remote_id"] == str(remote_id5)
     assert result.result["queue"][5]["remote_id"] == str(remote_id6)
     assert result.code == 200
+    # 5 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 5
 
     # finish a compile and wait for service to take on next
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
@@ -845,11 +889,15 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert len(result.result["queue"]) == 5
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
+    # 4 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 4
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
     assert await compilerslice.get_report(compile_id2) == await compilerslice.get_report(compile_id4)
+    # 2 in the queue, 1 running
+    assert compilerslice._queue_count_cache == 2
 
     # finish third compile
     # prevent race conditions where compile is not yet in queue
@@ -867,6 +915,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id5)
     assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id6)
 
+    # 0 in the queue, 0 running
+    assert compilerslice._queue_count_cache == 0
+
     # api should return none
     result = await client.get_compile_queue(environment)
     assert len(result.result["queue"]) == 0
@@ -879,6 +930,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 0
+    assert compilerslice._queue_count_cache == 0
 
     await client.halt_environment(environment)
 
@@ -889,6 +941,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 1
+    assert compilerslice._queue_count_cache == 0
 
     result = await client.is_compiling(environment)
     assert result.code == 204
