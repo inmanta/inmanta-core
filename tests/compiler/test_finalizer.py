@@ -111,7 +111,6 @@ def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
     test_module_plugin_contents: str = """
-from inmanta.plugins import plugin
 from inmanta import compiler
 
 connection = None
@@ -168,7 +167,6 @@ def test_modules_compiler_finalizer_exception(
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
     test_module_plugin_contents: str = """
-from inmanta.plugins import plugin
 from inmanta import compiler
 
 @compiler.finalizer
