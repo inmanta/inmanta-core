@@ -1,0 +1,5 @@
+---
+description: Dummy feature branch to test the irt pipeline against
+change-type: patch
+destination-branches:
+  - master
