@@ -55,6 +55,8 @@ docs/moduleguides
 docs/inmanta.pdf
 docs/_static/*.pdf
 docs/_static/*.png
+/docs/model_developers/images/handler_flow.png
+/docs/model_developers/images/handler_flow.pdf
 
 # Mypy
 .mypy
