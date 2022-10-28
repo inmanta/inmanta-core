@@ -332,7 +332,7 @@ class Finalizers:
         cls.__finalizers.append(fnc)
 
     @classmethod
-    def call_finalizers(cls, should_log: bool = False):
+    def call_finalizers(cls, should_log: bool = False) -> None:
         """
         by default this function will raise exceptions caused by errors in the finalizer functions
         if 'should_log' is set to True the exceptions will not be raised but logged instead.
@@ -345,6 +345,10 @@ class Finalizers:
                 LOGGER.error(f"Finalizers failed: {e}")
             else:
                 raise
+
+    @classmethod
+    def reset_finalizers(cls) -> None:
+        cls.__finalizers = []
 
 
 @stable_api
