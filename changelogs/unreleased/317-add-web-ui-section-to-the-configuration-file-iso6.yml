@@ -1,6 +1,5 @@
 ---
-description: The 'dashboard' and 'web-console' sections are no longer supported for configuration options.
-  The 'web-ui' section should now be used instead for configuration options relative to web interfaces.
+description: The 'dashboard' and 'web-console' sections are no longer supported for configuration options. The 'web-ui' section should now be used instead for configuration options related to web interfaces.
 change-type: major
 issue-nr: 317
 issue-repo: inmanta-ui
