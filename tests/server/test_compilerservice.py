@@ -345,7 +345,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             # First one is never queued, so not counted
             # Last iteration here doesn't de-queue an item, but allows it to complete
             # So don't handle last 2
-            compiler_cache_consistent(4 - i)
+            await compiler_cache_consistent(4 - i)
 
     await compiler_cache_consistent(3)
 
