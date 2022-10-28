@@ -22,7 +22,7 @@ import pytest
 
 from inmanta import compiler
 from inmanta.ast import DoubleSetException
-from utils import log_contains, module_from_template, v1_module_from_template
+from utils import log_contains, v1_module_from_template
 
 
 def test_modules_compiler_finalizer(
