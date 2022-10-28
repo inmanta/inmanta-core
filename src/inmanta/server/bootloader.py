@@ -134,7 +134,7 @@ class InmantaBootloader(object):
         available = self.get_available_extensions()
         LOGGER.info("Discovered extensions: %s", ", ".join(available.keys()))
 
-        extensions = []
+        extensions: List[str] = []
         enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
 
         if return_all_available_packages:
