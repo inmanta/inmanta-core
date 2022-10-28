@@ -150,7 +150,12 @@ def finalize():
 
 @pytest.mark.parametrize("compile_exception", ["", "a = 2"])
 def test_modules_compiler_finalizer_exception(
-    tmpdir: str, snippetcompiler_clean, modules_dir: str, caplog, compile_exception: str
+    tmpdir: str,
+    snippetcompiler_clean,
+    clean_reset,
+    modules_dir: str,
+    caplog,
+    compile_exception: str,
 ) -> None:
     """
     verify that the exceptions in the finalizer are raised if there are no exceptions during the compilation,
