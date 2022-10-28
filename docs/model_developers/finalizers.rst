@@ -1,4 +1,4 @@
-.. _module-plugins:
+.. _module-finalizers:
 
 Finalizers
 *********************
