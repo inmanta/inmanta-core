@@ -39,7 +39,7 @@ def test_modules_compiler_finalizer(
     test_module: str = "test_module"
     libs_dir: str = os.path.join(str(tmpdir), "libs")
 
-    test_module_plugin_contents: str = f"""
+    test_module_plugin_contents: str = """
 from inmanta.plugins import plugin
 from inmanta import compiler
 
