@@ -216,7 +216,7 @@ class ApplicationContext:
         """
         data.Environment.register_setting(setting)
 
-    def get_environment_settings(self) -> List[data.Setting]:
+    def get_environment_settings(self) -> list[data.Setting]:
         """
         Returns the list of all available environment settings
         """
