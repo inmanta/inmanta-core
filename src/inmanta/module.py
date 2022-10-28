@@ -270,6 +270,10 @@ class MetadataDeprecationWarning(Warning):
     pass
 
 
+class ModuleDeprecationWarning(Warning):
+    pass
+
+
 @stable_api
 class ProjectNotFoundException(CompilerException):
     """
@@ -1138,6 +1142,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
+    deprecated: Optional[bool]
 
     @validator("version")
     @classmethod
@@ -2526,6 +2531,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
+        if self.metadata.deprecated:
+            warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)

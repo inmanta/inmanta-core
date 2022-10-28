@@ -1,0 +1,4 @@
+---
+description: Fix bug in deactivation logic of the ReentrantVirtualEnv used by the snippetcompiler.
+change-type: patch
+destination-branches: [master, iso5]

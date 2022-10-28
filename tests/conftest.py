@@ -1001,8 +1001,9 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.working_set = None
 
     def deactivate(self):
-        self._using_venv = False
-        self.working_set = pkg_resources.working_set
+        if self._using_venv:
+            self._using_venv = False
+            self.working_set = pkg_resources.working_set
 
     def use_virtual_env(self) -> None:
         """
