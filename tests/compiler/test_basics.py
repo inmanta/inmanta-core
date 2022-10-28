@@ -434,7 +434,7 @@ std::print(hi_world)
 
 @pytest.mark.parametrize_any(
     "decorator, replaced_by",
-    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', '"newplugin"')],
+    [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', "newplugin")],
 )
 def test_modules_plugin_deprecated(
     tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
@@ -474,18 +474,21 @@ def get_one() -> "int":
     )
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        assert len(w) == 1 if decorator else len(w) == 0
-        if len(w):
-            warning = w[0]
-            assert issubclass(warning.category, PluginDeprecationWarning)
-            if replaced_by:
-                replaced_by_name = replaced_by.replace('"', "")
-                assert (
-                    f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
-                    f"replaced by '{replaced_by_name}'" in str(warning.message)
-                )
-            else:
-                assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        if decorator:
+            has_warning: bool = False
+            for warning in w:
+                if issubclass(warning.category, PluginDeprecationWarning):
+                    has_warning = True
+                    if replaced_by:
+                        assert (
+                            f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
+                            f"replaced by '{replaced_by}'" in str(warning.message)
+                        )
+                    else:
+                        assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+            assert has_warning
+        else:
+            assert not any(issubclass(warning.category, PluginDeprecationWarning) for warning in w)
 
 
 @pytest.mark.parametrize_any(
@@ -634,9 +637,12 @@ def get_one() -> "int":
         autostd=False,
         install_project=False,
     )
+
     with warnings.catch_warnings(record=True) as w:
         compiler.do_compile()
-        assert len(w) == 1
-        warning = w[0]
-        assert issubclass(warning.category, PluginDeprecationWarning)
-        assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        has_warning: bool = False
+        for warning in w:
+            if issubclass(warning.category, PluginDeprecationWarning):
+                has_warning = True
+                assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+        assert has_warning
