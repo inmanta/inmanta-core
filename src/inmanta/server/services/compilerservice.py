@@ -679,7 +679,7 @@ class CompilerService(ServerSlice):
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
-        # one run per env max to get startedf
+        # one run per env max to get started
         runs = await data.Compile.get_next_run_all()
         self._queue_count_cache = await data.Compile.get_next_compiles_count() - len(runs)
         for run in runs:
