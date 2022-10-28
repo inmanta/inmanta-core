@@ -46,5 +46,9 @@ the same example but using the callback option would look like this:
       global connection
       if not connection:
            connection = connect()
-           compiler.finalizer(connection.close)
+           compiler.finalizer(finalize_connection)
        return connection
+
+    def finalize_connection():
+       if connection:
+          connection.close()
