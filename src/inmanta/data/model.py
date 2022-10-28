@@ -478,8 +478,8 @@ class PagingBoundaries:
         self,
         start: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
         end: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
-        first_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"], # Can be none if single keyed
-        last_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"], # Can be none if single keyed
+        first_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
+        last_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
     ) -> None:
         self.start = start
         self.end = end

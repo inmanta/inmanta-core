@@ -31,6 +31,8 @@ from inmanta import data
 from inmanta.data import (
     APILIMIT,
     PRIMITIVE_SQL_TYPES,
+    Agent,
+    AgentOrder,
     CompileReportOrder,
     ConfigurationModel,
     DatabaseOrderV2,
@@ -42,6 +44,7 @@ from inmanta.data import (
     NotificationOrder,
     PagingOrder,
     Parameter,
+    ParameterOrder,
     QueryFilter,
     ResourceAction,
     ResourceHistoryOrder,
@@ -50,7 +53,7 @@ from inmanta.data import (
     ResourceOrder,
     SimpleQueryBuilder,
     VersionedResourceOrder,
-    model, ParameterOrder,
+    model,
 )
 from inmanta.data.model import (
     BaseModel,
@@ -64,7 +67,6 @@ from inmanta.data.model import (
     ResourceLog,
     ResourceVersionIdStr,
 )
-from inmanta.data.paging import PagingMetadata
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
@@ -98,11 +100,13 @@ class RequestedPagingBoundaries:
         end: Optional[PRIMITIVE_SQL_TYPES],
         first_id: Optional[PRIMITIVE_SQL_TYPES],
         last_id: Optional[PRIMITIVE_SQL_TYPES],
+        id_nullable: bool,
     ) -> None:
         self.start = start
         self.end = end
         self.first_id = first_id
         self.last_id = last_id
+        self.id_nullable = id_nullable
 
     def validate(
         self,
@@ -111,15 +115,24 @@ class RequestedPagingBoundaries:
         end = self.end
         first_id = self.first_id
         last_id = self.last_id
-        if start and end:
+        if (start is not None) and (end is not None):
             raise InvalidQueryParameter(
                 f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
             )
-        if first_id and last_id:
+        if (first_id is not None) and (last_id is not None):
             raise InvalidQueryParameter(
                 f"Only one of first_id and last_id parameters is allowed at the same time. "
                 f"Received first_id: {first_id}, last_id: {last_id}"
             )
+
+        if self.has_start() and self.has_end():
+            raise InvalidQueryParameter(
+                f"Start and end parameters can not be set at the same time: "
+                f"Received first_id: {first_id}, last_id: {last_id}, start: {start}, end: {end}"
+            )
+
+        if self.id_nullable:
+            return
 
         if (first_id and not start) or (first_id and end):
             raise InvalidQueryParameter(
@@ -131,6 +144,28 @@ class RequestedPagingBoundaries:
                 f"The last_id parameter should be used in combination with the end parameter. "
                 f"Received last_id: {last_id}, start: {start}, end: {end}"
             )
+
+    def has_start(self) -> bool:
+        return (self.start is not None) or (self.first_id is not None)
+
+    def has_end(self) -> bool:
+        return (self.end is not None) or (self.last_id is not None)
+
+
+class PagingMetadata:
+    def __init__(self, total: int, before: int, after: int, page_size: int) -> None:
+        self.total = total
+        self.before = before
+        self.after = after
+        self.page_size = page_size
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "total": self.total,
+            "before": self.before,
+            "after": self.after,
+            "page_size": self.page_size,
+        }
 
 
 class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
@@ -148,7 +183,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.raw_filter = filter or {}
         self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
-        self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
+        self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id, order.is_id_nullable())
         self.requested_page_boundaries.validate()
 
     @abc.abstractmethod
@@ -216,8 +251,8 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         Update the query builder to constrain it to the page boundaries, order and size
         """
         order = self.order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and self.requested_page_boundaries.end is not None) or (
-            order == PagingOrder.DESC and self.requested_page_boundaries.start is not None
+        backward_paging: bool = (order == PagingOrder.ASC and self.requested_page_boundaries.has_end()) or (
+            order == PagingOrder.DESC and self.requested_page_boundaries.has_start()
         )
 
         return (
@@ -401,11 +436,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
             # Same page
             links["self"] = make_link(
-                first_id=paging_boundaries.first_id,
-                last_id=paging_boundaries.last_id,
-                first=paging_boundaries.start,
-                last=paging_boundaries.end,
+                first_id=self.requested_page_boundaries.first_id,
+                start=self.requested_page_boundaries.start,
             )
+            # TODO: last links
         return links
 
     def validate_limit(self, limit: Optional[int]) -> int:
@@ -1044,4 +1078,86 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
                 environment=parameter["environment"],
             )
             for parameter in records
+        ]
+
+
+class AgentView(DataView[AgentOrder, model.Agent]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "resource_type.desc",
+        start: Optional[Union[datetime, bool, str]] = None,
+        end: Optional[Union[datetime, bool, str]] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        filter: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
+        super().__init__(
+            order=AgentOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=filter,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "name": ContainsPartialFilter,
+            "process_name": ContainsPartialFilter,
+            "status": ContainsFilter,
+        }
+
+    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+        out_filter = super().process_filters(filter)
+        # name is ambiguous, qualify
+        if "name" in out_filter:
+            out_filter["a.name"] = out_filter.pop("name")
+        return out_filter
+
+    def get_base_url(self) -> str:
+        return "/api/v2/agents"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        base = SimpleQueryBuilder(
+            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
+                                            ap.hostname as process_name, ai.process as process_id,
+                                            (CASE WHEN paused THEN 'paused'
+                                                WHEN id_primary IS NOT NULL THEN 'up'
+                                                ELSE 'down'
+                                            END) as status""",
+            from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
+            filter_statements=[" a.environment = $1 "],
+            values=[self.environment.id],
+        )
+        # wrap when using compound fields
+        virtual_fields = {"status", "process_name", "process_id"}
+        used_fields = set(self.filter.keys()).union({t[0] for t in self.order.get_order_elements(False)})
+        if virtual_fields.intersection(used_fields):
+            query, values = base.build()
+            return SimpleQueryBuilder(
+                select_clause="select *",
+                from_clause=f"FROM ({query}) as a",
+                values=values,
+            )
+        return base
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.Agent]:
+        return [
+            model.Agent(
+                name=agent["name"],
+                environment=agent["environment"],
+                last_failover=agent["last_failover"],
+                paused=agent["paused"],
+                unpause_on_resume=agent["unpause_on_resume"],
+                process_id=agent["process_id"],
+                process_name=agent["process_name"],
+                status=agent["status"],
+            )
+            for agent in records
         ]

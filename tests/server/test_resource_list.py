@@ -346,6 +346,17 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     base_url = "http://localhost:%s" % (port,)
     http_client = AsyncHTTPClient()
 
+    # Test link for self page
+    url = f"""{base_url}{result.result["links"]["self"]}"""
+    request = HTTPRequest(
+        url=url,
+        headers={"X-Inmanta-tid": str(env.id)},
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    assert response == result.result
+
     # Test link for next page
     url = f"""{base_url}{result.result["links"]["next"]}"""
     assert "limit=2" in url

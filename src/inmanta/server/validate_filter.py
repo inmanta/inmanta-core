@@ -306,14 +306,3 @@ class FilterValidator(ABC):
         if len(not_allowed_filters) > 0:
             raise InvalidFilter(f"The following filters are not supported: {not_allowed_filters}")
         return query
-
-
-class AgentFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "name": ContainsPartialFilter,
-            "process_name": ContainsPartialFilter,
-            "status": ContainsFilter,
-        }
-

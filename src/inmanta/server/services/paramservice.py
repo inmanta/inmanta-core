@@ -22,10 +22,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.data import APILIMIT, InvalidSort, ParameterOrder, QueryType
+from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView
 from inmanta.data.model import Fact, Parameter, ResourceIdStr
-from inmanta.data.paging import ParameterPagingCountsProvider, ParameterPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
@@ -319,7 +318,6 @@ class ParameterService(protocol.ServerSlice):
             return out
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-
 
     @handle(methods_v2.get_all_facts, env="tid")
     async def get_all_facts(
