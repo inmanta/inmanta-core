@@ -357,7 +357,7 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
         if "-" in str(self.name):
-            warnings.warn(HyphenDeprecationWarning(self.name))
+            inmanta.warnings.warn(HyphenDeprecationWarning(self.name))
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
