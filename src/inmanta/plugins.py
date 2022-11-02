@@ -32,6 +32,7 @@ from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
+from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
 
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
     from inmanta.compiler import Compiler
 
 
-class PluginDeprecationWarning(Warning):
+class PluginDeprecationWarning(InmantaWarning):
     pass
 
 
