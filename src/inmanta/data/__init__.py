@@ -321,7 +321,7 @@ class TablePrefixWrapper(ColumnType):
         self.child = child
 
     @property
-    def nullable(self):
+    def nullable(self) -> bool:
         return self.child.nullable
 
     def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
