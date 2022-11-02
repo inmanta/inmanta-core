@@ -507,9 +507,11 @@ async def retry_limited(
         raise ValueError("value of INMANTA_RETRY_LIMITED_MULTIPLIER must be bigger or equal to 1.")
     hard_timeout = timeout * multiplier
     start = time.time()
-    while time.time() - start < hard_timeout and not (await fun_wrapper()):
+    result = await fun_wrapper()
+    while time.time() - start < hard_timeout and not result:
         await asyncio.sleep(interval)
-    if not (await fun_wrapper()):
+        result = await fun_wrapper()
+    if not result:
         raise asyncio.TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
     if time.time() - start > timeout:
         raise asyncio.TimeoutError(

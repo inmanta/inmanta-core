@@ -3581,7 +3581,7 @@ class Compile(BaseDocument):
     @classmethod
     async def get_next_compiles_count(cls) -> int:
         """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
+        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled AND completed IS NULL")
         return result
 
     @classmethod
