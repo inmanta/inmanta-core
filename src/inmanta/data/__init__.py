@@ -97,7 +97,8 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
+    @staticmethod
+    def _generate_next_value_(name, start: int, count: int, last_values: abc.Sequence[object]) -> str:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -167,8 +168,8 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
-RangeConstraint = List[Tuple[RangeOperator, int]]
-DateRangeConstraint = List[Tuple[RangeOperator, datetime.datetime]]
+RangeConstraint = list[tuple[RangeOperator, int]]
+DateRangeConstraint = list[tuple[RangeOperator, datetime.datetime]]
 QueryFilter = Tuple[QueryType, object]
 
 
@@ -379,9 +380,18 @@ class DatabaseOrderV2(ABC):
         offset: int,
         column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        start: Optional[bool] = True,
+        start: bool = True,
     ) -> Tuple[List[str], List[object]]:
-        """Get the column and id values as filters, for use in paging"""
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
         pass
 
     @abstractmethod
@@ -395,7 +405,7 @@ class DatabaseOrderV2(ABC):
         pass
 
     @abstractmethod
-    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record of the page"""
         pass
 
@@ -449,14 +459,10 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
             return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
         raise InvalidSort(f"Sort parameter invalid: {sort}")
 
-        # Internal helpers
-
+    # Internal helpers
     def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
         return self.order.invert() if invert else self.order
-
-    def __str__(self) -> str:
-        return f"{self.order_by_column}.{self.order}"
 
     def get_order_by_column_type(self) -> ColumnType:
         """The type of the order by column"""
@@ -466,22 +472,30 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
-        # External API
-
+    # External API
     def as_filter(
         self,
         offset: int,
         column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        start: Optional[bool] = True,
+        start: bool = True,
     ) -> Tuple[List[str], List[object]]:
-        """Get the column and id values as filters"""
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
         relation = ">" if start else "<"
 
         if column_value is None:
             return [], []
 
-        coll_type = self.get_valid_sort_columns()[self.order_by_column]
+        coll_type = self.get_order_by_column_type()
         col_name = self.order_by_column
         value = coll_type.get_value(column_value)
 
@@ -489,13 +503,13 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
         return [filter], ac.args
 
-    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
         """
         return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
         """
         order = self.get_order(invert)
         return [
-            (self.order_by_column, self.get_valid_sort_columns()[self.order_by_column], order),
+            (self.order_by_column, self.get_order_by_column_type(), order),
         ]
 
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
@@ -505,13 +519,13 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         )
         return f" ORDER BY {order_by_part}"
 
-    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
         if self.get_order() == PagingOrder.ASC:
             first, last = last, first
 
         order_column_name = self.order_by_column
-        order_type: ColumnType = self.get_valid_sort_columns()[self.order_by_column]
+        order_type: ColumnType = self.get_order_by_column_type()
 
         def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
             # Make mypy happy
@@ -550,7 +564,7 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         offset: int,
         column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
         id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        start: Optional[bool] = True,
+        start: bool = True,
     ) -> Tuple[List[str], List[object]]:
         """
         Produce a filter for this order, to select all record before or after the given id
@@ -558,7 +572,7 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         :param offset: the next free number to use for query parameters
         :param column_value: the value for the user specified order
         :param id_value: the value for the built in order order
-        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+        :param start: is this the start filter? if so, retain all values`> (column_value, id_value)`, otherwise `< (column_value, id_value)`.
 
         :return: The filter (as a string) and all associated query parameter values
         """
@@ -568,9 +582,9 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         # 2. type of the collumn
         # 3. sanitized value of the collumn
 
-        filter_elements: List[Tuple[str, ColumnType, object]] = []
+        filter_elements: list[tuple[str, ColumnType, object]] = []
 
-        order_by_collumns_type = self.get_valid_sort_columns()[self.order_by_column]
+        order_by_collumns_type = self.get_order_by_column_type()
         paging_on_nullable = order_by_collumns_type.nullable and id_value is not None
 
         if column_value is not None or paging_on_nullable:
@@ -609,24 +623,24 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
             filter = f"({names_tuple}) {relation} ({values_references_tuple})"
             return [filter], ac.args
 
-    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
         """
         return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
         """
         order = self.get_order(invert)
         id_name, id_type = self.id_column
         return [
-            (self.order_by_column, self.get_valid_sort_columns()[self.order_by_column], order),
+            (self.order_by_column, self.get_order_by_column_type(), order),
             (id_name, id_type, order),
         ]
 
-    def get_paging_boundaries(self, first: dict[str, object], last: dict[str, object]) -> PagingBoundaries:
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
         if self.get_order() == PagingOrder.ASC:
             first, last = last, first
 
         order_column_name = self.order_by_column
-        order_type: ColumnType = self.get_valid_sort_columns()[self.order_by_column]
+        order_type: ColumnType = self.get_order_by_column_type()
 
         id_column, id_type = self.id_column
 
@@ -2010,34 +2024,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statements:
             return "WHERE " + " AND ".join(filter_statements)
         return ""
-
-    @classmethod
-    def _validate_paging_parameters(
-        cls,
-        start: Optional[Any],
-        end: Optional[Any],
-        first_id: Optional[Union[uuid.UUID, str]],
-        last_id: Optional[Union[uuid.UUID, str]],
-    ) -> None:
-        if start and end:
-            raise InvalidQueryParameter(
-                f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
-            )
-        if first_id and last_id:
-            raise InvalidQueryParameter(
-                f"Only one of first_id and last_id parameters is allowed at the same time. "
-                f"Received first_id: {first_id}, last_id: {last_id}"
-            )
-        if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameter(
-                f"The first_id parameter should be used in combination with the start parameter. "
-                f"Received first_id: {first_id}, start: {start}, end: {end}"
-            )
-        if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameter(
-                f"The last_id parameter should be used in combination with the end parameter. "
-                f"Received last_id: {last_id}, start: {start}, end: {end}"
-            )
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
