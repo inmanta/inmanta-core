@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
+from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING
@@ -608,7 +609,7 @@ class CompilerRuntimeWarning(Warning, RuntimeException):
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
-        Warning.__init__(self)
+        InmantaWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
 
 

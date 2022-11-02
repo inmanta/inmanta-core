@@ -22,6 +22,7 @@ import typing
 import warnings
 from typing import Dict, Iterator, List, Optional, Tuple
 
+import inmanta
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
@@ -525,7 +526,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
-        warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
+        inmanta.warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 
