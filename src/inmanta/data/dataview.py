@@ -48,7 +48,6 @@ from inmanta.data import (
     QueryFilter,
     ResourceAction,
     ResourceHistoryOrder,
-    ResourceIdStr,
     ResourceLogOrder,
     ResourceOrder,
     SimpleQueryBuilder,
@@ -64,6 +63,7 @@ from inmanta.data.model import (
     LatestReleasedResource,
     PagingBoundaries,
     ResourceHistory,
+    ResourceIdStr,
     ResourceLog,
     ResourceVersionIdStr,
 )
@@ -296,7 +296,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
             metadata = await self._get_page_count(paging_boundaries)
             links = await self.prepare_paging_links(dtos, paging_boundaries, metadata)
-            return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
         # Paging helpers

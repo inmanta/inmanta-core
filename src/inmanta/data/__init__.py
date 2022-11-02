@@ -544,6 +544,10 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
     ) -> bool:
         return False
 
+    def __str__(self) -> str:
+        # used to serialize the order back to a  paging url
+        return f"{self.order_by_column}.{self.order}"
+
 
 class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
     """
