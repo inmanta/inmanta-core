@@ -346,12 +346,10 @@ class Finalizers:
                 excns.append(CompilerException("Finalizer failed: " + str(e)))
         if excns:
             if should_log:
-                msg: list[str] = []
                 for exception in excns:
-                    msg.append(exception.msg + "\n")
-                LOGGER.error("".join(msg).strip())
+                    LOGGER.error(exception.msg)
             else:
-                raise MultiException(excns)
+                raise excns[0] if len(excns) == 1 else MultiException(excns)
 
     @classmethod
     def reset_finalizers(cls) -> None:

@@ -170,11 +170,11 @@ def test_modules_compiler_finalizer_exception(
 from inmanta import compiler
 
 @compiler.finalizer
-def finalize():
+def finalize1():
     connection = 3/0
 
 @compiler.finalizer
-def finalize():
+def finalize2():
     raise Exception("big mistake")
         """.strip()
 
@@ -204,7 +204,13 @@ def finalize():
                 caplog,
                 "inmanta.compiler",
                 logging.ERROR,
-                "Finalizer failed: division by zero" + "\n" + "Finalizer failed: big mistake",
+                "Finalizer failed: division by zero",
+            )
+            log_contains(
+                caplog,
+                "inmanta.compiler",
+                logging.ERROR,
+                "Finalizer failed: big mistake",
             )
     else:
         with pytest.raises(MultiException) as e:
