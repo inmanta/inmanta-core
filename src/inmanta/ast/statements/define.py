@@ -22,6 +22,7 @@ import typing
 import warnings
 from typing import Dict, Iterator, List, Optional, Tuple
 
+import inmanta
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
@@ -432,7 +433,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.comment = None
         if self.name in TYPES:
-            warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
+            inmanta.warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
         if "-" in self.name:
             raise HyphenException(name)
 
@@ -525,7 +526,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
-        warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
+        inmanta.warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 

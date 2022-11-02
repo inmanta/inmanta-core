@@ -17,13 +17,13 @@
 """
 import logging
 import re
-import warnings
 from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
+import inmanta
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
@@ -524,7 +524,7 @@ def deprecated_relation_warning(p: YaccProduction) -> None:
         values: Tuple[str, str] = tuple(v if v is not None else "" for v in multi)
         return "[%s:%s]" % values if values[0] != values[1] else "[%s]" % values[0]
 
-    warnings.warn(
+    inmanta.warnings.warn(
         SyntaxDeprecationWarning(
             p[0].location,
             None,

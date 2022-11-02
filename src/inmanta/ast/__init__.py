@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
+from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING
@@ -602,19 +603,14 @@ class HyphenException(RuntimeException):
         RuntimeException.__init__(self, stmt, msg)
 
 
-class CompilerRuntimeWarning(Warning, RuntimeException):
+class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
-        Warning.__init__(self)
+        InmantaWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
-
-
-class CompilerDeprecationWarning(CompilerRuntimeWarning):
-    def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
-        CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
 class VariableShadowWarning(CompilerRuntimeWarning):
@@ -860,6 +856,7 @@ class DuplicateException(TypingException):
 
 
 class CompilerError(Exception):
+
     pass
 
 
