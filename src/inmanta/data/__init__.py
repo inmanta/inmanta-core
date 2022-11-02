@@ -575,7 +575,8 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         :param offset: the next free number to use for query parameters
         :param column_value: the value for the user specified order
         :param id_value: the value for the built in order order
-        :param start: is this the start filter? if so, retain all values`> (column_value, id_value)`, otherwise `< (column_value, id_value)`.
+        :param start: is this the start filter? if so, retain all values`> (column_value, id_value)`,
+            otherwise `< (column_value, id_value)`.
 
         :return: The filter (as a string) and all associated query parameter values
         """
