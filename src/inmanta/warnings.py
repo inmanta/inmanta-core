@@ -140,9 +140,11 @@ class WarningsManager:
         :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
-        if filename == __file__:
-            text: str = "%s: %s" % (category.__name__, message)
-            logger: logging.Logger = logging.getLogger("inmanta.warnings")
+        text: str
+        logger: logging.Logger
+        if issubclass(category, InmantaWarning):
+            text = "%s: %s" % (category.__name__, message)
+            logger = logging.getLogger("inmanta.warnings")
         else:
             text = warnings.formatwarning(
                 # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
@@ -153,7 +155,6 @@ class WarningsManager:
                 line,
             )
             logger = logging.getLogger("py.warnings")
-
         if file is not None:
             try:
                 # This code path is currently not used in our code base
