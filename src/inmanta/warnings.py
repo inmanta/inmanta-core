@@ -140,14 +140,15 @@ class WarningsManager:
         :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
-        text: str = warnings.formatwarning(
-            # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
-            message,  # type: ignore
-            category,
-            filename,
-            lineno,
-            line,
-        )
+        # text: str = warnings.formatwarning(
+        #     # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
+        #     message,  # type: ignore
+        #     category,
+        #     filename,
+        #     lineno,
+        #     line,
+        # )
+        text = "%s: %s" % (category.__name__, message)
         logger: logging.Logger = logging.getLogger("py.warnings")
 
         if file is not None:
