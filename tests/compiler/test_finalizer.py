@@ -21,7 +21,7 @@ import os
 import pytest
 
 from inmanta import compiler
-from inmanta.ast import DoubleSetException
+from inmanta.ast import DoubleSetException, MultiException
 from utils import log_contains, v1_module_from_template
 
 
@@ -172,6 +172,10 @@ from inmanta import compiler
 @compiler.finalizer
 def finalize():
     connection = 3/0
+
+@compiler.finalizer
+def finalize():
+    raise Exception("big mistake")
         """.strip()
 
     v1_module_from_template(
@@ -196,7 +200,13 @@ def finalize():
         with caplog.at_level(logging.ERROR):
             with pytest.raises(DoubleSetException):
                 compiler.do_compile()
-            log_contains(caplog, "inmanta.compiler", logging.ERROR, "Finalizers failed: division by zero")
+            log_contains(
+                caplog,
+                "inmanta.compiler",
+                logging.ERROR,
+                "Finalizer failed: division by zero" + "\n" + "Finalizer failed: big mistake",
+            )
     else:
-        with pytest.raises(ZeroDivisionError):
+        with pytest.raises(MultiException) as e:
             compiler.do_compile()
+        assert str(e.value) == "Reported 2 errors:\n\tFinalizer failed: division by zero\n\tFinalizer failed: big mistake"

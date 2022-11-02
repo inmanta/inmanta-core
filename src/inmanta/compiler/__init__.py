@@ -338,11 +338,20 @@ class Finalizers:
         by default this function will raise exceptions caused by errors in the finalizer functions
         if 'should_log' is set to True the exceptions will not be raised but logged instead.
         """
-        try:
-            for fnc in cls.__finalizers:
+        excns: list[CompilerException] = []
+        for fnc in cls.__finalizers:
+            try:
                 fnc()
-        except (Exception if should_log else ()) as e:
-            LOGGER.error(f"Finalizers failed: {e}")
+            except Exception as e:
+                excns.append(CompilerException("Finalizer failed: " + str(e)))
+        if excns:
+            if should_log:
+                msg: list[str] = []
+                for exception in excns:
+                    msg.append(exception.msg + "\n")
+                LOGGER.error("".join(msg).strip())
+            else:
+                raise MultiException(excns)
 
     @classmethod
     def reset_finalizers(cls) -> None:
