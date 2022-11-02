@@ -342,17 +342,29 @@ def environment_list(client: Client) -> None:
 
 @environment.command(name="show")
 @click.argument("environment")
+# TODO: write test
+@click.option(
+    "--format",
+    "format_string",
+    # TODO: security?
+    # TODO: mention which {} are supported
+    help="Instead of outputting a table, use the supplied format string. Accepts Python format syntax",
+    required=False
+)
 @click.pass_obj
-def environment_show(client: Client, environment: str) -> None:
+def environment_show(client: Client, environment: str, format_string: Optional[str]) -> None:
     """
     Show details of an environment
 
     ENVIRONMENT: ID or name of the environment to show
     """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
-    print_table(
-        ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
-    )
+    if format_string is not None:
+        print(format_string.format(**env))
+    else:
+        print_table(
+            ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
+        )
 
 
 @environment.command(name="save")
