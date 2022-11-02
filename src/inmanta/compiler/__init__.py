@@ -326,10 +326,10 @@ class Finalizers:
     This class keeps all the finalizers that need to be called right after the compilation finishes
     """
 
-    __finalizers: List[abc.Callable[[], None]] = []
+    __finalizers: list[abc.Callable[[], object]] = []
 
     @classmethod
-    def add_function(cls, fnc: abc.Callable[[], None]) -> None:
+    def add_function(cls, fnc: abc.Callable[[], object]) -> None:
         cls.__finalizers.append(fnc)
 
     @classmethod
@@ -350,7 +350,7 @@ class Finalizers:
 
 
 @stable_api
-def finalizer(fnc: abc.Callable[[], None]) -> None:
+def finalizer(fnc: abc.Callable[[], object]) -> None:
     """
     Python decorator to register functions with inmanta as Finalizers
     :param fnc: The function to register with inmanta as a finalizer. When used as a decorator this is the function to which the

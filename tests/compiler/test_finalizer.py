@@ -102,7 +102,7 @@ def finalize2():
 
 def test_modules_compiler_exception_finalizer(tmpdir: str, snippetcompiler_clean, modules_dir: str) -> None:
     """
-    verify that the finalizers are called even if there is an excpetion raised during compilation
+    verify that the finalizers are called even if there is an exception raised during compilation
     """
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 
