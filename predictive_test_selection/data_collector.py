@@ -20,7 +20,7 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import List, MutableMapping, Set, Union
+from typing import List, MutableMapping, Set, Union, Optional
 
 import click
 
@@ -74,13 +74,17 @@ class CodeChange:
 
     changed_files: List[str] = field(init=False, repr=False)
 
-    def parse(self):
+    def parse(self, feature_branch: Optional[str]):
         # Get latest commit hash:
         self.commit_hash = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
 
-        # Get current branch
-        cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-        current_branch: str = subprocess.check_output(cmd).strip().decode()
+        # Get current branch:
+
+        if feature_branch is None:
+            cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+            current_branch: str = subprocess.check_output(cmd).strip().decode()
+        else:
+            current_branch: str = feature_branch
 
         if current_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
@@ -200,9 +204,9 @@ class DataParser:
         self.code_change_data: CodeChange = CodeChange()
         self.test_result_data: TestResult = TestResult()
 
-    def run(self, dry_run: bool):
+    def run(self, dry_run: bool, feature_branch: Optional[str]):
         try:
-            self.code_change_data.parse()
+            self.code_change_data.parse(feature_branch)
             self.test_result_data.parse(self.code_change_data.dev_branch)
 
             self.send_influxdb_data(dry_run)
@@ -242,9 +246,10 @@ class DataParser:
 
 @click.command()
 @click.option("--dry-run/--full-run", default=True, help="If dry-run only: no data will be sent to the db.")
-def main(dry_run: bool):
+@click.option("--feature-branch", default=None, help="The name of the feature branch.")
+def main(dry_run: bool, feature_branch: Optional[str]):
     data_parser = DataParser()
-    data_parser.run(dry_run)
+    data_parser.run(dry_run, feature_branch)
 
 
 if __name__ == "__main__":
