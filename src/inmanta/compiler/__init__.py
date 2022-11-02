@@ -341,11 +341,8 @@ class Finalizers:
         try:
             for fnc in cls.__finalizers:
                 fnc()
-        except Exception as e:
-            if should_log:
-                LOGGER.error(f"Finalizers failed: {e}")
-            else:
-                raise
+        except (Exception if should_log else ()) as e:
+            LOGGER.error(f"Finalizers failed: {e}")
 
     @classmethod
     def reset_finalizers(cls) -> None:
