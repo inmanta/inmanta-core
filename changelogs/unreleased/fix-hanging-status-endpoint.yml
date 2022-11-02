@@ -1,0 +1,5 @@
+description: Fix bug where the status endpoint can become non-responsive
+change-type: patch
+destination-branches: [iso4]
+sections:
+  bugfix: "{{description}}"
