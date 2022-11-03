@@ -87,6 +87,7 @@ class CodeChange:
         if feature_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
+        self._fully_checkout_branch(feature_branch)
         self._compute_changed_files(self.commit_hash)
         self._compute_file_extensions()
         self._count_modifications()
