@@ -82,26 +82,24 @@ class CodeChange:
 
         if feature_branch is None:
             cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-            current_branch: str = subprocess.check_output(cmd).strip().decode()
-        else:
-            current_branch: str = feature_branch
+            feature_branch: str = subprocess.check_output(cmd).strip().decode()
 
-        if current_branch.startswith("merge-tool/"):
+        if feature_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
-        self._compute_changed_files(current_branch)
+        self._compute_changed_files(self.commit_hash)
         self._compute_file_extensions()
         self._count_modifications()
 
-    def _compute_changed_files(self, current_branch: str) -> None:
+    def _compute_changed_files(self, latest_commit: str) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
-        The distance metric used is the total number of files in the diff with the current branch
+        The distance metric used is the total number of files in the diff with the feature branch latest commit
         """
         max_cardinality: Union[float, int] = float("inf")
 
         for dev_branch in DEV_BRANCHES:
-            cmd = ["git", "diff", f"{dev_branch}...{current_branch}", "--name-only"]
+            cmd = ["git", "diff", f"{dev_branch}...{latest_commit}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
