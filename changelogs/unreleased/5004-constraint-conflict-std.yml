@@ -1,4 +1,6 @@
-description: "constraints Jinja and email_validator to same version as std"
+description: "adapt constraints to not conflict with those of std"
 change-type: patch
 destination-branches:
   - iso4
+sections:
+  bugfix: "{{description}}"

@@ -11,16 +11,18 @@ requires = [
     "cryptography",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.14.0",
-    "email-validator",
+    "email_validator~=1.1",
     "execnet",
     "importlib_metadata",
-    "jinja2",
+    "Jinja2~=2.11",
+    # Dependency of Jinja2, later versions not compatible with Jinja2~=2.11
+    "MarkupSafe~=2.0.0",
     "more-itertools",
     "netifaces",
     "packaging",
     "ply",
     # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic!=1.9.0a1",
+    "pydantic~=1.8,!=1.9.0a1",
     "pyformance",
     "PyJWT",
     "python-dateutil",
