@@ -78,18 +78,15 @@ class CodeChange:
         # Get latest commit hash:
         self.commit_hash = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
 
-        # Get current branch:
-
         if feature_branch is None:
+            # Get current branch:
             cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
             feature_branch: str = subprocess.check_output(cmd).strip().decode()
 
         if feature_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
-        self._show_branches()
         self._fully_checkout_branch(feature_branch)
-        self._show_branches()
         self._compute_changed_files(feature_branch)
         self._compute_file_extensions()
         self._count_modifications()
@@ -102,13 +99,6 @@ class CodeChange:
         cmd = ["git", "fetch", "origin", f"{branch}"]
         subprocess.check_output(cmd)
 
-    def _show_branches(self) -> None:
-        LOGGER.info("Show branches:")
-        cmd = ["git", "branch"]
-        branches = subprocess.check_output(cmd).strip().decode()
-
-        LOGGER.info(f"Branches:\n{branches}")
-
     def _compute_changed_files(self, feature_branch: str) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
@@ -118,7 +108,6 @@ class CodeChange:
 
         for dev_branch in DEV_BRANCHES:
             self._fully_checkout_branch(dev_branch)
-            self._show_branches()
             cmd = ["git", "diff", f"origin/{dev_branch}...origin/{feature_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
