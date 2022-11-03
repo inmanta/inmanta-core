@@ -88,7 +88,7 @@ class CodeChange:
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
         self._fully_checkout_branch(feature_branch)
-        self._compute_changed_files(self.commit_hash)
+        self._compute_changed_files(feature_branch)
         self._compute_file_extensions()
         self._count_modifications()
 
@@ -97,7 +97,7 @@ class CodeChange:
         cmd = ["git", "fetch", "origin", f"{dev_branch}"]
         subprocess.check_output(cmd)
 
-    def _compute_changed_files(self, latest_commit: str) -> None:
+    def _compute_changed_files(self, feature_branch: str) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
         The distance metric used is the total number of files in the diff with the feature branch latest commit
@@ -106,7 +106,7 @@ class CodeChange:
 
         for dev_branch in DEV_BRANCHES:
             self._fully_checkout_branch(dev_branch)
-            cmd = ["git", "diff", f"{dev_branch}...{latest_commit}", "--name-only"]
+            cmd = ["git", "diff", f"{dev_branch}...{feature_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
