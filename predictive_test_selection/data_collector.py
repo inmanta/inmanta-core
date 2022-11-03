@@ -116,7 +116,7 @@ class CodeChange:
         for dev_branch in DEV_BRANCHES:
             self._fully_checkout_branch(dev_branch)
             self._show_branches()
-            cmd = ["git", "diff", f"{dev_branch}...{feature_branch}", "--name-only"]
+            cmd = ["git", "diff", f"origin/{dev_branch}...origin/{feature_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
