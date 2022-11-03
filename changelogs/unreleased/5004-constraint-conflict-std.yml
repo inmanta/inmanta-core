@@ -1,0 +1,4 @@
+description: "constraints Jinja and email_validator to same version as std"
+change-type: patch
+destination-branches:
+  - iso4
