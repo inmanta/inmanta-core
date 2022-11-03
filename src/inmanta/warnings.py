@@ -152,10 +152,10 @@ class WarningsManager:
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
         if issubclass(category, InmantaWarning):
-            text = "%s: %s" % (category.__name__, message)
-            logger = logging.getLogger("inmanta.warnings")
+            text: str = "%s: %s" % (category.__name__, message)
+            logger: logging.Logger = logging.getLogger("inmanta.warnings")
         else:
-            text: str = warnings.formatwarning(
+            text = warnings.formatwarning(
                 # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
                 message,  # type: ignore
                 category,
@@ -163,7 +163,7 @@ class WarningsManager:
                 lineno,
                 line,
             )
-            logger: logging.Logger = logging.getLogger("py.warnings")
+            logger = logging.getLogger("py.warnings")
 
         if file is not None:
             try:
