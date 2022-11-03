@@ -173,7 +173,7 @@ class TestResult:
 
     def parse(self, dev_branch: str) -> None:
         self.test_result_data = {}
-        path: str = "junit-py36.xml" if dev_branch == "iso4" else "junit-py39.xml.bak"
+        path: str = "junit-py36.xml" if dev_branch == "iso4" else "junit-py39.xml"
         tree = ET.parse(path)
         root = tree.getroot()
 
