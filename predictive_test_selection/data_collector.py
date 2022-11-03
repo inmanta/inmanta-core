@@ -173,7 +173,7 @@ class TestResult:
 
     def parse(self, dev_branch: str) -> None:
         self.test_result_data = {}
-        path: str = "junit-py36.xml" if dev_branch == "iso4" else "junit-py39.xml"
+        path: str = "junit-py36.xml" if dev_branch == "iso4" else "junit-py39.xml.bak"
         tree = ET.parse(path)
         root = tree.getroot()
 
@@ -184,7 +184,11 @@ class TestResult:
 
                 test_file: str = test_case.get("classname")
                 test_name: str = test_case.get("name")
-                test_fqn: str = ".".join((test_file, test_name))
+
+                if not test_file or not test_name:
+                    continue
+                test_fqn: str = ".".join((sanitize(test_file), sanitize(test_name)))
+                # test_fqn: str = ".".join((test_file.replace("\n", "").replace(" ", ""), test_name.replace("\n", "")))
 
                 test_failed: int = int(test_case.find("failure") is not None)
 
@@ -194,6 +198,10 @@ class TestResult:
 
     def __iter__(self):
         yield from self.test_result_data.items()
+
+
+def sanitize(str_to_sanitize: str) -> str:
+    return str_to_sanitize.replace("\\n", "_").replace(" ", "_").replace(",", r"\,").replace("=", r"\=")
 
 
 class DataParser:
@@ -213,7 +221,7 @@ class DataParser:
 
             self.send_influxdb_data(dry_run)
         except AbortDataCollection as e:
-            LOGGER.debug(f"Data collection was aborted because {str(e)}")
+            LOGGER.info(f"Data collection was aborted because {str(e)}")
 
     def _create_data_payload(self) -> str:
         """
