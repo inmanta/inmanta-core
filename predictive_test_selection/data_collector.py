@@ -87,7 +87,9 @@ class CodeChange:
         if feature_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
+        self._show_branches()
         self._fully_checkout_branch(feature_branch)
+        self._show_branches()
         self._compute_changed_files(feature_branch)
         self._compute_file_extensions()
         self._count_modifications()
@@ -95,6 +97,11 @@ class CodeChange:
     def _fully_checkout_branch(self, dev_branch: str) -> None:
         LOGGER.info(f"Full checkout on {dev_branch}")
         cmd = ["git", "fetch", "origin", f"{dev_branch}"]
+        subprocess.check_output(cmd)
+
+    def _show_branches(self) -> None:
+        LOGGER.info("Show branches:")
+        cmd = ["git", "branch"]
         subprocess.check_output(cmd)
 
     def _compute_changed_files(self, feature_branch: str) -> None:
@@ -106,6 +113,7 @@ class CodeChange:
 
         for dev_branch in DEV_BRANCHES:
             self._fully_checkout_branch(dev_branch)
+            self._show_branches()
             cmd = ["git", "diff", f"{dev_branch}...{feature_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
