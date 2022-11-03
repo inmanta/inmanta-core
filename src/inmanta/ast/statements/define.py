@@ -28,7 +28,6 @@ from inmanta.ast import (
     CompilerException,
     CompilerRuntimeWarning,
     DuplicateException,
-    HyphenDeprecationWarning,
     Import,
     IndexException,
     LocatableString,
@@ -105,8 +104,6 @@ class DefineAttribute(Statement):
         if default_value is None, this is an explicit removal of a default value
         """
         super(DefineAttribute, self).__init__()
-        if "-" in name.value:
-            warnings.warn(HyphenDeprecationWarning(name))
         self.type = attr_type
         self.name = name
         self.default = default_value
@@ -134,8 +131,6 @@ class DefineEntity(TypeDefinitionStatement):
     ) -> None:
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
-        if "-" in name:
-            warnings.warn(HyphenDeprecationWarning(lname))
 
         self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
 
@@ -269,8 +264,6 @@ class DefineImplementation(TypeDefinitionStatement):
     ):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
-        if "-" in self.name:
-            warnings.warn(HyphenDeprecationWarning(name))
 
         self.block = statements
         self.entity = target_type
@@ -433,8 +426,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.comment = None
         if self.name in TYPES:
             warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
-        if "-" in self.name:
-            warnings.warn(HyphenDeprecationWarning(name))
 
     def get_expression(self) -> ExpressionStatement:
         """
@@ -502,8 +493,6 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.comment = None
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
-        if "-" in self.name:
-            warnings.warn(HyphenDeprecationWarning(name))
 
     def pretty_print(self) -> str:
         return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
@@ -548,11 +537,6 @@ class DefineRelation(BiStatement):
 
     def __init__(self, left: Relationside, right: Relationside, annotations: List[ExpressionStatement] = []) -> None:
         DefinitionStatement.__init__(self)
-        if "-" in str(right[1]):
-            warnings.warn(HyphenDeprecationWarning(right[1]))
-
-        if "-" in str(left[1]):
-            warnings.warn(HyphenDeprecationWarning(left[1]))
         # for later evaluation
         self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
         # for access to results
@@ -734,8 +718,6 @@ class DefineImport(TypeDefinitionStatement, Import):
                 "%s is not a valid module name: hyphens are not allowed, please use underscores instead." % (self.name)
             )
         self.toname = str(toname)
-        if "-" in self.toname:
-            warnings.warn(HyphenDeprecationWarning(toname))
 
     def register_types(self) -> None:
         self.target = self.namespace.get_ns_from_string(self.name)

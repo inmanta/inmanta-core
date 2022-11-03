@@ -611,12 +611,6 @@ class CompilerDeprecationWarning(CompilerRuntimeWarning):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
-class HyphenDeprecationWarning(CompilerDeprecationWarning):
-    def __init__(self, stmt: LocatableString) -> None:
-        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
-        CompilerRuntimeWarning.__init__(self, stmt, msg)
-
-
 class VariableShadowWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str):
         CompilerRuntimeWarning.__init__(self, stmt, msg)
