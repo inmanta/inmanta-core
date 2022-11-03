@@ -20,7 +20,7 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import List, MutableMapping, Set, Union, Optional
+from typing import List, MutableMapping, Optional, Set, Union
 
 import click
 
@@ -91,6 +91,10 @@ class CodeChange:
         self._compute_file_extensions()
         self._count_modifications()
 
+    def _fully_checkout_branch(self, dev_branch: str) -> None:
+        cmd = ["git", "fetch", "origin", f"{dev_branch}"]
+        subprocess.check_output(cmd)
+
     def _compute_changed_files(self, latest_commit: str) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
@@ -99,6 +103,7 @@ class CodeChange:
         max_cardinality: Union[float, int] = float("inf")
 
         for dev_branch in DEV_BRANCHES:
+            self._fully_checkout_branch(dev_branch)
             cmd = ["git", "diff", f"{dev_branch}...{latest_commit}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
