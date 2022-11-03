@@ -1,5 +1,5 @@
 ---
-description: Dummy feature branch to test the irt pipeline against
+description: Fix the data collector pipeline
 change-type: patch
 destination-branches:
   - master
