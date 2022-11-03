@@ -408,9 +408,9 @@ class DatabaseOrderV2(ABC):
 
         More specifically:
         1. when we have a single order, and `column_value` is not None, this singe value is used for filtering
-        2. when we have a double order and the 'id_value' is not None and `is_id_nullable()`,
+        2. when we have a double order and the 'id_value' is not None and `self.get_order_by_column_type().nullable`,
             we consider the null an effective value and filter on both `column_value` and `id_value`
-        3. when we have a double order and the 'id_value' is not None and `not is_id_nullable()`,
+        3. when we have a double order and the 'id_value' is not None and `not self.get_order_by_column_type().nullable`,
             we consider the null not a value and filter only on `id_value`
 
         """

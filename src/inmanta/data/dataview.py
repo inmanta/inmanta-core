@@ -283,6 +283,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
+
     # Paging helpers
 
     async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
