@@ -92,6 +92,7 @@ class CodeChange:
         self._count_modifications()
 
     def _fully_checkout_branch(self, dev_branch: str) -> None:
+        LOGGER.info(f"Full checkout on {dev_branch}")
         cmd = ["git", "fetch", "origin", f"{dev_branch}"]
         subprocess.check_output(cmd)
 
