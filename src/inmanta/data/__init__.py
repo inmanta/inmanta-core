@@ -66,7 +66,12 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import PagingBoundaries, ResourceIdStr
+from inmanta.data.model import (
+    PagingBoundaries,
+    ResourceIdStr,
+    api_boundary_datetime_normalizer,
+    validator_timezone_aware_timestamps,
+)
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -279,7 +284,7 @@ class ColumnType:
         if self.base_type == bool:
             return pydantic.validators.bool_validator(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
-            return dateutil.parser.isoparse(value)
+            return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
             # We can cast between those types
             return self.base_type(value)
@@ -303,7 +308,8 @@ class ColumnType:
             elif self.base_type == bool:
                 return f"COALESCE({value_reference}, FALSE)"
             elif self.base_type == int:
-                return f"COALESCE({value_reference}, 0)"
+                # we only support positive ints up till now
+                return f"COALESCE({value_reference}, -1)"
             elif self.base_type == str:
                 return f"COALESCE({value_reference}, '')"
             elif self.base_type == UUID:
@@ -335,7 +341,7 @@ class TablePrefixWrapper(ColumnType):
         return self.child.coalesce_to_min(value_reference)
 
 
-class ForcedStringCollumn(ColumnType):
+class ForcedStringColumn(ColumnType):
     """A string that is explicitly cast to a specific string type"""
 
     def __init__(self, forced_type: str) -> None:
@@ -358,7 +364,7 @@ OptionalDateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=True)
 PositiveIntColumn = ColumnType(base_type=int, nullable=False)
 # Negatives ints require updating coalesce_to_min
 
-TextColumn = ForcedStringCollumn("text")
+TextColumn = ForcedStringColumn("text")
 
 UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 BoolColumn = ColumnType(base_type=bool, nullable=False)
@@ -390,6 +396,23 @@ class DatabaseOrderV2(ABC):
         :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
 
         :return: The filter (as a string) and all associated query parameter values
+
+        None values can have a double meaning here:
+        - no value provided
+        - the value is provided and None
+
+        The distinction can be made as follows:
+        1. at least one of the columns must be not nullable (otherwise the sorting is not unique)
+        2. when both value are None, we are not paging and return '[],[]'
+        3. when one of the values is effective, we produce a filter
+
+        More specifically:
+        1. when we have a single order, and `column_value` is not None, this singe value is used for filtering
+        2. when we have a double order and the 'id_value' is not None and `is_id_nullable()`,
+            we consider the null an effective value and filter on both `column_value` and `id_value`
+        3. when we have a double order and the 'id_value' is not None and `not is_id_nullable()`,
+            we consider the null not a value and filter only on `id_value`
+
         """
         pass
 
@@ -406,13 +429,6 @@ class DatabaseOrderV2(ABC):
     @abstractmethod
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record of the page"""
-        pass
-
-    @abstractmethod
-    def is_id_nullable(
-        self,
-    ) -> bool:
-        """Is the (secondary) order column nullable?"""
         pass
 
 
@@ -538,11 +554,6 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
             last_id=None,
         )
 
-    def is_id_nullable(
-        self,
-    ) -> bool:
-        return False
-
     def __str__(self) -> str:
         # used to serialize the order back to a  paging url
         return f"{self.order_by_column}.{self.order}"
@@ -614,7 +625,6 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
             filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
             return [filter], ac.args
         else:
-            # TODO: dedup
             # composed filter:
             # 1. comparison of two tuples (c_a, c_b) < (c_a, c_b)
             # 2. nulls must be removed to get proper comparison
@@ -654,11 +664,6 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
             end=order_type.get_value(last[order_column_name]),
             last_id=id_type.get_value(last[id_column]),
         )
-
-    def is_id_nullable(
-        self,
-    ) -> bool:
-        return True
 
 
 class VersionedResourceOrder(AbstractDatabaseOrderV2):

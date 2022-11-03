@@ -52,12 +52,19 @@ def patch_pydantic_field_type_schema() -> None:
     pydantic.schema.field_type_schema = patch_nullable
 
 
+def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
+
 def validator_timezone_aware_timestamps(value: object) -> object:
     """
     A Pydantic validator to ensure that all datetime times are timezone aware.
     """
-    if isinstance(value, datetime.datetime) and value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
+    if isinstance(value, datetime.datetime):
+        return api_boundary_datetime_normalizer(value)
     else:
         return value
 

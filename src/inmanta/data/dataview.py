@@ -100,13 +100,11 @@ class RequestedPagingBoundaries:
         end: Optional[PRIMITIVE_SQL_TYPES],
         first_id: Optional[PRIMITIVE_SQL_TYPES],
         last_id: Optional[PRIMITIVE_SQL_TYPES],
-        id_nullable: bool,
     ) -> None:
         self.start = start
         self.end = end
         self.first_id = first_id
         self.last_id = last_id
-        self.id_nullable = id_nullable
 
     def validate(
         self,
@@ -129,20 +127,6 @@ class RequestedPagingBoundaries:
             raise InvalidQueryParameter(
                 f"Start and end parameters can not be set at the same time: "
                 f"Received first_id: {first_id}, last_id: {last_id}, start: {start}, end: {end}"
-            )
-
-        if self.id_nullable:
-            return
-
-        if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameter(
-                f"The first_id parameter should be used in combination with the start parameter. "
-                f"Received first_id: {first_id}, start: {start}, end: {end}"
-            )
-        if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameter(
-                f"The last_id parameter should be used in combination with the end parameter. "
-                f"Received last_id: {last_id}, start: {start}, end: {end}"
             )
 
     def has_start(self) -> bool:
@@ -183,7 +167,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.raw_filter = filter or {}
         self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
-        self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id, order.is_id_nullable())
+        self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
         self.requested_page_boundaries.validate()
 
     @abc.abstractmethod
