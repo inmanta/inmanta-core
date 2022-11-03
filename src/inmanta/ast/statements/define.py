@@ -433,7 +433,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.comment = None
         if self.name in TYPES:
-            warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
+            inmanta.warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
         if "-" in self.name:
             raise HyphenException(name)
 

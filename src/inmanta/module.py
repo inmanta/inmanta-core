@@ -65,7 +65,6 @@ import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
-import inmanta
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -1122,7 +1121,7 @@ class MetadataFieldRequires(BaseModel):
     def requires_to_list(cls, v: object) -> object:
         if isinstance(v, dict):
             # transform legacy format for backwards compatibility
-            inmanta.warnings.warn(
+            warnings.warn(
                 MetadataDeprecationWarning(
                     "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
                     " documented list syntax instead."
