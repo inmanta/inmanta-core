@@ -22,7 +22,6 @@ import typing
 import warnings
 from typing import Dict, Iterator, List, Optional, Tuple
 
-import inmanta
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,
@@ -107,7 +106,7 @@ class DefineAttribute(Statement):
         """
         super(DefineAttribute, self).__init__()
         if "-" in name.value:
-            inmanta.warnings.warn(HyphenDeprecationWarning(name))
+            warnings.warn(HyphenDeprecationWarning(name))
         self.type = attr_type
         self.name = name
         self.default = default_value
@@ -136,7 +135,7 @@ class DefineEntity(TypeDefinitionStatement):
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
         if "-" in name:
-            inmanta.warnings.warn(HyphenDeprecationWarning(lname))
+            warnings.warn(HyphenDeprecationWarning(lname))
 
         self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
 
@@ -271,7 +270,7 @@ class DefineImplementation(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         if "-" in self.name:
-            inmanta.warnings.warn(HyphenDeprecationWarning(name))
+            warnings.warn(HyphenDeprecationWarning(name))
 
         self.block = statements
         self.entity = target_type
@@ -433,9 +432,9 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.comment = None
         if self.name in TYPES:
-            inmanta.warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
+            warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
         if "-" in self.name:
-            inmanta.warnings.warn(HyphenDeprecationWarning(name))
+            warnings.warn(HyphenDeprecationWarning(name))
 
     def get_expression(self) -> ExpressionStatement:
         """
@@ -504,7 +503,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
         if "-" in self.name:
-            inmanta.warnings.warn(HyphenDeprecationWarning(name))
+            warnings.warn(HyphenDeprecationWarning(name))
 
     def pretty_print(self) -> str:
         return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
@@ -526,7 +525,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
             raise TypingException(
                 self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
             )
-        inmanta.warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
+        warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
 
         self.type.comment = self.comment
 
@@ -550,10 +549,10 @@ class DefineRelation(BiStatement):
     def __init__(self, left: Relationside, right: Relationside, annotations: List[ExpressionStatement] = []) -> None:
         DefinitionStatement.__init__(self)
         if "-" in str(right[1]):
-            inmanta.warnings.warn(HyphenDeprecationWarning(right[1]))
+            warnings.warn(HyphenDeprecationWarning(right[1]))
 
         if "-" in str(left[1]):
-            inmanta.warnings.warn(HyphenDeprecationWarning(left[1]))
+            warnings.warn(HyphenDeprecationWarning(left[1]))
         # for later evaluation
         self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
         # for access to results
@@ -736,7 +735,7 @@ class DefineImport(TypeDefinitionStatement, Import):
             )
         self.toname = str(toname)
         if "-" in self.toname:
-            inmanta.warnings.warn(HyphenDeprecationWarning(toname))
+            warnings.warn(HyphenDeprecationWarning(toname))
 
     def register_types(self) -> None:
         self.target = self.namespace.get_ns_from_string(self.name)
