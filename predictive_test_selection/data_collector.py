@@ -94,9 +94,12 @@ class CodeChange:
         self._compute_file_extensions()
         self._count_modifications()
 
-    def _fully_checkout_branch(self, dev_branch: str) -> None:
-        LOGGER.info(f"Full checkout on {dev_branch}")
-        cmd = ["git", "fetch", "origin", f"{dev_branch}"]
+    def _fully_checkout_branch(self, branch: str) -> None:
+        LOGGER.info(f"Full checkout on {branch}")
+
+        cmd = ["git", "remote", "set-branches", "--add", "origin", f"{branch}"]
+        subprocess.check_output(cmd)
+        cmd = ["git", "fetch", "origin", f"{branch}"]
         subprocess.check_output(cmd)
 
     def _show_branches(self) -> None:
@@ -116,7 +119,7 @@ class CodeChange:
         for dev_branch in DEV_BRANCHES:
             self._fully_checkout_branch(dev_branch)
             self._show_branches()
-            cmd = ["git", "diff", f"remotes/origin/{dev_branch}...remotes/origin/{feature_branch}", "--name-only"]
+            cmd = ["git", "diff", f"origin/{dev_branch}...origin/{feature_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
