@@ -20,7 +20,7 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import List, MutableMapping, Optional, Set, Union
+from typing import List, MutableMapping, Set, Union
 
 import click
 
@@ -74,14 +74,9 @@ class CodeChange:
 
     changed_files: List[str] = field(init=False, repr=False)
 
-    def parse(self, feature_branch: Optional[str]):
+    def parse(self, feature_branch: str) -> None:
         # Get latest commit hash:
         self.commit_hash = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
-
-        if feature_branch is None:
-            # Get current branch:
-            cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-            feature_branch: str = subprocess.check_output(cmd).strip().decode()
 
         if feature_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
@@ -211,7 +206,7 @@ class DataParser:
         self.code_change_data: CodeChange = CodeChange()
         self.test_result_data: TestResult = TestResult()
 
-    def run(self, dry_run: bool, feature_branch: Optional[str]):
+    def run(self, dry_run: bool, feature_branch: str):
         try:
             self.code_change_data.parse(feature_branch)
             self.test_result_data.parse(self.code_change_data.dev_branch)
@@ -253,8 +248,8 @@ class DataParser:
 
 @click.command()
 @click.option("--dry-run/--full-run", default=True, help="If dry-run only: no data will be sent to the db.")
-@click.option("--feature-branch", default=None, help="The name of the feature branch.")
-def main(dry_run: bool, feature_branch: Optional[str]):
+@click.option("--feature-branch", default=None, required=True, help="The name of the feature branch.")
+def main(dry_run: bool, feature_branch: str):
     data_parser = DataParser()
     data_parser.run(dry_run, feature_branch)
 
