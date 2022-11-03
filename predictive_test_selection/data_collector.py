@@ -102,7 +102,9 @@ class CodeChange:
     def _show_branches(self) -> None:
         LOGGER.info("Show branches:")
         cmd = ["git", "branch"]
-        subprocess.check_output(cmd)
+        branches = subprocess.check_output(cmd).strip().decode()
+
+        LOGGER.info(f"Branches:\n{branches}")
 
     def _compute_changed_files(self, feature_branch: str) -> None:
         """
