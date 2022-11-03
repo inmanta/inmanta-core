@@ -92,7 +92,7 @@ T_DTO = TypeVar("T_DTO", bound=BaseModel)
 
 
 class RequestedPagingBoundaries:
-    """Represents the lower and upper bounds that the user requested for the paging boundaries"""
+    """Represents the lower and upper bounds that the user requested for the paging boundaries, if any."""
 
     def __init__(
         self,
@@ -190,14 +190,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         # Project
         query_builder = query_builder.filter(
-            *data.Resource.get_composed_filter_with_query_types(
+            *data.BaseDocument.get_composed_filter_with_query_types(
                 offset=query_builder.offset, col_name_prefix=None, **self.filter
             )
         )
         query_builder = self.clip_to_page(query_builder)
         sql_query, values = query_builder.build()
 
-        records = await data.Resource.select_query(sql_query, values, no_obj=True)
+        records = await data.BaseDocument.select_query(sql_query, values, no_obj=True)
 
         dtos = self.construct_dtos(records)
 
@@ -283,7 +283,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata.to_dict())
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        # Paging helpers
+    # Paging helpers
 
     async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
         """
