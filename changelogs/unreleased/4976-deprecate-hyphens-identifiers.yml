@@ -1,0 +1,8 @@
+---
+description: Hyphens in identifiers are deprecated. Support will be removed in the next major releases
+issue-nr: 4976
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [iso5]
+sections:
+  deprecation-note: "{{description}}"
