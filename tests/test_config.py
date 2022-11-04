@@ -108,8 +108,8 @@ host=host1
 interval=10
 tags=tag1=value1
 [web-ui]
-path=/some/directory
-client-id=test
+dashboard-path=/some/directory
+dashboard-client-id=test
         """
         )
 
@@ -151,7 +151,7 @@ host=host3
 [influxdb]
 tags=tag2=value2
 [web-ui]
-path=/some/other/directory
+dashboard-path=/some/other/directory
         """
         )
 
@@ -159,8 +159,8 @@ path=/some/other/directory
         f.write(
             """
 [web-ui]
-path=/directory
-client-id=test123
+dashboard-path=/directory
+dashboard-client-id=test123
         """
         )
 
@@ -168,7 +168,7 @@ client-id=test123
         f.write(
             """
 [web-ui]
-client-id=test456
+dashboard-client-id=test456
         """
         )
 
@@ -182,8 +182,8 @@ client-id=test456
     assert Config.get("influxdb", "host") == "host3"
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
-    assert Config.get("web-ui", "path") == "/directory"
-    assert Config.get("web-ui", "client-id") == "test456"
+    assert Config.get("web-ui", "dashboard-path") == "/directory"
+    assert Config.get("web-ui", "dashboard-client-id") == "test456"
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
