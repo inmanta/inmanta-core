@@ -535,6 +535,7 @@ def reset_all_objects():
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    compiler.Finalizers.reset_finalizers()
 
 
 @pytest.fixture()
