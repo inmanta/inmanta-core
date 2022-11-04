@@ -308,7 +308,8 @@ class Option(Generic[T]):
                     )
                 else:
                     warnings.warn(
-                        "Config option %s is in deprecated section %s. Use option %s in section %s instead." % (self.predecessor_option.name, self.predecessor_option.section, self.name, self.section),
+                        "Config option %s is in deprecated section %s. Use option %s in section %s instead."
+                        % (self.predecessor_option.name, self.predecessor_option.section, self.name, self.section),
                         category=DeprecationWarning,
                     )
 
