@@ -256,9 +256,15 @@ class DataParser:
 @click.command()
 @click.option("--dry-run/--full-run", default=True, help="If dry-run only: no data will be sent to the db.")
 @click.option("--feature-branch", default=None, required=True, help="The name of the feature branch.")
-def main(dry_run: bool, feature_branch: str):
-    data_parser = DataParser()
-    data_parser.run(dry_run, feature_branch)
+@click.option("--fail-data-collection", default=False, help="Cause instant failure for debugging purpose")
+def main(dry_run: bool, feature_branch: str, fail_data_collection: bool):
+    try:
+        if fail_data_collection:
+            raise AbortDataCollection("Failure")
+        data_parser = DataParser()
+        data_parser.run(dry_run, feature_branch)
+    except AbortDataCollection as e:
+        LOGGER.info(f"Data collection was aborted because {str(e)}")
 
 
 if __name__ == "__main__":
