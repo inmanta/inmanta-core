@@ -1,9 +1,9 @@
 # Loosely inspired by virtualenv's `activate` and virtualenvwrapper's `virtualenvwrapper.sh`
 
+# TODO: delete old Python implementation
+# TODO: write tests, include all failure scenarios
 # TODO: document shell and user portability?
-# TODO: function naming conventions use _
 # TODO: mention reasoning for "command ls" vs "ls"
-# TODO: check that this file is sourced, not executed
 # TODO: names of all functions + docstrings and help
 
 if [ "$BASH_SOURCE" = "$0" ]; then
@@ -40,10 +40,10 @@ fi
 function __inmanta_workon_environments_dir {
     declare result
     result=$(
-        "$INMANTA_WORKON_PYTHON" -c 'from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));'
+        "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));'
     )
 
-    if [ "$?" -eq 0 ]; then
+    if [ ! "$?" -eq 0 ]; then
         echo "ERROR: Failed to determine server state directory. Is the server config valid?" >&2
         return 1
     fi
@@ -63,7 +63,7 @@ function __inmanta_workon_cli_port {
         "$INMANTA_WORKON_PYTHON" -c 'from inmanta.server.config import get_bind_port; print(get_bind_port());' 2> /dev/null
     )
 
-    if [ "$?" -eq 0 ]; then
+    if [ ! "$?" -eq 0 ]; then
         echo "ERROR: Failed to determine server bind port. Is the server config valid?" >&2
         return 1
     fi
@@ -73,11 +73,17 @@ function __inmanta_workon_cli_port {
 }
 
 
-function inmanta-workon-list {
-    # TODO: --help
+function __inmanta_workon_cli {
+    # Call inmanta-cli with appropriate host and port options. Hides stderr.
     declare port
     port="$(__inmanta_workon_cli_port)" || return  # propagate error
-    "$INMANTA_WORKON_CLI" --host localhost --port "$port" environment list 2> /dev/null
+    "$INMANTA_WORKON_CLI" --host localhost --port "$port" "$@" 2> /dev/null
+}
+
+
+function inmanta-workon-list {
+    # TODO: --help
+    __inmanta_workon_cli environment list
     if [ ! "$?" -eq 0 ]; then
         echo "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery." >&2
         declare envs_dir
@@ -102,7 +108,7 @@ function inmanta-workon-test {
     envs_dir="$(__inmanta_workon_environments_dir)" || return  # propagate error
 
     # convert environment argument to environment id
-    env_id=$("$INMANTA_WORKON_CLI" environment show --format '{id}' "$inmanta_env")
+    env_id=$(__inmanta_workon_cli environment show --format '{id}' "$inmanta_env")
     if [ ! "$?" -eq 0 ]; then
         # check if inmanta_env is a valid id
         "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
@@ -157,13 +163,14 @@ function __inmanta_workon_register_deactivate {
     # Replace the deactivate() function with a wrapper.
     eval 'deactivate () {
         declare inmanta_env_dir=$(dirname "$VIRTUAL_ENV")
+        declare user=${INMANTA_USER-inmanta}
 
         # Call the original function.
         virtualenv_deactivate $1
 
-        ownership_issues=$(find "$inmanta_env_dir" \! -user inmanta -print -quit)
+        ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the inmanta user. To fix this, run `find '$inmanta_env_dir' \! -user inmanta -exec chown inmanta:inmanta {} \;` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the inmanta user. To fix this, run \`find '\''$inmanta_env_dir'\'' \! -user '\''$user'\'' -exec chown '\''$user'\'':'\''$user'\'' {} \;\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then
