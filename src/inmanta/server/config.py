@@ -300,7 +300,7 @@ dash_realm = Option(
     "dashboard",
     "realm",
     "inmanta",
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_realm`] " "The realm to use for keycloak authentication.",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_realm`] The realm to use for keycloak authentication.",
     is_str,
 )
 
@@ -308,7 +308,7 @@ dash_auth_url = Option(
     "dashboard",
     "auth_url",
     None,
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_auth_url`] " "The auth url of the keycloak server to use.",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_auth_url`] The auth url of the keycloak server to use.",
     is_str,
 )
 
