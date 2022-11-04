@@ -265,6 +265,25 @@ class ColumnType:
         self.base_type = base_type
         self.nullable = nullable
 
+    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[Tuple[str, "ColumnType", object]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :param value: the value of this column
+        :return: a list of (name, type, value) items
+        """
+        return [(name, self, self.get_value(value))]
+
+    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[Tuple[str, "ColumnType", PagingOrder]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :return: a list of (name, type, order) items
+        """
+        return [(name, self, order)]
+
     def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
         """
         Prepare the actual value for use as an argument in a prepared statement for this type
@@ -351,6 +370,54 @@ class ForcedStringColumn(ColumnType):
         return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
 
 
+class ResourceVersionIdColumnType(ColumnType):
+    def __init__(self) -> None:
+        super().__init__(base_type=None, nullable=False)
+
+    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[Tuple[str, "ColumnType", object]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :param value: the value of this column
+        :return: a list of (name, type, value) items
+        """
+        assert isinstance(value, str)
+        id = Id.parse_resource_version_id(value)
+        return [
+            ("resource_id", StringColumn, StringColumn.get_value(id.resource_str())),
+            ("model", PositiveIntColumn, PositiveIntColumn.get_value(id.version)),
+        ]
+
+    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[Tuple[str, "ColumnType", PagingOrder]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :return: a list of (name, type, order) items
+        """
+        return [("resource_id", StringColumn, order), ("model", PositiveIntColumn, order)]
+
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        """
+        Prepare the actual value for use as an argument in a prepared statement for this type
+        """
+        raise NotImplementedError()
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        raise NotImplementedError()
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, because comparing a value to
+        NULL always yields NULL.
+        """
+        raise NotImplementedError()
+
+
 StringColumn = ColumnType(base_type=str, nullable=False)
 OptionalStringColumn = ColumnType(base_type=str, nullable=True)
 
@@ -364,6 +431,7 @@ TextColumn = ForcedStringColumn("text")
 
 UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
 BoolColumn = ColumnType(base_type=bool, nullable=False)
+ResourceVersionIdColumn = ResourceVersionIdColumnType()
 
 
 class DatabaseOrderV2(ABC):
@@ -514,7 +582,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
         return [filter], ac.args
 
-    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+    def get_order_elements(self, invert: bool) -> Sequence[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
         """
         return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
         """
@@ -600,15 +668,13 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
 
         if column_value is not None or paging_on_nullable:
             # Have column value or paging on nullable
-            filter_elements.append(
-                (self.order_by_column, order_by_collumns_type, order_by_collumns_type.get_value(column_value))
-            )
+            filter_elements.extend(order_by_collumns_type.as_basic_filter_elements(self.order_by_column, column_value))
 
         if id_value is not None:
             # Have ID
             id_name, id_type = self.id_column
             if id_name != self.order_by_column:
-                filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
+                filter_elements.extend(id_type.as_basic_filter_elements(id_name, id_value))
 
         relation = ">" if start else "<"
 
@@ -639,10 +705,10 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
         """
         order = self.get_order(invert)
         id_name, id_type = self.id_column
-        return [
-            (self.order_by_column, self.get_order_by_column_type(), order),
-            (id_name, id_type, order),
-        ]
+
+        return list(
+            self.get_order_by_column_type().as_basic_order_elements(self.order_by_column, order)
+        ) + id_type.as_basic_order_elements(self.order_by_column, order)
 
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
@@ -695,7 +761,27 @@ class ResourceOrder(VersionedResourceOrder):
     @property
     def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id"), StringColumn
+        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumn
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        def make_id(record: abc.Mapping[str, object]) -> str:
+            resource_id = record["resource_id"]
+            assert isinstance(resource_id, str)
+            model = record["model"]
+            return resource_id + ",v=" + str(model)
+
+        return PagingBoundaries(
+            start=order_type.get_value(first[order_column_name]),
+            first_id=make_id(first),
+            end=order_type.get_value(last[order_column_name]),
+            last_id=make_id(last),
+        )
 
 
 class ResourceHistoryOrder(AbstractDatabaseOrderV2):
@@ -711,15 +797,6 @@ class ResourceHistoryOrder(AbstractDatabaseOrderV2):
         """Name and type of the id column of this database order"""
         return (ColumnNameStr("attribute_hash"), StringColumn)
 
-    def get_order_elements(self, invert: bool) -> List[Tuple[ColumnNameStr, PagingOrder]]:
-        """
-        return a list of column/order pairs, to format an ORDER VBY statement
-
-        the purpose of this method is to get rid of id_column and its inherent limitation to one collumn
-        """
-        # Moved legacy code
-        order = self.get_order(invert)
-        return [(self.order_by_column, order), (ColumnNameStr("resource_id"), order), (ColumnNameStr("model"), order)]
 
 class ResourceLogOrder(SingleDatabaseOrder):
     """Represents the ordering by which resource logs should be sorted"""
