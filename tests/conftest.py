@@ -1417,24 +1417,33 @@ class CompileRunnerMock(object):
         self.request = request
         self.version: Optional[int] = None
         self._make_compile_fail = make_compile_fail
+        self._make_pull_fail = False
         self._runner_queue = runner_queue
         self.block = False
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
         now = datetime.datetime.now()
-        returncode = 1 if self._make_compile_fail else 0
-        report = data.Report(
-            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
-        )
-        await report.insert()
-        self.version = int(time.time())
-        success = not self._make_compile_fail
 
         if self._runner_queue is not None:
             self._runner_queue.put(self)
             self.block = True
             while self.block:
                 await asyncio.sleep(0.1)
+
+        returncode = 1 if self._make_compile_fail else 0
+        report = data.Report(
+            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
+        )
+        await report.insert()
+
+        if self._make_pull_fail:
+            report = data.Report(
+                compile=self.request.id, started=now, name="Pulling updates", command="", completed=now, returncode=1
+            )
+            await report.insert()
+
+        self.version = int(time.time())
+        success = not self._make_compile_fail
 
         return success, None
 
