@@ -17,20 +17,66 @@
 """
 import asyncio
 import click.testing
+import os
 import py
 import pytest
 import subprocess
+import textwrap
 import uuid
 from collections import abc
+from dataclasses import dataclass
 
 import utils
-from inmanta import config, data, protocol, workon
+import inmanta.data.model
+import inmanta.main
+from inmanta import config, data, protocol
 from server.conftest import EnvironmentFactory
 
 
+# TODO: mypy
+
+
+WORKON_REGISTER: str = os.path.join(os.path.dirname(__file__), "..", "..", "misc", "inmanta-workon-register.sh")
+
+
+@dataclass
+class CliResult:
+    exit_code: int
+    stdout: str
+    stderr: str
+
+
+Bash = abc.Callable[str, abc.Awaitable[CliResult]]
+
+
 @pytest.fixture
-def cli_runner() -> abc.Iterator[click.testing.CliRunner]:
-    yield click.testing.CliRunner(mix_stderr=False)
+def workon_bash(server, tmpdir: py.path.local) -> abc.Iterator[Bash]:
+    """
+    Yields a function that runs a bash script in an environment where the inmanta-workon shell functions have been registered.
+    """
+    port = config.Config.get("server", "bind-port")
+    workdir: py.path.local = tmpdir.join("workon_bash_workdir")
+    workdir.join(".inmanta.cfg").write(
+        textwrap.dedent(
+            f"""
+            [server]
+            bind-port = {port}
+            """.strip("\n")
+        )
+    )
+
+    async def bash(script: str) -> CliResult:
+        # use asyncio's subprocess for non-blocking IO so the server can handle requests
+        process: asyncio.Process = await asyncio.create_subprocess_exec(
+            "bash", "-c", f"source '{WORKON_REGISTER}';\n{script}",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(workdir),
+        )
+        stdout, stderr = await process.communicate()
+        return CliResult(exit_code=process.returncode, stdout=stdout.decode(), stderr=stderr.decode())
+
+    yield bash
 
 
 async def create_environment(client: protocol.Client, project: uuid.UUID, name: str) -> uuid.UUID:
@@ -40,12 +86,7 @@ async def create_environment(client: protocol.Client, project: uuid.UUID, name: 
 
 
 @pytest.fixture
-def cli_runner() -> abc.Iterator[click.testing.CliRunner]:
-    yield click.testing.CliRunner(mix_stderr=False)
-
-
-@pytest.fixture
-async def simple_environments(client: protocol.Client) -> abc.Iterator[abc.Sequence[uuid.UUID]]:
+async def simple_environments(client: protocol.Client) -> abc.Iterator[abc.Sequence[data.model.Environment]]:
     """
     Creates some simple environments that aren't set up for compilation.
     """
@@ -54,22 +95,24 @@ async def simple_environments(client: protocol.Client) -> abc.Iterator[abc.Seque
         assert result.code == 200
         return uuid.UUID(result.result["project"]["id"])
 
-    async def create_environment(project: uuid.UUID, name: str) -> uuid.UUID:
-        result: protocol.Result = await client.create_environment(project_id=project, name=name)
+    async def create_environment(project: uuid.UUID, name: str) -> data.model.Environment:
+        result: protocol.Result = await client.environment_create(project_id=project, name=name)
         assert result.code == 200
-        return uuid.UUID(result.result["environment"]["id"])
+        return data.model.Environment(**result.result["data"])
 
     project = await create_project()
     yield [await create_environment(project, f"env-{i}") for i in range(5)]
 
 
 @pytest.fixture
-async def compiled_environments(client: protocol.Client, environment_factory: EnvironmentFactory) -> abc.Iterator[abc.Sequence[data.Environment]]:
+async def compiled_environments(
+    client: protocol.Client, environment_factory: EnvironmentFactory
+) -> abc.Iterator[abc.Sequence[data.model.Environment]]:
     """
     Initialize some environments with an empty main.cf and trigger a single compile.
     """
-    environments: abc.Sequence[data.Environment] = [
-        await environment_factory.create_environment(name=f"env-{i}") for i in range(5)
+    environments: abc.Sequence[data.model.Environment] = [
+        (await environment_factory.create_environment(name=f"env-{i}") for i in range(5)).to_dto()
     ]
 
     for env in environments:
@@ -87,22 +130,23 @@ async def compiled_environments(client: protocol.Client, environment_factory: En
 
 
 @pytest.mark.parametrize_any("short_option", [True, False])
-def test_workon_list(
-    server, simple_environments: abc.Sequence[uuid.UUID], cli_runner: click.testing.CliRunner, short_option: bool
+async def test_workon_list(
+    server, simple_environments: abc.Sequence[data.model.Environment], workon_bash: Bash, short_option: bool
 ) -> None:
     """
     Verify output of `inmanta-workon --list`.
     """
-    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["-l" if short_option else "--list"])
-    assert result.exit_code == 0, (result.stderr, result.output)
-    assert len(simple_environments) <= 10, "Not strictly an issue but the assertion below assumes 1 digit"
-    assert result.output.strip() == "\n".join(
-        f"env-{i}                {env}" for i, env in enumerate(simple_environments)
-    )
+    result: CliResult = await workon_bash(f"inmanta-workon {'-l' if short_option else '--list'}")
+    assert result.exit_code == 0, (result.stderr, result.stdout)
     assert result.stderr.strip() == ""
+    assert result.stdout.strip() == inmanta.main.get_table(
+        ["Project name", "Project ID", "Environment", "Environment ID"],
+        [["env-test", env.project_id, env.name, env.id] for env in simple_environments]
+    ).strip()
 
 
-def test_workon_list_no_environments(server, cli_runner: click.testing.CliRunner) -> None:
+# TODO
+def test_workon_list_no_environments(server) -> None:
     """
     Verify output of `inmanta-workon --list` when no environments are present in the database.
     """
@@ -112,12 +156,12 @@ def test_workon_list_no_environments(server, cli_runner: click.testing.CliRunner
     assert result.stderr.strip() == ""
 
 
+# TODO
 @pytest.mark.slowtest
 def test_workon_list_no_api(
     server,
     # fallback environment discovery is file system based and works only for environments that have had at least one compile
-    compiled_environments: abc.Sequence[data.Environment],
-    cli_runner: click.testing.CliRunner,
+    compiled_environments: abc.Sequence[data.model.Environment],
     unused_tcp_port: int,
 ) -> None:
     """
@@ -135,9 +179,10 @@ def test_workon_list_no_api(
     assert result.output.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
 
 
+# TODO
 @pytest.mark.parametrize_any("server_dir_exists", [True, False])
 def test_workon_list_no_api_no_environments(
-    server, cli_runner: click.testing.CliRunner, tmpdir: py.path.local, unused_tcp_port: int, server_dir_exists: bool
+    server, tmpdir: py.path.local, unused_tcp_port: int, server_dir_exists: bool
 ) -> None:
     """
     Verify output of `inmanta-workon --list` when no environments were found at all in the server state dir.

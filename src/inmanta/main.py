@@ -162,6 +162,13 @@ class Client(object):
 
 
 def print_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> None:
+    click.echo(get_table(header, rows, data_type))
+
+
+def get_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> str:
+    """
+    Returns a table that would fit in the current terminal.
+    """
     width, _ = shutil.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
@@ -171,7 +178,7 @@ def print_table(header: List[str], rows: List[List[str]], data_type: Optional[Li
     table.header(header)
     for row in rows:
         table.add_row(row)
-    click.echo(table.draw())
+    return table.draw()
 
 
 @with_plugins(iter_entry_points("inmanta.cli_plugins"))
