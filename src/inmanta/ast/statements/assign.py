@@ -19,7 +19,6 @@
 # pylint: disable-msg=W0613
 
 import typing
-import warnings
 from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, Optional, TypeVar

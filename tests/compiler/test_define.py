@@ -147,6 +147,7 @@ var-hello = "hello"
         f"The use of '-' in identifiers is not allowed. please rename var-hello. "
         f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
     )
+    assert str(e.value) == message
 
 
 def test_deprecation_minus_import_as(snippetcompiler):
