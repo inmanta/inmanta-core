@@ -20,7 +20,6 @@
     does not result in an import loop (see #2341 and #2342).
 """
 
-
 import importlib
 import multiprocessing
 from typing import Callable, Iterator, Optional
@@ -115,6 +114,10 @@ def test_import_ast(import_entry_point: Callable[[str], Optional[int]]) -> None:
 
 def test_import_env(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.env") == 0
+
+
+def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.compiler") == 0
 
 
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
