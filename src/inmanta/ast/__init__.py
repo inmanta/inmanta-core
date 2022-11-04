@@ -596,6 +596,12 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
+class HyphenException(RuntimeException):
+    def __init__(self, stmt: LocatableString) -> None:
+        msg: str = "The use of '-' in identifiers is not allowed. please rename %s." % stmt.value
+        RuntimeException.__init__(self, stmt, msg)
+
+
 class CompilerRuntimeWarning(Warning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
@@ -608,12 +614,6 @@ class CompilerRuntimeWarning(Warning, RuntimeException):
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
-        CompilerRuntimeWarning.__init__(self, stmt, msg)
-
-
-class HyphenDeprecationWarning(CompilerDeprecationWarning):
-    def __init__(self, stmt: LocatableString) -> None:
-        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
@@ -860,7 +860,6 @@ class DuplicateException(TypingException):
 
 
 class CompilerError(Exception):
-
     pass
 
 

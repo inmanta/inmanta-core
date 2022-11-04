@@ -2550,11 +2550,9 @@ RETURNING last_version;
         return version
 
     @classmethod
-    async def register_setting(cls, setting: Setting) -> None:
+    def register_setting(cls, setting: Setting) -> None:
         """
-        Adds a new setting to the environments from outside inmanta-core.
-        As example, inmanta-lsm can use this method to add settings that are only
-        relevant for inmanta-lsm but that are needed in the environments.
+        Adds a new environment setting that was defined by an extension.
 
         :param setting: the setting that should be added to the existing settings
         """
@@ -3609,7 +3607,7 @@ class Compile(BaseDocument):
     @classmethod
     async def get_next_compiles_count(cls) -> int:
         """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
+        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled AND completed IS NULL")
         return result
 
     @classmethod
