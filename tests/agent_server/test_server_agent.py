@@ -726,10 +726,11 @@ async def test_get_set_param(resource_container, environment, client, server):
     assert result.code == 200
 
 
-async def test_register_setting(environment, client, server):
+async def test_register_setting(environment, client, server, caplog):
     """
     Test registering a new setting.
     """
+    caplog.set_level(logging.WARNING)
     new_setting: Setting = Setting(
         name="a new boolean setting",
         default=False,
@@ -738,7 +739,16 @@ async def test_register_setting(environment, client, server):
         doc="a new setting",
     )
     env_slice: EnvironmentService = server.get_slice(SLICE_ENVIRONMENT)
+    caplog.clear()
     await env_slice.register_setting(new_setting)
+
+    log_contains(
+        caplog,
+        "py.warnings",
+        logging.WARNING,
+        "Registering environment settings via the inmanta.server.services.environmentservice.register_setting endpoint "
+        "is deprecated.",
+    )
     result = await client.get_setting(tid=environment, id="a new boolean setting")
     assert result.code == 200
     assert result.result["value"] is False

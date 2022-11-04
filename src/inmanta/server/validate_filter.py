@@ -308,6 +308,17 @@ class FilterValidator(ABC):
         return query
 
 
+class ResourceFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "resource_type": ContainsPartialFilter,
+            "agent": ContainsPartialFilter,
+            "resource_id_value": ContainsPartialFilter,
+            "status": CombinedContainsFilterResourceState,
+        }
+
+
 class ResourceLogFilterValidator(FilterValidator):
     @property
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
@@ -358,6 +369,16 @@ class DesiredStateVersionFilterValidator(FilterValidator):
             "version": IntRangeFilter,
             "date": DateRangeFilter,
             "status": ContainsFilter,
+        }
+
+
+class VersionedResourceFilterValidator(FilterValidator):
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        return {
+            "resource_type": ContainsPartialFilter,
+            "agent": ContainsPartialFilter,
+            "resource_id_value": ContainsPartialFilter,
         }
 
 

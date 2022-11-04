@@ -1,0 +1,8 @@
+---
+description: The available-versions-to-keep option of the server configuration file is no longer supported.
+  Please use the AVAILABLE_VERSIONS_TO_KEEP environment setting instead.
+change-type: major
+issue-nr: 4980
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

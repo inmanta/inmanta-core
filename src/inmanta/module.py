@@ -28,6 +28,7 @@ import sys
 import tempfile
 import traceback
 import types
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
@@ -64,7 +65,6 @@ import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
-import inmanta.warnings
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -266,7 +266,11 @@ class InvalidMetadata(CompilerException):
         return msg
 
 
-class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
+class MetadataDeprecationWarning(Warning):
+    pass
+
+
+class ModuleDeprecationWarning(Warning):
     pass
 
 
@@ -1116,7 +1120,7 @@ class MetadataFieldRequires(BaseModel):
     def requires_to_list(cls, v: object) -> object:
         if isinstance(v, dict):
             # transform legacy format for backwards compatibility
-            inmanta.warnings.warn(
+            warnings.warn(
                 MetadataDeprecationWarning(
                     "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
                     " documented list syntax instead."
@@ -1138,6 +1142,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
+    deprecated: Optional[bool]
 
     @validator("version")
     @classmethod
@@ -2202,7 +2207,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
                 " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
-
+        if isinstance(module, ModuleV1):
+            warnings.warn(
+                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
+                category=DeprecationWarning,
+            )
         self.modules[module_name] = module
         return module
 
@@ -2522,6 +2531,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
+        if self.metadata.deprecated:
+            warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)

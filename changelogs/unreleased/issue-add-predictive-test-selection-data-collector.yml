@@ -1,0 +1,5 @@
+---
+description: Add data collector to create a dataset for future predictive test selection.
+change-type: minor
+destination-branches:
+  - master

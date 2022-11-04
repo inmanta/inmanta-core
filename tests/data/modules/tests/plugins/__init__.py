@@ -1,7 +1,7 @@
 from _collections import defaultdict
-from inmanta.execute.util import Unknown
-from inmanta.plugins import plugin, PluginException
 from inmanta import resources
+from inmanta.execute.util import Unknown
+from inmanta.plugins import PluginException, plugin
 
 
 @plugin
