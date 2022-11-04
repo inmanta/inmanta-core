@@ -50,28 +50,55 @@ Bash = abc.Callable[str, abc.Awaitable[CliResult]]
 
 
 @pytest.fixture
-def workon_bash(server, tmpdir: py.path.local) -> abc.Iterator[Bash]:
+def workon_workdir(server, tmpdir: py.path.local) -> abc.Iterator[py.path.local]:
     """
-    Yields a function that runs a bash script in an environment where the inmanta-workon shell functions have been registered.
+    Yields a working directory prepared for calling inmanta-workon.
     """
     port = config.Config.get("server", "bind-port")
+    state_dir = config.Config.get("config", "state-dir")
     workdir: py.path.local = tmpdir.mkdir("workon_bash_workdir")
     workdir.join(".inmanta.cfg").write(
         textwrap.dedent(
             f"""
+            [config]
+            state-dir = {state_dir}
+
             [server]
             bind-port = {port}
             """.strip("\n")
         )
     )
+    yield workdir
 
+
+@pytest.fixture
+def workon_broken_cli(workon_workdir: py.path.local, unused_tcp_port_factory: abc.Callable[[], int]) -> abc.Iterator[None]:
+    """
+    Overrides the server bind port in the config used by inmanta-workon to an unused port to make any inmanta-cli calls fail.
+    """
+    workon_workdir.join(".inmanta.cfg").write(
+        workon_workdir.join(".inmanta.cfg").read().replace(
+            str(config.Config.get("server", "bind-port")),
+            str(unused_tcp_port_factory()),
+        )
+    )
+    yield
+
+
+@pytest.fixture
+def workon_bash(workon_workdir: py.path.local) -> abc.Iterator[Bash]:
+    """
+    Yields a function that runs a bash script in an environment where the inmanta-workon shell functions have been registered.
+    Any inspection of the workon state should be done from within this bash script since the state change is contained to the
+    sub shell. There is no easy way to lift this generically to the Python level.
+    """
     async def bash(script: str) -> CliResult:
         # use asyncio's subprocess for non-blocking IO so the server can handle requests
         process: asyncio.Process = await asyncio.create_subprocess_exec(
             "bash", "-c", f"source '{WORKON_REGISTER}';\n{script}",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=str(workdir),
+            cwd=str(workon_workdir),
         )
         stdout, stderr = await process.communicate()
         return CliResult(exit_code=process.returncode, stdout=stdout.decode(), stderr=stderr.decode())
@@ -112,7 +139,7 @@ async def compiled_environments(
     Initialize some environments with an empty main.cf and trigger a single compile.
     """
     environments: abc.Sequence[data.model.Environment] = [
-        (await environment_factory.create_environment(name=f"env-{i}") for i in range(5)).to_dto()
+        (await environment_factory.create_environment(name=f"env-{i}")).to_dto() for i in range(5)
     ]
 
     for env in environments:
@@ -131,7 +158,7 @@ async def compiled_environments(
 
 @pytest.mark.parametrize_any("short_option", [True, False])
 async def test_workon_list(
-    server, simple_environments: abc.Sequence[data.model.Environment], workon_bash: Bash, short_option: bool
+    server, workon_bash: Bash, simple_environments: abc.Sequence[data.model.Environment], short_option: bool
 ) -> None:
     """
     Verify output of `inmanta-workon --list`.
@@ -155,59 +182,63 @@ async def test_workon_list_no_environments(server, workon_bash: Bash) -> None:
     assert result.stdout.strip() == "No environment defined."
 
 
-# TODO
 @pytest.mark.slowtest
-def test_workon_list_no_api(
+async def test_workon_list_no_api(
     server,
+    workon_broken_cli,
+    workon_bash: Bash,
     # fallback environment discovery is file system based and works only for environments that have had at least one compile
     compiled_environments: abc.Sequence[data.model.Environment],
-    unused_tcp_port: int,
 ) -> None:
     """
     Verify output of `inmanta-workon --list` when API call to fetch environment names fails.
     """
-    # set port incorrectly so the API call will fail
-    config.Config.set("cmdline_rest_transport", "port", str(unused_tcp_port))
-
-    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
-    assert result.exit_code == 0, (result.stderr, result.output)
+    result: CliResult = await workon_bash("inmanta-workon --list")
+    assert result.exit_code == 0, (result.stderr, result.stdout)
     assert result.stderr.strip() == (
-        "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
-        " Reason: [Errno 111] Connection refused"
+        "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
     )
-    assert result.output.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
+    assert result.stdout.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
 
 
-# TODO
 @pytest.mark.parametrize_any("server_dir_exists", [True, False])
-def test_workon_list_no_api_no_environments(
-    server, tmpdir: py.path.local, unused_tcp_port: int, server_dir_exists: bool
+async def test_workon_list_no_api_no_environments(
+    server,
+    workon_workdir: py.path.local,
+    workon_broken_cli,
+    workon_bash: Bash,
+    tmpdir: py.path.local,
+    server_dir_exists: bool,
 ) -> None:
     """
     Verify output of `inmanta-workon --list` when no environments were found at all in the server state dir.
     """
-    # set port incorrectly so the API call will fail
-    config.Config.set("cmdline_rest_transport", "port", str(unused_tcp_port))
     if not server_dir_exists:
         # set state dir to directory that does not exist
-        config.Config.set("config", "state-dir", str(tmpdir.join("doesnotexist")))
+        workon_workdir.join(".inmanta.cfg").write(
+            workon_workdir.join(".inmanta.cfg").read().replace(
+                str(config.Config.get("config", "state-dir")),
+                str(tmpdir.join("doesnotexist")),
+            )
+        )
 
-    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
+    result: CliResult = await workon_bash("inmanta-workon --list")
     if server_dir_exists:
-        assert result.exit_code == 0, (result.stderr, result.output)
+        assert result.exit_code == 0, (result.stderr, result.stdout)
         assert result.stderr.strip() == (
-            "Failed to fetch environments details from the server, falling back to basic nameless environment discovery."
-            " Reason: [Errno 111] Connection refused"
+            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
         )
-        assert result.output == ""
+        assert result.stdout == ""
     else:
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert result.stderr.strip() == (
-            "Error: Failed to fetch environment details from the server or to find the server state directory. Please check"
-            " you're running this command from the inmanta server host and `cmdline_rest_transport.port` and"
-            " `config.state-dir` settings are set correctly."
+            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+            "\n"
+            # TODO: this line is currently logged twice
+            f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server/environments'. This is expected if no"
+            " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
         )
-        assert result.output == ""
+        assert result.stdout == ""
 
 
 # TODO: similar tests for actual workon
