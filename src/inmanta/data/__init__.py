@@ -50,6 +50,7 @@ from typing import (
     cast,
     overload,
 )
+from uuid import UUID
 
 import asyncpg
 import dateutil
@@ -65,7 +66,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -83,6 +84,7 @@ APILIMIT = 1000
 # Used as the 'default' parameter value for the Field class, when no default value has been set
 default_unset = object()
 
+PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
 
 """
 Locking order rules:
@@ -95,7 +97,7 @@ as `A -> B`, meaning A should be locked before B in any transaction that acquire
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
+    def _generate_next_value_(name, start: int, count: int, last_values: abc.Sequence[object]) -> str:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -165,8 +167,8 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
-RangeConstraint = List[Tuple[RangeOperator, int]]
-DateRangeConstraint = List[Tuple[RangeOperator, datetime.datetime]]
+RangeConstraint = list[tuple[RangeOperator, int]]
+DateRangeConstraint = list[tuple[RangeOperator, datetime.datetime]]
 QueryFilter = Tuple[QueryType, object]
 
 
@@ -251,35 +253,188 @@ class InvalidSort(Exception):
         self.message = message
 
 
-class DatabaseOrder:
-    """Represents an ordering for database queries"""
+class ColumnType:
+    """
+    Class encapsulating all handling of specific column types
 
-    @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {}
+    This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
+    """
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        """The class used for checking whether the ordering is valid for a table"""
-        return BaseDocument
+    def __init__(self, base_type: Type[PRIMITIVE_SQL_TYPES], nullable: bool):
+        self.base_type = base_type
+        self.nullable = nullable
 
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "DatabaseOrder":
-        valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
-        )
-        match = valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = cls.validator_dataclass()._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-            return cls(order_by_column=validated_order_by_column, order=validated_order)
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        """
+        Prepare the actual value for use as an argument in a prepared statement for this type
+        """
+        if value is None:
+            if not self.nullable:
+                raise ValueError("None is not a valid value")
+            else:
+                return None
+        if isinstance(value, self.base_type):
+            # It is as expected
+            return value
+        if self.base_type == bool:
+            return pydantic.validators.bool_validator(value)
+        if self.base_type == datetime.datetime and isinstance(value, str):
+            return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
+        if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
+            # We can cast between those types
+            return self.base_type(value)
+        raise ValueError(f"{value} is not a valid value")
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        return table_prefix_value + column_name
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, because comparing a value to
+        NULL always yields NULL.
+        """
+        if self.nullable:
+            if self.base_type == datetime.datetime:
+                return f"COALESCE({value_reference}, to_timestamp(0))"
+            elif self.base_type == bool:
+                return f"COALESCE({value_reference}, FALSE)"
+            elif self.base_type == int:
+                # we only support positive ints up till now
+                return f"COALESCE({value_reference}, -1)"
+            elif self.base_type == str:
+                return f"COALESCE({value_reference}, '')"
+            elif self.base_type == UUID:
+                return f"COALESCE({value_reference}, '00000000-0000-0000-0000-000000000000'::uuid)"
+            else:
+                assert False, "Unexpected argument type received, this should not happen"
+
+        return value_reference
+
+
+class TablePrefixWrapper(ColumnType):
+    def __init__(self, table_name: str, child: ColumnType) -> None:
+        self.table_name = table_name
+        self.child = child
+
+    @property
+    def nullable(self) -> bool:
+        return self.child.nullable
+
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        return self.child.get_value(value)
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        if not table_prefix:
+            table_prefix = self.table_name
+        return self.child.get_accessor(column_name, table_prefix)
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        return self.child.coalesce_to_min(value_reference)
+
+
+class ForcedStringColumn(ColumnType):
+    """A string that is explicitly cast to a specific string type"""
+
+    def __init__(self, forced_type: str) -> None:
+        super().__init__(base_type=str, nullable=False)
+        self.forced_type = forced_type
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
+
+
+StringColumn = ColumnType(base_type=str, nullable=False)
+OptionalStringColumn = ColumnType(base_type=str, nullable=True)
+
+DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
+OptionalDateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=True)
+
+PositiveIntColumn = ColumnType(base_type=int, nullable=False)
+# Negatives ints require updating coalesce_to_min
+
+TextColumn = ForcedStringColumn("text")
+
+UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
+BoolColumn = ColumnType(base_type=bool, nullable=False)
+
+
+class DatabaseOrderV2(ABC):
+    """
+    Helper API for handling database order and filtering
+
+    This class defines the consumer interface,
+
+    It is made into a separate type, to make it very explicit what is exposed externally, to limit feature creep
+    """
+
+    @abstractmethod
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
+    ) -> Tuple[List[str], List[object]]:
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the boundary value for the user specified order
+        :param id_value: the boundary value for the built in order order
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+
+        None values can have a double meaning here:
+        - no value provided
+        - the value is provided and None
+
+        The distinction can be made as follows:
+        1. at least one of the columns must be not nullable (otherwise the sorting is not unique)
+        2. when both value are None, we are not paging and return '[],[]'
+        3. when one of the values is effective, we produce a filter
+
+        More specifically:
+        1. when we have a single order, and `column_value` is not None, this singe value is used for filtering
+        2. when we have a double order and the 'id_value' is not None and `self.get_order_by_column_type().nullable`,
+            we consider the null an effective value and filter on both `column_value` and `id_value`
+        3. when we have a double order and the 'id_value' is not None and `not self.get_order_by_column_type().nullable`,
+            we consider the null not a value and filter only on `id_value`
+
+        """
+        pass
+
+    @abstractmethod
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Get this order as an order_by statement"""
+        pass
+
+    @abstractmethod
+    def get_order(self) -> PagingOrder:
+        """Return the order of this paging request"""
+        pass
+
+    @abstractmethod
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record of the page"""
+        pass
+
+
+T_SELF = TypeVar("T_SELF", bound="SingleDatabaseOrder")
+
+
+class SingleDatabaseOrder(DatabaseOrderV2, ABC):
+    """
+    Abstract Base class for ordering when using
+    - a user specified order, that is always unique
+    """
 
     def __init__(
         self,
@@ -290,38 +445,36 @@ class DatabaseOrder:
         self.order_by_column = order_by_column
         self.order = order
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        """The validated column name string as it should be used in the database queries"""
-        return self.order_by_column
+    # Configuration methods
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Return all valid columns for lookup and their type"""
+        raise NotImplementedError()
 
-    def get_order(self) -> PagingOrder:
+    #  Factory
+    @classmethod
+    def parse_from_string(
+        cls: Type[T_SELF],
+        sort: str,
+    ) -> T_SELF:
+        valid_sort_pattern: Pattern[str] = re.compile(
+            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+        )
+        match = valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            # Verify there is no escaping from the regex by exact match
+            assert order_by_column in cls.get_valid_sort_columns()
+            order = match.groups()[1].upper()
+            return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
+
+    # Internal helpers
+    def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
-        return self.order
+        return self.order.invert() if invert else self.order
 
-    def is_nullable_column(self) -> bool:
-        """Is the current order by column type nullable (optional) or not"""
-        column_type = self.get_order_by_column_type()
-        return typing_inspect.is_optional_type(column_type)
-
-    def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, for example, because comparing a value to
-        NULL always yields NULL.
-        """
-        if self.is_nullable_column():
-            column_type = self.get_order_by_column_type()
-            if typing_inspect.get_args(column_type)[0] == datetime.datetime:
-                return ColumnNameStr(f"COALESCE({value_reference}, to_timestamp(0))")
-            elif typing_inspect.get_args(column_type)[0] == bool:
-                return ColumnNameStr(f"COALESCE({value_reference}, FALSE)")
-            else:
-                return ColumnNameStr(f"COALESCE({value_reference}, '')")
-        return ColumnNameStr(value_reference)
-
-    def __str__(self) -> str:
-        return f"{self.order_by_column}.{self.order}"
-
-    def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
+    def get_order_by_column_type(self) -> ColumnType:
         """The type of the order by column"""
         return self.get_valid_sort_columns()[self.order_by_column]
 
@@ -329,254 +482,336 @@ class DatabaseOrder:
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
-    def get_min_time(self) -> Optional[datetime.datetime]:
-        if self.get_order_by_column_type() == datetime.datetime:
-            return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-        else:
-            return None
-
-    def get_max_time(self) -> Optional[datetime.datetime]:
-        if self.get_order_by_column_type() == datetime.datetime:
-            return datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
-        else:
-            return None
-
-    def ensure_boundary_type(
-        self, order_by_column_value: Union[datetime.datetime, int, bool, str]
-    ) -> Union[datetime.datetime, int, bool, str]:
-        """Converts a value to the type of the order by column,
-        can be used to make sure a boundary (start or end) is the correct type"""
-        column_type = self.get_order_by_column_type()
-        if isinstance(order_by_column_value, str):
-            if column_type == datetime.datetime:
-                return dateutil.parser.isoparse(order_by_column_value)
-            elif column_type == int:
-                return int(order_by_column_value)
-            elif column_type == bool:
-                return order_by_column_value.lower() == "true"
-        return order_by_column_value
-
-    @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("id")
-
+    # External API
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[object] = None,
-        id_value: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[bool] = True,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
     ) -> Tuple[List[str], List[object]]:
-        """Get the column and id values as filters"""
-        filter_statements = []
-        values: List[object] = []
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order, if this class has one. Otherwise this value is ignored.
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
         relation = ">" if start else "<"
-        if (column_value is not None or self.is_nullable_column()) and id_value:
-            filter_statements.append(
-                f"""({self.get_order_by_column_db_name()}, {self.id_column}) {relation}
-                    ({self.coalesce_to_min(f"${str(offset)}")}, ${str(offset + 1)})"""
+
+        if column_value is None:
+            return [], []
+
+        coll_type = self.get_order_by_column_type()
+        col_name = self.order_by_column
+        value = coll_type.get_value(column_value)
+
+        ac = ArgumentCollector(offset=offset - 1)
+        filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
+        return [filter], ac.args
+
+    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
+        """
+        order = self.get_order(invert)
+        return [
+            (self.order_by_column, self.get_order_by_column_type(), order),
+        ]
+
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Return the actual order by statement, as derived from get_order_elements"""
+        order_by_part = ", ".join(
+            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+        )
+        return f" ORDER BY {order_by_part}"
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
+            # Make mypy happy
+            assert in_value is not None
+            return in_value
+
+        return PagingBoundaries(
+            start=assert_not_null(order_type.get_value(first[order_column_name])),
+            first_id=None,
+            end=assert_not_null(order_type.get_value(last[order_column_name])),
+            last_id=None,
+        )
+
+    def __str__(self) -> str:
+        # used to serialize the order back to a  paging url
+        return f"{self.order_by_column}.{self.order}"
+
+
+class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
+    """
+    Abstract Base class for ordering when using
+    - a user specified order
+    - an additional built in order to make the ordering unique (the id_collumn)
+    """
+
+    @property
+    @abstractmethod
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        pass
+
+    # External API
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
+    ) -> Tuple[List[str], List[object]]:
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order
+        :param start: is this the start filter? if so, retain all values`> (column_value, id_value)`,
+            otherwise `< (column_value, id_value)`.
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
+
+        # All the filter elements:
+        # 1. name of the actual collumn in the DB
+        # 2. type of the collumn
+        # 3. sanitized value of the collumn
+
+        filter_elements: list[tuple[str, ColumnType, object]] = []
+
+        order_by_collumns_type = self.get_order_by_column_type()
+        paging_on_nullable = order_by_collumns_type.nullable and id_value is not None
+
+        if column_value is not None or paging_on_nullable:
+            # Have column value or paging on nullable
+            filter_elements.append(
+                (self.order_by_column, order_by_collumns_type, order_by_collumns_type.get_value(column_value))
             )
-            values.append(BaseDocument._get_value(column_value))
-            values.append(BaseDocument._get_value(id_value))
-        elif column_value is not None:
-            filter_statements.append(f"{self.get_order_by_column_db_name()} {relation} ${str(offset)}")
-            values.append(BaseDocument._get_value(column_value))
-        return filter_statements, values
 
-    def as_start_filter(
-        self,
-        offset: int,
-        start: Optional[object] = None,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-    ) -> Tuple[List[str], List[object]]:
-        """Get the start and first_id values as start filters"""
-        return self.as_filter(offset, column_value=start, id_value=first_id, start=True)
+        if id_value is not None:
+            # Have ID
+            id_name, id_type = self.id_column
+            if id_name != self.order_by_column:
+                filter_elements.append((id_name, id_type, id_type.get_value(id_value)))
 
-    def as_end_filter(
-        self,
-        offset: int,
-        end: Optional[object] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-    ) -> Tuple[List[str], List[object]]:
-        """Get the end and last_id values as end filters"""
-        return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
+        relation = ">" if start else "<"
+
+        if len(filter_elements) == 0:
+            return [], []
+
+        ac = ArgumentCollector(offset=offset - 1)
+        if len(filter_elements) == 1:
+            col_name, coll_type, value = filter_elements[0]
+            filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
+            return [filter], ac.args
+        else:
+            # composed filter:
+            # 1. comparison of two tuples (c_a, c_b) < (c_a, c_b)
+            # 2. nulls must be removed to get proper comparison
+            names_tuple = ", ".join(
+                [coll_type.coalesce_to_min(coll_type.get_accessor(col_name)) for col_name, coll_type, value in filter_elements]
+            )
+            values_references_tuple = ", ".join(
+                [coll_type.coalesce_to_min(ac(value)) for col_name, coll_type, value in filter_elements]
+            )
+            filter = f"({names_tuple}) {relation} ({values_references_tuple})"
+            return [filter], ac.args
+
+    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
+        """
+        order = self.get_order(invert)
+        id_name, id_type = self.id_column
+        return [
+            (self.order_by_column, self.get_order_by_column_type(), order),
+            (id_name, id_type, order),
+        ]
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        id_column, id_type = self.id_column
+
+        return PagingBoundaries(
+            start=order_type.get_value(first[order_column_name]),
+            first_id=id_type.get_value(first[id_column]),
+            end=order_type.get_value(last[order_column_name]),
+            last_id=id_type.get_value(last[id_column]),
+        )
 
 
-class VersionedResourceOrder(DatabaseOrder):
+class VersionedResourceOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id_value": str}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Resource
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
+        }
 
     @property
-    def id_column(self) -> ColumnNameStr:
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id")
+        return ColumnNameStr("resource_id"), StringColumn
 
 
 class ResourceOrder(VersionedResourceOrder):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {**super().get_valid_sort_columns(), "status": str}
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
+            ColumnNameStr("status"): TextColumn,
+        }
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        return ColumnNameStr(
-            f"{super().get_order_by_column_db_name()}{'::text' if self._should_be_treated_as_string() else ''}"
-        )
-
-    def _should_be_treated_as_string(self) -> bool:
-        """Ensure that records are sorted alphabetically by status instead of the enum order"""
-        return self.order_by_column == "status"
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("resource_version_id"), StringColumn
 
 
-class ResourceHistoryOrder(DatabaseOrder):
+class ResourceHistoryOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resource history should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"date": datetime.datetime}
+        return {ColumnNameStr("date"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        # Sorting based on the date of the configuration model
-        return ConfigurationModel
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("attribute_hash"), StringColumn)
 
 
-class ResourceLogOrder(DatabaseOrder):
+class ResourceLogOrder(SingleDatabaseOrder):
     """Represents the ordering by which resource logs should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"timestamp": datetime.datetime}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ResourceAction
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("timestamp"): DateTimeColumn,
+        }
 
 
-class CompileReportOrder(DatabaseOrder):
+class CompileReportOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which compile reports should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"requested": datetime.datetime}
+        return {ColumnNameStr("requested"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Compile
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class AgentOrder(DatabaseOrder):
+class AgentOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which agents should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            "name": str,
-            "process_name": Optional[str],
-            "paused": bool,
-            "last_failover": Optional[datetime.datetime],
-            "status": str,
+            ColumnNameStr("name"): TablePrefixWrapper("a", StringColumn),
+            ColumnNameStr("process_name"): OptionalStringColumn,
+            ColumnNameStr("paused"): BoolColumn,
+            ColumnNameStr("last_failover"): OptionalDateTimeColumn,
+            ColumnNameStr("status"): StringColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Agent
-
     @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("name")
-
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("name"), TablePrefixWrapper("a", StringColumn))
 
 
-class DesiredStateVersionOrder(DatabaseOrder):
+class DesiredStateVersionOrder(SingleDatabaseOrder):
     """Represents the ordering by which desired state versions should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "version": int,
+            ColumnNameStr("version"): PositiveIntColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ConfigurationModel
 
-    @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("version")
-
-
-class ParameterOrder(DatabaseOrder):
+class ParameterOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which parameters should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "name": str,
-            "source": str,
-            "updated": Optional[datetime.datetime],
+            ColumnNameStr("name"): StringColumn,
+            ColumnNameStr("source"): StringColumn,
+            ColumnNameStr("updated"): OptionalDateTimeColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Parameter
-
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class FactOrder(DatabaseOrder):
+class FactOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which facts should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "name": str,
-            "resource_id": str,
+            ColumnNameStr("name"): StringColumn,
+            ColumnNameStr("resource_id"): StringColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Parameter
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class NotificationOrder(DatabaseOrder):
+class NotificationOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which notifications should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            "created": datetime.datetime,
+            ColumnNameStr("created"): DateTimeColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Notification
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
 class BaseQueryBuilder(ABC):
@@ -640,9 +875,10 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         from_clause: Optional[str] = None,
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
-        db_order: Optional[DatabaseOrder] = None,
+        db_order: Optional[DatabaseOrderV2] = None,
         limit: Optional[int] = None,
-        backward_paging: Optional[bool] = False,
+        backward_paging: bool = False,
+        prelude: Optional[str] = None,
     ) -> None:
         """
         :param select_clause: The select clause of the query
@@ -653,11 +889,13 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         :param limit: Limit the results to this amount
         :param backward_paging: Whether the ordering of the results should be inverted,
                                 used when going backward through the pages
+        :param prelude: part of the query preceding all else, for use with 'with' binding
         """
         super().__init__(select_clause, from_clause, filter_statements, values)
         self.db_order = db_order
         self.limit = limit
         self.backward_paging = backward_paging
+        self.prelude = prelude
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """Set the select clause of the query"""
@@ -669,6 +907,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
@@ -681,14 +920,22 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def order_and_limit(
-        self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
+        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
     ) -> "SimpleQueryBuilder":
         """Set the order and limit of the query"""
         return SimpleQueryBuilder(
-            self.select_clause, self._from_clause, self.filter_statements, self.values, db_order, limit, backward_paging
+            self.select_clause,
+            self._from_clause,
+            self.filter_statements,
+            self.values,
+            db_order,
+            limit,
+            backward_paging,
+            self.prelude,
         )
 
     def filter(self, filter_statements: List[str], values: List[object]) -> "SimpleQueryBuilder":
@@ -700,6 +947,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def build(self) -> Tuple[str, List[object]]:
@@ -709,96 +957,19 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
                          """
+        if self.prelude:
+            full_query = self.prelude + full_query
         if self.db_order:
-            order = self.db_order.get_order()
-            order_by_column = self.db_order.get_order_by_column_db_name()
-            if self.backward_paging:
-                backward_paging_order = order.invert().db_form
-                full_query += (
-                    f" ORDER BY {order_by_column} {backward_paging_order}, {self.db_order.id_column} {backward_paging_order}"
-                )
-            else:
-                full_query += f" ORDER BY {order_by_column} {order.db_form}, {self.db_order.id_column}  {order.db_form}"
+            full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:
             if self.limit > DBLIMIT:
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {self.limit}")
             elif self.limit > 0:
                 full_query += " LIMIT " + str(self.limit)
         if self.db_order and self.backward_paging:
-            full_query = f"""SELECT * FROM ({full_query}) AS matching_records
-                            ORDER BY {self.db_order.get_order_by_column_db_name()} {self.db_order.get_order().db_form},
-                                     {self.db_order.id_column} {self.db_order.get_order().db_form}"""
+            order_by = self.db_order.get_order_by_statement(table="matching_records")
+            full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
-        return full_query, self.values
-
-
-class PageCountQueryBuilder(BaseQueryBuilder):
-    """A specific query builder for counting records before and after
-    the current page returned by a select query, as well as the total number of records"""
-
-    def __init__(
-        self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[List[str]] = None,
-        values: Optional[List[object]] = None,
-    ) -> None:
-        """
-        :param select_clause: The select clause of the query, optional, `page_count()` can be used to provide a query builder
-                              with a specific select clause
-        :param from_clause: The from clause of the query
-        :param filter_statements: A list of filters for the query
-        :param values: The values to be used for the filter statements
-        """
-        super().__init__(select_clause, from_clause, filter_statements, values)
-
-    def page_count(
-        self,
-        db_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-    ) -> "PageCountQueryBuilder":
-        """Determine the filters and select clause for a page count query"""
-        order = db_order.get_order()
-        values = []
-        if "ASC" in order:
-            before_filter_statements, before_values = db_order.as_end_filter(self.offset, end, last_id)
-            values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_start_filter(self.offset + len(before_values), start, first_id)
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = db_order.as_start_filter(self.offset, start, first_id)
-            values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_end_filter(self.offset + len(before_values), end, last_id)
-            values.extend(after_values)
-        before_filter = self._join_filter_statements(before_filter_statements)
-        after_filter = self._join_filter_statements(after_filter_statements)
-        id_column_name = db_order.id_column
-        select_clause = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-        )
-        return PageCountQueryBuilder(select_clause, self._from_clause, self.filter_statements, self.values + values)
-
-    def from_clause(self, from_clause: str) -> "PageCountQueryBuilder":
-        """Set the from clause of the query"""
-        return PageCountQueryBuilder(self.select_clause, from_clause, self.filter_statements, self.values)
-
-    def filter(self, filter_statements: List[str], values: List[object]) -> "PageCountQueryBuilder":
-        return PageCountQueryBuilder(
-            self.select_clause, self._from_clause, self.filter_statements + filter_statements, self.values + values
-        )
-
-    def build(self) -> Tuple[str, List[object]]:
-        if not self.select_clause or not self._from_clause:
-            raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
-        full_query = f"""{self.select_clause}
-                         {self._from_clause}
-                         {self._join_filter_statements(self.filter_statements)}
-                        """
         return full_query, self.values
 
 
@@ -1680,7 +1851,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
             filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index_count)
             filter_statements.append(filter_statement)
@@ -1857,113 +2027,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statements:
             return "WHERE " + " AND ".join(filter_statements)
         return ""
-
-    @classmethod
-    def _get_list_query_pagination_parameters(
-        cls,
-        database_order: DatabaseOrder,
-        id_column: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: QueryFilter,
-    ) -> Tuple[List[str], List[object]]:
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        start_filter_statements, start_values = cls._add_start_filter(
-            len(values),
-            database_order.get_order_by_column_db_name(),
-            id_column,
-            start,
-            first_id,
-        )
-        filter_statements.extend(start_filter_statements)
-        values.extend(start_values)
-        end_filter_statements, end_values = cls._add_end_filter(
-            len(values),
-            database_order.get_order_by_column_db_name(),
-            id_column,
-            end,
-            last_id,
-        )
-        filter_statements.extend(end_filter_statements)
-        values.extend(end_values)
-
-        return filter_statements, values
-
-    @classmethod
-    def _validate_paging_parameters(
-        cls,
-        start: Optional[Any],
-        end: Optional[Any],
-        first_id: Optional[Union[uuid.UUID, str]],
-        last_id: Optional[Union[uuid.UUID, str]],
-    ) -> None:
-        if start and end:
-            raise InvalidQueryParameter(
-                f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
-            )
-        if first_id and last_id:
-            raise InvalidQueryParameter(
-                f"Only one of first_id and last_id parameters is allowed at the same time. "
-                f"Received first_id: {first_id}, last_id: {last_id}"
-            )
-        if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameter(
-                f"The first_id parameter should be used in combination with the start parameter. "
-                f"Received first_id: {first_id}, start: {start}, end: {end}"
-            )
-        if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameter(
-                f"The last_id parameter should be used in combination with the end parameter. "
-                f"Received last_id: {last_id}, start: {start}, end: {end}"
-            )
-
-    @classmethod
-    def _get_item_count_query_conditions(
-        cls,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object], List[str]]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        if "ASC" in order:
-            before_filter_statements, before_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(after_values)
-        before_filter = cls._join_filter_statements(before_filter_statements)
-        after_filter = cls._join_filter_statements(after_filter_statements)
-
-        select_clause = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-        )
-
-        return select_clause, values, common_filter_statements
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -2705,177 +2768,6 @@ class Parameter(BaseDocument):
             metadata=self.metadata,
         )
 
-    @classmethod
-    def parameter_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT p.id, p.name, p.value, p.source, p.updated, p.metadata, p.environment""",
-            from_clause=f" FROM {cls.table_name()} as p",
-            filter_statements=[" environment = $1 ", "p.source != 'fact'"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_parameters_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.parameter_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_parameter_list(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Parameter]:
-        subquery, subquery_values = cls.parameter_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        parameter_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        parameter_records = cast(Iterable[Record], parameter_records)
-        dtos = [
-            m.Parameter(
-                id=parameter["id"],
-                name=parameter["name"],
-                value=parameter["value"],
-                source=parameter["source"],
-                updated=parameter["updated"],
-                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
-                environment=parameter["environment"],
-            )
-            for parameter in parameter_records
-        ]
-        return dtos
-
-    @classmethod
-    def fact_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT p.id, p.name, p.value, p.source, p.resource_id, p.updated, p.metadata, p.environment""",
-            from_clause=f" FROM {cls.table_name()} as p",
-            filter_statements=[" environment = $1 ", "p.source = 'fact'"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_facts_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.fact_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_fact_list(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Fact]:
-        subquery, subquery_values = cls.fact_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        fact_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        fact_records = cast(Iterable[Record], fact_records)
-        dtos = [
-            m.Fact(
-                id=fact["id"],
-                name=fact["name"],
-                value=fact["value"],
-                source=fact["source"],
-                updated=fact["updated"],
-                resource_id=fact["resource_id"],
-                metadata=json.loads(fact["metadata"]) if fact["metadata"] else None,
-                environment=fact["environment"],
-            )
-            for fact in fact_records
-        ]
-        return dtos
-
 
 class UnknownParameter(BaseDocument):
     """
@@ -3331,100 +3223,6 @@ class Agent(BaseDocument):
         """
         await cls._execute_query(query, connection=connection)
 
-    @classmethod
-    def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ap.hostname as process_name, ai.process as process_id,
-                                    (CASE WHEN paused THEN 'paused'
-                                        WHEN id_primary IS NOT NULL THEN 'up'
-                                        ELSE 'down'
-                                    END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-            filter_statements=[" a.environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.agent_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_agents(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[Union[datetime.datetime, bool, str]] = None,
-        end: Optional[Union[datetime.datetime, bool, str]] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Agent]:
-        subquery, subquery_values = cls.agent_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        agent_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        agent_records = cast(Iterable[Record], agent_records)
-
-        dtos = [
-            m.Agent(
-                name=agent["name"],
-                environment=agent["environment"],
-                last_failover=agent["last_failover"],
-                paused=agent["paused"],
-                unpause_on_resume=agent["unpause_on_resume"],
-                process_id=agent["process_id"],
-                process_name=agent["process_name"],
-                status=agent["status"],
-            )
-            for agent in agent_records
-        ]
-        return dtos
-
 
 @stable_api
 class Report(BaseDocument):
@@ -3624,88 +3422,6 @@ class Compile(BaseDocument):
     ) -> None:
         query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
-
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_compile_reports(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.CompileReport]:
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT id, remote_id, environment, requested,
-                    started, completed, do_export, force_update,
-                    metadata, environment_variables, success, version """,
-            from_clause=f" FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        compile_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        compile_records = cast(Iterable[Record], compile_records)
-
-        dtos = [
-            m.CompileReport(
-                id=compile["id"],
-                remote_id=compile["remote_id"],
-                environment=compile["environment"],
-                requested=compile["requested"],
-                started=compile["started"],
-                completed=compile["completed"],
-                success=compile["success"],
-                version=compile["version"],
-                do_export=compile["do_export"],
-                force_update=compile["force_update"],
-                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
-            )
-            for compile in compile_records
-        ]
-        return dtos
 
     @classmethod
     async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
@@ -3993,126 +3709,6 @@ class ResourceAction(BaseDocument):
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
         return super().get_valid_field_names() + ["timestamp", "level", "msg"]
-
-    @classmethod
-    def _get_resource_logs_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
-        # characters in the query
-        resource_id = resource_id.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
-
-        query = f"""{select_clause}
-                    FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND rvid LIKE ${offset + 1} ESCAPE '#') unnested
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_logs_paged(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List["m.ResourceLog"]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=None,
-            last_id=None,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause="SELECT action_id, action, timestamp, unnested_message ",
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                                ORDER BY matching_records.{order_by_column} {order}"""
-
-        records = cast(Iterable[Record], await cls.select_query(db_query, values, no_obj=True, connection=connection))
-        logs = []
-        for record in records:
-            message = json.loads(record["unnested_message"])
-            logs.append(
-                m.ResourceLog(
-                    action_id=record["action_id"],
-                    action=record["action"],
-                    timestamp=record["timestamp"],
-                    level=message.get("level"),
-                    msg=message.get("msg"),
-                    args=message.get("args", []),
-                    kwargs=message.get("kwargs", {}),
-                )
-            )
-        return logs
-
-    @classmethod
-    def _get_paging_resource_log_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
@@ -4649,17 +4245,17 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources_list = []
+        resources_list: Union[List[Resource], List[Dict[str, object]]] = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
-                        record = dict(record)
-                        record["attributes"] = json.loads(record["attributes"])
-                        record["id"] = record["resource_version_id"]
-                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
-                        record["resource_type"] = parsed_id.entity_type
-                        resources_list.append(record)
+                        drecord = dict(record)
+                        drecord["attributes"] = json.loads(drecord["attributes"])
+                        parsed_id = resources.Id.parse_id(drecord["resource_version_id"])
+                        drecord["id"] = drecord["resource_version_id"]
+                        drecord["resource_type"] = parsed_id.entity_type
+                        resources_list.append(drecord)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
         return resources_list
@@ -4690,135 +4286,6 @@ class Resource(BaseDocument):
             return resources[0]
         return None
 
-    @classmethod
-    def _get_released_resources_base_query(cls, select_clause: str, environment: uuid.UUID, offset: int) -> Tuple[str, object]:
-        """A partial query describing the conditions for selecting the latest released resources,
-        according to the model version number."""
-        environment_db_value = cls._get_value(environment)
-        # Emulate a loose index scan with a recursive common table expression (CTE),
-        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
-        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
-        # btree index efficiently; rather than scanning all equal values of a key,
-        # as soon as a new value is found, restart the search by looking for a larger value"
-        # In this case we don't scan all equal values of a resource_id
-        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
-        # and move on to the next resource_id
-        return (
-            f"""
-            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-            /* The cm_version CTE finds the maximum released version number in the environment  */
-            WITH RECURSIVE cm_version AS (
-                  SELECT
-                    MAX(public.configurationmodel.version) as max_version
-                    FROM public.configurationmodel
-                WHERE public.configurationmodel.released=TRUE
-                AND environment=${offset}
-                ),
-            /* emulate a loose (or skip) index scan */
-            cte AS (
-               (
-               /* specify the necessary columns */
-               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned' -- use the CTE to check the status
-                    ELSE r.status::text END) as status
-               FROM   resource r
-               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-               WHERE  r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY resource_id, model DESC
-               LIMIT  1
-               )
-               UNION ALL
-               SELECT r.*
-               FROM   cte c
-               CROSS JOIN LATERAL
-               /* specify the same columns in the recursive part */
-                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned'
-                    ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
-               /* One result from the recursive call is the latest released version of one specific resource.
-                  We always start looking for this based on the previous resource_id. */
-               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY r.resource_id, r.model DESC
-               LIMIT  1) r
-               )
-            {select_clause}
-            FROM   cte
-            """,
-            environment_db_value,
-        )
-
-    @classmethod
-    async def get_released_resources(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.LatestReleasedResource]:
-        """
-        Get all resources that are in a released version, sorted, paged and filtered
-        """
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause="SELECT * ", environment=environment, offset=len(values) + 1
-        )
-        values.append(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}, resource_version_id {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.resource_version_id {order}"""
-
-        resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
-        resource_records = cast(Iterable[Record], resource_records)
-
-        dtos = [
-            m.LatestReleasedResource(
-                resource_id=resource["resource_id"],
-                resource_version_id=resource["resource_version_id"],
-                id_details=cls.get_details_from_resource_id(resource["resource_id"]),
-                status=resource["status"],
-                requires=json.loads(resource["attributes"]).get("requires", []),
-            )
-            for resource in resource_records
-        ]
-        return dtos
-
     @staticmethod
     def get_details_from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
         parsed_id = resources.Id.parse_id(resource_id)
@@ -4828,34 +4295,6 @@ class Resource(BaseDocument):
             attribute=parsed_id.attribute,
             resource_id_value=parsed_id.attribute_value,
         )
-
-    @classmethod
-    def _get_paging_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            offset=len(values) + 1,
-        )
-        values.append(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get(
@@ -5073,147 +4512,6 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    def get_history_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        query = f"""
-                /* Assign a sequence id to the rows, which is used for grouping consecutive ones with the same hash */
-                WITH resourcewithsequenceids AS (
-                  SELECT
-                    attribute_hash,
-                    model,
-                    attributes,
-                    date,
-                    ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
-                      PARTITION BY attribute_hash
-                      ORDER BY date
-                    ) AS seqid
-                  FROM resource JOIN configurationmodel cm
-                    ON resource.model = cm.version AND resource.environment = cm.environment
-                  WHERE resource.environment = ${offset} AND resource_id = ${offset + 1} AND cm.released = TRUE
-                )
-                   {select_clause}
-                    FROM
-                    (SELECT
-                        attribute_hash,
-                        min(date) as date,
-                        (SELECT distinct on (attribute_hash) attributes
-                            FROM resourcewithsequenceids
-                            WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
-                            AND resourcewithsequenceids.seqid = rs.seqid
-                            ORDER BY attribute_hash, model
-                        ) as attributes
-                    FROM resourcewithsequenceids rs
-                    GROUP BY attribute_hash,  seqID) as sub
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_resource_history(
-        cls,
-        env: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        limit: Optional[int] = None,
-    ) -> List[m.ResourceHistory]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-
-        select_clause = """
-        SELECT
-        attribute_hash,
-        date,
-        attributes """
-
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("attribute_hash"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-        )
-        query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause, environment=env, resource_id=resource_id, offset=len(values) + 1
-        )
-        if len(filter_statements) > 0:
-            query += cls._join_filter_statements(filter_statements)
-        values.extend(base_query_values)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
-        else:
-            query += f" ORDER BY {order_by_column} {order}, attribute_hash {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                query += " LIMIT " + str(limit)
-        else:
-            query += f" LIMIT {DBLIMIT} "
-
-        if backward_paging:
-            query = f"""SELECT * FROM ({query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.attribute_hash {order}"""
-        result = await cls.select_query(query, values, no_obj=True)
-        result = cast(List[Record], result)
-
-        return [
-            m.ResourceHistory(
-                resource_id=resource_id,
-                attribute_hash=record["attribute_hash"],
-                attributes=json.loads(record["attributes"]),
-                date=record["date"],
-                requires=[
-                    resources.Id.parse_resource_version_id(rvid).resource_str()
-                    for rvid in json.loads(record["attributes"]).get("requires", [])
-                ],
-            )
-            for record in result
-        ]
-
-    @classmethod
-    def _get_paging_history_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
-
-    @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
         query = f"""
             SELECT COUNT(r.resource_id) as count, status
@@ -5228,93 +4526,6 @@ class Resource(BaseDocument):
         for row in raw_results:
             results[row["status"]] = row["count"]
         return m.ResourceDeploySummary.create_from_db_result(results)
-
-    @classmethod
-    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                                    r.agent, r.resource_id_value, r.environment""",
-            from_clause=f" FROM {cls.table_name()} as r",
-            filter_statements=[" environment = $1 ", " model = $2"],
-            values=[cls._get_value(environment), cls._get_value(version)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_versioned_resources_for_paging(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_versioned_resources(
-        cls,
-        version: int,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.VersionedResource]:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        versioned_resource_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        versioned_resource_records = cast(Iterable[Record], versioned_resource_records)
-
-        dtos = [
-            m.VersionedResource(
-                resource_id=versioned_resource["resource_id"],
-                resource_version_id=versioned_resource["resource_version_id"],
-                id_details=cls.get_details_from_resource_id(versioned_resource["resource_id"]),
-                requires=json.loads(versioned_resource["attributes"]).get("requires", []),
-            )
-            for versioned_resource in versioned_resource_records
-        ]
-        return dtos
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5822,80 +5033,6 @@ class ConfigurationModel(BaseDocument):
         )
         return query_builder.build()
 
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_desired_state_versions(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.DesiredStateVersion]:
-        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        desired_state_version_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-
-        dtos = [
-            m.DesiredStateVersion(
-                version=desired_state["version"],
-                date=desired_state["date"],
-                total=desired_state["total"],
-                labels=[m.DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
-                status=desired_state["status"],
-            )
-            for desired_state in desired_state_version_records
-        ]
-        return dtos
-
 
 class Code(BaseDocument):
     """
@@ -6086,94 +5223,6 @@ class Notification(BaseDocument):
     uri: str
     read: bool = False
     cleared: bool = False
-
-    @classmethod
-    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT n.*""",
-            from_clause=f" FROM {cls.table_name()} as n",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_notifications_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def list_notifications(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Notification]:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        notification_records = cast(Iterable[Record], notification_records)
-        dtos = [
-            m.Notification(
-                id=notification["id"],
-                title=notification["title"],
-                message=notification["message"],
-                severity=notification["severity"],
-                created=notification["created"],
-                read=notification["read"],
-                cleared=notification["cleared"],
-                uri=notification["uri"],
-                environment=notification["environment"],
-            )
-            for notification in notification_records
-        ]
-        return dtos
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
