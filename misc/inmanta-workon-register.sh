@@ -3,7 +3,6 @@
 # TODO: delete old Python implementation
 # TODO: write tests, include all failure scenarios
 # TODO: document shell and user portability?
-# TODO: mention reasoning for "command ls" vs "ls"
 # TODO: names of all functions + docstrings and help
 
 if [ "$BASH_SOURCE" = "$0" ]; then
@@ -119,13 +118,14 @@ function inmanta-workon-test {
         env_id="$inmanta_env"
     fi
 
-    __inmanta_workon_by_id "$envs_dir" "$env_id"
+    __inmanta_activate "$inmanta_env" "$env_id" "$envs_dir"
 }
 
 
-function __inmanta_workon_by_id {
-    declare envs_dir="$1"
+function __inmanta_activate {
+    declare env_name="$1"
     declare env_id="$2"
+    declare envs_dir="$3"
 
     if [ ! -d "$envs_dir/$env_id" ]; then
         echo "ERROR: Directory '$envs_dir/$env_id' does not exist. This may mean the environment has never started a compile" >&2
@@ -141,9 +141,12 @@ function __inmanta_workon_by_id {
         return 1
     fi
 
-    # TODO: call custom deactivate if it exists to make sure we raise the warning for the previous environment
+    # if we are in an active venv, deactivate it first: restores PS1 and triggers our custom deactivate logic if it's an inmanta venv
+    declare -F deactivate > /dev/null && deactivate nondestructive
+    # store PS1 before sourcing activate because we don't care about virtualenv's modifications
+    declare OLD_PS1="$PS1"
     source "$activate"
-    # TODO: custom PS1?
+    export PS1="($env_name) $OLD_PS1"
 
     __inmanta_workon_register_deactivate
 
@@ -159,14 +162,14 @@ function __inmanta_workon_register_deactivate {
     eval "$virtualenv_deactivate"
     unset -f deactivate > /dev/null 2>&1
 
-    # TODO: unset PS1
     # Replace the deactivate() function with a wrapper.
     eval 'deactivate () {
         declare inmanta_env_dir=$(dirname "$VIRTUAL_ENV")
-        declare user=${INMANTA_USER-inmanta}
+        declare user=${INMANTA_USER:-inmanta}
 
         # Call the original function.
         virtualenv_deactivate $1
+        # no need to restore PS1 because virtualenv_deactivate already does that
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
