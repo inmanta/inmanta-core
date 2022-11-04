@@ -55,7 +55,7 @@ def workon_bash(server, tmpdir: py.path.local) -> abc.Iterator[Bash]:
     Yields a function that runs a bash script in an environment where the inmanta-workon shell functions have been registered.
     """
     port = config.Config.get("server", "bind-port")
-    workdir: py.path.local = tmpdir.join("workon_bash_workdir")
+    workdir: py.path.local = tmpdir.mkdir("workon_bash_workdir")
     workdir.join(".inmanta.cfg").write(
         textwrap.dedent(
             f"""
@@ -145,15 +145,14 @@ async def test_workon_list(
     ).strip()
 
 
-# TODO
-def test_workon_list_no_environments(server) -> None:
+async def test_workon_list_no_environments(server, workon_bash: Bash) -> None:
     """
     Verify output of `inmanta-workon --list` when no environments are present in the database.
     """
-    result: click.testing.Result = cli_runner.invoke(cli=workon.workon, args=["--list"])
-    assert result.exit_code == 0, (result.stderr, result.output)
-    assert result.output.strip() == ""
+    result: CliResult = await workon_bash("inmanta-workon --list")
+    assert result.exit_code == 0, (result.stderr, result.stdout)
     assert result.stderr.strip() == ""
+    assert result.stdout.strip() == "No environment defined."
 
 
 # TODO
