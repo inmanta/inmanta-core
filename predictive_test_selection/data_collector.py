@@ -26,7 +26,7 @@ import click
 
 import requests
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 LOGGER = logging.getLogger(__name__)
 # This parameter is used to configure how far in the past we look back (in days) when computing the number of modifications
 # made to files involved in a specific code change. This parameter is used in the learning algorithm as well and as such it
@@ -188,7 +188,6 @@ class TestResult:
                 if not test_file or not test_name:
                     continue
                 test_fqn: str = ".".join((sanitize(test_file), sanitize(test_name)))
-                # test_fqn: str = ".".join((test_file.replace("\n", "").replace(" ", ""), test_name.replace("\n", "")))
 
                 test_failed: int = int(test_case.find("failure") is not None)
 
