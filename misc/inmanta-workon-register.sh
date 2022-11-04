@@ -1,13 +1,14 @@
 # Loosely inspired by virtualenv's `activate` and virtualenvwrapper's `virtualenvwrapper.sh`
 
-# TODO: delete old Python implementation
+# TODO: delete old Python inmanta-workon implementation
 # TODO: write tests, include all failure scenarios
-# TODO: document shell and user portability?
-# TODO: names of all functions + docstrings and help
 
+if [ -z "$BASH" ]; then
+    echo "WARNING: This script was written for bash and might not be portable to other shells" >&2
+fi
 if [ "$BASH_SOURCE" = "$0" ]; then
     # TODO: also provide script that can just be executed?
-    echo "This script is meant to be sourced rather than executed directly: \`source '$0'\`" >&2
+    echo "ERROR: This script is meant to be sourced rather than executed directly: \`source '$0'\`" >&2
     exit 1
 fi
 
@@ -36,7 +37,39 @@ if [ -z "$INMANTA_WORKON_PYTHON" ]; then
 fi
 
 
+function inmanta-workon {
+    # TODO: --help
+    if [ -z "$1" ] || [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
+        __inmanta_workon_list
+        return
+    fi
+
+    declare inmanta_env="$1"
+    declare env_id
+    declare envs_dir
+
+    envs_dir="$(__inmanta_workon_environments_dir)" || return  # propagate error
+
+    # convert environment argument to environment id
+    env_id=$(__inmanta_workon_cli environment show --format '{id}' "$inmanta_env")
+    if [ ! "$?" -eq 0 ]; then
+        # check if inmanta_env is a valid id
+        "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
+        if [ ! "$?" -eq 0 ]; then
+            # TODO: bug: this same error is raised when the name is just invalid
+            echo "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead."
+            return 1
+        fi
+        env_id="$inmanta_env"
+    fi
+
+    __inmanta_workon_activate "$inmanta_env" "$env_id" "$envs_dir"
+}
+
+
 function __inmanta_workon_environments_dir {
+    # Writes the path to the server's environments directory to stdout
+
     declare result
     result=$(
         "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));'
@@ -47,8 +80,8 @@ function __inmanta_workon_environments_dir {
         return 1
     fi
     if [ ! -d "$result" ]; then
-        echo "WARNING: no environments directory found at '$result'. This is expected if no environments have been compiled yet. Otherwise, make sure you use this function on the server host." >&2
         # only warn, don't return: path might still be valid
+        echo "WARNING: no environments directory found at '$result'. This is expected if no environments have been compiled yet. Otherwise, make sure you use this function on the server host." >&2
     fi
 
     echo "$result"
@@ -57,6 +90,8 @@ function __inmanta_workon_environments_dir {
 
 
 function __inmanta_workon_cli_port {
+    # Writes the configured server port to stdout
+
     declare result
     result=$(
         "$INMANTA_WORKON_PYTHON" -c 'from inmanta.server.config import get_bind_port; print(get_bind_port());' 2> /dev/null
@@ -73,15 +108,17 @@ function __inmanta_workon_cli_port {
 
 
 function __inmanta_workon_cli {
-    # Call inmanta-cli with appropriate host and port options. Hides stderr.
+    # Calls inmanta-cli with appropriate host and port options
+
     declare port
     port="$(__inmanta_workon_cli_port)" || return  # propagate error
     "$INMANTA_WORKON_CLI" --host localhost --port "$port" "$@" 2> /dev/null
 }
 
 
-function inmanta-workon-list {
-    # TODO: --help
+function __inmanta_workon_list {
+    # Writes a list of environments to stdout. Attempts to print a nice table if inmanta-cli works, otherwise falls back to a plain uuid list.
+
     __inmanta_workon_cli environment list
     if [ ! "$?" -eq 0 ]; then
         echo "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery." >&2
@@ -93,36 +130,9 @@ function inmanta-workon-list {
 }
 
 
-function inmanta-workon-test {
-    # TODO: --help
-    if [ -z "$1" ] || [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
-        inmanta-workon-list
-        return
-    fi
+function __inmanta_workon_activate {
+    # Activates the environment's venv and registers the deactivate function
 
-    declare inmanta_env="$1"
-    declare env_id
-    declare envs_dir
-
-    envs_dir="$(__inmanta_workon_environments_dir)" || return  # propagate error
-
-    # convert environment argument to environment id
-    env_id=$(__inmanta_workon_cli environment show --format '{id}' "$inmanta_env")
-    if [ ! "$?" -eq 0 ]; then
-        # check if inmanta_env is a valid id
-        "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
-        if [ ! "$?" -eq 0 ]; then
-            echo "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead."
-            return 1
-        fi
-        env_id="$inmanta_env"
-    fi
-
-    __inmanta_activate "$inmanta_env" "$env_id" "$envs_dir"
-}
-
-
-function __inmanta_activate {
     declare env_name="$1"
     declare env_id="$2"
     declare envs_dir="$3"
@@ -149,12 +159,10 @@ function __inmanta_activate {
     export PS1="($env_name) $OLD_PS1"
 
     __inmanta_workon_register_deactivate
-
-    return 0
 }
 
 function __inmanta_workon_register_deactivate {
-    # Register a custom deactivate function. Modified from virtualenvwrapper's implementation
+    # Registers a custom deactivate function. Modified from virtualenvwrapper's implementation
 
     # Save the deactivate function from virtualenv under a different name
     declare original_deactivate
