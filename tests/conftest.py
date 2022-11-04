@@ -535,6 +535,7 @@ def reset_all_objects():
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    compiler.Finalizers.reset_finalizers()
 
 
 @pytest.fixture()
@@ -1001,8 +1002,9 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.working_set = None
 
     def deactivate(self):
-        self._using_venv = False
-        self.working_set = pkg_resources.working_set
+        if self._using_venv:
+            self._using_venv = False
+            self.working_set = pkg_resources.working_set
 
     def use_virtual_env(self) -> None:
         """
