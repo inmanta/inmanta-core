@@ -66,12 +66,7 @@ from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import (
-    PagingBoundaries,
-    ResourceIdStr,
-    api_boundary_datetime_normalizer,
-    validator_timezone_aware_timestamps,
-)
+from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
