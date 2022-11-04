@@ -188,16 +188,20 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
     async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
         query_builder = self.get_base_query()
 
+        # In this method, we use `data.Resource`
+        # we need the generic functionality of `data.BaseDocument`
+        # But that one doesn't actually hold a connection, as it is abstract
+
         # Project
         query_builder = query_builder.filter(
-            *data.BaseDocument.get_composed_filter_with_query_types(
+            *data.Resource.get_composed_filter_with_query_types(
                 offset=query_builder.offset, col_name_prefix=None, **self.filter
             )
         )
         query_builder = self.clip_to_page(query_builder)
         sql_query, values = query_builder.build()
 
-        records = await data.BaseDocument.select_query(sql_query, values, no_obj=True)
+        records = await data.Resource.select_query(sql_query, values, no_obj=True)
 
         dtos = self.construct_dtos(records)
 
