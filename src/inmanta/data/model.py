@@ -28,6 +28,7 @@ from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
+import inmanta.data
 from inmanta import const, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
@@ -51,12 +52,19 @@ def patch_pydantic_field_type_schema() -> None:
     pydantic.schema.field_type_schema = patch_nullable
 
 
+def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    else:
+        return value
+
+
 def validator_timezone_aware_timestamps(value: object) -> object:
     """
     A Pydantic validator to ensure that all datetime times are timezone aware.
     """
-    if isinstance(value, datetime.datetime) and value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
+    if isinstance(value, datetime.datetime):
+        return api_boundary_datetime_normalizer(value)
     else:
         return value
 
@@ -475,10 +483,10 @@ class PagingBoundaries:
 
     def __init__(
         self,
-        start: Union[datetime.datetime, int, str],
-        end: Union[datetime.datetime, int, str],
-        first_id: Optional[Union[uuid.UUID, str]],
-        last_id: Optional[Union[uuid.UUID, str]],
+        start: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
+        end: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if user selected field is nullable
+        first_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
+        last_id: Optional["inmanta.data.PRIMITIVE_SQL_TYPES"],  # Can be none if single keyed
     ) -> None:
         self.start = start
         self.end = end
