@@ -282,13 +282,14 @@ class FilterValidator(ABC):
         """A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         raise NotImplementedError()
 
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
         """
         Processes filters and returns a structured query filter object.
 
         :raises InvalidFilter: The supplied filter is invalid.
         """
-
+        if filter is None:
+            return {}
         query: Dict[str, QueryFilter] = {}
         for filter_name, filter_class in self.allowed_filters.items():
             try:
@@ -305,108 +306,3 @@ class FilterValidator(ABC):
         if len(not_allowed_filters) > 0:
             raise InvalidFilter(f"The following filters are not supported: {not_allowed_filters}")
         return query
-
-
-class ResourceFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "resource_type": ContainsPartialFilter,
-            "agent": ContainsPartialFilter,
-            "resource_id_value": ContainsPartialFilter,
-            "status": CombinedContainsFilterResourceState,
-        }
-
-
-class ResourceLogFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "minimal_log_level": LogLevelFilter,
-            "timestamp": DateRangeFilter,
-            "message": ContainsPartialFilter,
-            "action": ContainsFilterResourceAction,
-        }
-
-    def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:
-        # Change the api names of the filters to the names used internally in the database
-        query = super().process_filters(filter)
-        if query.get("minimal_log_level"):
-            filter_value = query.pop("minimal_log_level")
-            query["level"] = filter_value
-        if query.get("message"):
-            filter_value = query.pop("message")
-            query["msg"] = filter_value
-        return query
-
-
-class CompileReportFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "requested": DateRangeFilter,
-            "success": BooleanEqualityFilter,
-            "started": BooleanIsNotNullFilter,
-            "completed": BooleanIsNotNullFilter,
-        }
-
-
-class AgentFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "name": ContainsPartialFilter,
-            "process_name": ContainsPartialFilter,
-            "status": ContainsFilter,
-        }
-
-
-class DesiredStateVersionFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "version": IntRangeFilter,
-            "date": DateRangeFilter,
-            "status": ContainsFilter,
-        }
-
-
-class VersionedResourceFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "resource_type": ContainsPartialFilter,
-            "agent": ContainsPartialFilter,
-            "resource_id_value": ContainsPartialFilter,
-        }
-
-
-class ParameterFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "name": ContainsPartialFilter,
-            "source": ContainsPartialFilter,
-            "updated": DateRangeFilter,
-        }
-
-
-class FactsFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "name": ContainsPartialFilter,
-            "resource_id": ContainsPartialFilter,
-        }
-
-
-class NotificationFilterValidator(FilterValidator):
-    @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        return {
-            "title": ContainsPartialFilter,
-            "message": ContainsPartialFilter,
-            "read": BooleanEqualityFilter,
-            "cleared": BooleanEqualityFilter,
-            "severity": ContainsFilter,
-        }

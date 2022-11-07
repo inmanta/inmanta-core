@@ -16,7 +16,7 @@ requires = [
     "execnet~=1.0",
     "importlib_metadata>=4,<6",
     "jinja2~=3.0",
-    "more-itertools~=8.0",
+    "more-itertools>=8,<10",
     "netifaces~=0.11",
     "packaging~=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
@@ -42,7 +42,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "7.1.1"
+version = "7.2.0"
 
 setup(
     version=version,

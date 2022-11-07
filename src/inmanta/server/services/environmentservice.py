@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import uuid
+import warnings
 from collections import defaultdict
 from collections.abc import Set
 from enum import Enum
@@ -354,6 +355,10 @@ class EnvironmentService(protocol.ServerSlice):
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
+        if repository is None:
+            repository = ""
+        if branch is None:
+            branch = ""
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
@@ -611,4 +616,10 @@ class EnvironmentService(protocol.ServerSlice):
         relevant for inmanta-lsm but that are needed in the environment.
         :param setting: the setting that should be added to the existing settings
         """
-        await data.Environment.register_setting(setting)
+        warnings.warn(
+            "Registering environment settings via the inmanta.server.services.environmentservice.register_setting endpoint "
+            "is deprecated. Environment settings defined by an extension should be advertised via the "
+            "register_environment_settings method of the inmanta_ext.<extension_name>.extension.py file of an extension.",
+            category=DeprecationWarning,
+        )
+        data.Environment.register_setting(setting)

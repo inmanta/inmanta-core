@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
-from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING
@@ -283,11 +282,12 @@ class Namespace(Namespaced):
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
+        self.visible_namespaces: Dict[str, Import]
         if self.__parent is not None:
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
-            self.visible_namespaces = {name: MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
 
@@ -596,24 +596,24 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
-class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
+class HyphenException(RuntimeException):
+    def __init__(self, stmt: LocatableString) -> None:
+        msg: str = "The use of '-' in identifiers is not allowed. please rename %s." % stmt.value
+        RuntimeException.__init__(self, stmt, msg)
+
+
+class CompilerRuntimeWarning(Warning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
-        InmantaWarning.__init__(self)
+        Warning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
 
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
-        CompilerRuntimeWarning.__init__(self, stmt, msg)
-
-
-class HyphenDeprecationWarning(CompilerDeprecationWarning):
-    def __init__(self, stmt: LocatableString) -> None:
-        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
@@ -860,7 +860,6 @@ class DuplicateException(TypingException):
 
 
 class CompilerError(Exception):
-
     pass
 
 

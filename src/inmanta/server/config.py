@@ -108,7 +108,6 @@ def get_bind_port() -> int:
             warnings.warn(
                 "Ignoring the server_rest_transport.port config option since the new config options "
                 "server.bind-port/server.bind-address are used.",
-                category=DeprecationWarning,
             )
         return server_bind_port.get()
     else:
@@ -191,16 +190,6 @@ server_purge_version_interval = Option(
     """The number of seconds between version purging,
                                           see :inmanta.config:option:`server.available-versions-to-keep`""",
     is_time,
-)
-
-server_version_to_keep = Option(
-    "server",
-    "available-versions-to-keep",
-    10,
-    """[DEPRECATED: use AVAILABLE_VERSIONS_TO_KEEP environment setting]
-                                On boot and at regular intervals the server will purge older versions.
-                                This is the number of most recent versions to keep available.""",
-    is_int,
 )
 
 server_compiler_report_retention = Option(
