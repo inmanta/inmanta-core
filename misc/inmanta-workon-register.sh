@@ -124,7 +124,7 @@ function __inmanta_workon_list {
         echo "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery." >&2
         declare envs_dir
         envs_dir="$(__inmanta_workon_environments_dir)" || return  # propagate error
-        command ls -1 "$(__inmanta_workon_environments_dir)" 2> /dev/null
+        command ls -1 "$envs_dir" 2> /dev/null
     fi
     return 0
 }
