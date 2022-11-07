@@ -18,11 +18,11 @@
 import inspect
 import os
 import subprocess
-import warnings
 from collections import abc
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
+import inmanta
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
@@ -32,7 +32,6 @@ from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
-from inmanta.warnings import InmantaWarning
 
 T = TypeVar("T")
 
@@ -42,7 +41,7 @@ if TYPE_CHECKING:
     from inmanta.compiler import Compiler
 
 
-class PluginDeprecationWarning(InmantaWarning):
+class PluginDeprecationWarning(Warning):
     pass
 
 
@@ -422,7 +421,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
             if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
-            warnings.warn(PluginDeprecationWarning(msg))
+            inmanta.warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
         def new_arg(arg: object) -> object:
