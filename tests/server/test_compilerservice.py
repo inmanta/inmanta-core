@@ -25,7 +25,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import AsyncIterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, AsyncIterator, List, Optional, Tuple
 
 import pkg_resources
 import pytest
@@ -33,7 +33,6 @@ from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
-from conftest import CompileRunnerMock
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
@@ -51,6 +50,9 @@ from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, v1_module_from_template, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
+
+if TYPE_CHECKING:
+    from conftest import CompileRunnerMock
 
 
 @pytest.fixture
@@ -787,7 +789,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
 async def run_compile_and_wait_until_compile_is_done(
     compiler_service: CompilerService,
-    compiler_queue: queue.Queue[CompileRunnerMock],
+    compiler_queue: queue.Queue["CompileRunnerMock"],
     env_id: uuid.UUID,
     fail: Optional[bool] = None,
     fail_on_pull=False,
