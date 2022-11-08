@@ -88,6 +88,7 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     ]
 
     await clienthelper.put_version_simple(resources, version)
+
     # Release the model and set all resources as deployed
     result = await client.release_version(environment, version, False)
     assert result.code == 200
