@@ -1,5 +1,5 @@
 ---
-description: The 'dashboard' and 'web-console' sections are being deprecated. The 'web-ui' section should now be used instead for configuration options related to web interfaces.
+description: The 'dashboard' section is being deprecated. The 'web-ui' section should now be used instead for configuration options related to web interfaces.
 change-type: minor
 issue-nr: 317
 issue-repo: inmanta-ui
