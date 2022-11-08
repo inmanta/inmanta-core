@@ -88,6 +88,7 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: Type[War
     caplog.set_level(logging.WARNING)
     WarningsManager.apply_config({})
     warnings.resetwarnings()
+    raise Exception("aie")
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
     assert caplog.record_tuples == [
