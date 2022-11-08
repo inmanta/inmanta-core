@@ -21,6 +21,7 @@ import itertools
 import os
 import py
 import pytest
+import shutil
 import subprocess
 import textwrap
 import uuid
@@ -346,6 +347,11 @@ async def assert_workon_state(
     arg: str,
     *,
     expected_dir: py.path.local,
+    invert_success_assert: bool = False,
+    invert_working_dir_assert: bool = False,
+    invert_python_assert: bool = False,
+    invert_ps1_assert: bool = False,
+    expect_stderr: str = "",
 ) -> CliResult:
     """
     Helper function to call inmanta-workon with an argument and assert the expected state.
@@ -353,26 +359,32 @@ async def assert_workon_state(
     :param workon_bash: The Bash environment to use for this assertion.
     :param arg: The environment argument to pass to inmanta-workon. May be either a name or a UUID.
     :param expected_dir: The directory that is expected to be selected.
+    :param invert_success_assert: If true, assert that inmanta-workon returns a non-zero exit code.
+    :param invert_working_dir_assert: If true, assert that the working directory has not changed to the environment dir.
+    :param invert_python_assert: If true, assert that `which python` does not resolve to the environment's Python.
+    :param invert_ps1_assert: If true, assert that PS1 has received the environment as a prefix.
     """
     result: CliResult = await workon_bash(
         textwrap.dedent(
             f"""
             test_workon_ps1_pre=$PS1
             inmanta-workon '{arg}'
+            result=$?
             echo "$(pwd)"
             which python
             echo "${{PS1%test_workon_ps1_pre}}"
+            [ "$result" -eq 0 ]  # exit with result code
             """.strip("\n")
         )
     )
-    assert result.exit_code == 0
+    assert (result.exit_code == 0) != invert_success_assert
     lines: abc.Sequence[str] = result.stdout.splitlines()
     assert len(lines) == 3
     working_dir, python, ps1_prefix = lines
-    assert working_dir == str(expected_dir)
-    assert python == str(expected_dir.join(".env", "bin", "python"))
-    assert ps1_prefix == f"({arg}) "
-    assert result.stderr == ""
+    assert (working_dir == str(expected_dir)) != invert_working_dir_assert
+    assert (python == str(expected_dir.join(".env", "bin", "python"))) != invert_python_assert
+    assert (ps1_prefix == f"({arg}) ") != invert_ps1_assert
+    assert result.stderr == expect_stderr
 
 
 @pytest.mark.slowtest
@@ -399,6 +411,28 @@ async def test_workon(
         compiled_environments[1].name,
         expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
     )
+    # .env dir missing
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
+    shutil.rmtree(str(env_dir.join(".env")))
+    await assert_workon_state(
+        workon_bash,
+        compiled_environments[2].name,
+        expected_dir=env_dir,
+        invert_success_assert=True,
+        invert_working_dir_assert=False,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+    )
+
+
+async def test_workon_env_does_not_exist(
+    server,
+    workon_bash: Bash,
+    simple_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify behavior of various scenarios where the environment or its directory does not exist.
+    """
 
 
 # TODO: similar tests for actual workon

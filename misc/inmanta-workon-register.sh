@@ -56,7 +56,7 @@ function inmanta-workon {
         # check if inmanta_env is a valid id
         "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
         if [ ! "$?" -eq 0 ]; then
-            # TODO: bug: this same error is raised when the name is just invalid
+            # TODO: bug: this same error is raised when the name is just invalid + add test
             echo "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead."
             return 1
         fi
