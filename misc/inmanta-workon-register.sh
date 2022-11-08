@@ -38,7 +38,7 @@ fi
 
 
 function inmanta-workon {
-    # TODO: --help
+    # TODO: --help + test for --help
     if [ -z "$1" ] || [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
         __inmanta_workon_list
         return

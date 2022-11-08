@@ -17,14 +17,17 @@
 """
 import asyncio
 import click.testing
+import itertools
 import os
 import py
 import pytest
 import subprocess
 import textwrap
 import uuid
+from abc import ABC, abstractmethod
 from collections import abc
 from dataclasses import dataclass
+from typing import Optional
 
 import utils
 import inmanta.data.model
@@ -34,6 +37,7 @@ from server.conftest import EnvironmentFactory
 
 
 # TODO: mypy
+# TODO: skip tests if not UNIX
 
 
 WORKON_REGISTER: str = os.path.join(os.path.dirname(__file__), "..", "..", "misc", "inmanta-workon-register.sh")
@@ -156,6 +160,123 @@ async def compiled_environments(
     yield environments
 
 
+def test_workon_source_check() -> None:
+    """
+    Verify that the inmanta-workon register script checks that it is sourced rather than executed and notifies the user in when
+    it isn't.
+    """
+    process: subprocess.CompletedProcess = subprocess.run(
+        ["bash", WORKON_REGISTER], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    assert process.returncode == 1
+    assert process.stdout == ""
+    assert process.stderr.strip() == (
+        f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
+    )
+
+
+# TODO: these are a lot of classes for a single test case. Can this be cleaned up?
+@dataclass
+class FileRef:
+    """
+    Reference to a file in an `ExecutablesEnvironment`.
+
+    :param name: The name of the referred file
+    :param path_index: The index of the directory in path_executables the referred file lives in. None if it is not on the
+        PATH.
+    """
+    name: str
+    path_index: Optional[int]
+
+
+@dataclass
+class Executable:
+    name: str
+    symlink: Optional[FileRef] = None
+
+
+@dataclass
+class ExecutablesEnvironment:
+    """
+    Represents an environment of executables, some of which live in PATH, others that do not.
+
+    :param path_executables: Sequence of directories on the PATH, represented by their index. Each directory contains a
+        collection of executables.
+    :param nonpath_executables: Collection of executables not on the PATH.
+    """
+    path_executables: abc.Sequence[abc.Collection[Executable]]
+    nonpath_executables: abc.Collection[Executable]
+
+    def set_up(self, monkeypatch, working_dir: py.path.local) -> None:
+        path_dir: py.path.local = working_dir.mkdir("path")
+        nonpath_dir: py.path.local = working_dir.mkdir("nonpath")
+
+        def create_executable(subdir: py.path.local, executable: Executable) -> None:
+            file_path: py.path.local = subdir.join(executable.name)
+            if executable.symlink is None:
+                file_path.write("")
+                file_path.chmod(700)
+            else:
+                target_path: py.path.local = (
+                    path_dir.join(str(executable.symlink.path_index), executable.symlink.name)
+                    if executable.symlink.path_index is not None
+                    else nonpath_dir.join(executable.symlink.name)
+                )
+                file_path.mksymlinkto(target_path)
+
+        for i, executables in enumerate(self.path_executables):
+            subdir: py.path.local = path_dir.mkdir(str(i))
+            for executable in executables:
+                create_executable(subdir, executable)
+
+        for executable in self.nonpath_executables:
+            create_executable(nonpath_dir, executable)
+
+        # TODO: no colons allowed in names
+        monkeypatch.setenv("PATH", ":".join(str(i) for i in range(len(self.path_executables))))
+
+
+# TODO: bash not in PATH with this approach
+@pytest.mark.parametrize(
+    "executables, expected_cli, expected_python",
+    [
+        (
+            # TODO: this is very verbose -> tiny DSL probably better
+            ExecutablesEnvironment(
+                path_executables=list(itertools.repeat([Executable(name="python3"), Executable(name="inmanta-cli")], 2)),
+                nonpath_executables=[],
+            ),
+            FileRef(name="inmanta-cli", path_index=0),
+            FileRef(name="python3", path_index=0),
+        ),
+    ],
+)
+async def test_workon_python_check(
+    monkeypatch,
+    tmpdir: py.path.local,
+    workon_bash: Bash,
+    executables: ExecutablesEnvironment,
+    expected_cli: FileRef,
+    expected_python: FileRef,
+) -> None:
+    # TODO: update docstring + mention executables should only be python3 + inmanta-cli
+    """
+    Verify that the inmanta-workon script discovers the appropriate Python executable.
+
+    Sets PATH environment variable to 0:1:...:n where n is the lenght of the executables parameter.
+
+    :param executables: A sequence of executables that exist at various depths on the PATH. Symlinks to other
+        e.g. `[["inmanta-cli", "python3"], ["inmanta-cli", "python3"]]`
+    """
+    print(executables)
+    # create bin directories and set PATH
+    executables.set_up(monkeypatch, tmpdir)
+
+    # don't call inmanta-workon, just source the registration script and fetch some env vars
+    result: CliResult = await workon_bash(f"echo $INMANTA_WORKON_CLI && echo $INMANTA_WORKON_PYTHON")
+    breakpoint()
+
+
 @pytest.mark.parametrize_any("short_option", [True, False])
 async def test_workon_list(
     server, workon_bash: Bash, simple_environments: abc.Sequence[data.model.Environment], short_option: bool
@@ -234,7 +355,6 @@ async def test_workon_list_no_api_no_environments(
         assert result.stderr.strip() == (
             "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
             "\n"
-            # TODO: this line is currently logged twice
             f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server/environments'. This is expected if no"
             " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
         )
