@@ -615,7 +615,15 @@ class Id(object):
         if version_match is not None:
             version = int(version_match)
 
-        id_obj = Id(result.group("type"), result.group("hostname"), result.group("attr"), result.group("value"), version)
+        parts = {
+            "type": result.group("type"),
+            "hostname": result.group("hostname"),
+            "attr": result.group("attr"),
+            "value": result.group("value"),
+            "id": result.group("id"),
+        }
+
+        id_obj = Id(parts["type"], parts["hostname"], parts["attr"], parts["value"], version)
         return id_obj
 
     @classmethod

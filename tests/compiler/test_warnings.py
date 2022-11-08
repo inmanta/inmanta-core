@@ -24,7 +24,7 @@ import pytest
 
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.ast import CompilerDeprecationWarning, CompilerException, CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import WarningsManager
 from utils import log_doesnt_contain
 
@@ -90,16 +90,13 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: Type[War
     warnings.resetwarnings()
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
-    if isinstance(warning, inmanta_warnings.InmantaWarning):
-        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s" % (category.__name__, warning))]
-    else:
-        assert caplog.record_tuples == [
-            (
-                "py.warnings",
-                logging.WARNING,
-                warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
-            )
-        ]
+    assert caplog.record_tuples == [
+        (
+            "py.warnings",
+            logging.WARNING,
+            warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
+        )
+    ]
 
 
 def test_shadow_warning(snippetcompiler):
@@ -222,3 +219,186 @@ typedef string as number matching self > 0
 
         assert len(caught_warnings) >= 1
         assert any(issubclass(w.category, CompilerRuntimeWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_entity_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity-a:
+    end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming Entity-a. "
+            f"(reported in Entity-a ({snippetcompiler.project_dir}/main.cf:2:12))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_attribute_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+    entity Entity:
+        string attribute-a
+    end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming attribute-a. "
+            f"(reported in attribute-a ({snippetcompiler.project_dir}/main.cf:3:16))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_implementation_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+implementation vw-polo for Car:
+    brand = "vw"
+end
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming vw-polo. "
+            f"(reported in vw-polo ({snippetcompiler.project_dir}/main.cf:6:16))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_typedef_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+typedef tcp-port as int matching self > 0 and self < 65535
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming tcp-port. "
+            f"(reported in tcp-port ({snippetcompiler.project_dir}/main.cf:2:9))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Car:
+   string brand
+end
+
+typedef Corsa-opel as Car(brand="opel")
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming Corsa-opel. "
+            f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+var-hello = "hello"
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming var-hello. "
+            f"(reported in var-hello ({snippetcompiler.project_dir}/main.cf:2:1))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_import_as(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+import std as std-std
+            """
+        )
+        message: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming std-std. "
+            f"(reported in std-std ({snippetcompiler.project_dir}/main.cf:2:15))"
+        )
+        compiler.do_compile()
+
+        assert len(caught_warnings) >= 1
+        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
+
+
+def test_deprecation_minus_relation(snippetcompiler):
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        snippetcompiler.setup_for_snippet(
+            """
+entity Host:
+    string  name
+end
+
+entity File:
+    string path
+end
+
+Host.files-hehe [0:] -- File.host-hoho [1]
+            """
+        )
+        message1: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming files-hehe. "
+            f"(reported in files-hehe ({snippetcompiler.project_dir}/main.cf:10:6))"
+        )
+        message2: str = (
+            f"The use of '-' in identifiers is deprecated. Consider renaming host-hoho. "
+            f"(reported in host-hoho ({snippetcompiler.project_dir}/main.cf:10:30))"
+        )
+        compiler.do_compile()
+
+        compiler_warning_1: bool = False
+        compiler_warning_2: bool = False
+
+        for w in caught_warnings:
+            if str(w.message) == message1:
+                assert issubclass(w.category, CompilerDeprecationWarning)
+                compiler_warning_1 = True
+            elif str(w.message) == message2:
+                assert issubclass(w.category, CompilerDeprecationWarning)
+                compiler_warning_2 = True
+
+        assert all([compiler_warning_1, compiler_warning_2])
+
+
+def test_import_hypen_in_name(snippetcompiler):
+    with pytest.raises(CompilerException) as e:
+        snippetcompiler.setup_for_snippet(
+            """
+import st-d
+            """
+        )
+        compiler.do_compile()
+
+    assert "st-d is not a valid module name: hyphens are not allowed, please use underscores instead." == e.value.msg

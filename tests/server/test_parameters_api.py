@@ -41,13 +41,10 @@ async def env_with_parameters(server, client, environment: str):
         version_info={},
     ).insert()
 
-    id_counter = [0x1000]
-
     async def insert_param(
         name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[Dict[str, str]] = None
     ) -> uuid.UUID:
-        id_counter[0] += 1
-        param_id = uuid.UUID(int=id_counter[0])
+        param_id = uuid.uuid4()
         await data.Parameter(
             id=param_id,
             name=name,
@@ -146,17 +143,6 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     port = get_bind_port()
     base_url = "http://localhost:%s" % (port,)
     http_client = AsyncHTTPClient()
-
-    # Test link for self page
-    url = f"""{base_url}{result.result["links"]["self"]}"""
-    request = HTTPRequest(
-        url=url,
-        headers={"X-Inmanta-tid": env},
-    )
-    response = await http_client.fetch(request, raise_error=False)
-    assert response.code == 200
-    response = json.loads(response.body.decode("utf-8"))
-    assert response == result.result
 
     # Test link for next page
     url = f"""{base_url}{result.result["links"]["next"]}"""

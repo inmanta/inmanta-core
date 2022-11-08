@@ -26,7 +26,7 @@ import click
 
 import requests
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 # This parameter is used to configure how far in the past we look back (in days) when computing the number of modifications
 # made to files involved in a specific code change. This parameter is used in the learning algorithm as well and as such it
@@ -74,36 +74,30 @@ class CodeChange:
 
     changed_files: List[str] = field(init=False, repr=False)
 
-    def parse(self, feature_branch: str) -> None:
+    def parse(self):
         # Get latest commit hash:
         self.commit_hash = subprocess.check_output(["git", "log", "--pretty=%H", "-1"]).strip().decode()
 
-        if feature_branch.startswith("merge-tool/"):
+        # Get current branch
+        cmd = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+        current_branch: str = subprocess.check_output(cmd).strip().decode()
+
+        if current_branch.startswith("merge-tool/"):
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
-        self._fully_checkout_branch(feature_branch)
-        self._compute_changed_files(feature_branch)
+        self._compute_changed_files(current_branch)
         self._compute_file_extensions()
         self._count_modifications()
 
-    def _fully_checkout_branch(self, branch: str) -> None:
-        LOGGER.info(f"Full checkout on {branch}")
-
-        cmd = ["git", "remote", "set-branches", "--add", "origin", f"{branch}"]
-        subprocess.check_output(cmd)
-        cmd = ["git", "fetch", "origin", f"{branch}"]
-        subprocess.check_output(cmd)
-
-    def _compute_changed_files(self, feature_branch: str) -> None:
+    def _compute_changed_files(self, current_branch: str) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
-        The distance metric used is the total number of files in the diff with the feature branch latest commit
+        The distance metric used is the total number of files in the diff with the current branch
         """
         max_cardinality: Union[float, int] = float("inf")
 
         for dev_branch in DEV_BRANCHES:
-            self._fully_checkout_branch(dev_branch)
-            cmd = ["git", "diff", f"origin/{dev_branch}...origin/{feature_branch}", "--name-only"]
+            cmd = ["git", "diff", f"{dev_branch}...{current_branch}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
@@ -184,10 +178,7 @@ class TestResult:
 
                 test_file: str = test_case.get("classname")
                 test_name: str = test_case.get("name")
-
-                if not test_file or not test_name:
-                    continue
-                test_fqn: str = ".".join((sanitize(test_file), sanitize(test_name)))
+                test_fqn: str = ".".join((test_file, test_name))
 
                 test_failed: int = int(test_case.find("failure") is not None)
 
@@ -197,10 +188,6 @@ class TestResult:
 
     def __iter__(self):
         yield from self.test_result_data.items()
-
-
-def sanitize(str_to_sanitize: str) -> str:
-    return str_to_sanitize.replace("\\n", "_").replace(" ", "_").replace(",", r"\,").replace("=", r"\=")
 
 
 class DataParser:
@@ -213,14 +200,14 @@ class DataParser:
         self.code_change_data: CodeChange = CodeChange()
         self.test_result_data: TestResult = TestResult()
 
-    def run(self, dry_run: bool, feature_branch: str):
+    def run(self, dry_run: bool):
         try:
-            self.code_change_data.parse(feature_branch)
+            self.code_change_data.parse()
             self.test_result_data.parse(self.code_change_data.dev_branch)
 
             self.send_influxdb_data(dry_run)
         except AbortDataCollection as e:
-            LOGGER.info(f"Data collection was aborted because {str(e)}")
+            LOGGER.debug(f"Data collection was aborted because {str(e)}")
 
     def _create_data_payload(self) -> str:
         """
@@ -255,10 +242,9 @@ class DataParser:
 
 @click.command()
 @click.option("--dry-run/--full-run", default=True, help="If dry-run only: no data will be sent to the db.")
-@click.option("--feature-branch", default=None, required=True, help="The name of the feature branch.")
-def main(dry_run: bool, feature_branch: str):
+def main(dry_run: bool):
     data_parser = DataParser()
-    data_parser.run(dry_run, feature_branch)
+    data_parser.run(dry_run)
 
 
 if __name__ == "__main__":

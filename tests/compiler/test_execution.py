@@ -379,9 +379,9 @@ implement KafkaNode using fromtarball
 
 
 
-kafka_user = std::Entity()
-kafka_volume = Volume(requires=kafka_user)
-KafkaNode(requires=kafka_volume)
+kafka-user = std::Entity()
+kafka-volume = Volume(requires=kafka-user)
+KafkaNode(requires=kafka-volume)
 """,
         autostd=False,
     )

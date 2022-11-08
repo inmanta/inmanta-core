@@ -1,8 +1,0 @@
-description: Added compiler finalizers
-change-type: minor
-sections:
-  feature:
-    Add the finalizer decorator. Functions decorated with it will be executed at the end of the compilation
-destination-branches:
-  - iso5
-  - master

@@ -25,7 +25,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import TYPE_CHECKING, AsyncIterator, List, Optional, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
 import pkg_resources
 import pytest
@@ -50,9 +50,6 @@ from inmanta.util import ensure_directory_exist
 from utils import LogSequence, report_db_index_usage, retry_limited, v1_module_from_template, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
-
-if TYPE_CHECKING:
-    from conftest import CompileRunnerMock
 
 
 @pytest.fixture
@@ -788,11 +785,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
 
 async def run_compile_and_wait_until_compile_is_done(
-    compiler_service: CompilerService,
-    compiler_queue: queue.Queue["CompileRunnerMock"],
-    env_id: uuid.UUID,
-    fail: Optional[bool] = None,
-    fail_on_pull=False,
+    compiler_service: CompilerService, compiler_queue: queue.Queue, env_id: uuid.UUID
 ) -> None:
     """
     Unblock the first compile in the compiler queue and wait until the compile finishes.
@@ -802,9 +795,6 @@ async def run_compile_and_wait_until_compile_is_done(
     # prevent race conditions where compile request is not yet in queue
     await retry_limited(lambda: not compiler_queue.empty(), timeout=10)
     run = compiler_queue.get(block=True)
-    if fail is not None:
-        run._make_compile_fail = fail
-    run._make_pull_fail = fail_on_pull
     run.block = False
 
     def _is_compile_finished() -> bool:
@@ -1252,15 +1242,15 @@ async def test_compileservice_api(client, environment):
     ["a custom message", None],
 )
 async def test_notification_failed_compile_with_message(
-    server, client, environment, mocked_compiler_service_block, message: Optional[str]
+    server, client, environment_factory: EnvironmentFactory, message: Optional[str]
 ) -> None:
     compilerservice = server.get_slice(SLICE_COMPILER)
 
-    result = await client.list_notifications(environment)
+    env = await environment_factory.create_environment("x=0 x=1")
+
+    result = await client.list_notifications(env.id)
     assert result.code == 200
     assert len(result.result["data"]) == 0
-
-    env = await data.Environment.get_by_id(environment)
 
     compile_id, _ = await compilerservice.request_recompile(
         env,
@@ -1271,15 +1261,19 @@ async def test_notification_failed_compile_with_message(
         failed_compile_message=message,
     )
 
-    await run_compile_and_wait_until_compile_is_done(compilerservice, mocked_compiler_service_block, env.id, True)
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
 
     async def notification_logged() -> bool:
-        result = await client.list_notifications(environment)
+        result = await client.list_notifications(env.id)
         assert result.code == 200
         return len(result.result["data"]) > 0
 
     await retry_limited(notification_logged, timeout=10)
-    result = await client.list_notifications(environment)
+    result = await client.list_notifications(env.id)
     assert result.code == 200
     compile_failed_notification = next((item for item in result.result["data"] if item["title"] == "Compilation failed"), None)
     assert compile_failed_notification
@@ -1290,9 +1284,7 @@ async def test_notification_failed_compile_with_message(
         assert "A compile has failed" in compile_failed_notification["message"]
 
 
-async def test_notification_on_failed_exporting_compile(
-    server, client, environment: str, mocked_compiler_service_failing_compile
-) -> None:
+async def test_notification_on_failed_exporting_compile(server, client, environment: str) -> None:
     compilerservice = server.get_slice(SLICE_COMPILER)
     env = await data.Environment.get_by_id(uuid.UUID(environment))
 
@@ -1322,9 +1314,10 @@ async def test_notification_on_failed_exporting_compile(
 
 
 async def test_notification_on_failed_pull_during_compile(
-    server, client, environment: str, mocked_compiler_service_block
+    server, client, environment_factory: EnvironmentFactory, tmp_path
 ) -> None:
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    env = await environment_factory.create_environment("")
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(env.id))
 
     compilerservice = server.get_slice(SLICE_COMPILER)
 
@@ -1335,12 +1328,19 @@ async def test_notification_on_failed_pull_during_compile(
     # Do a compile
     compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
 
-    await run_compile_and_wait_until_compile_is_done(compilerservice, mocked_compiler_service_block, env.id)
+    async def compile_done() -> bool:
+        res = await compilerservice.is_compiling(env.id)
+        return res == 204
+
+    await retry_limited(compile_done, timeout=10)
+
+    # Change the remote to an invalid value
+    subprocess.check_output(["git", "remote", "set-url", "origin", str(tmp_path)], cwd=project_dir)
 
     # During the next compile, the pull should fail
     compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
 
-    await run_compile_and_wait_until_compile_is_done(compilerservice, mocked_compiler_service_block, env.id, fail_on_pull=True)
+    await retry_limited(compile_done, timeout=10)
 
     async def notification_logged() -> bool:
         result = await client.list_notifications(env.id)
