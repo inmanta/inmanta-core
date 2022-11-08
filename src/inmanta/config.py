@@ -301,17 +301,10 @@ class Option(Generic[T]):
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
-                if self.predecessor_option.section == self.section:
-                    warnings.warn(
-                        "Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
-                        category=DeprecationWarning,
-                    )
-                else:
-                    warnings.warn(
-                        "Config option %s is in deprecated section %s. Use option %s in section %s instead."
-                        % (self.predecessor_option.name, self.predecessor_option.section, self.name, self.section),
-                        category=DeprecationWarning,
-                    )
+                warnings.warn(
+                    "Config option %s.%s is deprecated. Use %s.%s instead." % (self.predecessor_option.section, self.predecessor_option.name, self.section, self.name),
+                    category=DeprecationWarning,
+                )
 
                 return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
