@@ -861,7 +861,6 @@ class DuplicateException(TypingException):
 
 
 class CompilerError(Exception):
-
     pass
 
 

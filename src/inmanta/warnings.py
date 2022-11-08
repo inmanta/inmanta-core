@@ -21,6 +21,17 @@ import warnings
 from enum import Enum
 from typing import Dict, List, Literal, Mapping, Optional, TextIO, Type, Union
 
+
+class InmantaWarning(Warning):
+    """
+    Base class for Inmanta Warnings.
+    Inmanta warnings use other formatting rules then default warnings
+    """
+
+    def __init__(self, *args: object):
+        Warning.__init__(self, *args)
+
+
 REGEX_INMANTA_MODULE: str = r"^(inmanta|inmanta\..*|inmanta_.*)$"
 
 
@@ -140,7 +151,7 @@ class WarningsManager:
         :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
-        if filename == __file__:
+        if issubclass(category, InmantaWarning):
             text: str = "%s: %s" % (category.__name__, message)
             logger: logging.Logger = logging.getLogger("inmanta.warnings")
         else:
