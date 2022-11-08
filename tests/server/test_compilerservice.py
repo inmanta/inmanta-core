@@ -1229,7 +1229,6 @@ async def test_notification_failed_compile_with_message(
         assert "a custom message" in compile_failed_notification["message"]
     else:
         assert "A compile has failed" in compile_failed_notification["message"]
-    raise Exception("aie")
 
 
 async def test_notification_on_failed_exporting_compile(server, client, environment: str) -> None:
