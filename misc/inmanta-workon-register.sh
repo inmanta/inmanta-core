@@ -72,7 +72,7 @@ function __inmanta_workon_environments_dir {
 
     declare result
     result=$(
-        "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));'
+        "$INMANTA_WORKON_PYTHON" -c 'import os; from inmanta.config import state_dir; print(os.path.join(state_dir.get(), "server", "environments"));' 2> /dev/null
     )
 
     if [ ! "$?" -eq 0 ]; then

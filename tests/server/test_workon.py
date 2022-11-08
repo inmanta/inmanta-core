@@ -54,6 +54,12 @@ Bash = abc.Callable[str, abc.Awaitable[CliResult]]
 
 
 @pytest.fixture
+def workon_environments_dir(server) -> abc.Iterator[py.path.local]:
+    state_dir: str = config.Config.get("config", "state-dir")
+    yield py.path.local(state_dir).join("server", "environments")
+
+
+@pytest.fixture
 def workon_workdir(server, tmpdir: py.path.local) -> abc.Iterator[py.path.local]:
     """
     Yields a working directory prepared for calling inmanta-workon.
@@ -142,8 +148,9 @@ async def compiled_environments(
     """
     Initialize some environments with an empty main.cf and trigger a single compile.
     """
+    nb_environments: int = 3
     environments: abc.Sequence[data.model.Environment] = [
-        (await environment_factory.create_environment(name=f"env-{i}")).to_dto() for i in range(5)
+        (await environment_factory.create_environment(name=f"env-{i}")).to_dto() for i in range(nb_environments)
     ]
 
     for env in environments:
@@ -293,6 +300,105 @@ async def test_workon_list_no_api_no_environments(
             " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
         )
         assert result.stdout == ""
+
+
+async def test_workon_list_invalid_config(
+    server,
+    workon_workdir: py.path.local,
+    workon_broken_cli,
+    workon_bash: Bash,
+) -> None:
+    """
+    Verify error behavior of `inmanta-workon --list` when an invalid cfg file is encountered.
+    """
+    # write invalid config
+    workon_workdir.join(".inmanta.cfg").write("this is not compatible with the cfg format")
+    result: CliResult = await workon_bash("inmanta-workon --list")
+    assert result.exit_code == 1, (result.stderr, result.stdout)
+    assert result.stderr.strip() == (
+        "ERROR: Failed to determine server bind port. Is the server config valid?"
+        "\n"
+        "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+        "\n"
+        "ERROR: Failed to determine server state directory. Is the server config valid?"
+    )
+    assert result.stdout == ""
+
+
+async def test_workon_invalid_config(
+    server,
+    workon_workdir: py.path.local,
+    workon_bash: Bash,
+) -> None:
+    """
+    Verify error behavior of `inmanta-workon someenvironment` when an invalid cfg file is encountered.
+    """
+    # write invalid config
+    workon_workdir.join(".inmanta.cfg").write("this is not compatible with the cfg format")
+    result: CliResult = await workon_bash("inmanta-workon someenvironment")
+    assert result.exit_code == 1, (result.stderr, result.stdout)
+    assert result.stderr.strip() == "ERROR: Failed to determine server state directory. Is the server config valid?"
+    assert result.stdout == ""
+
+
+async def assert_workon_state(
+    workon_bash: Bash,
+    arg: str,
+    *,
+    expected_dir: py.path.local,
+) -> CliResult:
+    """
+    Helper function to call inmanta-workon with an argument and assert the expected state.
+
+    :param workon_bash: The Bash environment to use for this assertion.
+    :param arg: The environment argument to pass to inmanta-workon. May be either a name or a UUID.
+    :param expected_dir: The directory that is expected to be selected.
+    """
+    result: CliResult = await workon_bash(
+        textwrap.dedent(
+            f"""
+            test_workon_ps1_pre=$PS1
+            inmanta-workon '{arg}'
+            echo "$(pwd)"
+            which python
+            echo "${{PS1%test_workon_ps1_pre}}"
+            """.strip("\n")
+        )
+    )
+    assert result.exit_code == 0
+    lines: abc.Sequence[str] = result.stdout.splitlines()
+    assert len(lines) == 3
+    working_dir, python, ps1_prefix = lines
+    assert working_dir == str(expected_dir)
+    assert python == str(expected_dir.join(".env", "bin", "python"))
+    assert ps1_prefix == f"({arg}) "
+    assert result.stderr == ""
+
+
+@pytest.mark.slowtest
+async def test_workon(
+    server,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    # TODO: also check with broken_cli
+    # TODO: also check for environment that does not exist, both by id and name
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify the basics of inmanta-workon behavior when an environment id or name is specified.
+    """
+    # by id
+    await assert_workon_state(
+        workon_bash,
+        str(compiled_environments[0].id),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+    )
+    # by name
+    await assert_workon_state(
+        workon_bash,
+        compiled_environments[1].name,
+        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
+    )
 
 
 # TODO: similar tests for actual workon
