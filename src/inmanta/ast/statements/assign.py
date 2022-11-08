@@ -28,8 +28,8 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
-    KeyException,
     HyphenException,
+    KeyException,
     LocatableString,
     Location,
     OptionalValueException,
