@@ -384,7 +384,7 @@ async def assert_workon_state(
     assert (working_dir == str(expected_dir)) != invert_working_dir_assert
     assert (python == str(expected_dir.join(".env", "bin", "python"))) != invert_python_assert
     assert (ps1_prefix == f"({arg}) ") != invert_ps1_assert
-    assert result.stderr == expect_stderr
+    assert result.stderr.strip() == expect_stderr.strip()
 
 
 @pytest.mark.slowtest
@@ -422,6 +422,7 @@ async def test_workon(
         invert_working_dir_assert=False,
         invert_python_assert=True,
         invert_ps1_assert=True,
+        expect_stderr=f"ERROR: Environment '{env_dir}' does not contain a venv. This may mean it has never started a compile",
     )
 
 
