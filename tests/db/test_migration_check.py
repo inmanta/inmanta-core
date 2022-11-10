@@ -26,7 +26,7 @@ def test_migration_check():
     """
     versions_folder: Path = Path(".").absolute() / "src" / "inmanta" / "db" / "versions"
 
-    versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Dumps have format vYYYYMMDDN.py
+    versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
     latest_version: Path = sorted(versions)[-1]
 
     migration_tests_folder: Path = Path(".").absolute() / "tests" / "db" / "migration_tests"
@@ -36,6 +36,21 @@ def test_migration_check():
     latest_dump: Path = sorted(dumps)[-1]
 
     assert latest_version.stem == latest_dump.stem
+
+    # Make sure the following lines have been removed from the dump:
+    forbidden_strings: List[str] = [
+        "SELECT pg_catalog.set_config('search_path', '', false);",
+        "SET default_table_access_method = heap;",
+    ]
+
+    with open(latest_dump, "r") as fh:
+        for line_no, line in enumerate(fh.readlines(), start=1):
+            if line.startswith("--"):
+                continue
+            if line.strip() in forbidden_strings:
+                raise Exception(
+                    f"Line '{line}' was found in dump {latest_dump} L{line_no}. Please remove or comment out this line."
+                )
 
     migration_test: Path = sorted(migration_tests_folder.glob("test_v*" + latest_dump.stem + ".py"))[-1]
 
