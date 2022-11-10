@@ -33,14 +33,7 @@ from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.command import CLIException
-from inmanta.module import (
-    InmantaModuleRequirement,
-    InvalidMetadata,
-    InvalidModuleException,
-    MetadataDeprecationWarning,
-    ModuleDeprecationWarning,
-    Project,
-)
+from inmanta.module import InmantaModuleRequirement, InvalidMetadata, InvalidModuleException, ModuleDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -412,35 +405,17 @@ requires: std > 1.0.0
     assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
 
 
-def test_module_requires_legacy(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file(
-        """
-name: mod
-license: ASL
-version: 1.0.0
-requires:
-    std: std
-    ip: ip > 1.0.0
-        """
-    )
-    mod: module.Module
-    with warnings.catch_warnings(record=True) as w:
-        mod = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-        assert len(w) == 1
-        warning = w[0]
-        assert issubclass(warning.category, MetadataDeprecationWarning)
-        assert "yaml dictionary syntax for specifying module requirements has been deprecated" in str(warning.message)
-    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
-
-
 def test_module_requires_legacy_invalid(inmanta_module_v1):
+    """
+    Verify that providing a dictionary to the 'requires' property results in an error (This is a legacy format).
+    """
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
 version: 1.0.0
 requires:
-    std: ip
+    std: std > 1.0.0
         """
     )
     with pytest.raises(InvalidModuleException) as e:
@@ -448,7 +423,7 @@ requires:
 
     cause = e.value.__cause__
     assert isinstance(cause, InvalidMetadata)
-    assert "Invalid legacy requires" in cause.msg
+    assert "('requires', 0)\n\tstr type expected (type_error.str)" in cause.msg
 
 
 def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:
