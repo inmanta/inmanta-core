@@ -407,7 +407,7 @@ requires: std > 1.0.0
 
 def test_module_requires_contains_dictionary(inmanta_module_v1):
     """
-    Verify that providing a dictionary to the 'requires' field of a V1 module results in an error
+    Verify that providing a dictionary to the 'requires' field of a V1 module results in an error.
     This is a legacy format that is no longer supported.
     """
     inmanta_module_v1.write_metadata_file(
