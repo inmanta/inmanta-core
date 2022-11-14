@@ -559,3 +559,24 @@ Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
             "The attribute __config__::Test_A.name is part of an index."
         ),
     )
+
+
+def test_index_collision_exception(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    string name
+    int id
+end
+
+implement A using std::none
+
+index A(name)
+index A(id)
+
+A(name="one",id=1)
+A(name="two",id=2)
+A(name="one", id=2)
+"""
+    )
+    compiler.do_compile()
