@@ -30,7 +30,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.statements import Statement  # noqa: F401
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
 
 
 class Location(export.Exportable):
-
     __slots__ = ("file", "lnr")
 
     def __init__(self, file: str, lnr: int) -> None:
@@ -75,7 +73,6 @@ class Location(export.Exportable):
 
 
 class Range(Location):
-
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
@@ -611,6 +608,11 @@ class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
         InmantaWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
+
+
+class CompilerDeprecationWarning(CompilerRuntimeWarning):
+    def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
+        CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
 class VariableShadowWarning(CompilerRuntimeWarning):
