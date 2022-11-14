@@ -266,10 +266,6 @@ class InvalidMetadata(CompilerException):
         return msg
 
 
-class MetadataDeprecationWarning(Warning):
-    pass
-
-
 class ModuleDeprecationWarning(Warning):
     pass
 
@@ -1118,20 +1114,6 @@ class MetadataFieldRequires(BaseModel):
     @validator("requires", pre=True)
     @classmethod
     def requires_to_list(cls, v: object) -> object:
-        if isinstance(v, dict):
-            # transform legacy format for backwards compatibility
-            warnings.warn(
-                MetadataDeprecationWarning(
-                    "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
-                    " documented list syntax instead."
-                )
-            )
-            result: List[str] = []
-            for key, value in v.items():
-                if not (isinstance(key, str) and isinstance(value, str) and value.startswith(key)):
-                    raise ValueError("Invalid legacy requires format, expected `mod: mod [constraint]`.")
-                result.append(value)
-            return result
         return cls.to_list(v)
 
 
