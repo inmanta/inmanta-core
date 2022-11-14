@@ -26,7 +26,7 @@ class InmantaWarning(Warning):
     """
     Base class for Inmanta Warnings.
     Inmanta warnings use other formatting rules then default warnings and should be used to display warning to
-    users.
+    end-users.
     """
 
     def __init__(self, *args: object):
