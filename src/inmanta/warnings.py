@@ -25,7 +25,8 @@ from typing import Dict, List, Literal, Mapping, Optional, TextIO, Type, Union
 class InmantaWarning(Warning):
     """
     Base class for Inmanta Warnings.
-    Inmanta warnings use other formatting rules then default warnings
+    Inmanta warnings use other formatting rules then default warnings and should be used to display warning to
+    users.
     """
 
     def __init__(self, *args: object):
