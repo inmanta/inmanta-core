@@ -157,8 +157,8 @@ tags=tag2=value2
         f.write(
             """
 [database]
-connection_pool_min_size=5
 username=non-default-name-2
+connection_pool_min_size=3
         """
         )
 
@@ -166,7 +166,7 @@ username=non-default-name-2
         f.write(
             """
 [database]
-username=non-default-name-3
+connection_pool_min_size=5
         """
         )
 
@@ -180,7 +180,7 @@ username=non-default-name-3
     assert Config.get("influxdb", "host") == "host3"
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
-    assert Config.get("database", "username") == "non-default-name-3"
+    assert Config.get("database", "username") == "non-default-name-2"
     assert Config.get("database", "connection_pool_min_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
