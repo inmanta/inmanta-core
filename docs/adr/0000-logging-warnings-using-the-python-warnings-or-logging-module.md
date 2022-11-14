@@ -24,7 +24,7 @@ Python has two different ways to report warnings to the user. Warnings can be lo
 ## Decision Outcome
 
 - The `warnings` module will be configured as such that it ignores warnings logged from non-inmanta python modules. This way warnings from third-party libraries are ignored.
-- All warnings, for which we expect an action from the end-user, should be logged using the `inmanta.warnings.warn()` method. An example is a log message that announces a feature deprecation. This user can be a user of the CLI, the API, a module or an extension developer.
+- All warnings, for which we expect an action from the end-user, should be logged using the `inmanta.warnings.warn()`, with the right Warning type according to the needed formatting. An example is a log message that announces a feature deprecation. This user can be a user of the CLI, the API, a module or an extension developer.
 - All other warnings should be logged using the `LOGGER.warning()` method. These warnings usually indicate that something went wong at runtime. For example, an agent that hits the rate limiter.
 
 ## Disclaimer
