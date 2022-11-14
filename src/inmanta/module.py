@@ -65,7 +65,6 @@ import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 
-import inmanta
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
