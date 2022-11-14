@@ -90,23 +90,6 @@ typedef foo as string matching /^a+$/
     assert types["__config__::foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
 
 
-def test_doc_string_on_typedefault(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity File:
-    number x
-end
-
-typedef Foo as File(x=5)
-\"""
-    Foo is a stringtype that only allows "a"
-\"""
-"""
-    )
-    (types, _) = compiler.do_compile()
-    assert types["__config__::Foo"].comment.strip() == 'Foo is a stringtype that only allows "a"'
-
-
 def test_doc_string_on_impl(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

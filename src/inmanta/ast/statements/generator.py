@@ -73,7 +73,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
+    from inmanta.ast.entity import Entity, Implement  # noqa: F401
 
 LOGGER = logging.getLogger(__name__)
 
@@ -498,7 +498,7 @@ class Constructor(ExpressionStatement):
         self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
-        self.type: Optional["EntityLike"] = None
+        self.type: Optional["Entity"] = None
         self._self_ref: "Reference" = Reference(
             LocatableString(str(uuid.uuid4()), Range("__internal__", 1, 1, 1, 1), -1, self.namespace)
         )
@@ -528,7 +528,7 @@ class Constructor(ExpressionStatement):
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        mytype: "EntityLike" = self.namespace.get_type(self.class_type)
+        mytype: "Entity" = self.namespace.get_type(self.class_type)
         self.type = mytype
 
         inindex: abc.MutableSet[str] = set()
@@ -538,7 +538,7 @@ class Constructor(ExpressionStatement):
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
-        for index in self.type.get_entity().get_indices():
+        for index in self.type.get_indices():
             for attr in index:
                 if attr not in all_attributes:
                     self._required_dynamic_args.append(attr)
@@ -553,12 +553,12 @@ class Constructor(ExpressionStatement):
             # lhs attribute. If this passes but the kwargs and/or lhs attribute don't in fact provide the required arguments,
             # an exception is raised during execution.
             if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self._required_dynamic_args) > 1):
-                raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self._required_dynamic_args)
+                raise IndexAttributeMissingInConstructorException(self, self.type, self._required_dynamic_args)
 
         self._normalize_rhs(inindex)
 
         for (k, v) in all_attributes.items():
-            attribute = self.type.get_entity().get_attribute(k)
+            attribute = self.type.get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
             if k not in inindex:
@@ -567,9 +567,7 @@ class Constructor(ExpressionStatement):
                 self._direct_attributes[k] = v
 
         self._own_eager_promises = list(
-            chain.from_iterable(
-                subconstructor.get_all_eager_promises() for subconstructor in self.type.get_entity().get_sub_constructor()
-            )
+            chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -619,7 +617,7 @@ class Constructor(ExpressionStatement):
         Part of the execute flow: returns values for kwargs and the inverse relation derived from the lhs for which this
         constructor is the rhs, if appliccable.
         """
-        type_class = self.type.get_entity()
+        type_class = self.type
 
         # kwargs
         kwarg_attrs: dict[str, object] = {}
@@ -677,7 +675,7 @@ class Constructor(ExpressionStatement):
         super().execute(requires, resolver, queue)
 
         # the type to construct
-        type_class = self.type.get_entity()
+        type_class = self.type
 
         # kwargs and implicit inverse from lhs
         late_args: abc.Mapping[str, object] = self._collect_required_dynamic_arguments(requires, resolver, queue)
@@ -705,7 +703,7 @@ class Constructor(ExpressionStatement):
             obj: Optional[Instance] = type_class.lookup_index(params, self)
 
             if obj is not None:
-                if obj.get_type().get_entity() != type_class:
+                if obj.get_type() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
 
@@ -798,10 +796,10 @@ class Constructor(ExpressionStatement):
 
         def get_new_node() -> dataflow.InstanceNode:
             assert self.type is not None
-            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names())
+            return dataflow.InstanceNode(self.type.get_all_attribute_names())
 
         assert self.type is not None
-        return graph.own_instance_node_for_responsible(self.type.get_entity(), self, get_new_node).reference()
+        return graph.own_instance_node_for_responsible(self.type, self, get_new_node).reference()
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         return self._register_dataflow_node(graph)

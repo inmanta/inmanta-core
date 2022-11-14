@@ -32,6 +32,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
@@ -239,8 +240,8 @@ class AttributeReferenceAnchor(Anchor):
     def resolve(self) -> Location:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
-        # assert isinstance(instancetype, EntityLike)
-        return instancetype.get_entity().get_attribute(self.attribute).get_location()
+        assert isinstance(instancetype, Entity)
+        return instancetype.get_attribute(self.attribute).get_location()
 
 
 class Namespaced(Locatable):
