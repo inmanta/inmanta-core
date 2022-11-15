@@ -282,7 +282,7 @@ dash_enable = Option(
     "dashboard",
     "enabled",
     True,
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_enabled`] "
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard-enabled`] "
     "Determines whether the server should host the dashboard or not",
     is_bool,
 )
@@ -291,7 +291,7 @@ dash_path = Option(
     "dashboard",
     "path",
     "/usr/share/inmanta/dashboard",
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard_path`] "
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard-path`] "
     "The path on the local file system where the dashboard can be found",
     is_str,
 )
@@ -300,7 +300,7 @@ dash_realm = Option(
     "dashboard",
     "realm",
     "inmanta",
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc_realm`] The realm to use for keycloak authentication.",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-realm`] The realm to use for keycloak authentication.",
     is_str,
 )
 
@@ -308,7 +308,7 @@ dash_auth_url = Option(
     "dashboard",
     "auth_url",
     None,
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc_auth_url`] The auth url of the keycloak server to use.",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-auth-url`] The auth url of the keycloak server to use.",
     is_str,
 )
 
@@ -316,7 +316,7 @@ dash_client_id = Option(
     "dashboard",
     "client_id",
     None,
-    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc_client_id`] "
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-client-id`] "
     "The client id configured in keycloak for this application.",
     is_str,
 )
