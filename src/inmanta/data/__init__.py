@@ -708,7 +708,7 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
 
         return list(
             self.get_order_by_column_type().as_basic_order_elements(self.order_by_column, order)
-        ) + id_type.as_basic_order_elements(self.order_by_column, order)
+        ) + id_type.as_basic_order_elements(id_name, order)
 
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record returned"""
