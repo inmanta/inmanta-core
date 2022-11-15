@@ -29,8 +29,8 @@ def test_migration_check():
     versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
     latest_version: Path = sorted(versions)[-1]
 
-    migration_tests_folder: Path = Path(".").absolute() / "tests" / "db" / "migration_tests"
-    dumps_folder: Path = migration_tests_folder / "dumps"
+    migration_tests_folder: Path = Path(".").absolute() / "tests" / "db"
+    dumps_folder: Path = Path(".").absolute() / "tests" / "db" / "dumps"
 
     dumps: List[Path] = list(dumps_folder.glob("v" + "[0-9]" * 9 + ".sql"))  # Dumps have format vYYYYMMDDN.sql
     latest_dump: Path = sorted(dumps)[-1]
