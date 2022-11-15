@@ -285,7 +285,7 @@ the parameters from the installation json file created by keycloak.
 .. code-block:: ini
 
     [web-ui]
-    # generic OpenID connect configuration
+    # generic OpenID Connect configuration
     oidc_realm=master
     oidc_auth_url=http://localhost:8080/auth
     oidc_client_id=inmanta
