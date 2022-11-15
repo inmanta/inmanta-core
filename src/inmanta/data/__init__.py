@@ -68,7 +68,6 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -4153,7 +4152,7 @@ class Resource(BaseDocument):
 
     @property
     def resource_version_id(self):
-        return Id.set_version_in_id(self.resource_id, self.model)
+        return resource.Id.set_version_in_id(self.resource_id, self.model)
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4210,7 +4209,7 @@ class Resource(BaseDocument):
         def convert_or_ignore(rvid):
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
-                return Id.parse_resource_version_id(rvid)
+                return resource.Id.parse_resource_version_id(rvid)
             except Exception:
                 return None
 
@@ -4415,7 +4414,7 @@ class Resource(BaseDocument):
         """
         Get a resource with the given resource version id
         """
-        parsed_id = Id.parse_id(resource_version_id)
+        parsed_id = resource.Id.parse_id(resource_version_id)
         value = await cls.get_one(
             environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection
         )
@@ -4678,22 +4677,24 @@ class Resource(BaseDocument):
         record["id"] = record["resource_version_id"]
         record["resource_type"] = parsed_id.entity_type
         if "requires" in record["attributes"]:
-            record["attributes"]["requires"] = [Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]]
-        record["provides"] = [Id.set_version_in_id(id, version) for id in record["provides"]]
+            record["attributes"]["requires"] = [
+                resource.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
+            ]
+        record["provides"] = [resource.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
 
         if "requires" in self.attributes:
             version = self.model
-            attributes["requires"] = [Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
+            attributes["requires"] = [resource.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
 
         return m.Resource(
             environment=self.environment,
             model=self.model,
             resource_id=self.resource_id,
             resource_type=self.resource_type,
-            resource_version_id=Id.set_version_in_id(self.resource_id, self.model),
+            resource_version_id=resource.Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             last_deploy=self.last_deploy,
             attributes=attributes,
