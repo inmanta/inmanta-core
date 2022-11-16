@@ -18,6 +18,7 @@
 import inspect
 import os
 import subprocess
+import warnings
 from collections import abc
 from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
@@ -422,7 +423,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
             msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
             if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
-            inmanta.warnings.warn(PluginDeprecationWarning(msg))
+            warnings.warn(PluginDeprecationWarning(msg))
         self.check_requirements()
 
         def new_arg(arg: object) -> object:

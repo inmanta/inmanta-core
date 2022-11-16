@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import warnings
 from collections.abc import Set
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -114,7 +114,7 @@ class BasicBlock(object):
         scope and only that block is searched for shadowing with respect to the scope.
         """
         for var, shadowed_locs, orig_locs in self.shadowed_variables():
-            inmanta.warnings.warn(
+            warnings.warn(
                 VariableShadowWarning(
                     None,
                     "Variable `%s` shadowed: originally declared at %s, shadowed at %s"

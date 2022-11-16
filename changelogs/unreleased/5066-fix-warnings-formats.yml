@@ -2,4 +2,4 @@
 description: fix the formatting of InmantaWarnings
 change-type: patch
 issue-nr: 5066
-destination-branches: [master, iso5]
+destination-branches: [master, iso5, iso4]

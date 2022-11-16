@@ -17,6 +17,7 @@
 """
 import logging
 import re
+import warnings
 from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -524,7 +525,7 @@ def deprecated_relation_warning(p: YaccProduction) -> None:
         values: Tuple[str, str] = tuple(v if v is not None else "" for v in multi)
         return "[%s:%s]" % values if values[0] != values[1] else "[%s]" % values[0]
 
-    inmanta.warnings.warn(
+    warnings.warn(
         SyntaxDeprecationWarning(
             p[0].location,
             None,
