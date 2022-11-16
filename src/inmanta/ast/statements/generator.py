@@ -677,6 +677,7 @@ class Constructor(ExpressionStatement):
 
         # the type to construct
         type_class = self.type
+        assert type_class
 
         # kwargs and implicit inverse from lhs
         late_args: abc.Mapping[str, object] = self._collect_required_dynamic_arguments(requires, resolver, queue)
