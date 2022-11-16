@@ -28,6 +28,7 @@ Python has two different ways to report warnings to the user. Warnings can be lo
 - All other warnings should be logged using the `LOGGER.warning()` method. These warnings usually indicate that something went wong at runtime. For example, an agent that hits the rate limiter.
 
 ## Rationale
+
 - We don't want to display python traces to end users as they contain no useful information and are clogging the logs. To prevent this we use the InmantaWarning which use a different formatting rule.
 
 ## Disclaimer
