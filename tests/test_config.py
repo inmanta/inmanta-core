@@ -103,13 +103,12 @@ log-dir=/log
 host=host1
 name=db1
 port=1234
+connection_pool_min_size=2
+username=non-default-name-0
 [influxdb]
 host=host1
 interval=10
 tags=tag1=value1
-[dashboard]
-path=/some/directory
-client-id=test
         """
         )
 
@@ -148,27 +147,26 @@ port=9999
             """
 [database]
 host=host3
+username=non-default-name-1
 [influxdb]
 tags=tag2=value2
-[dashboard]
-path=/some/other/directory
         """
         )
 
     with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[dashboard]
-path=/directory
-client-id=test123
+[database]
+username=non-default-name-2
+connection_pool_min_size=3
         """
         )
 
     with open(min_c_file, "w", encoding="utf-8") as f:
         f.write(
             """
-[dashboard]
-client-id=test456
+[database]
+connection_pool_min_size=5
         """
         )
 
@@ -182,8 +180,8 @@ client-id=test456
     assert Config.get("influxdb", "host") == "host3"
     assert Config.get("influxdb", "interval") == 20
     assert Config.get("influxdb", "tags")["tag2"] == "value2"
-    assert Config.get("dashboard", "path") == "/directory"
-    assert Config.get("dashboard", "client-id") == "test456"
+    assert Config.get("database", "username") == "non-default-name-2"
+    assert Config.get("database", "connection_pool_min_size") == 5
     assert Config.get("server", "auth")
     assert Config.get("server", "agent-timeout") == 60
 
