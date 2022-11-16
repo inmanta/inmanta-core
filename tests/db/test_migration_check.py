@@ -52,6 +52,10 @@ def test_migration_check():
                     f"Line '{line}' was found in dump {latest_dump} L{line_no}. Please remove or comment out this line."
                 )
 
-    migration_test: Path = sorted(migration_tests_folder.glob("test_v*" + latest_dump.stem + ".py"))[-1]
-
+    migration_tests: List[Path] = sorted(migration_tests_folder.glob("test_v*" + latest_dump.stem + ".py"))
+    if not migration_tests:
+        raise Exception(
+            f"No migration test to version {latest_dump.stem} was found in {migration_tests_folder}. Please add such a test."
+        )
+    migration_test: Path = migration_tests[-1]
     assert migration_test.is_file()
