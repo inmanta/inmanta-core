@@ -618,6 +618,7 @@ class Constructor(ExpressionStatement):
         constructor is the rhs, if appliccable.
         """
         type_class = self.type
+        assert type_class
 
         # kwargs
         kwarg_attrs: dict[str, object] = {}
@@ -629,7 +630,7 @@ class Constructor(ExpressionStatement):
                     )
                 attribute = type_class.get_attribute(k)
                 if attribute is None:
-                    raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                    raise TypingException(self, "no attribute %s on type %s" % (k, type_class.get_full_name()))
                 kwarg_attrs[k] = v
 
         lhs_inverse_assignment: Optional[tuple[str, object]] = None

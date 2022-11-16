@@ -29,7 +29,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
 
 
 class Location(export.Exportable):
-
     __slots__ = ("file", "lnr")
 
     def __init__(self, file: str, lnr: int) -> None:
@@ -75,7 +73,6 @@ class Location(export.Exportable):
 
 
 class Range(Location):
-
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
@@ -241,7 +238,9 @@ class AttributeReferenceAnchor(Anchor):
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         assert isinstance(instancetype, Entity)
-        return instancetype.get_attribute(self.attribute).get_location()
+        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
+        assert entity_attribute is not None
+        return entity_attribute.get_location()
 
 
 class Namespaced(Locatable):
