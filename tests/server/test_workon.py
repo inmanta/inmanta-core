@@ -378,7 +378,7 @@ async def assert_workon_state(
     invert_python_assert: bool = False,
     invert_ps1_assert: bool = False,
     expect_stderr: str = "",
-) -> CliResult:
+) -> None:
     """
     Helper function to call inmanta-workon with an argument and assert the expected state.
 
