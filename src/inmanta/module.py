@@ -258,7 +258,9 @@ class InvalidMetadata(CompilerException):
 
     @classmethod
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
-        msg += "\n" + display_errors(validation_error.errors())
+        errors = validation_error.errors()
+        if errors:
+            msg += "\n" + display_errors(errors)
         return msg
 
 
