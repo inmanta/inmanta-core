@@ -1,5 +1,5 @@
 ---
-description: Dummy change entry
+description: Add explicit error message when the migration test to the latest version is missing
 issue-nr: 1358
 issue-repo: irt
 change-type: patch
