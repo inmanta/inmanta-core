@@ -3037,10 +3037,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     ) -> None:
         self._is_editable_install = is_editable_install
         self._version: Optional[version.Version] = installed_version
-        try:
-            super(ModuleV2, self).__init__(project, path)
-        except InvalidMetadata:
-            raise
+        super(ModuleV2, self).__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
