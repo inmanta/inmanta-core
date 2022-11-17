@@ -21,6 +21,7 @@ from typing import Optional
 import inmanta.ast.export as ast_export
 from inmanta.ast import CompilerException, Range
 from inmanta.stable_api import stable_api
+from inmanta.warnings import InmantaWarning
 
 
 @stable_api
@@ -42,11 +43,11 @@ class ParserException(CompilerException):
         return error
 
 
-class ParserWarning(Warning, ParserException):
+class ParserWarning(InmantaWarning, ParserException):
     """Warning occurring during the parsing of the code"""
 
     def __init__(self, location: Range, value: object, msg: str) -> None:
-        Warning.__init__(self)
+        InmantaWarning.__init__(self)
         ParserException.__init__(self, location, value, msg)
         # Override parent message since it's not an error
         self.msg = msg
