@@ -204,7 +204,7 @@ function __inmanta_workon_register_deactivate {
     # Registers a custom deactivate function. Modified from virtualenvwrapper's implementation
 
     # Save the deactivate function from virtualenv under a different name
-    declare original_deactivate
+    declare virtualenv_deactivate
     virtualenv_deactivate=$(declare -f deactivate | sed 's/deactivate/virtualenv_deactivate/g')
     eval "$virtualenv_deactivate"
     unset -f deactivate > /dev/null 2>&1
@@ -215,7 +215,7 @@ function __inmanta_workon_register_deactivate {
         declare user=${INMANTA_USER:-inmanta}
 
         # Call the original function.
-        virtualenv_deactivate $1
+        virtualenv_deactivate "$1"
         # no need to restore PS1 because virtualenv_deactivate already does that
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)

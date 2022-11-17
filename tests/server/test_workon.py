@@ -372,6 +372,7 @@ async def assert_workon_state(
     workon_bash: Bash,
     arg: str,
     *,
+    deactivate: bool = False,
     expected_dir: py.path.local,
     invert_success_assert: bool = False,
     invert_working_dir_assert: bool = False,
@@ -384,6 +385,7 @@ async def assert_workon_state(
 
     :param workon_bash: The Bash environment to use for this assertion.
     :param arg: The environment argument to pass to inmanta-workon. May be either a name or a UUID.
+    :param deactivate: Deactivate the environment before inspecting the state.
     :param expected_dir: The directory that is expected to be selected.
     :param invert_success_assert: If true, assert that inmanta-workon returns a non-zero exit code.
     :param invert_working_dir_assert: If true, assert that the working directory has not changed to the environment dir.
@@ -393,14 +395,18 @@ async def assert_workon_state(
     result: CliResult = await workon_bash(
         textwrap.dedent(
             f"""
-            test_workon_ps1_pre=$PS1
+            # mock PS1 to mimic terminal behavior
+            test_workon_ps1_pre=myps1
+            export PS1="$test_workon_ps1_pre"
+
             inmanta-workon '{arg}'
+            {"deactivate" if deactivate else ""}
             result=$?
 
             # output three lines
             echo "$(pwd)"
             which python
-            echo "${{PS1%test_workon_ps1_pre}}"
+            echo "${{PS1%$test_workon_ps1_pre}}"
 
             # exit with result code
             [ "$result" -eq 0 ]
@@ -413,7 +419,7 @@ async def assert_workon_state(
     working_dir, python, ps1_prefix = lines
     assert (working_dir == str(expected_dir)) != invert_working_dir_assert
     assert (python == str(expected_dir.join(".env", "bin", "python"))) != invert_python_assert
-    assert (ps1_prefix == f"({arg}) ") != invert_ps1_assert
+    assert ps1_prefix == ("" if invert_ps1_assert else f"({arg}) ")
     assert result.stderr.strip() == expect_stderr.strip()
 
 
@@ -551,4 +557,23 @@ async def test_workon_broken_cli(
     )
 
 
-# TODO: test deactivate
+@pytest.mark.slowtest
+async def test_workon_deactivate(
+    server: Server,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify the deactivate behavior of inmanta-workon.
+    """
+    await assert_workon_state(
+        workon_bash,
+        str(compiled_environments[0].id),
+        deactivate=True,
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+    )
+    # TODO: check warning is raised
+    # TODO: check warning is raised when we don't deactivate but just activate a second one
