@@ -63,8 +63,18 @@ fi
 
 
 function inmanta-workon {
-    # TODO: --help + test for --help
-    if [ -z "$1" ] || [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
+    if [ -z "$1" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+        command cat <<EOF
+Usage: inmanta-workon [-l | --list] [ENVIRONMENT]
+Activate the Python virtual environment for an inmanta environment.
+
+-l, --list      list the inmanta environments on this server
+
+The ENVIRONMENT argument may be the name or the id of an inmanta environment.
+EOF
+        return 0
+    fi
+    if [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
         __inmanta_workon_list
         return
     fi

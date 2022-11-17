@@ -224,6 +224,26 @@ async def test_workon_python_check(
     assert result.stdout.splitlines() == [str(opt_inmanta), str(opt_python)]
 
 
+@pytest.mark.parametrize_any("option", [None, "-h", "--help"])
+async def test_workon_help(workon_bash: Bash, option: Optional[str]) -> None:
+    """
+    Verify output of `inmanta-workon --help`.
+    """
+    result: CliResult = await workon_bash(f"inmanta-workon {option if option is not None else ''}")
+    assert result.exit_code == 0, (result.stderr, result.stdout)
+    assert result.stderr == ""
+    assert result.stdout == textwrap.dedent(
+        """
+        Usage: inmanta-workon [-l | --list] [ENVIRONMENT]
+        Activate the Python virtual environment for an inmanta environment.
+
+        -l, --list      list the inmanta environments on this server
+
+        The ENVIRONMENT argument may be the name or the id of an inmanta environment.
+        """.strip("\n"),
+    )
+
+
 @pytest.mark.parametrize_any("short_option", [True, False])
 async def test_workon_list(
     server: Server, workon_bash: Bash, simple_environments: abc.Sequence[data.model.Environment], short_option: bool
@@ -233,7 +253,7 @@ async def test_workon_list(
     """
     result: CliResult = await workon_bash(f"inmanta-workon {'-l' if short_option else '--list'}")
     assert result.exit_code == 0, (result.stderr, result.stdout)
-    assert result.stderr.strip() == ""
+    assert result.stderr == ""
     assert result.stdout.strip() == inmanta.main.get_table(
         ["Project name", "Project ID", "Environment", "Environment ID"],
         [["env-test", str(env.project_id), env.name, str(env.id)] for env in simple_environments]
@@ -246,7 +266,7 @@ async def test_workon_list_no_environments(server: Server, workon_bash: Bash) ->
     """
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 0, (result.stderr, result.stdout)
-    assert result.stderr.strip() == ""
+    assert result.stderr == ""
     assert result.stdout.strip() == "No environment defined."
 
 
@@ -529,3 +549,6 @@ async def test_workon_broken_cli(
             f"ERROR: Directory '{env_dir}' does not exist. This may mean the environment has never started a compile."
         ),
     )
+
+
+# TODO: test deactivate
