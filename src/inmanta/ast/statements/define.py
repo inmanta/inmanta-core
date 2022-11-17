@@ -606,9 +606,8 @@ class DefineIndex(DefinitionStatement):
         """
         Add the index to the entity
         """
-        entity = self.namespace.get_type(self.type)
-        assert isinstance(entity, Entity), "%s is not an entity" % entity
-        entity_type = entity
+        entity_type = self.namespace.get_type(self.type)
+        assert isinstance(entity_type, Entity), "%s is not an entity" % entity_type
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:

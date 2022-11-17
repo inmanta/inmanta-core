@@ -39,7 +39,7 @@ from inmanta.execute.util import NoneValue, Unknown
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute, RelationAttribute
     from inmanta.ast.blocks import BasicBlock
-    from inmanta.ast.entity import Entity, Implement, Implementation  # noqa: F401
+    from inmanta.ast.entity import Entity, Implementation
     from inmanta.ast.statements import RawResumer, RequiresEmitStatement, Resumer, Statement
     from inmanta.compiler import Compiler
     from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
