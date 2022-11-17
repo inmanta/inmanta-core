@@ -30,7 +30,7 @@ Python has two different ways to report warnings to the user. Warnings can be lo
 ## Rationale
 
 - We don't want to display python traces to end users as they contain no useful information and are clogging the logs. To prevent this we use the InmantaWarning which use a different formatting rule.
-- InmantaWarning are also needed because the location the warning is about is not always the location in core that issues the warning. For example, when deprecated syntax is used in the inmanta model, we log a warning in core and the default warning formatter will include the line in core in the logs, while it is the line in the model that is important.
+- InmantaWarning are also needed because the location the warning is about is not always the location that issues the warning. For example, when deprecated syntax is used in the inmanta model, we log a warning in core and the default warning formatter will include the line in core in the logs, while it is the line in the model that is important.
   By using InmantaWarnings, we can manually include the correct filename and line number from the model in the warning message.
 
 ## Disclaimer
