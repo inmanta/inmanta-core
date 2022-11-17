@@ -579,7 +579,7 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
-class CompilerRuntimeWarning(Warning, RuntimeException):
+class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
     """
