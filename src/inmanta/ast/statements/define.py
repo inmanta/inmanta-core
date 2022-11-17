@@ -22,7 +22,6 @@ import typing
 import warnings
 from typing import Dict, Iterator, List, Optional, Tuple
 
-import inmanta
 from inmanta.ast import (
     AttributeReferenceAnchor,
     CompilerDeprecationWarning,

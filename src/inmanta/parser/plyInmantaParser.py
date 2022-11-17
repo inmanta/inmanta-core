@@ -24,7 +24,6 @@ from typing import Iterator, List, Optional, Tuple, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-import inmanta
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
