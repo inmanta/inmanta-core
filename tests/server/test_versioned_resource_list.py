@@ -90,7 +90,7 @@ async def env_with_resources(server, client):
 
 @pytest.mark.asyncio
 async def test_filter_resources(server, client, env_with_resources):
-    """ Test querying resources."""
+    """Test querying resources."""
 
     result = await client.get_resources_in_version(uuid.uuid4(), 1)
     assert result.code == 404
@@ -152,7 +152,7 @@ def resource_ids(resource_objects):
 @pytest.mark.parametrize("order", ["DESC", "ASC"])
 @pytest.mark.asyncio
 async def test_resources_paging(server, client, order_by_column, order, env_with_resources):
-    """ Test querying resources with paging, using different sorting parameters."""
+    """Test querying resources with paging, using different sorting parameters."""
     env = env_with_resources
     version = 3
     result = await client.get_resources_in_version(

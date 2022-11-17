@@ -117,7 +117,7 @@ class Attribute(object):
 
 
 class Value(object):
-    """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
+    """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue`"""
 
     @staticmethod
     def from_list(lst: List[JsonType]) -> List["Value"]:

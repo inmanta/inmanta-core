@@ -66,7 +66,7 @@ class MetricsService(protocol.ServerSlice):
             self._influx_db_reporter.start()
 
     def start_auto_benchmark(self) -> None:
-        """ Add all auto benchmarking to pyformance"""
+        """Add all auto benchmarking to pyformance"""
         gauge("self.spec.cpu", CPUMicroBenchMark())
 
 
@@ -122,7 +122,7 @@ class CPUMicroBenchMark(CachingCallbackGuage):
 
     @staticmethod
     def factor(number: int) -> int:
-        """ A CPU intensive algorithm"""
+        """A CPU intensive algorithm"""
         out = 0
         # for each potential factor i
         for i in range(2, number + 1):
