@@ -728,7 +728,8 @@ class CompilerService(ServerSlice):
         else:
             env = await data.Environment.get_by_id(compile.environment)
             wait_time = await env.get(data.RECOMPILE_BACKOFF)
-            LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
+            if wait_time:
+                LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
         last_run = await data.Compile.get_last_run(compile.environment)
         if not last_run:
             wait: float = 0
