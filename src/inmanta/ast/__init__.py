@@ -23,12 +23,12 @@ from typing import Dict, FrozenSet, Iterator, List, Optional, Sequence, Tuple, U
 
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
+from inmanta.warnings import InmantaWarning
 
 try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
-
 
 if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
@@ -44,7 +44,6 @@ if TYPE_CHECKING:
 
 
 class Location(export.Exportable):
-
     __slots__ = ("file", "lnr")
 
     def __init__(self, file: str, lnr: int) -> None:
@@ -77,7 +76,6 @@ class Location(export.Exportable):
 
 
 class Range(Location):
-
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
@@ -581,13 +579,13 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
-class CompilerRuntimeWarning(Warning, RuntimeException):
+class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
     """
 
     def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
-        Warning.__init__(self)
+        InmantaWarning.__init__(self)
         RuntimeException.__init__(self, stmt, msg)
 
 
