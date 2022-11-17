@@ -27,8 +27,6 @@
 #       %{_bindir}/virtualenvwrapper_lazy-3.sh
 #       %config(noreplace) %{_sysconfdir}/profile.d/virtualenvwrapper.sh
 
-# TODO: delete old Python inmanta-workon implementation
-
 if [ -z "$BASH" ]; then
     echo "WARNING: This script was written for bash and might not be portable to other shells" >&2
 fi
