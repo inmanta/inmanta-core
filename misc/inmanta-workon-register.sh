@@ -1,5 +1,32 @@
 # Loosely inspired by virtualenv's `activate` and virtualenvwrapper's `virtualenvwrapper.sh`
 
+# TODO: end-user docs
+# TODO: on RPM installation, put this in `/etc/profile.d/`. From Fedora spec file for virtualenvwrapper:
+# Prepend a shebang to these so they are not stripped of executable bits
+#       sed -i '1i #!/bin/sh' %{buildroot}/%{_bindir}/%{modname}.sh
+#
+#       %{__mkdir_p} %{buildroot}/%{_sysconfdir}/profile.d/
+#       ln -s %{_bindir}/virtualenvwrapper_lazy.sh %{buildroot}/%{_sysconfdir}/profile.d/virtualenvwrapper.sh
+#
+#       ln -s %{_bindir}/virtualenvwrapper_lazy.sh %{buildroot}/%{_bindir}/virtualenvwrapper_lazy-3.sh
+#       ln -s %{_bindir}/virtualenvwrapper.sh %{buildroot}/%{_bindir}/virtualenvwrapper-3.sh
+#
+#
+#       #%%check
+#       # Tests won't fly in koji since they try to install stuff from pypi
+#       #tox -e py27
+#
+#       %files -n python3-%{modname}
+#       %doc PKG-INFO docs
+#       %license LICENSE
+#       %{python3_sitelib}/%{modname}
+#       %{python3_sitelib}/%{modname}-%{version}*
+#       %{_bindir}/virtualenvwrapper.sh
+#       %{_bindir}/virtualenvwrapper_lazy.sh
+#       %{_bindir}/virtualenvwrapper-3.sh
+#       %{_bindir}/virtualenvwrapper_lazy-3.sh
+#       %config(noreplace) %{_sysconfdir}/profile.d/virtualenvwrapper.sh
+
 # TODO: delete old Python inmanta-workon implementation
 # TODO: write tests, include all failure scenarios
 
