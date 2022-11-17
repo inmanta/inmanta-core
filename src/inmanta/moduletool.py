@@ -646,7 +646,7 @@ mode.
         except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
             try:
                 return ModuleV1(project, path)
-            except (ModuleMetadataFileNotFound, InvalidModuleException) as e:
+            except (ModuleMetadataFileNotFound, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
             except InvalidMetadata as e:
                 raise InvalidModuleException(e.msg)

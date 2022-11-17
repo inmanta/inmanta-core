@@ -424,7 +424,12 @@ requires:
 
     cause = e.value.__cause__
     assert isinstance(cause, InvalidMetadata)
-    assert "('requires', 0)\n\tstr type expected (type_error.str)" in cause.msg
+    assert (
+        "Metadata defined in /tmp/pytest-of-florent/pytest-49/test_module_requires_contains_0/mod/module.yml is invalid:\n"
+        + "requires -> 0\n"
+        + " str type expected (type=type_error.str)"
+        in cause.msg
+    )
 
 
 def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:
