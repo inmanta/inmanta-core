@@ -28,13 +28,11 @@
 #       %config(noreplace) %{_sysconfdir}/profile.d/virtualenvwrapper.sh
 
 # TODO: delete old Python inmanta-workon implementation
-# TODO: write tests, include all failure scenarios
 
 if [ -z "$BASH" ]; then
     echo "WARNING: This script was written for bash and might not be portable to other shells" >&2
 fi
 if [ "$BASH_SOURCE" = "$0" ]; then
-    # TODO: also provide script that can just be executed?
     echo "ERROR: This script is meant to be sourced rather than executed directly: \`source '$0'\`" >&2
     exit 1
 fi
@@ -80,14 +78,20 @@ function inmanta-workon {
     # convert environment argument to environment id
     env_id=$(__inmanta_workon_cli environment show --format '{id}' "$inmanta_env")
     if [ ! "$?" -eq 0 ]; then
-        # check if inmanta_env is a valid id
-        "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
-        if [ ! "$?" -eq 0 ]; then
-            # TODO: bug: this same error is raised when the name is just invalid + add test
-            echo "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead."
+        # differentiate between invalid name or broken inmanta-cli
+        __inmanta_workon_cli environment list > /dev/null
+        if [ "$?" -eq 0 ]; then
+            echo "ERROR: Environment '$inmanta_env' does not exist." >&2
             return 1
+        else
+            # check if inmanta_env is a valid id, if so we can fall back on file-based workon
+            "$INMANTA_WORKON_PYTHON" -c "import uuid; uuid.UUID('$inmanta_env');" 2> /dev/null
+            if [ ! "$?" -eq 0 ]; then
+                echo "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead." >&2
+                return 1
+            fi
+            env_id="$inmanta_env"
         fi
-        env_id="$inmanta_env"
     fi
 
     __inmanta_workon_activate "$inmanta_env" "$env_id" "$envs_dir"
@@ -165,7 +169,7 @@ function __inmanta_workon_activate {
     declare envs_dir="$3"
 
     if [ ! -d "$envs_dir/$env_id" ]; then
-        echo "ERROR: Directory '$envs_dir/$env_id' does not exist. This may mean the environment has never started a compile" >&2
+        echo "ERROR: Directory '$envs_dir/$env_id' does not exist. This may mean the environment has never started a compile." >&2
         return 1
     fi
 
@@ -174,7 +178,7 @@ function __inmanta_workon_activate {
 
     activate="$envs_dir/$env_id/.env/bin/activate"
     if [ ! -f "$activate" ]; then
-        echo "ERROR: Environment '$envs_dir/$env_id' does not contain a venv. This may mean it has never started a compile" >&2
+        echo "ERROR: Environment '$envs_dir/$env_id' does not contain a venv. This may mean it has never started a compile." >&2
         return 1
     fi
 

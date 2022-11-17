@@ -376,10 +376,14 @@ async def assert_workon_state(
             test_workon_ps1_pre=$PS1
             inmanta-workon '{arg}'
             result=$?
+
+            # output three lines
             echo "$(pwd)"
             which python
             echo "${{PS1%test_workon_ps1_pre}}"
-            [ "$result" -eq 0 ]  # exit with result code
+
+            # exit with result code
+            [ "$result" -eq 0 ]
             """.strip("\n")
         )
     )
@@ -398,8 +402,6 @@ async def test_workon(
     server: Server,
     workon_bash: Bash,
     workon_environments_dir: py.path.local,
-    # TODO: also check with broken_cli
-    # TODO: also check for environment that does not exist, both by id and name
     compiled_environments: abc.Sequence[data.model.Environment],
 ) -> None:
     """
@@ -428,20 +430,102 @@ async def test_workon(
         invert_working_dir_assert=False,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr=f"ERROR: Environment '{env_dir}' does not contain a venv. This may mean it has never started a compile",
+        expect_stderr=f"ERROR: Environment '{env_dir}' does not contain a venv. This may mean it has never started a compile.",
     )
 
 
-async def test_workon_env_does_not_exist(
+@pytest.mark.slowtest
+async def test_workon_no_env(
     server: Server,
     workon_bash: Bash,
+    workon_environments_dir: py.path.local,
     simple_environments: abc.Sequence[data.model.Environment],
 ) -> None:
     """
-    Verify behavior of various scenarios where the environment or its directory does not exist.
+    Verify the behavior of various inmanta-workon failure scenarios when the requested environment doesn't exist.
     """
+    # env dir does not exist
+    env: data.model.Environment = simple_environments[0]
+    env_dir: py.path.local = workon_environments_dir.join(str(env.id))
+    for identifier in (str(env.id), env.name):
+        await assert_workon_state(
+            workon_bash,
+            identifier,
+            expected_dir=env_dir,
+            invert_success_assert=True,
+            invert_working_dir_assert=True,
+            invert_python_assert=True,
+            invert_ps1_assert=True,
+            expect_stderr=(
+                f"ERROR: Directory '{env_dir}' does not exist. This may mean the environment has never started a compile."
+            ),
+        )
+    # no environment with this name exists
+    await assert_workon_state(
+        workon_bash,
+        "thisenvironmentdoesnotexist",
+        expected_dir=env_dir,
+        invert_success_assert=True,
+        invert_working_dir_assert=True,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=f"ERROR: Environment 'thisenvironmentdoesnotexist' does not exist.",
+    )
+    # no environment with this id exists
+    random_id: uuid.UUID = uuid.uuid4()
+    await assert_workon_state(
+        workon_bash,
+        str(random_id),
+        expected_dir=workon_environments_dir.join(str(env.id)),
+        invert_success_assert=True,
+        invert_working_dir_assert=True,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=f"ERROR: Environment '{random_id}' does not exist.",
+    )
 
 
-# TODO: similar tests for actual workon
-
-# TODO: more tests
+@pytest.mark.slowtest
+async def test_workon_broken_cli(
+    server: Server,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    workon_broken_cli: None,
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify the behavior of inmanta-workon when an environment id or name is specified but the inmanta-cli command does
+    not work (fallback file-based workon).
+    """
+    # by id
+    await assert_workon_state(
+        workon_bash,
+        str(compiled_environments[0].id),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+    )
+    # by name
+    await assert_workon_state(
+        workon_bash,
+        compiled_environments[1].name,
+        expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
+        invert_success_assert=True,
+        invert_working_dir_assert=True,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr="ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead.",
+    )
+    # no environment with this id exists
+    random_id: uuid.UUID = uuid.uuid4()
+    env_dir: py.path.local = workon_environments_dir.join(str(random_id))
+    await assert_workon_state(
+        workon_bash,
+        str(random_id),
+        expected_dir=env_dir,
+        invert_success_assert=True,
+        invert_working_dir_assert=True,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=(
+            f"ERROR: Directory '{env_dir}' does not exist. This may mean the environment has never started a compile."
+        ),
+    )
