@@ -281,7 +281,7 @@ async def test_workon_list_no_environments(server: Server, workon_bash: Bash) ->
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 0, (result.stderr, result.stdout)
     assert result.stderr == ""
-    assert result.stdout.strip() == "No environment defined."
+    assert result.stdout.strip() == "No environments defined."
 
 
 @pytest.mark.slowtest
