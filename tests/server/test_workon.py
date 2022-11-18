@@ -46,9 +46,6 @@ if os.name != "posix":
 WORKON_REGISTER: str = os.path.join(os.path.dirname(__file__), "..", "..", "misc", "inmanta-workon-register.sh")
 
 
-# TODO: put all tests in one class so that environments only need to be created once
-
-
 @dataclass
 class CliResult:
     exit_code: int
