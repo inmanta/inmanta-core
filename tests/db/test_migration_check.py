@@ -25,7 +25,7 @@ def test_migration_check():
     that a migration test exists for this dump.
     """
 
-    inmanta_dir: Path = Path(__file__).parent.absolute() / ".." / ".."
+    inmanta_dir: Path = Path(__file__).parent.parent.parent.absolute()
 
     versions_folder: Path = inmanta_dir / "src" / "inmanta" / "db" / "versions"
     versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
