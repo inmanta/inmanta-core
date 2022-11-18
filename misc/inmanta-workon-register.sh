@@ -89,7 +89,8 @@ EOF
         # differentiate between invalid name or broken inmanta-cli
         __inmanta_workon_cli environment list > /dev/null
         if [ "$?" -eq 0 ]; then
-            echo "ERROR: Environment '$inmanta_env' does not exist." >&2
+            echo "ERROR: Environment '$inmanta_env' could not be uniquely identified. Available environments are:" >&2
+            __inmanta_workon_list >&2
             return 1
         else
             # check if inmanta_env is a valid id, if so we can fall back on file-based workon
@@ -191,7 +192,7 @@ function __inmanta_workon_activate {
     fi
 
     # if we are in an active venv, deactivate it first: restores PS1 and triggers our custom deactivate logic if it's an inmanta venv
-    declare -F deactivate > /dev/null && deactivate nondestructive
+    declare -F deactivate > /dev/null && deactivate
     # store PS1 before sourcing activate because we don't care about virtualenv's modifications
     declare OLD_PS1="$PS1"
     source "$activate"

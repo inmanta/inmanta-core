@@ -18,6 +18,7 @@
 import asyncio
 import asyncio.subprocess
 import getpass
+import itertools
 import os
 import shutil
 import subprocess
@@ -42,6 +43,9 @@ if os.name != "posix":
 
 
 WORKON_REGISTER: str = os.path.join(os.path.dirname(__file__), "..", "..", "misc", "inmanta-workon-register.sh")
+
+
+# TODO: put all tests in one class so that environments only need to be created once
 
 
 @dataclass
@@ -140,7 +144,7 @@ async def simple_environments(client: protocol.Client) -> abc.AsyncIterator[abc.
     """
 
     async def create_project() -> uuid.UUID:
-        result: protocol.Result = await client.create_project("env-test")
+        result: protocol.Result = await client.create_project("test")
         assert result.code == 200
         return uuid.UUID(result.result["project"]["id"])  # type: ignore
 
@@ -267,7 +271,7 @@ async def test_workon_list(
         result.stdout.strip()
         == inmanta.main.get_table(
             ["Project name", "Project ID", "Environment", "Environment ID"],
-            [["env-test", str(env.project_id), env.name, str(env.id)] for env in simple_environments],
+            [["test", str(env.project_id), env.name, str(env.id)] for env in simple_environments],
         ).strip()
     )
 
@@ -520,7 +524,13 @@ async def test_workon_no_env(
         invert_working_dir_assert=True,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="ERROR: Environment 'thisenvironmentdoesnotexist' does not exist.",
+        expect_stderr=(
+            "ERROR: Environment 'thisenvironmentdoesnotexist' could not be uniquely identified. Available environments are:\n"
+            + inmanta.main.get_table(
+                ["Project name", "Project ID", "Environment", "Environment ID"],
+                [["test", str(env.project_id), env.name, str(env.id)] for env in simple_environments],
+            )
+        ),
     )
     # no environment with this id exists
     random_id: uuid.UUID = uuid.uuid4()
@@ -532,7 +542,13 @@ async def test_workon_no_env(
         invert_working_dir_assert=True,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr=f"ERROR: Environment '{random_id}' does not exist.",
+        expect_stderr=(
+            f"ERROR: Environment '{random_id}' could not be uniquely identified. Available environments are:\n"
+            + inmanta.main.get_table(
+                ["Project name", "Project ID", "Environment", "Environment ID"],
+                [["test", str(env.project_id), env.name, str(env.id)] for env in simple_environments],
+            )
+        ),
     )
 
 
@@ -581,6 +597,46 @@ async def test_workon_broken_cli(
         expect_stderr=(
             f"ERROR: Directory '{env_dir}' does not exist. This may mean the environment has never started a compile."
         ),
+    )
+
+
+@pytest.mark.slowtest
+async def test_workon_non_unique_name(
+    tmpdir: py.path.local,
+    server: Server,
+    client: protocol.Client,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify the behavior of the inmanta-workon command if a lookup by name is attempted with a non-unique environment name.
+    """
+    env: data.model.Environment = compiled_environments[0]
+    second_factory: EnvironmentFactory = EnvironmentFactory(str(tmpdir.join("second_environment_factory")))
+    second_factory.project = data.Project(name="second_project")
+    new_env: data.model.Environment = (await second_factory.create_environment(name=env.name)).to_dto()
+    await assert_workon_state(
+        workon_bash,
+        str(env.name),
+        expected_dir=workon_environments_dir.join(str(env.id)),
+        invert_success_assert=True,
+        invert_working_dir_assert=True,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=(
+            "ERROR: Environment 'env-0' could not be uniquely identified. Available environments are:\n"
+            + inmanta.main.get_table(
+                ["Project name", "Project ID", "Environment", "Environment ID"],
+                [
+                    [project_name, str(env.project_id), env.name, str(env.id)]
+                    for (project_name, env) in (
+                        *zip(itertools.repeat("test"), compiled_environments),
+                        ("second_project", new_env),
+                    )
+                ],
+            )
+        )
     )
 
 

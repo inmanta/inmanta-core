@@ -33,7 +33,7 @@ async def environment_factory(tmpdir) -> abc.AsyncIterator["EnvironmentFactory"]
     """
     Provides a factory for environments with a main.cf file.
     """
-    yield EnvironmentFactory(str(tmpdir))
+    yield EnvironmentFactory(str(tmpdir.join("environment_factory")))
 
 
 class EnvironmentFactory:
