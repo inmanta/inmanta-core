@@ -5342,4 +5342,3 @@ async def connect(
         await pool.close()
         await disconnect()
         raise e
-
