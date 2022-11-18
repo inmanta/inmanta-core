@@ -24,13 +24,15 @@ def test_migration_check():
     Make sure there is a database dump for the latest version of the db and
     that a migration test exists for this dump.
     """
-    versions_folder: Path = Path(".").absolute() / "src" / "inmanta" / "db" / "versions"
 
+    inmanta_dir: Path = Path(__file__).parent.parent.parent.absolute()
+
+    versions_folder: Path = inmanta_dir / "src" / "inmanta" / "db" / "versions"
     versions: List[Path] = list(versions_folder.glob("v" + "[0-9]" * 9 + ".py"))  # Migration files have format vYYYYMMDDN.py
     latest_version: Path = sorted(versions)[-1]
 
-    migration_tests_folder: Path = Path(".").absolute() / "tests" / "db"
-    dumps_folder: Path = Path(".").absolute() / "tests" / "db" / "dumps"
+    migration_tests_folder: Path = inmanta_dir / "tests" / "db"
+    dumps_folder: Path = migration_tests_folder / "dumps"
 
     dumps: List[Path] = list(dumps_folder.glob("v" + "[0-9]" * 9 + ".sql"))  # Dumps have format vYYYYMMDDN.sql
     latest_dump: Path = sorted(dumps)[-1]
