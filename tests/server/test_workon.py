@@ -32,9 +32,10 @@ import py.path
 import pytest
 
 import inmanta.data.model
+import inmanta.env
 import inmanta.main
 import utils
-from inmanta import config, data, env, protocol
+from inmanta import config, data, protocol
 from inmanta.server.protocol import Server
 from server.conftest import EnvironmentFactory
 
@@ -641,7 +642,7 @@ async def test_workon_non_unique_name(
                     )
                 ],
             )
-        )
+        ),
     )
 
 
@@ -659,9 +660,9 @@ async def test_workon_compile(
     Verify the inmanta command works as expected after using inmanta-workon. Specifically, verify that the inmanta command
     considers this venv as the active one.
     """
-    assert not env.PythonWorkingSet.are_installed(["lorem"]), (
-        "This test assumes lorem is not preinstalled and therefore will not work as expected."
-    )
+    assert not inmanta.env.PythonWorkingSet.are_installed(
+        ["lorem"]
+    ), "This test assumes lorem is not preinstalled and therefore will not work as expected."
     await assert_workon_state(
         workon_bash,
         str(compiled_environments[0].name),
@@ -669,7 +670,7 @@ async def test_workon_compile(
         pre_activate="inmanta --version > /dev/null 2>&1",
         # Add a requirement and install it.
         post_activate=textwrap.dedent(
-            f"""
+            """
             declare -F inmanta > /dev/null 2>&1 || exit 1  # check that inmanta is a shell function
             echo lorem >> requirements.txt
             inmanta project install > /dev/null 2>&1 || exit 1
