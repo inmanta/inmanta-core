@@ -644,7 +644,9 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         query_builder = SimpleQueryBuilder(
             select_clause="""SELECT id, remote_id, environment, requested,
                             started, completed, do_export, force_update,
-                            metadata, environment_variables, success, version""",
+                            metadata, environment_variables, success, version,
+                            partial, removed_resource_sets, exporter_plugin,
+                            notify_failed_compile, failed_compile_message""",
             from_clause=f" FROM {data.Compile.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
@@ -666,6 +668,11 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 force_update=compile["force_update"],
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
                 environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
+                partial=compile["partial"],
+                removed_resource_sets=compile["removed_resource_sets"],
+                exporter_plugin=compile["exporter_plugin"],
+                notify_failed_compile=compile["notify_failed_compile"],
+                failed_compile_message=compile["failed_compile_message"],
             )
             for compile in records
         ]
