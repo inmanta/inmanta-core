@@ -156,13 +156,13 @@ class CompileRunBase(BaseModel):
     metadata: JsonType
     environment_variables: Dict[str, str]
 
-    partial: bool = False
-    removed_resource_sets: list[str] = []
+    partial: bool
+    removed_resource_sets: list[str]
 
-    exporter_plugin: Optional[str] = None
+    exporter_plugin: Optional[str]
 
-    notify_failed_compile: Optional[bool] = None
-    failed_compile_message: Optional[str] = None
+    notify_failed_compile: Optional[bool]
+    failed_compile_message: Optional[str]
 
 
 class CompileRun(CompileRunBase):
