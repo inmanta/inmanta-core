@@ -34,7 +34,7 @@ import pytest
 import inmanta.data.model
 import inmanta.main
 import utils
-from inmanta import config, data, protocol
+from inmanta import config, data, env, protocol
 from inmanta.server.protocol import Server
 from server.conftest import EnvironmentFactory
 
@@ -390,6 +390,7 @@ async def assert_workon_state(
     workon_bash: Bash,
     arg: str,
     *,
+    pre_activate: Optional[str] = None,
     post_activate: Optional[str] = None,
     inmanta_user: Optional[str] = None,
     expected_dir: py.path.local,
@@ -404,6 +405,8 @@ async def assert_workon_state(
 
     :param workon_bash: The Bash environment to use for this assertion.
     :param arg: The environment argument to pass to inmanta-workon. May be either a name or a UUID.
+    :param pre_activate: Additional script to execute after running inmanta-workon. The success assertion will include a
+        check on the status of the last command in this script.
     :param post_activate: Additional script to execute after running inmanta-workon. The success assertion will include a
         check on the status of the last command in this script.
     :param inmanta_user: The user that should be considered the owner of the inmanta state directory for the purpose of
@@ -424,6 +427,8 @@ async def assert_workon_state(
             # set inmanta user to active user for deactivation logic
             INMANTA_USER='{inmanta_user if inmanta_user is not None else getpass.getuser()}'
 
+            %s
+            pre_activate_result=$?
             inmanta-workon '{arg}'
             activate_result=$?
             %s
@@ -435,12 +440,12 @@ async def assert_workon_state(
             echo "${{PS1%%$test_workon_ps1_pre}}"
 
             # exit with result code
-            [ "$activate_result" -eq 0 ] && [ "$post_activate_result" -eq 0 ]
+            [ "$pre_activate_result" -eq 0 ] && [ "$activate_result" -eq 0 ] && [ "$post_activate_result" -eq 0 ]
             """.strip(
                 "\n"
             )
         )
-        % (post_activate if post_activate is not None else "")
+        % (pre_activate if pre_activate is not None else "", post_activate if post_activate is not None else "")
     )
     assert (result.exit_code == 0) != invert_success_assert
     lines: abc.Sequence[str] = result.stdout.splitlines()
@@ -630,13 +635,54 @@ async def test_workon_non_unique_name(
                 ["Project name", "Project ID", "Environment", "Environment ID"],
                 [
                     [project_name, str(env.project_id), env.name, str(env.id)]
-                    for (project_name, env) in (
-                        *zip(itertools.repeat("test"), compiled_environments),
-                        ("second_project", new_env),
+                    for (project_name, env) in sorted(
+                        (("second_project", new_env), *zip(itertools.repeat("test"), compiled_environments)),
+                        key=lambda t: (t[1].project_id, t[1].name, t[1].id),
                     )
                 ],
             )
         )
+    )
+
+
+@pytest.mark.slowtest
+async def test_workon_compile(
+    server: Server,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    compiled_environments: abc.Sequence[data.model.Environment],
+    # no need to run this test in a separate venv: either it works as expected and does not affect the outer venv, or this
+    # fixutre will catch it
+    guard_testing_venv: None,
+) -> None:
+    """
+    Verify the inmanta command works as expected after using inmanta-workon. Specifically, verify that the inmanta command
+    considers this venv as the active one.
+    """
+    assert not env.PythonWorkingSet.are_installed(["lorem"]), (
+        "This test assumes lorem is not preinstalled and therefore will not work as expected."
+    )
+    await assert_workon_state(
+        workon_bash,
+        str(compiled_environments[0].name),
+        # call inmanta before activation to guard against command caching errors (see `man hash`)
+        pre_activate="inmanta --version > /dev/null 2>&1",
+        # Add a requirement and install it.
+        post_activate=textwrap.dedent(
+            f"""
+            declare -F inmanta > /dev/null 2>&1 || exit 1  # check that inmanta is a shell function
+            echo lorem >> requirements.txt
+            inmanta project install > /dev/null 2>&1 || exit 1
+            deactivate
+            declare -F inmanta > /dev/null 2>&1
+            [ "$?" -eq 1 ] # check that inmanta is no longer a shell function
+            """.strip(
+                "\n"
+            )
+        ),
+        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        invert_python_assert=True,
+        invert_ps1_assert=True,
     )
 
 

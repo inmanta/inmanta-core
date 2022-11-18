@@ -198,8 +198,10 @@ function __inmanta_workon_activate {
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
 
+    eval 'inmanta () { python3 -m inmanta.app; }' # workaround for #4259
     __inmanta_workon_register_deactivate
 }
+
 
 function __inmanta_workon_register_deactivate {
     # Registers a custom deactivate function. Modified from virtualenvwrapper's implementation
@@ -217,6 +219,7 @@ function __inmanta_workon_register_deactivate {
 
         # Call the original function.
         virtualenv_deactivate "$1"
+        unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
