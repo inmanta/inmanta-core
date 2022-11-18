@@ -408,7 +408,7 @@ async def assert_workon_state(
     :param post_activate: Additional script to execute after running inmanta-workon. The success assertion will include a
         check on the status of the last command in this script.
     :param inmanta_user: The user that should be considered the owner of the inmanta state directory for the purpose of
-        owndership checks during deactivation. The user must exist on the system running the tests. Defaults to the active
+        ownership checks during deactivation. The user must exist on the system running the tests. Defaults to the active
         user.
     :param expected_dir: The directory that is expected to be selected.
     :param invert_success_assert: If true, assert that inmanta-workon returns a non-zero exit code.
