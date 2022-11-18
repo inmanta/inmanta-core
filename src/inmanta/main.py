@@ -344,7 +344,7 @@ def environment_list(client: Client) -> None:
     if len(data) > 0:
         print_table(["Project name", "Project ID", "Environment", "Environment ID"], data)
     else:
-        click.echo("No environment defined.")
+        click.echo("No environments defined.")
 
 
 @environment.command(name="show")
