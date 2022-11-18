@@ -356,7 +356,7 @@ def environment_list(client: Client) -> None:
     # TODO: security?
     # TODO: mention which {} are supported
     help="Instead of outputting a table, use the supplied format string. Accepts Python format syntax",
-    required=False
+    required=False,
 )
 @click.pass_obj
 def environment_show(client: Client, environment: str, format_string: Optional[str]) -> None:

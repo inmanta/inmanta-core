@@ -17,28 +17,25 @@
 """
 import asyncio
 import asyncio.subprocess
-import click.testing
 import getpass
-import itertools
 import os
-import py.path
-import pytest
 import shutil
 import subprocess
 import textwrap
 import uuid
-from abc import ABC, abstractmethod
 from collections import abc
 from dataclasses import dataclass
 from typing import Optional
 
-import utils
+import py.path
+import pytest
+
 import inmanta.data.model
 import inmanta.main
+import utils
 from inmanta import config, data, protocol
 from inmanta.server.protocol import Server
 from server.conftest import EnvironmentFactory
-
 
 if os.name != "posix":
     pytest.skip("Skipping UNIX-only tests", allow_module_level=True)
@@ -80,7 +77,9 @@ def workon_workdir(server: Server, tmpdir: py.path.local) -> abc.Iterator[py.pat
 
             [server]
             bind-port = {port}
-            """.strip("\n")
+            """.strip(
+                "\n"
+            )
         )
     )
     yield workdir
@@ -92,7 +91,9 @@ def workon_broken_cli(workon_workdir: py.path.local, unused_tcp_port_factory: ab
     Overrides the server bind port in the config used by inmanta-workon to an unused port to make any inmanta-cli calls fail.
     """
     workon_workdir.join(".inmanta.cfg").write_text(
-        workon_workdir.join(".inmanta.cfg").read_text(encoding="utf-8").replace(
+        workon_workdir.join(".inmanta.cfg")
+        .read_text(encoding="utf-8")
+        .replace(
             str(config.Config.get("server", "bind-port")),
             str(unused_tcp_port_factory()),
         ),
@@ -108,10 +109,13 @@ def workon_bash(workon_workdir: py.path.local) -> abc.Iterator[Bash]:
     Any inspection of the workon state should be done from within this bash script since the state change is contained to the
     sub shell. There is no easy way to lift this generically to the Python level.
     """
+
     async def bash(script: str) -> CliResult:
         # use asyncio's subprocess for non-blocking IO so the server can handle requests
         process: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
-            "bash", "-c", f"source '{WORKON_REGISTER}';\n{script}",
+            "bash",
+            "-c",
+            f"source '{WORKON_REGISTER}';\n{script}",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(workon_workdir),
@@ -134,6 +138,7 @@ async def simple_environments(client: protocol.Client) -> abc.AsyncIterator[abc.
     """
     Creates some simple environments that aren't set up for compilation.
     """
+
     async def create_project() -> uuid.UUID:
         result: protocol.Result = await client.create_project("env-test")
         assert result.code == 200
@@ -188,6 +193,7 @@ def test_workon_source_check() -> None:
         f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
     )
 
+
 async def test_workon_python_check(
     monkeypatch: pytest.MonkeyPatch,
     tmpdir: py.path.local,
@@ -219,7 +225,7 @@ async def test_workon_python_check(
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
 
     # don't call inmanta-workon, just source the registration script and fetch some env vars
-    result: CliResult = await workon_bash(f"echo $INMANTA_WORKON_CLI && echo $INMANTA_WORKON_PYTHON")
+    result: CliResult = await workon_bash("echo $INMANTA_WORKON_CLI && echo $INMANTA_WORKON_PYTHON")
     assert result.exit_code == 0
     assert result.stderr.strip() == ""
     assert result.stdout.splitlines() == [str(opt_inmanta), str(opt_python)]
@@ -241,7 +247,9 @@ async def test_workon_help(workon_bash: Bash, option: Optional[str]) -> None:
         -l, --list      list the inmanta environments on this server
 
         The ENVIRONMENT argument may be the name or the id of an inmanta environment.
-        """.strip("\n"),
+        """.strip(
+            "\n"
+        ),
     )
 
 
@@ -255,10 +263,13 @@ async def test_workon_list(
     result: CliResult = await workon_bash(f"inmanta-workon {'-l' if short_option else '--list'}")
     assert result.exit_code == 0, (result.stderr, result.stdout)
     assert result.stderr == ""
-    assert result.stdout.strip() == inmanta.main.get_table(
-        ["Project name", "Project ID", "Environment", "Environment ID"],
-        [["env-test", str(env.project_id), env.name, str(env.id)] for env in simple_environments]
-    ).strip()
+    assert (
+        result.stdout.strip()
+        == inmanta.main.get_table(
+            ["Project name", "Project ID", "Environment", "Environment ID"],
+            [["env-test", str(env.project_id), env.name, str(env.id)] for env in simple_environments],
+        ).strip()
+    )
 
 
 async def test_workon_list_no_environments(server: Server, workon_bash: Bash) -> None:
@@ -305,7 +316,9 @@ async def test_workon_list_no_api_no_environments(
     if not server_dir_exists:
         # set state dir to directory that does not exist
         workon_workdir.join(".inmanta.cfg").write_text(
-            workon_workdir.join(".inmanta.cfg").read_text(encoding="utf-8").replace(
+            workon_workdir.join(".inmanta.cfg")
+            .read_text(encoding="utf-8")
+            .replace(
                 str(config.Config.get("config", "state-dir")),
                 str(tmpdir.join("doesnotexist")),
             ),
@@ -419,8 +432,11 @@ async def assert_workon_state(
 
             # exit with result code
             [ "$activate_result" -eq 0 ] && [ "$post_activate_result" -eq 0 ]
-            """.strip("\n")
-        ) % (post_activate if post_activate is not None else "")
+            """.strip(
+                "\n"
+            )
+        )
+        % (post_activate if post_activate is not None else "")
     )
     assert (result.exit_code == 0) != invert_success_assert
     lines: abc.Sequence[str] = result.stdout.splitlines()
@@ -504,7 +520,7 @@ async def test_workon_no_env(
         invert_working_dir_assert=True,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr=f"ERROR: Environment 'thisenvironmentdoesnotexist' does not exist.",
+        expect_stderr="ERROR: Environment 'thisenvironmentdoesnotexist' does not exist.",
     )
     # no environment with this id exists
     random_id: uuid.UUID = uuid.uuid4()
@@ -547,7 +563,9 @@ async def test_workon_broken_cli(
         invert_working_dir_assert=True,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead.",
+        expect_stderr=(
+            "ERROR: Unable to connect through inmanta-cli to look up environment by name. Please supply its id instead."
+        ),
     )
     # no environment with this id exists
     random_id: uuid.UUID = uuid.uuid4()
@@ -618,7 +636,9 @@ async def test_workon_deactivate(
             cd '{workon_workdir}' && inmanta-workon {compiled_environments[2].id}
             # verify PS1 correctness, then reset it to what assert_workon_state expects
             [ "${{PS1%$test_workon_ps1_pre}}" = '({compiled_environments[2].id}) ' ] && export PS1="$test_workon_ps1_pre"
-            """.strip("\n")
+            """.strip(
+                "\n"
+            )
         ),
         # declare root owner of the inmanta state directory to trigger the ownership warning (files are owned by active user)
         inmanta_user="root",

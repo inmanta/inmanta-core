@@ -25,7 +25,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import TYPE_CHECKING, AsyncIterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pkg_resources
 import pytest
@@ -47,9 +47,8 @@ from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
 from inmanta.server.services.notificationservice import NotificationService
 from inmanta.util import ensure_directory_exist
-from utils import LogSequence, report_db_index_usage, retry_limited, v1_module_from_template, wait_for_version
-
 from server.conftest import EnvironmentFactory
+from utils import LogSequence, report_db_index_usage, retry_limited, wait_for_version
 
 logger = logging.getLogger("inmanta.test.server.compilerservice")
 

@@ -16,12 +16,15 @@
     Contact: code@inmanta.com
 """
 import os
-import pytest
 import shutil
 import subprocess
 import uuid
 from collections import abc
 from typing import Optional
+
+import pytest
+
+import utils
 from inmanta import data
 
 
@@ -78,7 +81,7 @@ class EnvironmentFactory:
         subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
 
     def add_v1_module(self, module_name: str, *, plugin_code: str, template_dir: str) -> None:
-        v1_module_from_template(
+        utils.v1_module_from_template(
             source_dir=template_dir,
             dest_dir=os.path.join(self.libs_dir, module_name),
             new_content_init_py=plugin_code,
