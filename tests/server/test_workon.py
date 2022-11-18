@@ -18,6 +18,7 @@
 import asyncio
 import asyncio.subprocess
 import click.testing
+import getpass
 import itertools
 import os
 import py.path
@@ -372,7 +373,8 @@ async def assert_workon_state(
     workon_bash: Bash,
     arg: str,
     *,
-    deactivate: bool = False,
+    post_activate: Optional[str] = None,
+    inmanta_user: Optional[str] = None,
     expected_dir: py.path.local,
     invert_success_assert: bool = False,
     invert_working_dir_assert: bool = False,
@@ -385,7 +387,11 @@ async def assert_workon_state(
 
     :param workon_bash: The Bash environment to use for this assertion.
     :param arg: The environment argument to pass to inmanta-workon. May be either a name or a UUID.
-    :param deactivate: Deactivate the environment before inspecting the state.
+    :param post_activate: Additional script to execute after running inmanta-workon. The success assertion will include a
+        check on the status of the last command in this script.
+    :param inmanta_user: The user that should be considered the owner of the inmanta state directory for the purpose of
+        owndership checks during deactivation. The user must exist on the system running the tests. Defaults to the active
+        user.
     :param expected_dir: The directory that is expected to be selected.
     :param invert_success_assert: If true, assert that inmanta-workon returns a non-zero exit code.
     :param invert_working_dir_assert: If true, assert that the working directory has not changed to the environment dir.
@@ -398,20 +404,23 @@ async def assert_workon_state(
             # mock PS1 to mimic terminal behavior
             test_workon_ps1_pre=myps1
             export PS1="$test_workon_ps1_pre"
+            # set inmanta user to active user for deactivation logic
+            INMANTA_USER='{inmanta_user if inmanta_user is not None else getpass.getuser()}'
 
             inmanta-workon '{arg}'
-            {"deactivate" if deactivate else ""}
-            result=$?
+            activate_result=$?
+            %s
+            post_activate_result=$?
 
             # output three lines
             echo "$(pwd)"
             which python
-            echo "${{PS1%$test_workon_ps1_pre}}"
+            echo "${{PS1%%$test_workon_ps1_pre}}"
 
             # exit with result code
-            [ "$result" -eq 0 ]
+            [ "$activate_result" -eq 0 ] && [ "$post_activate_result" -eq 0 ]
             """.strip("\n")
-        )
+        ) % (post_activate if post_activate is not None else "")
     )
     assert (result.exit_code == 0) != invert_success_assert
     lines: abc.Sequence[str] = result.stdout.splitlines()
@@ -560,6 +569,7 @@ async def test_workon_broken_cli(
 @pytest.mark.slowtest
 async def test_workon_deactivate(
     server: Server,
+    workon_workdir: py.path.local,
     workon_bash: Bash,
     workon_environments_dir: py.path.local,
     compiled_environments: abc.Sequence[data.model.Environment],
@@ -567,13 +577,60 @@ async def test_workon_deactivate(
     """
     Verify the deactivate behavior of inmanta-workon.
     """
+    env_id: uuid.UUID = compiled_environments[0].id
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    # simple deactivate
     await assert_workon_state(
         workon_bash,
-        str(compiled_environments[0].id),
-        deactivate=True,
-        expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        str(env_id),
+        post_activate="deactivate",
+        expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
     )
-    # TODO: check warning is raised
-    # TODO: check warning is raised when we don't deactivate but just activate a second one
+    # ownership warning on deactivate
+    await assert_workon_state(
+        workon_bash,
+        str(env_id),
+        post_activate="deactivate",
+        # declare root owner of the inmanta state directory to trigger the ownership warning (files are owned by active user)
+        inmanta_user="root",
+        expected_dir=env_dir,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=(
+            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env_dir}'"
+            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
+        ),
+    )
+    # ownership warning on activation of a different environment
+    env1_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[1].id))
+    env2_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
+    await assert_workon_state(
+        workon_bash,
+        # activate env 0
+        str(env_id),
+        # then activate env 1 and env 2 without explicit deactivate
+        # do it twice to verify that the deactivate function is kept / registered correctly the second time around.
+        post_activate=textwrap.dedent(
+            f"""
+            cd '{workon_workdir}' && inmanta-workon {compiled_environments[1].id}
+            cd '{workon_workdir}' && inmanta-workon {compiled_environments[2].id}
+            # verify PS1 correctness, then reset it to what assert_workon_state expects
+            [ "${{PS1%$test_workon_ps1_pre}}" = '({compiled_environments[2].id}) ' ] && export PS1="$test_workon_ps1_pre"
+            """.strip("\n")
+        ),
+        # declare root owner of the inmanta state directory to trigger the ownership warning (files are owned by active user)
+        inmanta_user="root",
+        # env 2 should be activated in the end
+        expected_dir=env2_dir,
+        invert_ps1_assert=True,  # see mock PS1 in post_activate script
+        # expect warnings for env 0 and env 1 but not for env 2 because it is still active
+        expect_stderr=(
+            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env_dir}'"
+            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
+            "\n"
+            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env1_dir}'"
+            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
+        ),
+    )
