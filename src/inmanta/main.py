@@ -349,13 +349,13 @@ def environment_list(client: Client) -> None:
 
 @environment.command(name="show")
 @click.argument("environment")
-# TODO: write test
 @click.option(
     "--format",
     "format_string",
-    # TODO: security?
-    # TODO: mention which {} are supported
-    help="Instead of outputting a table, use the supplied format string. Accepts Python format syntax",
+    help=(
+        "Instead of outputting a table, use the supplied format string. Accepts Python format syntax."
+        " Supported fields are 'id', 'name', 'project', 'repo_url', 'repo_branch'"
+    ),
     required=False,
 )
 @click.pass_obj

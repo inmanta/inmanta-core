@@ -857,12 +857,6 @@ def client(server):
 
 
 @pytest.fixture(scope="function")
-def sync_client(server):
-    client = protocol.SyncClient("client")
-    yield client
-
-
-@pytest.fixture(scope="function")
 def client_multi(server_multi):
     client = protocol.Client("client")
     yield client
