@@ -171,7 +171,7 @@ function __inmanta_workon_activate {
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
 
-    eval 'inmanta () { python3 -m inmanta.app; }' # workaround for #4259
+    eval 'inmanta () { python3 -m inmanta.app "$@"; }' # workaround for #4259
     __inmanta_workon_register_deactivate
 }
 

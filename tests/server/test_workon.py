@@ -664,13 +664,16 @@ async def test_workon_compile(
         workon_bash,
         str(compiled_environments[0].name),
         # call inmanta before activation to guard against command caching errors (see `man hash`)
-        pre_activate="inmanta --version > /dev/null 2>&1",
+        pre_activate="inmanta --help > /dev/null 2>&1",
         # Add a requirement and install it.
         post_activate=textwrap.dedent(
             """
             declare -F inmanta > /dev/null 2>&1 || exit 1  # check that inmanta is a shell function
+            (pip list | grep lorem > /dev/null 2>&1) && exit 1  # check that lorem is not installed yet
             echo lorem >> requirements.txt
+            # verify that the inmanta command works, accepts options, and is contained within this enviroment
             inmanta project install > /dev/null 2>&1 || exit 1
+            (pip list | grep lorem > /dev/null 2>&1) || exit 1  # check that lorem is now installed
             deactivate
             declare -F inmanta > /dev/null 2>&1
             [ "$?" -eq 1 ] # check that inmanta is no longer a shell function
