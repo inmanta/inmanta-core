@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import warnings
 from collections.abc import Set
 from itertools import chain
