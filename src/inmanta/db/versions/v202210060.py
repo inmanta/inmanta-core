@@ -34,4 +34,13 @@ async def update(connection: Connection) -> None:
 
     CREATE TYPE resource_id_version_pair AS (resource_id character varying, version int)
     """
+
+    # Deep rewrite of the data
+    # convert resource_version_id into resource_id
+
     await connection.execute(schema)
+
+
+def query_part_convert_rvid_to_rid(from_value:str) -> str:
+    return ""
+

@@ -4150,9 +4150,30 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides: List[m.ResourceIdStr] = []
 
+
+    ### Methods for backward compatibility
     @property
     def resource_version_id(self):
+        # This field was removed from the DB, this method keeps code compatibility
         return resource.Id.set_version_in_id(self.resource_id, self.model)
+
+    @classmethod
+    def __mangle_dict(cls, record: dict) -> None:
+        """
+        Transform the dict of attributes as it exists here/in the database to the backward compatible form
+        Operates in-place
+        """
+        version = record["model"]
+        parsed_id = resources.Id.parse_id(record["resource_id"])
+        parsed_id.set_version(version)
+        record["resource_version_id"] = parsed_id.resource_version_str()
+        record["id"] = record["resource_version_id"]
+        record["resource_type"] = parsed_id.entity_type
+        if "requires" in record["attributes"]:
+            record["attributes"]["requires"] = [
+                resource.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
+            ]
+        record["provides"] = [resource.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4663,24 +4684,6 @@ class Resource(BaseDocument):
         dct = super(Resource, self).to_dict()
         self.__mangle_dict(dct)
         return dct
-
-    @classmethod
-    def __mangle_dict(cls, record: dict) -> None:
-        """
-        Transform the dict of attributes as it exists here/in the database to the backward compatible form
-        Operates in-place
-        """
-        version = record["model"]
-        parsed_id = resources.Id.parse_id(record["resource_id"])
-        parsed_id.set_version(version)
-        record["resource_version_id"] = parsed_id.resource_version_str()
-        record["id"] = record["resource_version_id"]
-        record["resource_type"] = parsed_id.entity_type
-        if "requires" in record["attributes"]:
-            record["attributes"]["requires"] = [
-                resource.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
-            ]
-        record["provides"] = [resource.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     def to_dto(self) -> m.Resource:
         attributes = self.attributes.copy()
