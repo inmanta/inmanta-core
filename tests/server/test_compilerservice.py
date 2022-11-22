@@ -1152,6 +1152,7 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
     [
         ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
         ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING),
+        ("0", "0", "The recompile_backoff environment setting is disabled", logging.INFO),
     ],
 )
 async def test_compileservice_auto_recompile_wait(
