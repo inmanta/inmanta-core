@@ -426,8 +426,8 @@ requires:
     assert isinstance(cause, InvalidMetadata)
     assert (
         f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
-        + "requires -> 0\n"
-        + "  str type expected (type=type_error.str)"
+        + "  requires -> 0\n"
+        + "    str type expected (type=type_error.str)"
         in cause.msg
     )
 
