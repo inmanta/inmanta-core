@@ -234,3 +234,19 @@ implement C using std::none
 caused by:
   Invalid class type for __config__::A (instantiated at {dir}/main.cf:3), should be __config__::B (reported in Construct(C) ({dir}/main.cf:2))""",  # noqa: E501
     )
+
+
+def test_exception_default_constructors(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef MyType as A(n = 42)
+
+entity A:
+    number n
+    number m
+end
+
+implement A using std::none
+        """,
+        """Syntax error: The use of default constructors is no longer supported ({dir}/main.cf:2:9)""",
+    )

@@ -114,26 +114,6 @@ typedef tcp-port as int matching self > 0 and self < 65535
     assert str(e.value) == message
 
 
-def test_deprecation_minus_in_typedef_default_name(snippetcompiler):
-    with pytest.raises(HyphenException) as e:
-        snippetcompiler.setup_for_snippet(
-            """
-entity Car:
-   string brand
-end
-
-typedef Corsa-opel as Car(brand="opel")
-            """
-        )
-        compiler.do_compile()
-
-    message: str = (
-        f"The use of '-' in identifiers is not allowed. please rename Corsa-opel. "
-        f"(reported in Corsa-opel ({snippetcompiler.project_dir}/main.cf:6:9))"
-    )
-    assert str(e.value) == message
-
-
 def test_deprecation_minus_in_assign_variable_name(snippetcompiler):
     with pytest.raises(HyphenException) as e:
         snippetcompiler.setup_for_snippet(

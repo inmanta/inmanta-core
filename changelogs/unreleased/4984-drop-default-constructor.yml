@@ -1,0 +1,7 @@
+---
+description: Remove support for default constructors
+change-type: major
+issue-nr: 4984
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

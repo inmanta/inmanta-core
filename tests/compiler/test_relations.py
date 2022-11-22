@@ -146,17 +146,6 @@ Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
         compiler.do_compile()
 
 
-def test_issue_132_relation_on_default(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-typedef CFG as std::File(mode=755)
-CFG cfg [1] -- [1] std::File stuff
-"""
-    )
-    with pytest.raises(TypingException):
-        compiler.do_compile()
-
-
 def test_issue_141(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

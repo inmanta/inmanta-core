@@ -49,16 +49,12 @@ implementation a for Test:
 end
 
 implement Test using a
-
-typedef Test3 as Test(b="a")
-
-y = Test3(a="xx")
 """,
         autostd=False,
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 13
+    assert len(anchormap) == 9
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
 
@@ -76,10 +72,6 @@ y = Test3(a="xx")
     verify_anchor(19, 22, 26, 2)
     verify_anchor(23, 11, 15, 2)
     verify_anchor(23, 22, 23, 19)
-    verify_anchor(25, 18, 22, 2)
-    verify_anchor(25, 23, 24, 4)
-    verify_anchor(27, 5, 10, 25)
-    verify_anchor(27, 11, 12, 3)
 
 
 def test_anchors_two(snippetcompiler):
@@ -173,10 +165,6 @@ def test_get_types_and_scopes(snippetcompiler):
 
     implement Test using a
 
-    typedef Test3 as Test(b="a")
-
-    y = Test3(a="xx")
-
     """
     )
 
@@ -198,7 +186,6 @@ def test_get_types_and_scopes(snippetcompiler):
         "__config__::Test2",
         "__config__::foo",
         "__config__::a",
-        "__config__::Test3",
     ]
     assert sorted(namespace_to_type_name["__config__"]) == sorted(expected_types_in_config_ns)
 
