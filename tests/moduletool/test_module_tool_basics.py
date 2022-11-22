@@ -508,7 +508,7 @@ packages = find_namespace:
 @pytest.mark.parametrize_any(
     "version, error_msg",
     [
-        ("0.0.1.dev0", "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a " "tag"),
+        ("0.0.1.dev0", "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"),
         ("hello", "Version hello is not PEP440 compliant"),
     ],
 )
@@ -535,7 +535,7 @@ packages = find_namespace:
     )
     with pytest.raises(InvalidMetadata) as e:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
-    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\nversion\n" in str(e.value)
+    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
     assert error_msg in str(e.value)
 
 

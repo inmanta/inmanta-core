@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import traceback
 import types
 import warnings
@@ -38,7 +39,6 @@ from io import BytesIO, TextIOBase
 from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
-from textwrap import indent
 from time import time
 from typing import (
     Any,
