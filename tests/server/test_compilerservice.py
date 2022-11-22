@@ -1148,11 +1148,11 @@ async def test_git_uses_environment_variables(environment_factory: EnvironmentFa
 
 
 @pytest.mark.parametrize(
-    "auto_recompile_wait,recompile_backoff,expected_log_message,expected_log_level, printed",
+    "auto_recompile_wait,recompile_backoff,expected_log_message,expected_log_level",
     [
-        ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO, True),
-        ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING, True),
-        ("0", "0", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO, False),
+        ("0", "2.1", "The recompile_backoff environment setting is enabled and set to 2.1 seconds", logging.INFO),
+        ("2", "0", "This option is deprecated in favor of the recompile_backoff environment setting.", logging.WARNING),
+        ("0", "0", "The recompile_backoff environment setting is disabled", logging.INFO),
     ],
 )
 async def test_compileservice_auto_recompile_wait(
@@ -1165,7 +1165,6 @@ async def test_compileservice_auto_recompile_wait(
     recompile_backoff,
     expected_log_message,
     expected_log_level,
-    printed,
 ):
     """
     Test the auto-recompile-wait setting when multiple recompiles are requested in a short amount of time
@@ -1203,21 +1202,11 @@ async def test_compileservice_auto_recompile_wait(
         for i in range(3):
             await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-        if printed:
-            LogSequence(caplog, allow_errors=False).contains(
-                "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
-            ).contains("inmanta.server.services.compilerservice", expected_log_level, expected_log_message,).contains(
-                "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
-            )
-        else:
-            LogSequence(caplog, allow_errors=False).contains(
-                "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
-            ).contains("inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting")
-            LogSequence(caplog, allow_errors=False).assert_not(
-                "inmanta.server.services.compilerservice",
-                expected_log_level,
-                expected_log_message,
-            )
+        LogSequence(caplog, allow_errors=False).contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        ).contains("inmanta.server.services.compilerservice", expected_log_level, expected_log_message,).contains(
+            "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
+        )
 
 
 async def test_compileservice_calculate_auto_recompile_wait(mocked_compiler_service_block, server):
