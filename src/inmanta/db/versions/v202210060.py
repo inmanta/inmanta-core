@@ -41,6 +41,6 @@ async def update(connection: Connection) -> None:
     await connection.execute(schema)
 
 
-def query_part_convert_rvid_to_rid(from_value:str) -> str:
+def query_part_convert_rvid_to_rid(from_value: str) -> str:
     return ""
 
