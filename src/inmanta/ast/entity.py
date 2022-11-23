@@ -478,6 +478,7 @@ class Entity(NamedType):
         return self.location
 
 
+# Kept for backwards compatibility. May be dropped from iso7 onwards.
 EntityLike = Entity
 
 
