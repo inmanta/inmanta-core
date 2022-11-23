@@ -46,13 +46,27 @@ async def update(connection: Connection) -> None:
 
 
 def query_part_convert_rvid_to_rid(from_value: str) -> str:
+    """
+    Query part to actually convert a resource version id to a resource id
+
+    split off for easier testing
+    """
     return f"REGEXP_REPLACE({from_value}, ',v=[0-9]+$', '')"
 
 
 def query_part_convert_requires(from_value: str) -> str:
+    """
+    Query part to convert requires, which is in a jsonb dict
+
+    split off for easier testing
+    """
+    # get the value out of the dict
     project = f"{from_value}->'requires'"
+
+    # make conversion on one element
     convert = query_part_convert_rvid_to_rid("element")
 
+    # loop over the array and convert
     collect = f"""
      (select
          jsonb_agg(
@@ -60,12 +74,20 @@ def query_part_convert_requires(from_value: str) -> str:
          )
      from jsonb_array_elements_text({project}) element)"""
 
+    # set the value and handle the case where the requires key doesn't exist
     return f"coalesce(jsonb_set({from_value}, '{{requires}}', {collect}), {from_value})"
 
 
 def query_part_convert_provides(from_value: str) -> str:
+    """
+    Query part to convert provides, which is a varchar array
+
+    split off for easier testing
+    """
+    # make conversion on one element
     convert = query_part_convert_rvid_to_rid("element")
 
+    # loop over the array and convert
     collect = f"""
         (select
              array_agg(
