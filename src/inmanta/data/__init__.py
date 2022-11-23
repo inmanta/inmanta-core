@@ -60,11 +60,11 @@ import typing_inspect
 from asyncpg import Connection
 from asyncpg.protocol import Record
 
-import inmanta.db.versions
-from crontab import CronTab
-import inmanta.resources as resources
 import inmanta.const as const
+import inmanta.db.versions
+import inmanta.resources as resources
 import inmanta.util as util
+from crontab import CronTab
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
@@ -4151,7 +4151,6 @@ class Resource(BaseDocument):
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
     provides: List[m.ResourceIdStr] = []
-
 
     ### Methods for backward compatibility
     @property
