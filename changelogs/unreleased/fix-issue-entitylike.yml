@@ -1,0 +1,4 @@
+---
+description: add back the get_default() function in Entity (was previously in EntityLike) and some backwards compatibility
+change-type: patch
+destination-branches: [master]
