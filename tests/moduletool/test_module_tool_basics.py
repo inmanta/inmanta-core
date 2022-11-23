@@ -518,7 +518,7 @@ packages = find_namespace:
         """
     )
     if underscore:
-        with pytest.raises(InvalidModuleException):
+        with pytest.raises(InvalidMetadata):
             module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     else:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
@@ -555,6 +555,38 @@ import minimalv2module
     finally:
         os.chdir(cwd)
     verify_v2_message("push")
+
+
+@pytest.mark.parametrize_any(
+    "version, error_msg",
+    [
+        ("0.0.1.dev0", "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"),
+        ("hello", "Version hello is not PEP440 compliant"),
+    ],
+)
+def test_module_v2_invalid_version(inmanta_module_v2: InmantaModule, version: str, error_msg: str):
+    """
+    Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
+    """
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mymod
+version = {version}
+license = Apache 2.0
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+packages = find_namespace:
+        """
+    )
+    with pytest.raises(InvalidMetadata) as e:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
+    assert error_msg in str(e.value)
 
 
 def test_moduletool_create_v1(snippetcompiler_clean) -> None:
