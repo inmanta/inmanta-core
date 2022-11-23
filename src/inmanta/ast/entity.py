@@ -453,6 +453,15 @@ class Entity(NamedType):
         # remove erased defaults
         return {k: v for k, v in dvalues.items() if v is not None}
 
+    def get_default(self, name: str) -> "ExpressionStatement":
+        """
+        Get a default value for a given name
+        """
+        defaults = self.get_default_values()
+        if name not in defaults:
+            raise AttributeError(name)
+        return defaults[name]
+
     def final(self, excns: List[CompilerException]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
@@ -467,6 +476,10 @@ class Entity(NamedType):
 
     def get_location(self) -> Location:
         return self.location
+
+
+# Kept for backwards compatibility. May be dropped from iso7 onwards.
+EntityLike = Entity
 
 
 class Implementation(NamedType):
