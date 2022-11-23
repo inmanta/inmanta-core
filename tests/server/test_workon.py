@@ -176,7 +176,7 @@ async def compiled_environments(
             result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
         )
 
-    await utils.retry_limited(all_compiles_done, 10)
+    await utils.retry_limited(all_compiles_done, 15)
 
     yield environments
 
