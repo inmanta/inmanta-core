@@ -1,4 +1,4 @@
-The constructor `{{ constructor_str }}` ({{ constructor_lnr }}) matches different instances in different indexes:
+The constructor `{{ constructor_str }}` ({{ constructor_loc }}) matches different instances in different indexes:
 {% for coll in collisions -%}
  - index {{ constructor_name }}({{ collisions[coll].index }}) matches {{ collisions[coll].constructor }}
 {% endfor %}
