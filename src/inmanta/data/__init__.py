@@ -4249,7 +4249,7 @@ class Resource(BaseDocument):
             """Method to retain backward compatibility, ignore bad ID's"""
             try:
                 return resources.Id.parse_resource_version_id(rvid)
-            except Exception:
+            except ValueError:
                 return None
 
         parsed_rv = (convert_or_ignore(id) for id in resource_version_ids)
@@ -4263,12 +4263,12 @@ class Resource(BaseDocument):
             f"environment=$1 AND "
             f"(resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
         )
-        resources = await cls.select_query(
+        out = await cls.select_query(
             query,
             [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
             connection=connection,
         )
-        return resources
+        return out
 
     @classmethod
     async def get_undeployable(cls, environment: uuid.UUID, version: int) -> List["Resource"]:

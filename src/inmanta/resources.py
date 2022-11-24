@@ -595,7 +595,7 @@ class Id(object):
     def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
-            raise Exception(f"Version is missing from resource id: {resource_id}")
+            raise ValueError(f"Version is missing from resource id: {resource_id}")
         return id
 
     @classmethod
