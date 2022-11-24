@@ -182,7 +182,7 @@ class DatabaseOrder:
         sort: str,
     ) -> "DatabaseOrder":
         valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+            f"^({'|'.join(cls.get_valid_sort_columns().keys())})\\.(asc|desc)$", re.IGNORECASE
         )
         match = valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
@@ -231,7 +231,7 @@ class DatabaseOrder:
         return ColumnNameStr(value_reference)
 
     def __str__(self) -> str:
-        return f"{self.order_by_column}.{self.order}"
+        return f"{self.order_by_column}.{self.order.value.lower()}"
 
     def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
         """ The type of the order by column"""
