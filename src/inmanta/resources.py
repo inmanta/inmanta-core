@@ -637,7 +637,6 @@ class Id(object):
         """
         Return a copy of the given id_str with the version number set to new_version.
         """
-        # Todo:
         parsed_id = cls.parse_id(id_str)
         new_id = parsed_id.copy(version=new_version)
         return new_id.resource_version_str()
