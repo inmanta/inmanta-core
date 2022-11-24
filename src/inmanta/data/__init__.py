@@ -384,7 +384,7 @@ class ResourceVersionIdColumnType(ColumnType):
         :return: a list of (name, type, value) items
         """
         assert isinstance(value, str)
-        id = Id.parse_resource_version_id(value)
+        id = resources.Id.parse_resource_version_id(value)
         return [
             ("resource_id", StringColumn, StringColumn.get_value(id.resource_str())),
             ("model", PositiveIntColumn, PositiveIntColumn.get_value(id.version)),
@@ -4152,7 +4152,7 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides: List[m.ResourceIdStr] = []
 
-    ### Methods for backward compatibility
+    # Methods for backward compatibility
     @property
     def resource_version_id(self):
         # This field was removed from the DB, this method keeps code compatibility
