@@ -607,7 +607,7 @@ class Id(object):
         result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
-            raise Exception("Invalid id for resource %s" % resource_id)
+            raise ValueError("Invalid id for resource %s" % resource_id)
 
         version_match: str = result.group("version")
 
