@@ -76,6 +76,7 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
+from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
 
@@ -266,7 +267,7 @@ class InvalidMetadata(CompilerException):
         return msg
 
 
-class ModuleDeprecationWarning(Warning):
+class ModuleDeprecationWarning(InmantaWarning):
     pass
 
 
