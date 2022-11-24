@@ -29,6 +29,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
+    IndexCollisionException,
     Locatable,
     LocatableString,
     Location,
@@ -697,6 +698,7 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
+        lookup_table: List[List[str]] = []
         for index in type_class.get_indices():
             params = []
             for attr in index:
@@ -708,6 +710,7 @@ class Constructor(ExpressionStatement):
                 if obj.get_type() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
+                lookup_table.append(params)
 
         object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
@@ -719,11 +722,21 @@ class Constructor(ExpressionStatement):
                         (i.instance_node for i in instances if i.instance_node is not None),
                     )
                 )
+
             # ensure that instances are all the same objects
             first = instances[0]
             for i in instances[1:]:
                 if i != first:
-                    raise Exception("Inconsistent indexes detected!")
+                    raise IndexCollisionException(
+                        msg=("Inconsistent indexes detected!\n"),
+                        constructor_str=self.pretty_print(),
+                        constructor_loc=self.location,
+                        constructor_name=self.class_type,
+                        collisions={
+                            i: {"index": ",".join(idx[0] for idx in lookup), "constructor": i}
+                            for i, lookup in zip(instances, lookup_table)
+                        },
+                    )
 
             object_instance = first
             self.copy_location(object_instance)
