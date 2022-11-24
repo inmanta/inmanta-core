@@ -563,57 +563,30 @@ Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
     )
 
 
-def test_index_collision_exception_simple_index(snippetcompiler) -> None:
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    string name
-    int id
-end
-
-implement A using std::none
-
-index A(name)
-index A(id)
-
-A(name="one",id=1)
-A(name="two",id=2)
-A(name="one", id=2)
-"""
-    )
-    with pytest.raises(IndexCollisionException) as e:
-        compiler.do_compile()
-
-    print(ExplainerFactory().explain_and_format(e.value))
-    assert (
-        ExplainerFactory().explain_and_format(e.value)
-        == f"""
-Exception explanation
-=====================
-The constructor `A(name='one',id=2)` ({snippetcompiler.project_dir}/main.cf:14) matches different instances in different indexes:
-- index A(name) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:12)
-- index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:13)
-"""  # noqa: E501
-    )
-
-
-def test_index_collision_exception_multiple_index(snippetcompiler) -> None:
+def test_index_collision_exception(snippetcompiler) -> None:
+    """
+    Test that an IndexCollisionException is raised when an index collision is detected and that the correct
+    explanation is displayed.
+    """
     snippetcompiler.setup_for_snippet(
         """
 entity A:
     int id
     string left
     string right
+    int other_id
 end
 
 implement A using std::none
 
 index A(id)
 index A(left, right)
+index A(other_id)
 
-A(id=1, left="L", right="R")
-A(id=2, left="LL", right="RR")
-A(id=1, left="LL", right="RR")
+A(id=1, left="L", right="R", other_id=1)
+A(id=2, left="LL", right="RR", other_id=2)
+A(id=3, left="LLL", right="RRR", other_id=3)
+A(id=1, left="LL", right="RR", other_id=3)
 """
     )
     with pytest.raises(IndexCollisionException) as e:
@@ -625,8 +598,9 @@ A(id=1, left="LL", right="RR")
         == f"""
 Exception explanation
 =====================
-The constructor `A(id=1,left='LL',right='RR')` ({snippetcompiler.project_dir}/main.cf:15) matches different instances in different indexes:
-- index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:13)
-- index A(left,right) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:14)
+The constructor `A(id=1,left='LL',right='RR',other_id=3)` ({snippetcompiler.project_dir}/main.cf:18) matches different instances in different indexes:
+- index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:15)
+- index A(left,right) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:16)
+- index A(other_id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:17)
 """  # noqa: E501
     )
