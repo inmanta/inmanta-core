@@ -24,7 +24,7 @@ import pytest
 
 import inmanta.compiler as compiler
 import inmanta.warnings as inmanta_warnings
-from inmanta.ast import CompilerDeprecationWarning, CompilerRuntimeWarning, VariableShadowWarning
+from inmanta.ast import CompilerRuntimeWarning, VariableShadowWarning
 from inmanta.warnings import WarningsManager
 from utils import log_doesnt_contain
 
@@ -90,13 +90,16 @@ def test_warning_format(caplog, warning: Union[str, Warning], category: Type[War
     warnings.resetwarnings()
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
-    assert caplog.record_tuples == [
-        (
-            "py.warnings",
-            logging.WARNING,
-            warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
-        )
-    ]
+    if isinstance(warning, inmanta_warnings.InmantaWarning):
+        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s" % (category.__name__, warning))]
+    else:
+        assert caplog.record_tuples == [
+            (
+                "py.warnings",
+                logging.WARNING,
+                warnings.formatwarning(warning, category, filename, lineno),  # type: ignore
+            )
+        ]
 
 
 def test_shadow_warning(snippetcompiler):
@@ -177,31 +180,6 @@ end
         assert any(
             issubclass(w.category, VariableShadowWarning) and str(w.message) == message % (2, 4) for w in caught_warnings
         )
-
-
-def test_deprecation_warning_default_constructors(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-typedef MyType as A(n = 42)
-
-entity A:
-    number n
-    number m
-end
-
-implement A using std::none
-        """
-    )
-    message: str = (
-        "Default constructors are deprecated."
-        " Use inheritance instead. (reported in typedef MyType as A(n=42) ({dir}/main.cf:2))"
-    )
-    message = message.format(dir=snippetcompiler.project_dir)
-    with warnings.catch_warnings(record=True) as caught_warnings:
-        compiler.do_compile()
-
-        assert len(caught_warnings) >= 1
-        assert any(issubclass(w.category, CompilerDeprecationWarning) and str(w.message) == message for w in caught_warnings)
 
 
 def test_2030_type_overwrite_warning(snippetcompiler):

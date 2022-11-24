@@ -24,7 +24,6 @@ from typing import Dict, Iterator, List, Optional, Tuple
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
-    CompilerDeprecationWarning,
     CompilerException,
     CompilerRuntimeWarning,
     DuplicateException,
@@ -43,9 +42,8 @@ from inmanta.ast import (
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.entity import Default, Entity, EntityLike, Implement, Implementation
+from inmanta.ast.entity import Entity, Implement, Implementation
 from inmanta.ast.statements import BiStatement, ExpressionStatement, Literal, Statement, TypeDefinitionStatement
-from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.type import TYPES, ConstraintType, NullableType, Type, TypedList
 from inmanta.execute.runtime import ExecutionUnit, QueueScheduler, Resolver, ResultVariable
 from inmanta.plugins import Plugin
@@ -365,12 +363,10 @@ class DefineImplement(DefinitionStatement):
         try:
             entity_type = self.namespace.get_type(self.entity)
 
-            if not isinstance(entity_type, EntityLike):
+            if not isinstance(entity_type, Entity):
                 raise TypingException(
                     self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
                 )
-
-            entity_type = entity_type.get_entity()
 
             # If one implements statement has parent declared, set to true
             entity_type.implements_inherits |= self.inherit
@@ -485,57 +481,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.expression.normalize()
 
 
-class DefineTypeDefault(TypeDefinitionStatement):
-    """
-    Define a new entity that is based on an existing entity and default values for attributes.
-
-    :param name: The name of the new type
-    :param class_ctor: A constructor statement
-    """
-
-    type: Default
-
-    def __init__(self, namespace: Namespace, name: LocatableString, class_ctor: Constructor):
-        TypeDefinitionStatement.__init__(self, namespace, str(name))
-        self.type = Default(namespace, self.name)
-        self.ctor = class_ctor
-        self.comment = None
-        self.type.location = name.get_location()
-        self.anchors.extend(class_ctor.get_anchors())
-        if "-" in self.name:
-            raise HyphenException(name)
-
-    def pretty_print(self) -> str:
-        return "typedef %s as %s" % (self.name, self.ctor.pretty_print())
-
-    def __repr__(self) -> str:
-        """
-        Get a representation of this default
-        """
-        return self.pretty_print()
-
-    def evaluate(self) -> None:
-        """
-        Evaluate this statement.
-        """
-        # the base class
-        type_class = self.namespace.get_type(self.ctor.class_type)
-
-        if not isinstance(type_class, EntityLike):
-            raise TypingException(
-                self, "Default can only be define for an Entity, but %s is a %s" % (self.ctor.class_type, self.ctor.class_type)
-            )
-        warnings.warn(CompilerDeprecationWarning(self, "Default constructors are deprecated. Use inheritance instead."))
-
-        self.type.comment = self.comment
-
-        default = self.type
-        default.set_entity(type_class)
-
-        for name, value in self.ctor.get_attributes().items():
-            default.add_default(name, value)
-
-
 Relationside = Tuple[LocatableString, Optional[LocatableString], Optional[Tuple[int, Optional[int]]]]
 
 
@@ -583,13 +528,6 @@ class DefineRelation(BiStatement):
             e.set_location(self.location)
             raise e
 
-        if isinstance(left, Default):
-            raise TypingException(
-                self,
-                "Can not define relation on a default constructor %s, use base type instead: %s "
-                % (left.name, left.get_entity().get_full_name()),
-            )
-
         assert isinstance(left, Entity), "%s is not an entity" % left
 
         # Duplicate checking is in entity.normalize
@@ -600,13 +538,6 @@ class DefineRelation(BiStatement):
         except TypeNotFoundException as e:
             e.set_location(self.location)
             raise e
-
-        if isinstance(right, Default):
-            raise TypingException(
-                self,
-                "Can not define relation on a default constructor %s, use base type instead: %s "
-                % (right.name, right.get_entity().get_full_name()),
-            )
 
         assert isinstance(right, Entity), "%s is not an entity" % right
         # Duplicate checking is in entity.normalize
@@ -675,9 +606,8 @@ class DefineIndex(DefinitionStatement):
         """
         Add the index to the entity
         """
-        entity_like = self.namespace.get_type(self.type)
-        assert isinstance(entity_like, EntityLike), "%s is not an entity or default" % entity_like
-        entity_type = entity_like.get_entity()
+        entity_type = self.namespace.get_type(self.type)
+        assert isinstance(entity_type, Entity), "%s is not an entity" % entity_type
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
