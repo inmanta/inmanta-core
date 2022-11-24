@@ -749,6 +749,22 @@ class IndexException(RuntimeException):
         return 10
 
 
+class IndexCollisionException(RuntimeException):
+    """Exception raised when an index collision is detected"""
+
+    def __init__(
+        self, msg: str, collisions: Dict[str, str], constructor_loc: Location, constructor_str: str, constructor_name: LocatableString
+    ) -> None:
+        super().__init__(stmt=None, msg=msg)
+        self.collisions: Dict[str, str] = collisions
+        self.constructor_str: str = constructor_str
+        self.constructor_loc: Location = constructor_loc
+        self.constructor_name: LocatableString = constructor_name
+
+    def importantance(self) -> int:
+        return 10
+
+
 class TypingException(RuntimeException):
     """Base class for exceptions raised during the typing phase of compilation"""
 
