@@ -22,12 +22,14 @@ import pytest
 import inmanta.compiler as compiler
 from inmanta.ast import (
     DuplicateException,
+    IndexCollisionException,
     IndexException,
     NotFoundException,
     RuntimeException,
     TypeNotFoundException,
     TypingException,
 )
+from inmanta.compiler.help.explainer import ExplainerFactory
 
 
 def test_issue_121_non_matching_index(snippetcompiler):
@@ -561,7 +563,7 @@ Test_A({'id=1' if not use_wrapped_kwargs else '**{"id": 1}'})
     )
 
 
-def test_index_collision_exception(snippetcompiler) -> None:
+def test_index_collision_exception_simple_index(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         """
 entity A:
@@ -579,4 +581,52 @@ A(name="two",id=2)
 A(name="one", id=2)
 """
     )
-    compiler.do_compile()
+    with pytest.raises(IndexCollisionException) as e:
+        compiler.do_compile()
+
+    print(ExplainerFactory().explain_and_format(e.value))
+    assert (
+        ExplainerFactory().explain_and_format(e.value)
+        == f"""
+Exception explanation
+=====================
+The constructor `A(name='one',id=2)` ({snippetcompiler.project_dir}/main.cf:14) matches different instances in different indexes:
+- index A(name) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:12)
+- index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:13)
+"""  # noqa: E501
+    )
+
+
+def test_index_collision_exception_multiple_index(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    int id
+    string left
+    string right
+end
+
+implement A using std::none
+
+index A(id)
+index A(left, right)
+
+A(id=1, left="L", right="R")
+A(id=2, left="LL", right="RR")
+A(id=1, left="LL", right="RR")
+"""
+    )
+    with pytest.raises(IndexCollisionException) as e:
+        compiler.do_compile()
+
+    print(ExplainerFactory().explain_and_format(e.value))
+    assert (
+        ExplainerFactory().explain_and_format(e.value)
+        == f"""
+Exception explanation
+=====================
+The constructor `A(id=1,left='LL',right='RR')` ({snippetcompiler.project_dir}/main.cf:15) matches different instances in different indexes:
+- index A(id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:13)
+- index A(left,right) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:14)
+"""  # noqa: E501
+    )
