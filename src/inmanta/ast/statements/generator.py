@@ -698,7 +698,7 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
-        lookup_table: List[List[str]] = []
+        lookup_table: List[List[Tuple[str, object]]] = []
         for index in type_class.get_indices():
             params = []
             for attr in index:

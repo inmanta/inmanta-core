@@ -197,7 +197,7 @@ class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
     def get_arguments(self, problem: IndexCollisionException) -> Mapping[str, object]:
         return {
             "constructor_str": problem.constructor_str,
-            "constructor_lnr": problem.constructor_lnr,
+            "constructor_loc": problem.constructor_loc,
             "constructor_name": problem.constructor_name,
             "collisions": problem.collisions,
         }
