@@ -18,6 +18,7 @@
 import os
 import re
 import subprocess
+from typing import Optional
 
 import click
 import pytest
@@ -27,7 +28,6 @@ from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
 from utils import module_from_template, v1_module_from_template
-from typing import Optional
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -58,13 +58,16 @@ def test_release_stable_version(
     """
     Test normal scenario where `inmanta module release` is used to release a stable version of a module.
     """
+
     def get_changelog_content(add_new_section_for_version: Optional[str] = None) -> str:
         prefix = ""
         if add_new_section_for_version:
             prefix = f"""
 V{add_new_section_for_version}
 -
-            """.lstrip().rstrip(" ")
+            """.lstrip().rstrip(
+                " "
+            )
         return f"""
 {prefix}
 V1.2.3
