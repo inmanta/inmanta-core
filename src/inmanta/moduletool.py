@@ -18,6 +18,7 @@
 import argparse
 import configparser
 import datetime
+import enum
 import inspect
 import logging
 import os
@@ -31,24 +32,22 @@ import time
 import zipfile
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type, Iterable
 from functools import total_ordering
-import enum
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Pattern, Sequence, Set, Type
 
 import click
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
 from pkg_resources import parse_version
-from packaging.version import Version
 
 import build
 import build.env
 import inmanta
 import toml
 from build.env import IsolatedEnvBuilder
-from inmanta import env, const
+from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
@@ -71,6 +70,7 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
+from packaging.version import Version
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -241,9 +241,7 @@ class ChangeType(enum.Enum):
             return cls.MINOR
         if high.micro > low.micro:
             return cls.PATCH
-        raise Exception(
-            "Couldn't determine version change type diff: this state should be unreachable"
-        )
+        raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
     @classmethod
     def parse_from_bools(cls, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
@@ -678,7 +676,7 @@ When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version and the version mentioned in the change to a development version that is
   a patch, minor of major version ahead of the previous stable release. Whether a patch, minor or major version is created,
   is determined by respective the --patch, --minor or --major argument (--patch is the default).
-            """.strip()
+            """.strip(),
         )
         release.add_argument(
             "--dev",

@@ -38,9 +38,9 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     ModuleDeprecationWarning,
-    Project,
     ModuleV1Metadata,
     ModuleV2Metadata,
+    Project,
 )
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException

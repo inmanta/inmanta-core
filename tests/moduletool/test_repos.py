@@ -20,7 +20,7 @@ import subprocess
 
 import pytest
 
-from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider, UntrackedFilesMode
+from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, UntrackedFilesMode, gitprovider
 
 
 def test_file_co(git_modules_dir, modules_repo):

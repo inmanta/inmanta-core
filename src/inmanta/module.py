@@ -325,6 +325,7 @@ class UntrackedFilesMode(enum.Enum):
     """
     The different options that can be passed to the --untracked-files option of the `git status` command.
     """
+
     ALL = "all"
     NORMAL = "normal"
     NO = "no"
@@ -1260,7 +1261,7 @@ class ModuleMetadata(ABC, Metadata):
             )
 
         # Validate whether version_tag field was updated correctly in metadata file
-        if cls is ModuleV2Metadata and  version_tag != new_metadata.version_tag:
+        if cls is ModuleV2Metadata and version_tag != new_metadata.version_tag:
             raise Exception(
                 f"Unable to write tag_build in module definition, should be '{version_tag}' got "
                 f"'{new_metadata.version_tag}' instead."
@@ -1270,9 +1271,7 @@ class ModuleMetadata(ABC, Metadata):
 
     @classmethod
     @abstractmethod
-    def _substitute_version(
-        cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = ""
-    ) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         raise NotImplementedError()
 
 
@@ -1306,9 +1305,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         return cls.is_pep440_version(v)
 
     @classmethod
-    def _substitute_version(
-        cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = ""
-    ) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         new_version = f"{new_version}.{version_tag.lstrip('.')}" if version_tag else new_version
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
@@ -1411,9 +1408,7 @@ class ModuleV2Metadata(ModuleMetadata):
         return self._compose_full_version(self.version, self.version_tag)
 
     @classmethod
-    def _substitute_version(
-        cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = ""
-    ) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         result = re.sub(
             r"(\[metadata\][^\[]*[ \t\r\f\v]*version[ \t\r\f\v]*=[ \t\r\f\v]*)[\S]+(\n|$)",
             rf"\g<1>{new_version}\n",

@@ -15,17 +15,18 @@
 
     Contact: code@inmanta.com
 """
-import click
-import pytest
 import os
 import re
 import subprocess
 
-from inmanta.moduletool import ModuleTool, gitprovider
+import click
+import pytest
+
 from inmanta import const
 from inmanta.module import Module, UntrackedFilesMode
-from utils import v1_module_from_template, module_from_template
+from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
+from utils import module_from_template, v1_module_from_template
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -82,8 +83,8 @@ def test_release_stable_version(tmpdir, modules_dir: str, modules_v2_dir: str, m
     # Verify commit messages
     assert get_commit_message_x_commits_ago(path=path_module, nb_previous_commit=1).strip() == "Commit changes"
     assert (
-       get_commit_message_x_commits_ago(path=path_module, nb_previous_commit=0).strip()
-       == "Bump version to next development version"
+        get_commit_message_x_commits_ago(path=path_module, nb_previous_commit=0).strip()
+        == "Bump version to next development version"
     )
     # Verify release tags
     assert gitprovider.get_version_tags(repo=path_module) == [Version("1.2.3")]
@@ -155,7 +156,8 @@ def test_bump_dev_version(
     if changelog_file_exists:
         path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
         with open(path_changelog_file, "w", encoding="utf-8") as fh:
-            fh.write("""
+            fh.write(
+                """
 V1.1.2
 - Test
 
@@ -167,7 +169,8 @@ V1.1.0
 
 V1.0.0
 - Release
-            """.strip())
+            """.strip()
+            )
 
     gitprovider.git_init(repo=path_module)
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)

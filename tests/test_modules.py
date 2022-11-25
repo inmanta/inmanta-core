@@ -34,10 +34,9 @@ from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
 from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
-from inmanta.module import InmantaModuleRequirement, ModuleV2
+from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
 from utils import module_from_template
-from packaging.version import Version
 
 
 def test_module():

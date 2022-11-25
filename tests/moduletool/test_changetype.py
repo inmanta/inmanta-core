@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import pytest
+
 from inmanta.moduletool import ChangeType
 from packaging.version import Version
 
@@ -34,45 +35,21 @@ def test_change_type() -> None:
 
 
 def test_change_type_diff() -> None:
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("2.0.0")) == ChangeType.MAJOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.1"), high=Version("2.0.0")) == ChangeType.MAJOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.1"), high=Version("2.0.1")) == ChangeType.MAJOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("3.0.0")) == ChangeType.MAJOR
-    )
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("2.0.0")) == ChangeType.MAJOR
+    assert ChangeType.diff(low=Version("1.0.1"), high=Version("2.0.0")) == ChangeType.MAJOR
+    assert ChangeType.diff(low=Version("1.0.1"), high=Version("2.0.1")) == ChangeType.MAJOR
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("3.0.0")) == ChangeType.MAJOR
 
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("1.1.0")) == ChangeType.MINOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("1.2.0")) == ChangeType.MINOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("1.3.1")) == ChangeType.MINOR
-    )
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.1.0")) == ChangeType.MINOR
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.2.0")) == ChangeType.MINOR
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.3.1")) == ChangeType.MINOR
 
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.1")) == ChangeType.PATCH
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.2")) == ChangeType.PATCH
-    )
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.1")) == ChangeType.PATCH
+    assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.2")) == ChangeType.PATCH
 
-    assert (
-        ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("1.0.1.dev0")) == ChangeType.PATCH
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("1.1.0.dev0")) == ChangeType.MINOR
-    )
-    assert (
-        ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("2.0.0.dev0")) == ChangeType.MAJOR
-    )
+    assert ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("1.0.1.dev0")) == ChangeType.PATCH
+    assert ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("1.1.0.dev0")) == ChangeType.MINOR
+    assert ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("2.0.0.dev0")) == ChangeType.MAJOR
 
     assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.0")) is None
 
