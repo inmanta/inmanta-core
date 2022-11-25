@@ -1079,14 +1079,14 @@ version: 0.0.1dev0"""
             # No version bump is required
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
         try:
-            version_previous_release: Version = [v for v in sorted(all_existing_stable_version) if v < current_version][-1]
+            version_previous_release: Version = [v for v in sorted(all_existing_stable_version) if v <= current_version][-1]
         except IndexError:
             # No previous release happened
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
 
-        assert version_previous_release < current_version
+        assert version_previous_release <= current_version
         current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
-        if current_diff is not None and minimal_version_bump_to_prev_release > current_diff:
+        if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
             new_version = VersionOperation.bump_version(
                 minimal_version_bump_to_prev_release, current_version, version_tag="dev0"
             )
@@ -1116,9 +1116,21 @@ version: 0.0.1dev0"""
         with open(path_changelog_file, "w", encoding="utf-8") as fh:
             fh.write(content_changelog)
 
-    def release(self, dev: bool, message: str, patch: bool = False, minor: bool = False, major: bool = False) -> None:
+    def release(
+        self,
+        dev: bool,
+        message: str,
+        patch: bool = False,
+        minor: bool = False,
+        major: bool = False,
+        add_new_version_to_changelog: bool = False,
+    ) -> None:
         """
         Execute the release command.
+
+        :param add_new_version_to_changelog: Indicate that the new version has to be added to the changelog instead of
+                                             bumping the current version. This is used by the recursive call to prevent
+                                             bumping the latest stable release.
         """
         nb_version_bump_arguments_set = sum([patch, minor, major])
         if nb_version_bump_arguments_set > 1:
@@ -1132,6 +1144,7 @@ version: 0.0.1dev0"""
             raise click.ClickException("Version with an epoch value larger than zero are not supported by this tool.")
         gitprovider.fetch(module_dir)
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
+        path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
         if dev:
             requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
@@ -1141,11 +1154,17 @@ version: 0.0.1dev0"""
             new_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
             module.rewrite_version(new_version=new_version_str, version_tag=version_tag)
             files_to_commit = [module.get_metadata_file_path()]
-            path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
             if os.path.exists(path_changelog_file):
-                self._update_version_is_changelog_file(
-                    path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
-                )
+                if add_new_version_to_changelog:
+                    # Create a new section in the changelog for the version number
+                    with open(path_changelog_file, "r+", encoding="utf-8") as fh:
+                        current_content = fh.read()
+                        fh.seek(0, 0)
+                        fh.write(f"V{new_version_str}\n-\n\n{current_content}")
+                else:
+                    self._update_version_is_changelog_file(
+                        path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
+                    )
                 files_to_commit.append(path_changelog_file)
             gitprovider.commit(
                 repo=module_dir,
@@ -1170,7 +1189,9 @@ version: 0.0.1dev0"""
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             # bump to the next dev version
-            self.release(dev=True, message="Bump version to next development version", patch=True)
+            self.release(
+                dev=True, message="Bump version to next development version", patch=True, add_new_version_to_changelog=True
+            )
 
 
 class ModuleBuildFailedError(Exception):

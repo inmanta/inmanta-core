@@ -27,6 +27,7 @@ from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
 from utils import module_from_template, v1_module_from_template
+from typing import Optional
 
 
 def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> str:
@@ -43,10 +44,36 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
 
 
 @pytest.mark.parametrize("v1_module", [True, False])
-def test_release_stable_version(tmpdir, modules_dir: str, modules_v2_dir: str, monkeypatch, v1_module: bool) -> None:
+@pytest.mark.parametrize("changelog_file_exists", [True, False])
+@pytest.mark.parametrize("previous_stable_version_exists", [True, False])
+def test_release_stable_version(
+    tmpdir,
+    modules_dir: str,
+    modules_v2_dir: str,
+    monkeypatch,
+    v1_module: bool,
+    changelog_file_exists: bool,
+    previous_stable_version_exists: bool,
+) -> None:
     """
     Test normal scenario where `inmanta module release` is used to release a stable version of a module.
     """
+    def get_changelog_content(add_new_section_for_version: Optional[str] = None) -> str:
+        prefix = ""
+        if add_new_section_for_version:
+            prefix = f"""
+V{add_new_section_for_version}
+-
+            """.lstrip().rstrip(" ")
+        return f"""
+{prefix}
+V1.2.3
+- Release
+
+V1.2.2
+- Release
+        """.strip()
+
     module_name = "mod"
     path_module = os.path.join(tmpdir, module_name)
     if v1_module:
@@ -64,8 +91,15 @@ def test_release_stable_version(tmpdir, modules_dir: str, modules_v2_dir: str, m
             new_name=module_name,
         )
     gitprovider.git_init(repo=path_module)
+    path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
+    if changelog_file_exists:
+        with open(path_changelog_file, "w", encoding="utf-8") as fh:
+            fh.write(get_changelog_content())
     gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
-    assert not gitprovider.get_version_tags(repo=path_module)
+    if previous_stable_version_exists:
+        gitprovider.tag(repo=path_module, tag="1.2.2")
+    else:
+        assert not gitprovider.get_version_tags(repo=path_module)
 
     # Add a new staged file. This file should be committed when the release command is executed.
     new_file = os.path.join(path_module, "new_file")
@@ -87,10 +121,17 @@ def test_release_stable_version(tmpdir, modules_dir: str, modules_v2_dir: str, m
         == "Bump version to next development version"
     )
     # Verify release tags
-    assert gitprovider.get_version_tags(repo=path_module) == [Version("1.2.3")]
+    expected_tags = [Version("1.2.3")] if not previous_stable_version_exists else [Version("1.2.2"), Version("1.2.3")]
+    assert gitprovider.get_version_tags(repo=path_module) == expected_tags
     # Verify version
     mod = Module.from_path(path_module)
-    assert mod.version == Version("1.2.3.dev0")
+    assert mod.version == Version("1.2.4.dev0")
+    # Verify changelog file
+    if changelog_file_exists:
+        with open(path_changelog_file, "r", encoding="utf-8") as fh:
+            assert fh.read() == get_changelog_content("1.2.4")
+    else:
+        assert not os.path.exists(path_changelog_file)
 
 
 @pytest.mark.parametrize("v1_module", [True, False])
