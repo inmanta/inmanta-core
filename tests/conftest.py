@@ -1358,7 +1358,7 @@ def modules_dir() -> str:
 
 
 @pytest.fixture(scope="session")
-def modules_v2_dir():
+def modules_v2_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 
