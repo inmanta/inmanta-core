@@ -1257,7 +1257,8 @@ class ModuleMetadata(ABC, Metadata):
             expected_version = f"{new_version}.{version_tag.lstrip('.')}" if version_tag else new_version
         if new_metadata.version != expected_version:
             raise Exception(
-                f"Unable to write version in module definition, should be {expected_version} got {new_metadata.version} instead."
+                f"Unable to write version in module definition, should be {expected_version} "
+                f"got {new_metadata.version} instead."
             )
 
         # Validate whether version_tag field was updated correctly in metadata file
@@ -3105,13 +3106,13 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from module.yml file
             self.remove_module_requirement_from_requires_and_write(requirement.key)
 
-    def versions(self) -> List["Version"]:
+    def versions(self) -> List[version.Version]:
         """
         Provide a list of all versions available in the repository
         """
         versions = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x: str) -> "Optional[Version]":
+        def try_parse(x: str) -> Optional[version.Version]:
             try:
                 return parse_version(x)
             except Exception:

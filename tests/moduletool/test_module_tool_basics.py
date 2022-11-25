@@ -38,7 +38,6 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     ModuleDeprecationWarning,
-    ModuleV1Metadata,
     ModuleV2Metadata,
     Project,
 )
