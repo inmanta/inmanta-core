@@ -465,8 +465,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_list)
     async def environment_list(self, details: bool = False) -> List[model.Environment]:
-        env_list = await data.Environment.get_list(details=details)
-        return [env.to_dto() for env in env_list]
+        env_list = await data.Environment.get_list(details=details, order_by_column="project")
+        return sorted((env.to_dto() for env in env_list), key=lambda e: (e.project_id, e.name, e.id))
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:

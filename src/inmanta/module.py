@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import traceback
 import types
 import warnings
@@ -64,6 +65,7 @@ import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
+from pydantic.error_wrappers import display_errors
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -90,7 +92,6 @@ LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
-
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -256,10 +257,9 @@ class InvalidMetadata(CompilerException):
 
     @classmethod
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
-        for error in validation_error.errors():
-            mgs: str = error["msg"]
-            error_type = error["type"]
-            msg += f"\n{error['loc']}\n\t{mgs} ({error_type})"
+        errors = validation_error.errors()
+        if errors:
+            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
         return msg
 
 
@@ -1191,7 +1191,7 @@ class Metadata(BaseModel):
             return cls(**raw)
         except ValidationError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
             else:
                 raise InvalidMetadata(msg=str(e), validation_error=e) from e
 
@@ -1454,7 +1454,6 @@ class ModuleRepoType(enum.Enum):
 
 @stable_api
 class ModuleRepoInfo(BaseModel):
-
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
@@ -3174,10 +3173,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     ) -> None:
         self._is_editable_install = is_editable_install
         self._version: Optional[version.Version] = installed_version
-        try:
-            super(ModuleV2, self).__init__(project, path)
-        except InvalidMetadata as e:
-            raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+        super(ModuleV2, self).__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(

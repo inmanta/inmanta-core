@@ -458,7 +458,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         sort: str,
     ) -> T_SELF:
         valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+            f"^({'|'.join(cls.get_valid_sort_columns().keys())})\\.(asc|desc)$", re.IGNORECASE
         )
         match = valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
@@ -551,7 +551,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     def __str__(self) -> str:
         # used to serialize the order back to a  paging url
-        return f"{self.order_by_column}.{self.order}"
+        return f"{self.order_by_column}.{self.order.value.lower()}"
 
 
 class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
@@ -3273,7 +3273,7 @@ class Compile(BaseDocument):
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param environment_variables: environment variables to be passed to the compiler
-    :param succes: was the compile successful
+    :param success: was the compile successful
     :param handled: were all registered handlers executed?
     :param version: version exported by this compile
     :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
@@ -3445,6 +3445,11 @@ class Compile(BaseDocument):
                 c.environment_variables,
                 c.compile_data,
                 c.substitute_compile_id,
+                c.partial,
+                c.removed_resource_sets,
+                c.exporter_plugin,
+                c.notify_failed_compile,
+                c.failed_compile_message,
                 r.id as report_id,
                 r.started report_started,
                 r.completed report_completed,
@@ -3473,6 +3478,11 @@ class Compile(BaseDocument):
                     comp.environment_variables,
                     comp.compile_data,
                     comp.substitute_compile_id,
+                    comp.partial,
+                    comp.removed_resource_sets,
+                    comp.exporter_plugin,
+                    comp.notify_failed_compile,
+                    comp.failed_compile_message,
                     rep.id as report_id,
                     rep.started as report_started,
                     rep.completed as report_completed,
@@ -3535,6 +3545,11 @@ class Compile(BaseDocument):
             environment_variables=json.loads(requested_compile["environment_variables"])
             if requested_compile["environment_variables"]
             else {},
+            partial=requested_compile["partial"],
+            removed_resource_sets=requested_compile["removed_resource_sets"],
+            exporter_plugin=requested_compile["exporter_plugin"],
+            notify_failed_compile=requested_compile["notify_failed_compile"],
+            failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports,
         )
@@ -3554,6 +3569,8 @@ class Compile(BaseDocument):
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
             exporter_plugin=self.exporter_plugin,
+            notify_failed_compile=self.notify_failed_compile,
+            failed_compile_message=self.failed_compile_message,
         )
 
 

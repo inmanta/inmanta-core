@@ -27,14 +27,7 @@ from inmanta.ast import Anchor, CompilerException, CycleException, Location, Mul
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
-from inmanta.ast.statements.define import (
-    DefineEntity,
-    DefineImplement,
-    DefineIndex,
-    DefineRelation,
-    DefineTypeConstraint,
-    DefineTypeDefault,
-)
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineRelation, DefineTypeConstraint
 from inmanta.ast.type import TYPES, Type
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
@@ -227,10 +220,7 @@ class Scheduler(object):
         other_definitions = [t for t in definitions if not isinstance(t, DefineImplement)]
         entities: Dict[str, DefineEntity] = {t.fullName: t for t in other_definitions if isinstance(t, DefineEntity)}
         type_constraints = [t for t in other_definitions if isinstance(t, DefineTypeConstraint)]
-        typedefaults = [t for t in other_definitions if isinstance(t, DefineTypeDefault)]
-        other_definitions = [
-            t for t in other_definitions if not isinstance(t, (DefineEntity, DefineTypeDefault, DefineTypeConstraint))
-        ]
+        other_definitions = [t for t in other_definitions if not isinstance(t, (DefineEntity, DefineTypeConstraint))]
         indices = [t for t in other_definitions if isinstance(t, DefineIndex)]
         other_definitions = [t for t in other_definitions if not isinstance(t, DefineIndex)]
 
@@ -242,9 +232,6 @@ class Scheduler(object):
         # parents first
         for entity in self.sort_entities(entities):
             entity.evaluate()
-
-        for typedefault in typedefaults:
-            typedefault.evaluate()
 
         for other in other_definitions:
             other.evaluate()

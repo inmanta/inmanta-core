@@ -1,0 +1,6 @@
+---
+description: Fix bug where the compile-related dto's were not populated correctly.
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  bugfix: "Fix bug where the endpoints `compile_details`, `get_compile_reports` and `get_compile_queue` returned incorrect data for the fields `exporter_plugin`, `notify_failed_compile` and `failed_compile_message`."
