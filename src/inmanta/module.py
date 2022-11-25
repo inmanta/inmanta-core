@@ -1262,7 +1262,7 @@ class ModuleMetadata(ABC, Metadata):
             )
 
         # Validate whether version_tag field was updated correctly in metadata file
-        if cls is ModuleV2Metadata and version_tag != new_metadata.version_tag:
+        if isinstance(new_metadata, ModuleV2Metadata) and version_tag != new_metadata.version_tag:
             raise Exception(
                 f"Unable to write tag_build in module definition, should be '{version_tag}' got "
                 f"'{new_metadata.version_tag}' instead."
@@ -3015,15 +3015,15 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_suitable_version_for(
         cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
     ) -> Optional[version.Version]:
-        versions = gitprovider.get_all_tags(path)
+        versions_str = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> version.Version:
+        def try_parse(x: str) -> Optional[version.Version]:
             try:
                 return parse_version(x)
             except Exception:
                 return None
 
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions: List[version.Version] = [x for x in [try_parse(v) for v in versions_str] if x is not None]
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
@@ -3109,7 +3109,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         """
         Provide a list of all versions available in the repository
         """
-        versions = gitprovider.get_all_tags(self._path)
+        versions_str = gitprovider.get_all_tags(self._path)
 
         def try_parse(x: str) -> Optional[version.Version]:
             try:
@@ -3117,7 +3117,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             except Exception:
                 return None
 
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = [x for x in [try_parse(v) for v in versions_str] if x is not None]
         versions = sorted(versions, reverse=True)
 
         return versions

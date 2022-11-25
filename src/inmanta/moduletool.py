@@ -61,6 +61,7 @@ from inmanta.module import (
     Module,
     ModuleGeneration,
     ModuleLike,
+    ModuleMetadata,
     ModuleMetadataFileNotFound,
     ModuleNotFoundException,
     ModuleV1,
@@ -268,10 +269,9 @@ class VersionOperation:
         Bump the release part of the given version with this ChangeType and apply the given version_tag to it.
         If the given version has a different version tag set, it will be ignored.
         """
-        parts = version.base_version.split(".")
+        parts = [int(x) for x in version.base_version.split(".")]
         while len(parts) < 3:
-            parts.append("0")
-        parts = [int(x) for x in parts]
+            parts.append(0)
         if change_type is ChangeType.PATCH:
             parts[2] += 1
         if change_type is ChangeType.MINOR:
@@ -1138,7 +1138,7 @@ version: 0.0.1dev0"""
         if nb_version_bump_arguments_set > 1:
             raise click.UsageError("Only one of --patch, --minor and --major arguments can be set at the same time.")
         module_dir = os.path.abspath(os.getcwd())
-        module: Module = self.construct_module(project=DummyProject(), path=module_dir)
+        module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
         if not gitprovider.is_git_repository(repo=module_dir):
             raise click.ClickException(f"Directory {module_dir} is not a git repository.")
         current_version: Version = module.version
