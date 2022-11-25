@@ -3014,10 +3014,10 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def get_suitable_version_for(
         cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
-    ) -> "Optional[Version]":
+    ) -> Optional[version.Version]:
         versions = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> "Version":
+        def try_parse(x: str) -> version.Version:
             try:
                 return parse_version(x)
             except Exception:
@@ -3035,9 +3035,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
     @classmethod
     def __best_for_compiler_version(
-        cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
-    ) -> "Optional[Version]":
-        def get_cv_for(best: "Version") -> "Optional[Version]":
+        cls, modulename: str, versions: List[version.Version], path: str, comp_version: version.Version
+    ) -> Optional[version.Version]:
+        def get_cv_for(best: version.Version) -> Optional[version.Version]:
             cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
             metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
             if metadata.compiler_version is None:
