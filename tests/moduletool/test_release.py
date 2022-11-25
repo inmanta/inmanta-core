@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 import os
 import re
 import subprocess
@@ -292,6 +293,35 @@ def test_bump_dev_version_distance_already_met(
     assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
     module_tool.release(dev=True, major=True, message="Commit changes")
     assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
+
+
+def test_failed_to_bump_version_in_changelog_file(tmpdir, modules_dir: str, monkeypatch, caplog) -> None:
+    """
+    Ensure that a warning is logged when a changelog file is present but the `inmanta module release`
+    could not bump the version in the changelog, because the version was not found in the file.
+    """
+    module_name = "mod"
+    path_module = os.path.join(tmpdir, module_name)
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=path_module,
+        new_version=Version("1.0.1.dev0"),
+        new_name=module_name,
+    )
+    path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
+    with open(path_changelog_file, "w", encoding="utf-8") as fh:
+        # Ensure version number is not present in the changelog file
+        fh.write("")
+    gitprovider.git_init(repo=path_module)
+    gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
+    gitprovider.tag(repo=path_module, tag="1.0.0")
+    # Execute release command
+    monkeypatch.chdir(path_module)
+    module_tool = ModuleTool()
+    with caplog.at_level(logging.WARNING):
+        module_tool.release(dev=True, minor=True, message="commit message")
+    # Verify warning was logged
+    assert "Failed to bump the version number in the changelog file from 1.0.1.dev0 to 1.1.0.dev0." in caplog.text
 
 
 def test_too_many_version_bump_arguments() -> None:

@@ -1110,13 +1110,20 @@ version: 0.0.1dev0"""
         In the given changelog file replace the version number old_version with new_version.
         This operation is performed in-place.
         """
+        if old_version == new_version:
+            return
         with open(path_changelog_file, "r", encoding="utf-8") as fh:
             content_changelog = fh.read()
         # The changelog only contains the base_version. Replace only the first occurrence
         # to not accidentally perform invalid replacements in the remainder of the file.
-        content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
-        with open(path_changelog_file, "w", encoding="utf-8") as fh:
-            fh.write(content_changelog)
+        new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
+        if content_changelog == new_content_changelog:
+            LOGGER.warning(
+                "Failed to bump the version number in the changelog file from %s to %s.", str(old_version), str(new_version)
+            )
+        else:
+            with open(path_changelog_file, "w", encoding="utf-8") as fh:
+                fh.write(new_content_changelog)
 
     def release(
         self,
