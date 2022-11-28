@@ -1105,7 +1105,7 @@ version: 0.0.1dev0"""
         else:
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
 
-    def _update_version_is_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
+    def _update_version_in_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
         """
         In the given changelog file replace the version number old_version with new_version.
         This operation is performed in-place.
