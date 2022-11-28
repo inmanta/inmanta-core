@@ -674,7 +674,7 @@ When a stable release is done, this command:
   version.
 When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version and the version mentioned in the change to a development version that is
-  a patch, minor of major version ahead of the previous stable release. Whether a patch, minor or major version is created,
+  a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
   is determined by respective the --patch, --minor or --major argument (--patch is the default).
             """.strip(),
         )
