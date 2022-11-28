@@ -113,7 +113,7 @@ def workon_bash(workon_workdir: py.path.local) -> abc.Iterator[Bash]:
     sub shell. There is no easy way to lift this generically to the Python level.
     """
 
-    async def bash(script: str) -> CliResult:
+    async def bash(script: str, *, override_path: bool = True) -> CliResult:
         # use asyncio's subprocess for non-blocking IO so the server can handle requests
         process: asyncio.subprocess.Process = await asyncio.create_subprocess_exec(
             "bash",
@@ -124,9 +124,14 @@ def workon_bash(workon_workdir: py.path.local) -> abc.Iterator[Bash]:
             cwd=str(workon_workdir),
             env={
                 **os.environ,
-                # inmanta-workon expects inmanta-cli to be present in PATH but this might not be the case for the test
-                # environment (e.g. if the venv is not activated and the tests are executed with a fully qualified Python path)
-                "PATH": os.path.dirname(sys.executable) + os.pathsep + os.environ["PATH"],
+                **(
+                    # inmanta-workon expects inmanta-cli to be present in PATH but this might not be the case for the test
+                    # environment (e.g. if the venv is not activated and the tests are executed with a fully qualified Python
+                    # path)
+                    {"PATH": os.path.dirname(sys.executable) + os.pathsep + os.environ["PATH"]}
+                    if override_path
+                    else {}
+                ),
             },
         )
         stdout, stderr = await process.communicate()
@@ -234,7 +239,7 @@ async def test_workon_python_check(
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
 
     # don't call inmanta-workon, just source the registration script and fetch some env vars
-    result: CliResult = await workon_bash("echo $INMANTA_WORKON_CLI && echo $INMANTA_WORKON_PYTHON")
+    result: CliResult = await workon_bash("echo $INMANTA_WORKON_CLI && echo $INMANTA_WORKON_PYTHON", override_path=False)
     assert result.exit_code == 0
     assert result.stderr.strip() == ""
     assert result.stdout.splitlines() == [str(opt_inmanta), str(opt_python)]
