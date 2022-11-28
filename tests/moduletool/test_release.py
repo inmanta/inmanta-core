@@ -243,6 +243,8 @@ V1.0.0
     monkeypatch.chdir(path_module)
     module_tool = ModuleTool()
     module_tool.release(dev=True, patch=True, message="Commit patch increment")
+    # The version number is already a patch increment ahead of the previous stable release.
+    # There's no need for a new commit to bump the version.
     assert_module_state("1.1.2.dev0", expected_commit_message="Initial commit")
     module_tool.release(dev=True, minor=True, message="Commit minor increment")
     assert_module_state("1.2.0.dev0", expected_commit_message="Commit minor increment")
@@ -320,7 +322,7 @@ def test_failed_to_bump_version_in_changelog_file(tmpdir, modules_dir: str, monk
     with caplog.at_level(logging.WARNING):
         module_tool.release(dev=True, minor=True, message="commit message")
     # Verify warning was logged
-    assert "Failed to bump the version number in the changelog file from 1.0.1.dev0 to 1.1.0.dev0." in caplog.text
+    assert "Failed to bump the version number in the changelog file from 1.0.1 to 1.1.0" in caplog.text
 
 
 def test_too_many_version_bump_arguments() -> None:

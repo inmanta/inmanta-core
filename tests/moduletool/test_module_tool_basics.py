@@ -154,14 +154,15 @@ def test_rewrite(tmpdir, module_type: Type[module.Module]):
 
     def metadata_contents(version: str, version_tag: str = "") -> str:
         if v1:
+
             return f"""
 name: mod
 license: ASL
 version: {version if not version_tag else f"{version}.{version_tag.rstrip('.')}"}
 compiler_version: 2017.2
-            """.strip()
+            """
         else:
-            result = f"""
+            return f"""
 [metadata]
 name = inmanta-module-mod
 version = {version}
@@ -177,7 +178,6 @@ install_requires =
 [egg_info]
 tag_build = {version_tag}
             """
-            return result
 
     metadata_file.write(metadata_contents("1.2"))
     mod = module_type(None, module_path.strpath)
