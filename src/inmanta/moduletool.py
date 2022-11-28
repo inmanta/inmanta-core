@@ -665,7 +665,7 @@ mode.
 
         release = subparser.add_parser(
             "release",
-            help="Release a new stable of dev release for this module.",
+            help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
 * Does a commit that changes the current version to a stable version.
