@@ -22,6 +22,7 @@ import itertools
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 import uuid
 from collections import abc
@@ -121,6 +122,12 @@ def workon_bash(workon_workdir: py.path.local) -> abc.Iterator[Bash]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=str(workon_workdir),
+            env={
+                **os.environ,
+                # inmanta-workon expects inmanta-cli to be present in PATH but this might not be the case for the test
+                # environment (e.g. if the venv is not activated and the tests are executed with a fully qualified Python path)
+                "PATH": os.path.dirname(sys.executable) + os.pathsep + os.environ["PATH"],
+            },
         )
         stdout, stderr = await process.communicate()
         assert process.returncode is not None
