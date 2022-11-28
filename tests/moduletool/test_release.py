@@ -355,7 +355,7 @@ def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> 
     assert "Version with an epoch value larger than zero are not supported by this tool." in exc_info.value.message
 
 
-def test_no_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
+def test_not_a_git_repository(tmpdir, modules_dir: str, monkeypatch) -> None:
     """
     Ensure that a clear error message is returned when the `git release` command is executed on a directory
     that is not a git repository.
