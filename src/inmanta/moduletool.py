@@ -665,7 +665,7 @@ mode.
 
         release = subparser.add_parser(
             "release",
-            help="Release a new stable of dev release for this module.",
+            help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
 * Does a commit that changes the current version to a stable version.
@@ -674,8 +674,8 @@ When a stable release is done, this command:
   version.
 When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version and the version mentioned in the change to a development version that is
-  a patch, minor of major version ahead of the previous stable release. Whether a patch, minor or major version is created,
-  is determined by respective the --patch, --minor or --major argument (--patch is the default).
+  a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
+  is determined respectively by the --patch, --minor or --major argument (--patch is the default).
             """.strip(),
         )
         release.add_argument(
@@ -1105,7 +1105,7 @@ version: 0.0.1dev0"""
         else:
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
 
-    def _update_version_is_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
+    def _update_version_in_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
         """
         In the given changelog file replace the version number old_version with new_version.
         This operation is performed in-place.

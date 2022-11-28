@@ -3109,7 +3109,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         """
         Provide a list of all versions available in the repository
         """
-        versions_str = gitprovider.get_all_tags(self._path)
+        versions_str: List[str] = gitprovider.get_all_tags(self._path)
 
         def try_parse(x: str) -> Optional[version.Version]:
             try:
