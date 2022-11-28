@@ -680,7 +680,7 @@ When a development release is done using the --dev option, this command:
         )
         release.add_argument(
             "--dev",
-            dest="dev_build",
+            dest="dev",
             help="Create a development version. The new version number will have the .dev0 build tag.",
             action="store_true",
             default=False,
@@ -1110,7 +1110,7 @@ version: 0.0.1dev0"""
         In the given changelog file replace the version number old_version with new_version.
         This operation is performed in-place.
         """
-        if old_version == new_version:
+        if old_version.base_version == new_version.base_version:
             return
         with open(path_changelog_file, "r", encoding="utf-8") as fh:
             content_changelog = fh.read()
@@ -1119,7 +1119,9 @@ version: 0.0.1dev0"""
         new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
         if content_changelog == new_content_changelog:
             LOGGER.warning(
-                "Failed to bump the version number in the changelog file from %s to %s.", str(old_version), str(new_version)
+                "Failed to bump the version number in the changelog file from %s to %s.",
+                str(old_version.base_version),
+                str(new_version.base_version),
             )
         else:
             with open(path_changelog_file, "w", encoding="utf-8") as fh:

@@ -28,6 +28,7 @@ from inmanta import const
 from inmanta.module import Module, UntrackedFilesMode
 from inmanta.moduletool import ModuleTool, gitprovider
 from packaging.version import Version
+from test_app_cli import app
 from utils import module_from_template, v1_module_from_template
 
 
@@ -112,10 +113,8 @@ V1.2.2
     gitprovider.add(repo=path_module, files=[new_file])
     # Ensure we have an uncommitted tracked file
     assert gitprovider.status(repo=path_module, untracked_files_mode=UntrackedFilesMode.NORMAL) != ""
-
     monkeypatch.chdir(path_module)
-    module_tool = ModuleTool()
-    module_tool.release(dev=False, message="Commit changes")
+    app(["module", "release", "--message", "Commit changes"])
     # Ensure that all files are committed
     assert gitprovider.status(repo=path_module, untracked_files_mode=UntrackedFilesMode.NORMAL) == ""
     # Verify commit messages
