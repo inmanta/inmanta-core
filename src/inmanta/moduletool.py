@@ -1173,7 +1173,7 @@ version: 0.0.1dev0"""
                         fh.seek(0, 0)
                         fh.write(f"V{new_version_str}\n-\n\n{current_content}")
                 else:
-                    self._update_version_is_changelog_file(
+                    self._update_version_in_changelog_file(
                         path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
                     )
                 files_to_commit.append(path_changelog_file)
