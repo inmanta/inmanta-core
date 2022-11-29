@@ -1595,7 +1595,9 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
-async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
+async def test_2277_typedmethod_return_optional(
+    async_finalizer, return_value: object, valid: bool, unused_tcp_port_factory
+) -> None:
     @protocol.typedmethod(
         path="/typedtestmethod",
         operation="GET",
@@ -1611,6 +1613,9 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         @protocol.handle(test_method_typed)
         async def test_method_typed_implementation(self) -> Optional[int]:
             return return_value  # type: ignore
+
+    port = str(unused_tcp_port_factory())
+    config.Config.set("server", "bind-port", port)
 
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
