@@ -1616,6 +1616,8 @@ async def test_2277_typedmethod_return_optional(
 
     port = str(unused_tcp_port_factory())
     config.Config.set("server", "bind-port", port)
+    config.Config.set("server", "bind-address", "127.0.0.1")
+    config.Config.set("client_rest_transport", "port", port)
 
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
@@ -1657,7 +1659,7 @@ async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory
     port = str(unused_tcp_port_factory())
     config.Config.set("server", "bind-port", port)
     config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("server", "agent-process-purge-interval", "0")
+    config.Config.set("client_rest_transport", "port", port)
 
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
