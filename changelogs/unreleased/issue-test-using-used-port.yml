@@ -1,0 +1,4 @@
+---
+description: Fix an issue where some test would always use the same port, which caused problems if the port was already used by something else.
+change-type: patch
+destination-branches: [master, iso5, iso4]
