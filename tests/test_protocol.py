@@ -1642,7 +1642,7 @@ def test_method_strict_exception() -> None:
             pass
 
 
-async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory) -> None:
+async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory, inmanta_config, clean_reset) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
         """
