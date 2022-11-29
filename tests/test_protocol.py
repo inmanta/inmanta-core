@@ -1637,7 +1637,7 @@ def test_method_strict_exception() -> None:
             pass
 
 
-async def test_method_nonstrict_allowed(async_finalizer) -> None:
+async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
         """
@@ -1648,6 +1648,9 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
         @protocol.handle(merge_dicts)
         async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
             return {**one, **other}
+
+    port = str(unused_tcp_port_factory())
+    config.Config.set("server", "bind-port", port)
 
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
