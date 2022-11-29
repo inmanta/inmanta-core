@@ -458,7 +458,7 @@ async def assert_workon_state(
         % (pre_activate if pre_activate is not None else "", post_activate if post_activate is not None else "")
     )
     assert (result.exit_code == 0) != invert_success_assert
-    lines: abc.Sequence[str] = result.stdout.splitlines()
+    lines: abc.Sequence[str] = result.stdout.split("\n")  # don't use splitlines because it ignores empty lines
     assert len(lines) == 3
     working_dir, python, ps1_prefix = lines
     assert (working_dir == str(expected_dir)) != invert_working_dir_assert
