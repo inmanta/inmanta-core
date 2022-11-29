@@ -606,7 +606,7 @@ class EnvironmentService(protocol.ServerSlice):
                 if action == EnvironmentAction.updated and original_env:
                     await listener.environment_action_updated(updated_env, original_env)
             except Exception:
-                LOGGER.warning(f"Notifying listener of %s failed with the following exception", action.value, exc_info=True)
+                LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 
     async def register_setting(self, setting: Setting) -> None:
         """
