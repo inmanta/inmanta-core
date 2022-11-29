@@ -459,11 +459,12 @@ async def assert_workon_state(
     )
     assert (result.exit_code == 0) != invert_success_assert
     lines: abc.Sequence[str] = result.stdout.split("\n")  # don't use splitlines because it ignores empty lines
-    assert len(lines) == 3
-    working_dir, python, ps1_prefix = lines
+    assert len(lines) == 4  # trailing newline
+    working_dir, python, ps1_prefix, empty = lines
     assert (working_dir == str(expected_dir)) != invert_working_dir_assert
     assert (python == str(expected_dir.join(".env", "bin", "python"))) != invert_python_assert
     assert ps1_prefix == ("" if invert_ps1_assert else f"({arg}) ")
+    assert empty == ""
     assert result.stderr.strip() == expect_stderr.strip()
 
 
