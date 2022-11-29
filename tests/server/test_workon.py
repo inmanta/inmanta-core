@@ -446,7 +446,7 @@ async def assert_workon_state(
 
             # output three lines
             echo "$(pwd)"
-            which python
+            which python || echo ""  # make sure to always output a line, even if no python is found
             echo "${{PS1%%$test_workon_ps1_pre}}"
 
             # exit with result code
