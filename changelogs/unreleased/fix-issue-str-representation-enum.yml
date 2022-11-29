@@ -1,0 +1,6 @@
+---
+description: Fix an issue about enum representation which made a test fail for python3.11
+change-type: patch
+destination-branches: [iso4]
+sections:
+  bugfix: "{{description}}"
