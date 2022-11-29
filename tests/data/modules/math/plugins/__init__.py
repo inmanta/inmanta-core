@@ -22,7 +22,7 @@ from inmanta.plugins import PluginException, plugin
 
 @plugin
 def power(base: "int", exponent: "int") -> "int":
-    return base**exponent
+    return base ** exponent
 
 
 @plugin
