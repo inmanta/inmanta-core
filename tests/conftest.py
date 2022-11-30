@@ -769,17 +769,6 @@ async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     logger.info("Server clean up done")
 
 
-@pytest.fixture(scope="function")
-async def server_with_configured_port(unused_tcp_port_factory):
-    port = str(unused_tcp_port_factory())
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("client_rest_transport", "port", port)
-    server: Server = Server()
-    yield server
-    server.stop()
-
-
 @pytest.fixture(
     scope="function",
     params=[(True, True, False), (True, False, False), (False, True, False), (False, False, False), (True, True, True)],
