@@ -31,7 +31,7 @@ import traceback
 import types
 import warnings
 from abc import ABC, abstractmethod
-from collections import defaultdict, abc
+from collections import abc, defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
 from importlib.abc import Loader
@@ -354,7 +354,8 @@ class GitProvider(object):
         pass
 
     def commit(
-        self, repo: str,
+        self,
+        repo: str,
         message: str,
         commit_all: bool,
         add: Optional[abc.Sequence[str]] = None,
@@ -440,7 +441,8 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def commit(
-        self, repo: str,
+        self,
+        repo: str,
         message: str,
         commit_all: bool,
         add: Optional[abc.Sequence[str]] = None,
@@ -1292,6 +1294,7 @@ class ModuleMetadata(ABC, Metadata):
             return version.Version(v)
         normalized_tag: str = version_tag.lstrip(".")
         return version.Version(f"{v}.{normalized_tag}")
+
 
 @stable_api
 class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):

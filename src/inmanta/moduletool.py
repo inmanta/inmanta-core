@@ -31,11 +31,11 @@ import tempfile
 import time
 import zipfile
 from argparse import ArgumentParser
+from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
-from collections import abc
 
 import click
 import texttable
