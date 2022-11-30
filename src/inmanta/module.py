@@ -1327,8 +1327,8 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
-        new_version: version.Version = cls._compose_full_version(new_version, version_tag)
-        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
+        new_version_obj: version.Version = cls._compose_full_version(new_version, version_tag)
+        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", rf"\g<1>{new_version_obj}\g<2>", source)
 
     def get_full_version(self) -> packaging.version.Version:
         return version.Version(self.version)
