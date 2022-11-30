@@ -34,7 +34,8 @@ from argparse import ArgumentParser
 from configparser import ConfigParser
 from functools import total_ordering
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Pattern, Sequence, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
+from collections import abc
 
 import click
 import texttable
@@ -296,7 +297,7 @@ class VersionOperation:
         return cls._to_version(version.release, version_tag)
 
     @classmethod
-    def _to_version(cls, release_part_version_number: Iterable[int], version_tag: str) -> Version:
+    def _to_version(cls, release_part_version_number: abc.Iterable[int], version_tag: str) -> Version:
         """
         Compose a version from the release part of the version number and the version_tag.
         """
@@ -1069,7 +1070,7 @@ version: 0.0.1dev0"""
     def _get_dev_version_with_minimal_distance_to_previous_stable_release(
         self,
         current_version: Version,
-        all_existing_stable_version: List[Version],
+        all_existing_stable_version: abc.Collection[Version],
         minimal_version_bump_to_prev_release: Optional[ChangeType],
     ) -> Version:
         """
