@@ -1431,8 +1431,8 @@ class ModuleV2Metadata(ModuleMetadata):
             result = result.replace("[egg_info]", f"[egg_info]\ntag_build = {version_tag}")
         else:
             result = re.sub(
-                r"(\[egg_info\][^\[]*[ \t\f\v]*tag_build[ \t\f\v]*=[ \t\f\v]*)[\S]*(\n|$)",
-                rf"\g<1>{version_tag}\n",
+                r"(\[egg_info\][^\[]*[ \t\f\v]*tag_build[ \t\f\v]*=)[ \t\f\v]*[\S]*(\n|$)",
+                rf"\g<1> {version_tag}\n",
                 result,
             )
         return result
