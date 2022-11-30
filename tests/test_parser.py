@@ -37,14 +37,7 @@ from inmanta.ast.statements.assign import (
     StringFormat,
 )
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.define import (
-    DefineEntity,
-    DefineImplement,
-    DefineIndex,
-    DefineTypeConstraint,
-    DefineTypeDefault,
-    TypeDeclaration,
-)
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineTypeConstraint, TypeDeclaration
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
@@ -596,20 +589,6 @@ typedef abc as string matching std::is_base64_encoded(self)
     assert isinstance(left_side_equals, FunctionCall)
     assert isinstance(right_side_equals, Literal)
     assert isinstance(right_side_equals.value, bool) and right_side_equals.value
-
-
-def test_typedef2():
-    statements = parse_code(
-        """
-typedef ConfigFile as File(mode = 644, owner = "root", group = "root")
-"""
-    )
-
-    assert len(statements) == 1
-    stmt = statements[0]
-    assert isinstance(stmt, DefineTypeDefault)
-    assert stmt.name == "ConfigFile"
-    assert isinstance(stmt.ctor, Constructor)
 
 
 def test_index():
@@ -1537,21 +1516,6 @@ def test_doc_string_on_typedef():
     statements = parse_code(
         """
 typedef foo as string matching /^a+$/
-\"""
-    Foo is a stringtype that only allows "a"
-\"""
-"""
-    )
-    assert len(statements) == 1
-
-    stmt = statements[0]
-    assert str(stmt.comment).strip() == 'Foo is a stringtype that only allows "a"'
-
-
-def test_doc_string_on_typedefault():
-    statements = parse_code(
-        """
-typedef Foo as File(x=5)
 \"""
     Foo is a stringtype that only allows "a"
 \"""

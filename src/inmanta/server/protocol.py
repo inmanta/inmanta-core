@@ -349,7 +349,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         self._handlers.append(
             routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location[1:]})
         )
-
         if start:
             self._handlers.append((r"/", web.RedirectHandler, {"url": location[1:]}))
 

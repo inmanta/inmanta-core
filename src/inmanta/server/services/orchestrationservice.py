@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from typing import Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import Dict, List, Literal, Mapping, Optional, Sequence, Set, cast
 
 import asyncpg
 import asyncpg.connection
@@ -28,15 +28,8 @@ import pydantic
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    ENVIRONMENT_AGENT_TRIGGER_METHOD,
-    PURGE_ON_DELETE,
-    DesiredStateVersionOrder,
-    InvalidSort,
-    QueryType,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort
+from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
     PromoteTriggerMethod,
@@ -45,11 +38,9 @@ from inmanta.data.model import (
     ResourceMinimal,
     ResourceVersionIdStr,
 )
-from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -63,7 +54,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
-from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, InvalidFilter
+from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -1019,52 +1010,17 @@ class OrchestrationService(protocol.ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "version.desc",
     ) -> ReturnValue[List[DesiredStateVersion]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(DesiredStateVersionFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
         try:
-            resource_order = DesiredStateVersionOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-        try:
-            dtos = await data.ConfigurationModel.get_desired_state_versions(
-                database_order=resource_order,
+            return await DesiredStateVersionView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                filter=filter,
+                sort=sort,
                 start=start,
                 end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = DesiredStateVersionPagingHandler(DesiredStateVersionPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            start=start,
-            end=end,
-            first_id=None,
-            last_id=None,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            ).execute()
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @handle(methods_v2.promote_desired_state_version, env="tid")
     async def promote_desired_state_version(

@@ -86,30 +86,6 @@ def test_direct_execute_error(snippetcompiler):
     )
 
 
-def test_optional_value_exception(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
-entity Test:
-    number? n
-    number m
-end
-
-implementation i for Test:
-    self.m = self.n
-end
-
-implement Test using i
-
-Test()
-        """,
-        "Could not set attribute `m` on instance `__config__::Test (instantiated at {dir}/main.cf:13)` (reported in self.m ="
-        " self.n ({dir}/main.cf:8))"
-        "\ncaused by:"
-        "\n  Optional variable accessed that has no value (attribute `n` of `__config__::Test (instantiated at"
-        " {dir}/main.cf:13)`) (reported in self.m = self.n ({dir}/main.cf:8))",
-    )
-
-
 def test_plugin_exception(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -257,4 +233,20 @@ implement C using std::none
         """Could not set attribute `bs` on instance `__config__::C (instantiated at {dir}/main.cf:2)` (reported in Construct(C) ({dir}/main.cf:2))
 caused by:
   Invalid class type for __config__::A (instantiated at {dir}/main.cf:3), should be __config__::B (reported in Construct(C) ({dir}/main.cf:2))""",  # noqa: E501
+    )
+
+
+def test_exception_default_constructors(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef MyType as A(n = 42)
+
+entity A:
+    number n
+    number m
+end
+
+implement A using std::none
+        """,
+        """Syntax error: The use of default constructors is no longer supported ({dir}/main.cf:2:9)""",
     )

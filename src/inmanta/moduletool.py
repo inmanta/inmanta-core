@@ -212,7 +212,7 @@ class ProjectTool(ModuleLikeTool):
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new project.yml, default is the existing project.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
@@ -453,31 +453,10 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
         )
 
-        lst = subparser.add_parser("list", help="List all modules used in this project in a table")
-        lst.add_argument(
-            "-r",
-            help="(deprecated) Output a list of requires that can be included in project.yml",
-            dest="requires",
-            action="store_true",
-        )
+        subparser.add_parser("list", help="List all modules used in this project in a table")
 
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar="command", help="the command to  execute")
-
-        update = subparser.add_parser(
-            "update",
-            help=(
-                "(deprecated: use `inmanta project update` instead) Update all modules to the latest version compatible with"
-                " the module version constraints and install missing modules"
-            ),
-            description="""
-Update all modules to the latest version compatible with the module version constraints and install missing modules.
-
-This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
-compatible with the dependencies specified by the updated modules.
-            """.strip(),
-        )
-        add_deps_check_arguments(update)
 
         install: ArgumentParser = subparser.add_parser(
             "install",
@@ -528,25 +507,25 @@ mode.
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new module.yml, default is the existing module.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
             "-r",
             "--recursive",
-            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-            "which defaults to False",
+            help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
+            " which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " project.yml is used which defaults to ~=",
+            " module.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -667,8 +646,10 @@ mode.
         except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
             try:
                 return ModuleV1(project, path)
-            except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
+            except (ModuleMetadataFileNotFound, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
+            except InvalidMetadata as e:
+                raise InvalidModuleException(e.msg)
 
     def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
@@ -754,7 +735,7 @@ version: 0.0.1dev0"""
             except Exception as e:
                 print(e)
 
-    def list(self, requires: bool = False) -> None:
+    def list(self) -> None:
         """
         List all modules in a table
         """
@@ -804,18 +785,13 @@ version: 0.0.1dev0"""
 
             table.append((name, generation, editable, version, reqv, matches))
 
-        if requires:
-            LOGGER.warning("The `inmanta module list -r` command has been deprecated.")
-            for name, _, _, version, _, _ in table:
-                print("    - %s==%s" % (name, version))
-        else:
-            t = texttable.Texttable()
-            t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Type", "Editable", "Installed version", "Expected in project", "Matches"))
-            t.set_cols_dtype(("t", "t", show_bool, "t", "t", show_bool))
-            for row in table:
-                t.add_row(row)
-            print(t.draw())
+        t = texttable.Texttable()
+        t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+        t.header(("Name", "Type", "Editable", "Installed version", "Expected in project", "Matches"))
+        t.set_cols_dtype(("t", "t", show_bool, "t", "t", show_bool))
+        for row in table:
+            t.add_row(row)
+        print(t.draw())
 
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
@@ -841,19 +817,6 @@ version: 0.0.1dev0"""
             with tempfile.TemporaryDirectory() as build_dir:
                 build_artifact: str = self.build(module_path, build_dir)
                 install(build_artifact)
-
-    def update(
-        self,
-        module: Optional[str] = None,
-        project: Optional[Project] = None,
-        no_strict_deps_check: bool = False,
-        strict_deps_check: bool = False,
-    ) -> None:
-        """
-        Update all modules to the latest version compatible with the given module version constraints.
-        """
-        LOGGER.warning("The `inmanta modules update` command has been deprecated in favor of `inmanta project update`.")
-        ProjectTool().update(module, project, no_strict_deps_check, strict_deps_check)
 
     def status(self, module: Optional[str] = None) -> None:
         """
@@ -1291,6 +1254,12 @@ class ModuleConverter:
         # move plugins or create
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
+        if os.path.exists(new_plugins) and os.listdir(new_plugins):
+            raise ModuleBuildFailedError(
+                msg=f"Could not build module: inmanta_plugins/{self._module.name} directory already exists and is not empty"
+            )
+        if os.path.exists(new_plugins):
+            os.rmdir(new_plugins)
         if os.path.exists(old_plugins):
             shutil.move(old_plugins, new_plugins)
         else:

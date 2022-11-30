@@ -33,13 +33,7 @@ from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.command import CLIException
-from inmanta.module import (
-    InmantaModuleRequirement,
-    InvalidMetadata,
-    InvalidModuleException,
-    MetadataDeprecationWarning,
-    Project,
-)
+from inmanta.module import InmantaModuleRequirement, InvalidMetadata, InvalidModuleException, ModuleDeprecationWarning, Project
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -189,7 +183,7 @@ install_requires =
     assert metadata_file.read().strip() == metadata_contents("1.3.1")
 
 
-def test_module_corruption(git_modules_dir, modules_repo):
+def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
     add_file(mod9, "signal", "present", "third commit", version="3.3")
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
@@ -207,7 +201,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
     commitmodule(p9, "first commit")
 
     # setup project
-    proj = install_project(git_modules_dir, "proj9")
+    proj = install_project(git_modules_dir, "proj9", tmpdir)
     app(["project", "install"])
     print(os.listdir(proj))
 
@@ -228,7 +222,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
 
     with pytest.raises(ParserException):
         # mod 10 is updated to a version that contains a syntax error
-        app(["modules", "update"])
+        app(["project", "update"])
 
     # unfreeze deps to allow update
     pyml["requires"] = ["mod10 == 4.0"]
@@ -247,7 +241,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
     Project._project = None
 
     # attempt to update
-    app(["modules", "update"])
+    app(["project", "update"])
 
     # Additional output
     Project._project = None
@@ -258,7 +252,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
     assert os.path.exists(os.path.join(m9dir, "model", "b.cf"))
     m10dir = os.path.join(proj, "libs", "mod10")
     assert os.path.exists(os.path.join(m10dir, "secondsignal"))
-    # should not be lastest version
+    # should not be latest version
     assert not os.path.exists(os.path.join(m10dir, "badsignal"))
 
 
@@ -379,6 +373,25 @@ requires:
     assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v1_deprecation(inmanta_module_v1, deprecated):
+    inmanta_module_v1.write_metadata_file(
+        f"""
+name: mod
+license: ASL
+version: 1.0.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod has been deprecated" in str(warning.message) in str(warning.message)
+
+
 def test_module_requires_single(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
@@ -392,35 +405,18 @@ requires: std > 1.0.0
     assert mod.requires() == [InmantaModuleRequirement.parse("std > 1.0.0")]
 
 
-def test_module_requires_legacy(inmanta_module_v1):
+def test_module_requires_contains_dictionary(inmanta_module_v1):
+    """
+    Verify that providing a dictionary to the 'requires' field of a V1 module results in an error.
+    This is a legacy format that is no longer supported.
+    """
     inmanta_module_v1.write_metadata_file(
         """
 name: mod
 license: ASL
 version: 1.0.0
 requires:
-    std: std
-    ip: ip > 1.0.0
-        """
-    )
-    mod: module.Module
-    with warnings.catch_warnings(record=True) as w:
-        mod = module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
-        assert len(w) == 1
-        warning = w[0]
-        assert issubclass(warning.category, MetadataDeprecationWarning)
-        assert "yaml dictionary syntax for specifying module requirements has been deprecated" in str(warning.message)
-    assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
-
-
-def test_module_requires_legacy_invalid(inmanta_module_v1):
-    inmanta_module_v1.write_metadata_file(
-        """
-name: mod
-license: ASL
-version: 1.0.0
-requires:
-    std: ip
+    std: std > 1.0.0
         """
     )
     with pytest.raises(InvalidModuleException) as e:
@@ -428,7 +424,12 @@ requires:
 
     cause = e.value.__cause__
     assert isinstance(cause, InvalidMetadata)
-    assert "Invalid legacy requires" in cause.msg
+    assert (
+        f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
+        + "  requires -> 0\n"
+        + "    str type expected (type=type_error.str)"
+        in cause.msg
+    )
 
 
 def test_module_v2_metadata(inmanta_module_v2: InmantaModule) -> None:
@@ -452,6 +453,26 @@ install_requires =
     assert mod.metadata.name == "inmanta-module-mod1"
     assert mod.metadata.version == "1.2.3"
     assert mod.metadata.license == "Apache 2.0"
+
+
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v2_deprecation(inmanta_module_v2: InmantaModule, deprecated):
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mod1
+version = 1.2.3
+license = Apache 2.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod1 has been deprecated" in str(warning.message)
 
 
 @pytest.mark.parametrize("underscore", [True, False])
@@ -478,10 +499,44 @@ packages = find_namespace:
         """
     )
     if underscore:
-        with pytest.raises(InvalidModuleException):
+        with pytest.raises(InvalidMetadata):
             module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     else:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+
+
+@pytest.mark.parametrize_any(
+    "version, error_msg",
+    [
+        ("0.0.1.dev0", "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"),
+        ("hello", "Version hello is not PEP440 compliant"),
+    ],
+)
+def test_module_v2_invalid_version(inmanta_module_v2: InmantaModule, version: str, error_msg: str):
+    """
+    Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
+    """
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mymod
+version = {version}
+license = Apache 2.0
+
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+packages = find_namespace:
+        """
+    )
+    with pytest.raises(InvalidMetadata) as e:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
+    assert error_msg in str(e.value)
 
 
 def test_module_v2_incompatible_commands(caplog, local_module_package_index: str, snippetcompiler, modules_v2_dir: str) -> None:

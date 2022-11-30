@@ -103,7 +103,7 @@ Start the Inmanta server and make sure it is started at boot.
   sudo systemctl enable --now inmanta-server
 
 
-The server dashboard is now available on the port and host configured in step 7.
+The web-console is now available on the port and host configured in step 7.
 
 Optional Step 9: Setup influxdb for collection of performance metrics
 ---------------------------------------------------------------------

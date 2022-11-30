@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import OptionalValueException
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import NoneValue
 
 
@@ -39,39 +38,6 @@ def test_null(snippetcompiler):
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
-
-
-def test_null_unset(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-        entity A:
-            string? a
-        end
-        implement A using std::none
-        a = A()
-
-    """
-    )
-
-    (_, scopes) = compiler.do_compile()
-    root = scopes.get_child("__config__")
-    with pytest.raises(OptionalValueException):
-        root.lookup("a").get_value().get_attribute("a").get_value()
-
-
-def test_null_unset_hang(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-            entity A:
-                string? a
-            end
-            implement A using std::none
-            a = A()
-            b = a.a
-        """
-    )
-    with pytest.raises(OptionalValueException):
-        (_, scopes) = compiler.do_compile()
 
 
 def test_null_on_list(snippetcompiler):
@@ -146,3 +112,26 @@ def test_null_on_list_err(snippetcompiler):
     """,
         "Invalid value 'null', expected string[] (reported in string[] a = null ({dir}/main.cf:3:22))",
     )
+
+
+def test_exception_nullable(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number? n
+end
+
+implement A using std::none
+
+A()
+A(n = null)
+        """
+    )
+    try:
+        compiler.do_compile()
+    except UnsetException as e:
+        message: str = (
+            f"The object __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:8) is not "
+            f"complete: attribute n ({snippetcompiler.project_dir}/main.cf:3:13) is not set"
+        )
+        assert e.msg == message
