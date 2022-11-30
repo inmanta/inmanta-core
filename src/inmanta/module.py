@@ -1261,22 +1261,15 @@ class ModuleMetadata(ABC, Metadata):
         except Exception:
             raise Exception("Unable to rewrite module definition.")
 
-        # Validate whether version field was updated correctly in metadata file
-        if cls is ModuleV2Metadata:
-            expected_version = new_version
-        else:
-            expected_version = f"{new_version}.{version_tag.lstrip('.')}" if version_tag else new_version
-        if new_metadata.version != expected_version:
+        # Validate whether the version and version_tag field was updated correctly in metadata file
+        full_version_in_meta_data: packaging.version.Version = new_metadata.get_full_version()
+        expected_full_version: packaging.version.Version = cls._compose_full_version(new_version, version_tag)
+        if full_version_in_meta_data != expected_full_version:
             raise Exception(
-                f"Unable to write version in module definition, should be {expected_version} "
-                f"got {new_metadata.version} instead."
-            )
-
-        # Validate whether version_tag field was updated correctly in metadata file
-        if isinstance(new_metadata, ModuleV2Metadata) and version_tag != new_metadata.version_tag:
-            raise Exception(
-                f"Unable to write tag_build in module definition, should be '{version_tag}' got "
-                f"'{new_metadata.version_tag}' instead."
+                "Unable to write version and version tag information to the module metadata file.\n"
+                "\t* For a V1 module: Does the module.yml file contain a syntax error near the version field?\n"
+                "\t* For a V2 module: Does the setup.cfg file contain a syntax error near the metadata.version or "
+                "the egg_info.tag_build field?"
             )
 
         return result, new_metadata
@@ -1286,6 +1279,19 @@ class ModuleMetadata(ABC, Metadata):
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         raise NotImplementedError()
 
+    @abstractmethod
+    def get_full_version(self) -> packaging.version.Version:
+        """
+        Return the full version (version + version tag) of this module.
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def _compose_full_version(cls, v: str, version_tag: str) -> packaging.version.Version:
+        if not version_tag:
+            return version.Version(v)
+        normalized_tag: str = version_tag.lstrip(".")
+        return version.Version(f"{v}.{normalized_tag}")
 
 @stable_api
 class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
@@ -1320,6 +1326,9 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         new_version = f"{new_version}.{version_tag.lstrip('.')}" if version_tag else new_version
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
+
+    def get_full_version(self) -> packaging.version.Version:
+        return version.Version(self.version)
 
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
@@ -1365,13 +1374,6 @@ class ModuleV2Metadata(ModuleMetadata):
                 "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"
             )
         return v
-
-    @classmethod
-    def _compose_full_version(cls, v: str, version_tag: str) -> packaging.version.Version:
-        if not version_tag:
-            return version.Version(v)
-        normalized_tag: str = version_tag.lstrip(".")
-        return version.Version(f"{v}.{normalized_tag}")
 
     @classmethod
     def split_version(cls, v: packaging.version.Version) -> tuple[str, str]:
