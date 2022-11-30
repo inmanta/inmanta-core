@@ -1595,9 +1595,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
-async def test_2277_typedmethod_return_optional(
-    async_finalizer, return_value: object, valid: bool, unused_tcp_port_factory
-) -> None:
+async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool, unused_tcp_port) -> None:
     @protocol.typedmethod(
         path="/typedtestmethod",
         operation="GET",
@@ -1614,11 +1612,7 @@ async def test_2277_typedmethod_return_optional(
         async def test_method_typed_implementation(self) -> Optional[int]:
             return return_value  # type: ignore
 
-    port = str(unused_tcp_port_factory())
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("client_rest_transport", "port", port)
-
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -1644,7 +1638,7 @@ def test_method_strict_exception() -> None:
             pass
 
 
-async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory) -> None:
+async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
         """
@@ -1656,11 +1650,7 @@ async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port_factory
         async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
             return {**one, **other}
 
-    port = str(unused_tcp_port_factory())
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("client_rest_transport", "port", port)
-
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
