@@ -52,6 +52,7 @@ def test_change_type_diff() -> None:
     assert ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("2.0.0.dev0")) == ChangeType.MAJOR
 
     assert ChangeType.diff(low=Version("1.0.0"), high=Version("1.0.0")) is None
+    assert ChangeType.diff(low=Version("1.0.0.dev0"), high=Version("1.0.0")) is None
 
     with pytest.raises(ValueError):
         ChangeType.diff(low=Version("2.0.0"), high=Version("1.0.0"))
