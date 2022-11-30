@@ -1,0 +1,6 @@
+---
+description: Fixes an issue about optional fields without default value not being populated correctly in DAO
+change-type: patch
+destination-branches: [master, iso5]
+sections:
+  bugfix: "{{description}}"

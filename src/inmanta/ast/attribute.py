@@ -20,14 +20,7 @@ from typing import List, Optional, Set, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList
-from inmanta.execute.runtime import (
-    AttributeVariable,
-    DeprecatedOptionVariable,
-    ListVariable,
-    OptionVariable,
-    QueueScheduler,
-    ResultVariable,
-)
+from inmanta.execute.runtime import AttributeVariable, ListVariable, OptionVariable, QueueScheduler, ResultVariable
 from inmanta.execute.util import Unknown
 from inmanta.stable_api import stable_api
 
@@ -68,8 +61,6 @@ class Attribute(Locatable):
             self.__type = NullableType(self.__type)
 
         self.low: int = 0 if nullable else 1
-        # This attribute is only used for the DeprecatedOptionVariable
-        self.high: Optional[int] = None
         self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
@@ -117,17 +108,7 @@ class Attribute(Locatable):
         self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
-        out: ResultVariable["Instance"]
-
-        if self.is_optional():
-            # be a 0-1 relation
-            self.end = None
-            self.low = 0
-            self.high = 1
-            out = DeprecatedOptionVariable(self, instance, queue)
-        else:
-            out = ResultVariable()
-
+        out: ResultVariable[object] = ResultVariable()
         out.set_type(self.type)
         return out
 

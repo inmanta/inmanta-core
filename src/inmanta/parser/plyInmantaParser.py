@@ -17,13 +17,13 @@
 """
 import logging
 import re
+import warnings
 from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
@@ -39,7 +39,6 @@ from inmanta.ast.statements.define import (
     DefineIndex,
     DefineRelation,
     DefineTypeConstraint,
-    DefineTypeDefault,
     TypeDeclaration,
 )
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
@@ -524,7 +523,7 @@ def deprecated_relation_warning(p: YaccProduction) -> None:
         values: Tuple[str, str] = tuple(v if v is not None else "" for v in multi)
         return "[%s:%s]" % values if values[0] != values[1] else "[%s]" % values[0]
 
-    inmanta_warnings.warn(
+    warnings.warn(
         SyntaxDeprecationWarning(
             p[0].location,
             None,
@@ -625,9 +624,7 @@ def p_typedef_1(p: YaccProduction) -> None:
 
 def p_typedef_cls(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF CID AS constructor"""
-    assert namespace
-    p[0] = DefineTypeDefault(namespace, p[2], p[4])
-    attach_lnr(p, 2)
+    raise ParserException(p[2].location, str(p[2]), "The use of default constructors is no longer supported")
 
 
 # index

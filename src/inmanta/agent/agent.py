@@ -85,6 +85,8 @@ class ResourceActionBase(abc.ABC):
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource_id: Id = resource_id
         self.future: ResourceActionResultFuture = Future()
+        # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
+        # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
@@ -218,66 +220,67 @@ class ResourceAction(ResourceActionBase):
                 )
 
                 self.running = True
-                if self.is_done():
-                    # Action is cancelled
-                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
-                    self.running = False
-                    return
-
-                result = sum(results, ResourceActionResult(cancel=False))
-
-                if result.cancel:
-                    # self.running will be set to false when self.cancel is called
-                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                    return
-
                 try:
-                    requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
-                except Exception:
-                    ctx.set_status(const.ResourceState.failed)
-                    ctx.exception("Failed to report the start of the deployment to the server")
-                else:
-                    if self.undeployable is not None:
-                        ctx.set_status(self.undeployable)
+                    if self.is_done():
+                        # Action is cancelled
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
+                        return
+
+                    result = sum(results, ResourceActionResult(cancel=False))
+
+                    if result.cancel:
+                        # self.running will be set to false when self.cancel is called
+                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                        return
+
+                    try:
+                        requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
+                    except Exception:
+                        ctx.set_status(const.ResourceState.failed)
+                        ctx.exception("Failed to report the start of the deployment to the server")
                     else:
-                        await self._execute(ctx=ctx, requires=requires)
+                        if self.undeployable is not None:
+                            ctx.set_status(self.undeployable)
+                        else:
+                            await self._execute(ctx=ctx, requires=requires)
 
-                ctx.debug(
-                    "End run for resource %(resource)s in deploy %(deploy_id)s",
-                    resource=str(self.resource.id),
-                    deploy_id=self.gid,
-                )
-
-                changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
-                    self.resource.id.resource_version_str(): ctx.changes
-                }
-
-                if ctx.facts:
-                    ctx.debug("Sending facts to the server")
-                    set_fact_response = await self.scheduler.get_client().set_parameters(
-                        tid=self.scheduler._env_id, parameters=ctx.facts
+                    ctx.debug(
+                        "End run for resource %(resource)s in deploy %(deploy_id)s",
+                        resource=str(self.resource.id),
+                        deploy_id=self.gid,
                     )
-                    if set_fact_response.code != 200:
-                        ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                response = await self.scheduler.get_client().resource_deploy_done(
-                    tid=self.scheduler._env_id,
-                    rvid=self.resource.id.resource_version_str(),
-                    action_id=ctx.action_id,
-                    status=ctx.status,
-                    messages=ctx.logs,
-                    changes=changes,
-                    change=ctx.change,
-                )
+                    changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
+                        self.resource.id.resource_version_str(): ctx.changes
+                    }
 
-                if response.code != 200:
-                    LOGGER.error("Resource status update failed %s", response.result)
+                    if ctx.facts:
+                        ctx.debug("Sending facts to the server")
+                        set_fact_response = await self.scheduler.get_client().set_parameters(
+                            tid=self.scheduler._env_id, parameters=ctx.facts
+                        )
+                        if set_fact_response.code != 200:
+                            ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                self.status = ctx.status
-                self.change = ctx.change
-                self.changes = changes
-                self.future.set_result(ResourceActionResult(cancel=False))
-                self.running = False
+                    response = await self.scheduler.get_client().resource_deploy_done(
+                        tid=self.scheduler._env_id,
+                        rvid=self.resource.id.resource_version_str(),
+                        action_id=ctx.action_id,
+                        status=ctx.status,
+                        messages=ctx.logs,
+                        changes=changes,
+                        change=ctx.change,
+                    )
+
+                    if response.code != 200:
+                        LOGGER.error("Resource status update failed %s", response.result)
+
+                    self.status = ctx.status
+                    self.change = ctx.change
+                    self.changes = changes
+                    self.future.set_result(ResourceActionResult(cancel=False))
+                finally:
+                    self.running = False
 
 
 class RemoteResourceAction(ResourceActionBase):
@@ -301,6 +304,7 @@ class RemoteResourceAction(ResourceActionBase):
                 return
 
             status = const.ResourceState[result.result["resource"]["status"]]
+            self.running = True
             if status in const.TRANSIENT_STATES or self.future.done():
                 # wait for event
                 pass
@@ -320,10 +324,10 @@ class RemoteResourceAction(ResourceActionBase):
                     self.status = status
 
                 self.future.set_result(ResourceActionResult(cancel=False))
-
-            self.running = False
         except Exception:
             LOGGER.exception("could not get status for remote resource")
+        finally:
+            self.running = False
 
     def notify(
         self,
@@ -467,7 +471,11 @@ class ResourceScheduler(object):
         dummy.future.set_result(ResourceActionResult(cancel=False))
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
-        await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
+        # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
+        # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
+        # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
+        # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
+        await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
         async with self.agent.critical_ratelimiter:
             if not self.finished():
                 return
@@ -531,7 +539,7 @@ class AgentInstance(object):
         self.sessionid: uuid.UUID = process.sessionid
 
         # init
-        self._cache = AgentCache()
+        self._cache = AgentCache(self)
         self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
         self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False

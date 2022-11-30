@@ -232,7 +232,7 @@ def test_object_to_id(snippetcompiler):
     snippetcompiler.do_export()
 
 
-def test_resource_invalid_agent_name_annotation(snippetcompiler):
+def test_resource_invalid_agent_name_annotation():
 
     import inmanta.resources
 

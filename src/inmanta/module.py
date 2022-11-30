@@ -26,8 +26,10 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import traceback
 import types
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
@@ -63,8 +65,8 @@ import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
+from pydantic.error_wrappers import display_errors
 
-import inmanta.warnings
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -76,6 +78,7 @@ from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version
+from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
 
@@ -84,16 +87,13 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 if TYPE_CHECKING:
     from pkg_resources.packaging.version import Version  # noqa: F401
-
 
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
-
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -259,14 +259,13 @@ class InvalidMetadata(CompilerException):
 
     @classmethod
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
-        for error in validation_error.errors():
-            mgs: str = error["msg"]
-            error_type = error["type"]
-            msg += f"\n{error['loc']}\n\t{mgs} ({error_type})"
+        errors = validation_error.errors()
+        if errors:
+            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
         return msg
 
 
-class MetadataDeprecationWarning(inmanta.warnings.InmantaWarning):
+class ModuleDeprecationWarning(InmantaWarning):
     pass
 
 
@@ -354,9 +353,9 @@ class CLIGitProvider(GitProvider):
     def clone(self, src: str, dest: str) -> None:
         process_env = os.environ.copy()
         process_env["GIT_ASKPASS"] = "true"
-        cmd = ["git", "clone", "--progress", src, dest]
+        cmd = ["git", "clone", src, dest]
 
-        return_code, _ = env.PythonEnvironment.run_command_and_stream_output(cmd, env_vars=process_env)
+        return_code, _ = env.CommandRunner(LOGGER).run_command_and_stream_output(cmd, env_vars=process_env)
 
         if return_code != 0:
             raise Exception(f"An unexpected error occurred while cloning into {dest} from {src}.")
@@ -509,9 +508,9 @@ class ModuleSource(Generic[TModule]):
     def _log_snapshot_difference(
         self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
     ) -> None:
-        set_pre_install = set(previous_snapshot.items())
-        set_post_install = set(version_snapshot.items())
-        updates_and_additions = set_post_install - set_pre_install
+        set_pre_install: Set[tuple[str, "Version"]] = set(previous_snapshot.items())
+        set_post_install: Set[tuple[str, "Version"]] = set(version_snapshot.items())
+        updates_and_additions: Set[tuple[str, "Version"]] = set_post_install - set_pre_install
 
         if version_snapshot:
             out = [header] if header is not None else []
@@ -1095,7 +1094,7 @@ class Metadata(BaseModel):
             return cls(**raw)
         except ValidationError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
             else:
                 raise InvalidMetadata(msg=str(e), validation_error=e) from e
 
@@ -1114,20 +1113,6 @@ class MetadataFieldRequires(BaseModel):
     @validator("requires", pre=True)
     @classmethod
     def requires_to_list(cls, v: object) -> object:
-        if isinstance(v, dict):
-            # transform legacy format for backwards compatibility
-            inmanta.warnings.warn(
-                MetadataDeprecationWarning(
-                    "The yaml dictionary syntax for specifying module requirements has been deprecated. Please use the"
-                    " documented list syntax instead."
-                )
-            )
-            result: List[str] = []
-            for key, value in v.items():
-                if not (isinstance(key, str) and isinstance(value, str) and value.startswith(key)):
-                    raise ValueError("Invalid legacy requires format, expected `mod: mod [constraint]`.")
-                result.append(value)
-            return result
         return cls.to_list(v)
 
 
@@ -1138,6 +1123,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
+    deprecated: Optional[bool]
 
     @validator("version")
     @classmethod
@@ -1335,7 +1321,6 @@ class ModuleRepoType(enum.Enum):
 
 @stable_api
 class ModuleRepoInfo(BaseModel):
-
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
@@ -2202,7 +2187,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 f"Could not find module {module_name}. Please make sure to add any module v2 requirements with"
                 " `inmanta module add --v2` and to install all the project's dependencies with `inmanta project install`."
             )
-
+        if isinstance(module, ModuleV1):
+            warnings.warn(
+                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
+                category=DeprecationWarning,
+            )
         self.modules[module_name] = module
         return module
 
@@ -2522,6 +2511,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             raise InvalidModuleException(f"Directory {path} doesn't exist")
         super().__init__(path)
 
+        if self.metadata.deprecated:
+            warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
         self._project: Optional[Project] = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
@@ -3047,10 +3038,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     ) -> None:
         self._is_editable_install = is_editable_install
         self._version: Optional[version.Version] = installed_version
-        try:
-            super(ModuleV2, self).__init__(project, path)
-        except InvalidMetadata as e:
-            raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+        super(ModuleV2, self).__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(

@@ -98,6 +98,7 @@ The ``setup.cfg`` file defines metadata about the module. The following code sni
   * ``name``: The name of the resulting Python package when this module is packaged. This name should follow the naming schema: ``inmanta-module-<module-name>``.
   * ``version``: The version of the module. Modules must use semantic versioning.
   * ``license``: The license under which the module is distributed.
+  * ``deprecated``: Optional field. If set to True, this module will print a warning deprecation message when used.
 
 * The ``install_requires`` config option in the ``options`` section of the ``setup.cfg`` file defines the dependencies of the
   module on other Inmanta modules and external Python libraries. These version specs use
@@ -190,6 +191,7 @@ three keys mandatory:
 * *license*: The license under which the module is distributed.
 * *version*: The version of this module. For a new module a start version could be 0.1dev0 These
   versions are parsed using the same version parser as python setuptools.
+* *deprecated*: Optional field. If set to True, this module will print a warning deprecation message when used.
 
 For example the following module.yml from the :doc:`../quickstart`
 

@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import warnings
+
 import toml
 
 """
@@ -77,6 +79,7 @@ import time
 import traceback
 import uuid
 import venv
+from collections import abc
 from configparser import ConfigParser
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -113,9 +116,10 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import SliceStartupException
+from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 
@@ -532,6 +536,7 @@ def reset_all_objects():
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    compiler.Finalizers.reset_finalizers()
 
 
 @pytest.fixture()
@@ -709,34 +714,32 @@ def log_state_tcp_ports(request, log_file):
 async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
-    state_dir = tempfile.mkdtemp()
+    with tempfile.TemporaryDirectory() as state_dir:
+        port = str(unused_tcp_port_factory())
 
-    port = str(unused_tcp_port_factory())
-
-    config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "username", postgres_db.user)
-    config.Config.set("database", "password", postgres_db.password)
-    config.Config.set("database", "connection_timeout", str(3))
-    config.Config.set("config", "state-dir", state_dir)
-    config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("agent_rest_transport", "port", port)
-    config.Config.set("compiler_rest_transport", "port", port)
-    config.Config.set("client_rest_transport", "port", port)
-    config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("server", "agent-process-purge-interval", "0")
-    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
-    config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("agent", "agent-repair-interval", "0")
-    yield config
-    shutil.rmtree(state_dir)
+        config.Config.set("database", "name", database_name)
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(postgres_db.port))
+        config.Config.set("database", "username", postgres_db.user)
+        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("config", "state-dir", state_dir)
+        config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
+        config.Config.set("agent_rest_transport", "port", port)
+        config.Config.set("compiler_rest_transport", "port", port)
+        config.Config.set("client_rest_transport", "port", port)
+        config.Config.set("cmdline_rest_transport", "port", port)
+        config.Config.set("server", "bind-port", port)
+        config.Config.set("server", "bind-address", "127.0.0.1")
+        config.Config.set("server", "agent-process-purge-interval", "0")
+        config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
+        config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("agent", "agent-repair-interval", "0")
+        yield config
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start):
+async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -778,76 +781,73 @@ async def server_multi(
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
     """
-    state_dir = tempfile.mkdtemp()
+    with tempfile.TemporaryDirectory() as state_dir:
+        ssl, auth, ca = request.param
 
-    ssl, auth, ca = request.param
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        if auth:
+            config.Config.set("server", "auth", "true")
 
-    if auth:
-        config.Config.set("server", "auth", "true")
+        for x, ct in [
+            ("server", None),
+            ("agent_rest_transport", ["agent"]),
+            ("compiler_rest_transport", ["compiler"]),
+            ("client_rest_transport", ["api", "compiler"]),
+            ("cmdline_rest_transport", ["api"]),
+        ]:
+            if ssl and not ca:
+                config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+                config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+                config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+                config.Config.set(x, "ssl", "True")
+            if ssl and ca:
+                capath = os.path.join(path, "ca", "enduser-certs")
 
-    for x, ct in [
-        ("server", None),
-        ("agent_rest_transport", ["agent"]),
-        ("compiler_rest_transport", ["compiler"]),
-        ("client_rest_transport", ["api", "compiler"]),
-        ("cmdline_rest_transport", ["api"]),
-    ]:
-        if ssl and not ca:
-            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl", "True")
-        if ssl and ca:
-            capath = os.path.join(path, "ca", "enduser-certs")
+                config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
+                config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
+                config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
+                config.Config.set(x, "ssl", "True")
+            if auth and ct is not None:
+                token = protocol.encode_token(ct)
+                config.Config.set(x, "token", token)
 
-            config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-            config.Config.set(x, "ssl", "True")
-        if auth and ct is not None:
-            token = protocol.encode_token(ct)
-            config.Config.set(x, "token", token)
+        port = str(unused_tcp_port_factory())
+        config.Config.set("database", "name", database_name)
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(postgres_db.port))
+        config.Config.set("database", "username", postgres_db.user)
+        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("config", "state-dir", state_dir)
+        config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
+        config.Config.set("agent_rest_transport", "port", port)
+        config.Config.set("compiler_rest_transport", "port", port)
+        config.Config.set("client_rest_transport", "port", port)
+        config.Config.set("cmdline_rest_transport", "port", port)
+        config.Config.set("server", "bind-port", port)
+        config.Config.set("server", "bind-address", "127.0.0.1")
+        config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
+        config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("agent", "agent-repair-interval", "0")
 
-    port = str(unused_tcp_port_factory())
-    config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "username", postgres_db.user)
-    config.Config.set("database", "password", postgres_db.password)
-    config.Config.set("database", "connection_timeout", str(3))
-    config.Config.set("config", "state-dir", state_dir)
-    config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("agent_rest_transport", "port", port)
-    config.Config.set("compiler_rest_transport", "port", port)
-    config.Config.set("client_rest_transport", "port", port)
-    config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
-    config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("agent", "agent-repair-interval", "0")
+        ibl = InmantaBootloader()
 
-    ibl = InmantaBootloader()
+        try:
+            await ibl.start()
+        except SliceStartupException as e:
+            port = config.Config.get("server", "bind-port")
+            output = subprocess.check_output(["ss", "-antp"])
+            output = output.decode("utf-8")
+            logger.debug(f"Port: {port}")
+            logger.debug(f"Port usage: \n {output}")
+            raise e
 
-    try:
-        await ibl.start()
-    except SliceStartupException as e:
-        port = config.Config.get("server", "bind-port")
-        output = subprocess.check_output(["ss", "-antp"])
-        output = output.decode("utf-8")
-        logger.debug(f"Port: {port}")
-        logger.debug(f"Port usage: \n {output}")
-        raise e
-
-    yield ibl.restserver
-    try:
-        await ibl.stop(timeout=15)
-    except concurrent.futures.TimeoutError:
-        logger.exception("Timeout during stop of the server in teardown")
-
-    shutil.rmtree(state_dir)
+        yield ibl.restserver
+        try:
+            await ibl.stop(timeout=15)
+        except concurrent.futures.TimeoutError:
+            logger.exception("Timeout during stop of the server in teardown")
 
 
 @pytest.fixture(scope="function")
@@ -875,8 +875,12 @@ def clienthelper(client, environment):
 
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
+    # Ensure that the test suite uses the same config for warnings as the default config used by the CLI tools.
     logging.captureWarnings(True)
+    cmd_parser = inmanta.app.cmd_parser()
+    WarningsManager.apply_config({"default": cmd_parser.get_default("warnings")})
     yield
+    warnings.resetwarnings()
     logging.captureWarnings(False)
 
 
@@ -999,8 +1003,9 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.working_set = None
 
     def deactivate(self):
-        self._using_venv = False
-        self.working_set = pkg_resources.working_set
+        if self._using_venv:
+            self._using_venv = False
+            self.working_set = pkg_resources.working_set
 
     def use_virtual_env(self) -> None:
         """
@@ -1413,24 +1418,33 @@ class CompileRunnerMock(object):
         self.request = request
         self.version: Optional[int] = None
         self._make_compile_fail = make_compile_fail
+        self._make_pull_fail = False
         self._runner_queue = runner_queue
         self.block = False
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
         now = datetime.datetime.now()
-        returncode = 1 if self._make_compile_fail else 0
-        report = data.Report(
-            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
-        )
-        await report.insert()
-        self.version = int(time.time())
-        success = not self._make_compile_fail
 
         if self._runner_queue is not None:
             self._runner_queue.put(self)
             self.block = True
             while self.block:
                 await asyncio.sleep(0.1)
+
+        returncode = 1 if self._make_compile_fail else 0
+        report = data.Report(
+            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
+        )
+        await report.insert()
+
+        if self._make_pull_fail:
+            report = data.Report(
+                compile=self.request.id, started=now, name="Pulling updates", command="", completed=now, returncode=1
+            )
+            await report.insert()
+
+        self.version = int(time.time())
+        success = not self._make_compile_fail
 
         return success, None
 

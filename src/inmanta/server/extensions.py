@@ -23,9 +23,11 @@ from typing import Any, Dict, Generic, List, Optional, TypeVar
 import pkg_resources
 import yaml
 
+from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
+from inmanta.stable_api import stable_api
 
 LOGGER = logging.getLogger(__name__)
 
@@ -180,6 +182,7 @@ class FeatureManager:
         """Called when the server is stopped"""
 
 
+@stable_api
 class ApplicationContext:
     def __init__(self) -> None:
         self._slices: List[ServerSlice] = []
@@ -206,3 +209,15 @@ class ApplicationContext:
 
     def get_extension_statuses(self) -> List[ExtensionStatus]:
         return ServerSlice.get_extension_statuses(list(self._slices))
+
+    def register_environment_setting(self, setting: data.Setting) -> None:
+        """
+        Used by an Inmanta extension to register extension-specific environment settings.
+        """
+        data.Environment.register_setting(setting)
+
+    def get_environment_settings(self) -> list[data.Setting]:
+        """
+        Returns the list of all available environment settings
+        """
+        return sorted(data.Environment._settings.values(), key=lambda x: x.name)

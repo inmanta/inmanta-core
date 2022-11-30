@@ -1,0 +1,6 @@
+---
+description: Add test to automatically check for the presence of a migration test
+issue-nr: 1358
+issue-repo: irt
+change-type: patch
+destination-branches: [master, iso5, iso4]
