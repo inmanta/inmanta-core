@@ -1081,11 +1081,12 @@ version: 0.0.1dev0"""
         if not minimal_version_bump_to_prev_release:
             # No version bump is required
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+        version_previous_release: Version
         try:
-            version_previous_release: Version = sorted([v for v in all_existing_stable_version if v <= current_version])[-1]
+            version_previous_release = sorted([v for v in all_existing_stable_version if v <= current_version])[-1]
         except IndexError:
             # No previous release happened
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+            version_previous_release = Version("0.0.0")
 
         assert version_previous_release <= current_version
         current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
