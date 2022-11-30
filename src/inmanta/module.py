@@ -31,7 +31,7 @@ import traceback
 import types
 import warnings
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, abc
 from configparser import ConfigParser
 from dataclasses import dataclass
 from importlib.abc import Loader
@@ -354,7 +354,11 @@ class GitProvider(object):
         pass
 
     def commit(
-        self, repo: str, message: str, commit_all: bool, add: List[str] = [], raise_exc_when_nothing_to_commit: bool = True
+        self, repo: str,
+        message: str,
+        commit_all: bool,
+        add: Optional[abc.Sequence[str]] = None,
+        raise_exc_when_nothing_to_commit: bool = True,
     ) -> None:
         pass
 
@@ -436,7 +440,11 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def commit(
-        self, repo: str, message: str, commit_all: bool, add: List[str] = [], raise_exc_when_nothing_to_commit: bool = True
+        self, repo: str,
+        message: str,
+        commit_all: bool,
+        add: Optional[abc.Sequence[str]] = None,
+        raise_exc_when_nothing_to_commit: bool = True,
     ) -> None:
         """
         Execute the `git commit` command.
@@ -447,6 +455,8 @@ class CLIGitProvider(GitProvider):
         :param add: Paths to files that have to be staged for the commit.
         :param raise_exc_when_nothing_to_commit: True iff there are no changes to commit.
         """
+        if add is None:
+            add = []
         self.add(repo=repo, files=add)
         if (
             not raise_exc_when_nothing_to_commit
@@ -517,8 +527,9 @@ class CLIGitProvider(GitProvider):
         """
         subprocess.check_call(["git", "init"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def add(self, repo: str, files: list[str]) -> None:
-        subprocess.check_call(["git", "add", *files], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def add(self, repo: str, files: abc.Sequence[str]) -> None:
+        if files:
+            subprocess.check_call(["git", "add", *files], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 gitprovider = CLIGitProvider()
