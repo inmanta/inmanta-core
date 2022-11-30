@@ -22,6 +22,7 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
+from inmanta.ast.statements.generator import Constructor
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -756,15 +757,11 @@ class IndexCollisionException(RuntimeException):
         self,
         msg: str,
         collisions: Dict["Instance", Dict[str, object]],
-        constructor_loc: Location,
-        constructor_str: str,
-        constructor_name: LocatableString,
+        constructor: Constructor,
     ) -> None:
-        super().__init__(stmt=None, msg=msg)
+        super().__init__(stmt=constructor, msg=msg)
         self.collisions: Dict["Instance", Dict[str, object]] = collisions
-        self.constructor_str: str = constructor_str
-        self.constructor_loc: Location = constructor_loc
-        self.constructor_name: LocatableString = constructor_name
+        self.constructor: Constructor = constructor
 
     def importantance(self) -> int:
         return 10
