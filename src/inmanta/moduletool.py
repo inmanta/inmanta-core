@@ -704,7 +704,7 @@ When a development release is done using the --dev option, this command:
             help="Do a patch version bump compared to the previous stable release. Ignored when --dev is not set.",
             action="store_true",
         )
-        release.add_argument("-m", "--message", help="Commit message", required=True)
+        release.add_argument("-m", "--message", help="Commit message")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -1132,7 +1132,7 @@ version: 0.0.1dev0"""
     def release(
         self,
         dev: bool,
-        message: str,
+        message: Optional[str] = None,
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
@@ -1181,7 +1181,7 @@ version: 0.0.1dev0"""
                 files_to_commit.append(path_changelog_file)
             gitprovider.commit(
                 repo=module_dir,
-                message=message,
+                message=message if message else f"Bump version to {new_version}",
                 commit_all=True,
                 add=files_to_commit,
                 raise_exc_when_nothing_to_commit=False,
@@ -1195,7 +1195,7 @@ version: 0.0.1dev0"""
             module.rewrite_version(new_version=str(release_tag), version_tag="")
             gitprovider.commit(
                 repo=module_dir,
-                message=message,
+                message=message if message else f"Release version {module.metadata.get_full_version()}",
                 commit_all=True,
                 add=[module.get_metadata_file_path()],
                 raise_exc_when_nothing_to_commit=False,
