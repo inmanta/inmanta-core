@@ -155,6 +155,9 @@ class ModuleLikeTool(object):
         return project
 
     def determine_new_version(self, old_version, version, major, minor, patch, dev):
+        """
+        Only used by the `inmanta module commit` command.
+        """
         was_dev = old_version.is_prerelease
 
         if was_dev:
