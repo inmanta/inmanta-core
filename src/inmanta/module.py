@@ -1324,7 +1324,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
-        new_version = f"{new_version}.{version_tag.lstrip('.')}" if version_tag else new_version
+        new_version: version.Version = cls._compose_full_version(new_version, version_tag)
         return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
 
     def get_full_version(self) -> packaging.version.Version:
@@ -1396,10 +1396,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
     @validator("version_tag")
     @classmethod
-    def is_valid_version_tag(cls, v: Optional[str]) -> str:
-        if v is None:
-            # Represent a missing version_tag using an empty string
-            return ""
+    def is_valid_version_tag(cls, v: str) -> str:
         try:
             cls._compose_full_version("1.0.0", v)
         except version.InvalidVersion as e:
@@ -1424,7 +1421,7 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         result = re.sub(
-            r"(\[metadata\][^\[]*[ \t\r\f\v]*version[ \t\r\f\v]*=[ \t\r\f\v]*)[\S]+(\n|$)",
+            r"(\[metadata\][^\[]*[ \t\f\v]*version[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)",
             rf"\g<1>{new_version}\n",
             source,
         )
@@ -1434,7 +1431,7 @@ class ModuleV2Metadata(ModuleMetadata):
             result = result.replace("[egg_info]", f"[egg_info]\ntag_build = {version_tag}")
         else:
             result = re.sub(
-                r"(\[egg_info\][^\[]*[ \t\r\f\v]*tag_build[ \t\r\f\v]*=[ \t\r\f\v]*)[\S]*(\n|$)",
+                r"(\[egg_info\][^\[]*[ \t\f\v]*tag_build[ \t\f\v]*=[ \t\f\v]*)[\S]*(\n|$)",
                 rf"\g<1>{version_tag}\n",
                 result,
             )
