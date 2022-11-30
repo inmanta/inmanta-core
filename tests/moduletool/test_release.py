@@ -45,9 +45,9 @@ def get_commit_message_x_commits_ago(path: str, nb_previous_commit: int = 0) -> 
     return subprocess.check_output(["git", "log", "-1", f"--skip={nb_previous_commit}", "--pretty=%B"], cwd=path).decode()
 
 
-@pytest.mark.parametrize("v1_module", [True, False])
-@pytest.mark.parametrize("changelog_file_exists", [True, False])
-@pytest.mark.parametrize("previous_stable_version_exists", [True, False])
+@pytest.mark.parametrize_any("v1_module", [True, False])
+@pytest.mark.parametrize_any("changelog_file_exists", [True, False])
+@pytest.mark.parametrize_any("previous_stable_version_exists", [True, False])
 def test_release_stable_version(
     tmpdir,
     modules_dir: str,
@@ -137,7 +137,7 @@ V1.2.2
         assert not os.path.exists(path_changelog_file)
 
 
-@pytest.mark.parametrize("v1_module", [True, False])
+@pytest.mark.parametrize_any("v1_module", [True, False])
 def test_release_stable_version_already_released(
     tmpdir, modules_dir: str, modules_v2_dir: str, monkeypatch, v1_module: bool
 ) -> None:
@@ -171,9 +171,9 @@ def test_release_stable_version_already_released(
     assert "A Git version tag already exists for version 1.2.3" in exc_info.value.message
 
 
-@pytest.mark.parametrize("v1_module", [True, False])
-@pytest.mark.parametrize("increment", ["major", "minor", "patch"])
-@pytest.mark.parametrize("changelog_file_exists", [True, False])
+@pytest.mark.parametrize_any("v1_module", [True, False])
+@pytest.mark.parametrize_any("increment", ["major", "minor", "patch"])
+@pytest.mark.parametrize_any("changelog_file_exists", [True, False])
 def test_bump_dev_version(
     tmpdir, modules_dir: str, modules_v2_dir: str, monkeypatch, v1_module: bool, increment: str, changelog_file_exists: bool
 ) -> None:
