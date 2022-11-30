@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
 from inmanta.ast import export
-from inmanta.ast.statements.generator import Constructor
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -745,23 +744,6 @@ class OptionalValueException(RuntimeException):
 
 class IndexException(RuntimeException):
     """Exception raised when an index definition is invalid"""
-
-    def importantance(self) -> int:
-        return 10
-
-
-class IndexCollisionException(RuntimeException):
-    """Exception raised when an index collision is detected"""
-
-    def __init__(
-        self,
-        msg: str,
-        collisions: Dict["Instance", Dict[str, object]],
-        constructor: Constructor,
-    ) -> None:
-        super().__init__(stmt=constructor, msg=msg)
-        self.collisions: Dict["Instance", Dict[str, object]] = collisions
-        self.constructor: Constructor = constructor
 
     def importantance(self) -> int:
         return 10

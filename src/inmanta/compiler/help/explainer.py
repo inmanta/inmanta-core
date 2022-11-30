@@ -22,9 +22,9 @@ from typing import Generic, List, Mapping, Optional, Sequence, Set, Type, TypeVa
 
 from jinja2 import Environment, PackageLoader
 
-from inmanta.ast import CompilerException, IndexCollisionException, ModifiedAfterFreezeException
+from inmanta.ast import CompilerException, ModifiedAfterFreezeException
 from inmanta.ast.statements import AssignStatement
-from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
 
@@ -199,7 +199,7 @@ class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
             "constructor_str": problem.constructor.pretty_print(),
             "constructor_loc": problem.constructor.location,
             "constructor_name": problem.constructor.class_type,
-            "collisions": problem.collisions,
+            "collisions": {",".join(index): instance for index, instance in problem.collisions.items()},
         }
 
 

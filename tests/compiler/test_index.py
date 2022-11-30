@@ -22,13 +22,13 @@ import pytest
 import inmanta.compiler as compiler
 from inmanta.ast import (
     DuplicateException,
-    IndexCollisionException,
     IndexException,
     NotFoundException,
     RuntimeException,
     TypeNotFoundException,
     TypingException,
 )
+from inmanta.ast.statements.generator import IndexCollisionException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
 

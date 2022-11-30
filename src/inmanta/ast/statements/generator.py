@@ -29,7 +29,6 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeReferenceAnchor,
     DuplicateException,
-    IndexCollisionException,
     Locatable,
     LocatableString,
     Location,
@@ -698,7 +697,8 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
-        lookup_table: list[abc.Sequence[tuple[str, object]]] = []
+        # register any potential index collision
+        collisions: Dict[Tuple[str], Instance] = {}
         for index in type_class.get_indices():
             params = []
             for attr in index:
@@ -710,7 +710,7 @@ class Constructor(ExpressionStatement):
                 if obj.get_type() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
-                lookup_table.append(params)
+                collisions[tuple(index)] = obj
 
         object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
@@ -730,10 +730,7 @@ class Constructor(ExpressionStatement):
                     raise IndexCollisionException(
                         msg=("Inconsistent indexes detected!\n"),
                         constructor=self,
-                        collisions={
-                            i: {"index": ",".join(idx[0] for idx in lookup), "constructor": i}
-                            for i, lookup in zip(instances, lookup_table)
-                        },
+                        collisions=collisions,
                     )
 
             object_instance = first
@@ -859,3 +856,20 @@ class WrappedKwargs(ExpressionStatement):
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
         return list(dct.items())
+
+
+class IndexCollisionException(RuntimeException):
+    """Exception raised when an index collision is detected"""
+
+    def __init__(
+        self,
+        msg: str,
+        collisions: Dict[Tuple[str], Instance],
+        constructor: Constructor,
+    ) -> None:
+        super().__init__(stmt=constructor, msg=msg)
+        self.collisions: Dict[Tuple[str], Instance] = collisions
+        self.constructor: Constructor = constructor
+
+    def importantance(self) -> int:
+        return 10
