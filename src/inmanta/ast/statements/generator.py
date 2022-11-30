@@ -729,9 +729,7 @@ class Constructor(ExpressionStatement):
                 if i != first:
                     raise IndexCollisionException(
                         msg=("Inconsistent indexes detected!\n"),
-                        constructor_str=self.pretty_print(),
-                        constructor_loc=self.location,
-                        constructor_name=self.class_type,
+                        constructor=self,
                         collisions={
                             i: {"index": ",".join(idx[0] for idx in lookup), "constructor": i}
                             for i, lookup in zip(instances, lookup_table)
