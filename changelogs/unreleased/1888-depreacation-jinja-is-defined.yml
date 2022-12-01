@@ -1,0 +1,7 @@
+---
+description: Deprecated leaving nullable attribute unassigned. When using explicit `null` for plain attributes, the behaviour of 'is defined' in Jinja templates changes. You should update Jinja templates to use 'is not none' instead of `is defined` together with the change to explicit `null`.
+change-type: patch
+issue-nr: 1888
+destination-branches: [iso5]
+sections:
+  deprecation-note: "{{description}}"

@@ -1,0 +1,5 @@
+---
+description: Indents the logging of the modules' versions before and after install
+change-type: patch
+issue-nr: 4649
+destination-branches: [master, iso5]

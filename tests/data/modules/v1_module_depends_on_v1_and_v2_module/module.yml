@@ -1,5 +1,4 @@
-name: v1_module_depends_on_v2_module
+name: v1_module_depends_on_v1_and_v2_module
 license: Apache 2.0
 version: 1.0
-description: A V1 module with a dependency on a V2 module
-
+description: A V1 module with a dependency on a V1 and a V2 module

@@ -38,6 +38,7 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     MetadataDeprecationWarning,
+    ModuleDeprecationWarning,
     Project,
 )
 from inmanta.moduletool import ModuleTool
@@ -189,7 +190,7 @@ install_requires =
     assert metadata_file.read().strip() == metadata_contents("1.3.1")
 
 
-def test_module_corruption(git_modules_dir, modules_repo):
+def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
     add_file(mod9, "signal", "present", "third commit", version="3.3")
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
@@ -207,7 +208,7 @@ def test_module_corruption(git_modules_dir, modules_repo):
     commitmodule(p9, "first commit")
 
     # setup project
-    proj = install_project(git_modules_dir, "proj9")
+    proj = install_project(git_modules_dir, "proj9", tmpdir)
     app(["project", "install"])
     print(os.listdir(proj))
 
@@ -379,6 +380,25 @@ requires:
     assert mod.requires() == [InmantaModuleRequirement.parse("std"), InmantaModuleRequirement.parse("ip > 1.0.0")]
 
 
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v1_deprecation(inmanta_module_v1, deprecated):
+    inmanta_module_v1.write_metadata_file(
+        f"""
+name: mod
+license: ASL
+version: 1.0.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV1(None, inmanta_module_v1.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod has been deprecated" in str(warning.message) in str(warning.message)
+
+
 def test_module_requires_single(inmanta_module_v1):
     inmanta_module_v1.write_metadata_file(
         """
@@ -454,6 +474,26 @@ install_requires =
     assert mod.metadata.license == "Apache 2.0"
 
 
+@pytest.mark.parametrize("deprecated", ["", "deprecated: true", "deprecated: false"])
+def test_module_v2_deprecation(inmanta_module_v2: InmantaModule, deprecated):
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mod1
+version = 1.2.3
+license = Apache 2.0
+{deprecated}
+        """
+    )
+    with warnings.catch_warnings(record=True) as w:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+        assert len(w) == 1 if deprecated == "deprecated: true" else len(w) == 0
+        if len(w):
+            warning = w[0]
+            assert issubclass(warning.category, ModuleDeprecationWarning)
+            assert "Module mod1 has been deprecated" in str(warning.message)
+
+
 @pytest.mark.parametrize("underscore", [True, False])
 def test_module_v2_name_underscore(inmanta_module_v2: InmantaModule, underscore: bool):
     """
@@ -478,7 +518,7 @@ packages = find_namespace:
         """
     )
     if underscore:
-        with pytest.raises(InvalidModuleException):
+        with pytest.raises(InvalidMetadata):
             module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
     else:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
@@ -515,6 +555,38 @@ import minimalv2module
     finally:
         os.chdir(cwd)
     verify_v2_message("push")
+
+
+@pytest.mark.parametrize_any(
+    "version, error_msg",
+    [
+        ("0.0.1.dev0", "setup.cfg version should be a base version without tag. Use egg_info.tag_build to configure a tag"),
+        ("hello", "Version hello is not PEP440 compliant"),
+    ],
+)
+def test_module_v2_invalid_version(inmanta_module_v2: InmantaModule, version: str, error_msg: str):
+    """
+    Test module v2 metadata parsing with respect to module naming rules about dashes and underscores.
+    """
+    inmanta_module_v2.write_metadata_file(
+        f"""
+[metadata]
+name = inmanta-module-mymod
+version = {version}
+license = Apache 2.0
+[options]
+install_requires =
+  inmanta-modules-net ~=0.2.4
+  inmanta-modules-std >1.0,<2.5
+  cookiecutter~=1.7.0
+  cryptography>1.0,<3.5
+packages = find_namespace:
+        """
+    )
+    with pytest.raises(InvalidMetadata) as e:
+        module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
+    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
+    assert error_msg in str(e.value)
 
 
 def test_moduletool_create_v1(snippetcompiler_clean) -> None:

@@ -27,18 +27,16 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 from uuid import UUID
 
-import asyncpg
 import asyncpg.connection
 
 from inmanta import const, data, util
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.data import APILIMIT, InvalidSort, QueryType, model, paging
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -54,9 +52,9 @@ from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, 
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes
 
-from ..data.paging import QueryIdentifier
+from ..data.dataview import AgentView
 from . import config as server_config
-from .validate_filter import AgentFilterValidator, InvalidFilter
+from .validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -875,59 +873,22 @@ class AgentManager(ServerSlice, SessionListener):
         last_id: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
-    ) -> ReturnValue[List[model.Agent]]:
-
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(AgentFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValue[Sequence[model.Agent]]:
         try:
-            agent_order = data.AgentOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-        typed_start, typed_end = None, None
-        if start is not None and start != "None":
-            typed_start = agent_order.ensure_boundary_type(start)
-        if end is not None and end != "None":
-            typed_end = agent_order.ensure_boundary_type(end)
-
-        try:
-            dtos = await data.Agent.get_agents(
-                environment=env.id,
-                database_order=agent_order,
+            handler = AgentView(
+                environment=env,
+                limit=limit,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
-                start=typed_start,
-                end=typed_end,
-                limit=limit,
-                **query,
+                start=start,
+                end=end,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = paging.AgentPagingHandler(paging.AgentPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, limit=limit, database_order=agent_order, db_query=query
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            database_order=agent_order,
-            limit=limit,
-            filter=filter,
-            first_id=first_id,
-            last_id=last_id,
-            start=typed_start,
-            end=typed_end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @protocol.handle(methods_v2.get_agent_process_details, env="tid")
     async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:

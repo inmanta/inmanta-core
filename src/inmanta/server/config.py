@@ -108,7 +108,6 @@ def get_bind_port() -> int:
             warnings.warn(
                 "Ignoring the server_rest_transport.port config option since the new config options "
                 "server.bind-port/server.bind-address are used.",
-                category=DeprecationWarning,
             )
         return server_bind_port.get()
     else:
@@ -279,19 +278,48 @@ server_access_control_allow_origin = Option(
 # Dashboard
 #############################
 
-dash_enable = Option("dashboard", "enabled", True, "Determines whether the server should host the dashboard or not", is_bool)
+dash_enable = Option(
+    "dashboard",
+    "enabled",
+    True,
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard-enabled`] "
+    "Determines whether the server should host the dashboard or not",
+    is_bool,
+)
 
 dash_path = Option(
     "dashboard",
     "path",
     "/usr/share/inmanta/dashboard",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.dashboard-path`] "
     "The path on the local file system where the dashboard can be found",
     is_str,
 )
 
-dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
-dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
-dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
+dash_realm = Option(
+    "dashboard",
+    "realm",
+    "inmanta",
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-realm`] The realm to use for keycloak authentication.",
+    is_str,
+)
+
+dash_auth_url = Option(
+    "dashboard",
+    "auth_url",
+    None,
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-auth-url`] The auth url of the keycloak server to use.",
+    is_str,
+)
+
+dash_client_id = Option(
+    "dashboard",
+    "client_id",
+    None,
+    "[DEPRECATED USE :inmanta.config:option:`web-ui.oidc-client-id`] "
+    "The client id configured in keycloak for this application.",
+    is_str,
+)
 
 
 def default_hangtime() -> str:

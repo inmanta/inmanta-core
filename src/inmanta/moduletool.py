@@ -212,7 +212,7 @@ class ProjectTool(ModuleLikeTool):
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new project.yml, default is the existing project.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
@@ -528,25 +528,25 @@ mode.
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
         freeze.add_argument(
             "-o",
             "--outfile",
-            help="File in which to put the new project.yml, default is the existing project.yml",
+            help="File in which to put the new module.yml, default is the existing module.yml. Use - to write to stdout.",
             default=None,
         )
         freeze.add_argument(
             "-r",
             "--recursive",
-            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-            "which defaults to False",
+            help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
+            " which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " project.yml is used which defaults to ~=",
+            " module.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -667,8 +667,10 @@ mode.
         except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
             try:
                 return ModuleV1(project, path)
-            except (ModuleMetadataFileNotFound, InvalidMetadata, InvalidModuleException):
+            except (ModuleMetadataFileNotFound, InvalidModuleException):
                 raise InvalidModuleException(f"No module can be found at {path}")
+            except InvalidMetadata as e:
+                raise InvalidModuleException(e.msg)
 
     def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
@@ -1291,6 +1293,12 @@ class ModuleConverter:
         # move plugins or create
         old_plugins = os.path.join(output_directory, "plugins")
         new_plugins = os.path.join(output_directory, "inmanta_plugins", self._module.name)
+        if os.path.exists(new_plugins) and os.listdir(new_plugins):
+            raise ModuleBuildFailedError(
+                msg=f"Could not build module: inmanta_plugins/{self._module.name} directory already exists and is not empty"
+            )
+        if os.path.exists(new_plugins):
+            os.rmdir(new_plugins)
         if os.path.exists(old_plugins):
             shutil.move(old_plugins, new_plugins)
         else:
