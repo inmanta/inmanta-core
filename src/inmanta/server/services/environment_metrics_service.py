@@ -33,7 +33,6 @@ class MetricType(str, Enum):
 
 
 class MetricsCollector(abc.ABC):
-
     def __init__(
         self,
         metric_name: str,
@@ -48,32 +47,32 @@ class MetricsCollector(abc.ABC):
 
     def get_metric_name(self) -> str:
         """
-    Returns the name of the metric collected by this MetricsCollector.
-    """
+        Returns the name of the metric collected by this MetricsCollector.
+        """
         return self.metric_name
 
     def get_metric_type(self) -> MetricType:
         """
-    Returns the type of Metric collected by this metrics collector (count, non-count, etc.).
-    This information is required by the `EnvironmentMetricsService` to know how the data
-    should be aggregated.
-    """
+        Returns the type of Metric collected by this metrics collector (count, non-count, etc.).
+        This information is required by the `EnvironmentMetricsService` to know how the data
+        should be aggregated.
+        """
         raise self.metric_type
 
     @abc.abstractmethod
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
         """
-    Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
-    Returns the metrics collected by this MetricCollector within the past metrics collection interval.
+        Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
+        Returns the metrics collected by this MetricCollector within the past metrics collection interval.
 
-    The *_interval arguments are present, because this method is intended to perform a query on
-    the database. No in-memory state is being stored by this metrics collector. The provided interval
-    should be interpreted as [start_interval, end_interval[
+        The *_interval arguments are present, because this method is intended to perform a query on
+        the database. No in-memory state is being stored by this metrics collector. The provided interval
+        should be interpreted as [start_interval, end_interval[
 
-    :param start_interval: The start time of the metrics collection interval (inclusive).
-    :param end_interval: The end time of the metrics collection interval (exclusive).
-    :result: The metrics collected by this MetricCollector within the past metrics collection interval.
-    """
+        :param start_interval: The start time of the metrics collection interval (inclusive).
+        :param end_interval: The end time of the metrics collection interval (exclusive).
+        :result: The metrics collected by this MetricCollector within the past metrics collection interval.
+        """
         raise NotImplementedError()
 
 
@@ -112,7 +111,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
             metric_value: object = metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
-            if metric_type
+            if metric_type == MetricType.count:
+                pass
+            if metric_type == MetricType.non_count:
+                pass
 
-        if datetime.now()-now > timedelta(seconds=60):
+        if datetime.now() - now > timedelta(seconds=60):
             LOGGER.warning("flush_metrics method took more than 1 minute")
