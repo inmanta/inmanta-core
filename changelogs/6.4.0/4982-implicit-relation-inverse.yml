@@ -1,0 +1,9 @@
+description: Added implicit inverse relation assignment for bidirectional relations with an index
+change-type: minor
+sections:
+  feature:
+    Constructors that appear as a right hand side in an assignment (or another constructor) now no longer require
+    explicit assignments for the inverse relation to the left hand side.
+destination-branches:
+  - iso5
+  - master

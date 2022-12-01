@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import uuid
+import warnings
 from collections import defaultdict
 from collections.abc import Set
 from enum import Enum
@@ -354,6 +355,10 @@ class EnvironmentService(protocol.ServerSlice):
 
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             raise BadRequest("Repository and branch should be set together.")
+        if repository is None:
+            repository = ""
+        if branch is None:
+            branch = ""
 
         # fetch the project first
         project = await data.Project.get_by_id(project_id)
@@ -460,8 +465,8 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_list)
     async def environment_list(self, details: bool = False) -> List[model.Environment]:
-        env_list = await data.Environment.get_list(details=details)
-        return [env.to_dto() for env in env_list]
+        env_list = await data.Environment.get_list(details=details, order_by_column="project")
+        return sorted((env.to_dto() for env in env_list), key=lambda e: (e.project_id, e.name, e.id))
 
     @handle(methods_v2.environment_delete, environment_id="id")
     async def environment_delete(self, environment_id: uuid.UUID) -> None:
@@ -601,7 +606,7 @@ class EnvironmentService(protocol.ServerSlice):
                 if action == EnvironmentAction.updated and original_env:
                     await listener.environment_action_updated(updated_env, original_env)
             except Exception:
-                LOGGER.warning(f"Notifying listener of {action} failed with the following exception", exc_info=True)
+                LOGGER.warning("Notifying listener of %s failed with the following exception", action.value, exc_info=True)
 
     async def register_setting(self, setting: Setting) -> None:
         """
@@ -611,4 +616,10 @@ class EnvironmentService(protocol.ServerSlice):
         relevant for inmanta-lsm but that are needed in the environment.
         :param setting: the setting that should be added to the existing settings
         """
-        await data.Environment.register_setting(setting)
+        warnings.warn(
+            "Registering environment settings via the inmanta.server.services.environmentservice.register_setting endpoint "
+            "is deprecated. Environment settings defined by an extension should be advertised via the "
+            "register_environment_settings method of the inmanta_ext.<extension_name>.extension.py file of an extension.",
+            category=DeprecationWarning,
+        )
+        data.Environment.register_setting(setting)

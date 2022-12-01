@@ -278,17 +278,17 @@ issued by keycloak.
 
    Show the correct configuration parameters in JSON format.
 
-Add the keycloak configuration parameters to the dashboard section of the server configuration file. Add a configuration
-file called `/etc/inmanta/inmanta.d/keycloak.cfg`. Add the realm, auth_url and client_id to the dashboard section. Use
+Add the keycloak configuration parameters to the web-ui section of the inmanta-ui configuration file. Add a configuration
+file called `/etc/inmanta/inmanta.d/keycloak.cfg`. Add the oidc_realm, oidc_auth_url and oidc_client_id to the web-ui section. Use
 the parameters from the installation json file created by keycloak.
 
 .. code-block:: ini
 
-    [dashboard]
-    # keycloak specific configuration
-    realm=master
-    auth_url=http://localhost:8080/auth
-    client_id=inmanta
+    [web-ui]
+    # generic OpenID Connect configuration
+    oidc_realm=master
+    oidc_auth_url=http://localhost:8080/auth
+    oidc_client_id=inmanta
 
 .. warning:: In a real setup, the url should contain public names instead of localhost, otherwise logins will only work
    on the machine that hosts inmanta server.

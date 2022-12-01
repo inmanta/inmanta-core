@@ -283,11 +283,12 @@ class Namespace(Namespaced):
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
+        self.visible_namespaces: Dict[str, Import]
         if self.__parent is not None:
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
-            self.visible_namespaces = {name: MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
 
@@ -716,6 +717,7 @@ class WrappingRuntimeException(RuntimeException):
         return self.__cause__.importantance() + 1
 
 
+@stable_api
 class AttributeException(WrappingRuntimeException):
     """Exception raise when an attribute could not be set, always wraps another exception"""
 
@@ -802,6 +804,7 @@ class NotFoundException(RuntimeException):
         return 20
 
 
+@stable_api
 class DoubleSetException(RuntimeException):
     def __init__(
         self, variable: "ResultVariable", stmt: "Optional[Statement]", newvalue: object, newlocation: Location
