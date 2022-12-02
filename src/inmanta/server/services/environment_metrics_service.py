@@ -39,8 +39,8 @@ class MetricsCollector(abc.ABC):
         metric_type: MetricType,
     ) -> None:
         """
-        :param metric_name: The name of the metric
-        :param metric_type: The metric type
+        :param metric_name: The name of the metric collected by this MetricsCollector
+        :param metric_type: The metric type of Metric collected by this metrics collector (count, non-count, etc.)
         """
         self.metric_name = metric_name
         self.metric_type = metric_type
@@ -88,7 +88,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
-        return [SLICE_TRANSPORT]
+        return [SLICE_TRANSPORT]  # todo: what is this slice for?
 
     async def start(self) -> None:
         await super().start()
