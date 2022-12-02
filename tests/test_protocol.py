@@ -1545,7 +1545,7 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
     assert request.url == "/api/v1/test/1/monty?age=42"
 
 
-async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
+async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_port) -> None:
     async def _id(x: object, dct: Dict[str, str]) -> object:
         return x
 
@@ -1565,6 +1565,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
         async def test_method_implementation(self, header_param: str, body_param: str) -> None:
             pass
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
