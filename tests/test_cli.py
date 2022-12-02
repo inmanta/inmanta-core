@@ -288,11 +288,9 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert ctime_0 != ctime_2
 
 
-async def test_inmanta_cli_http_version(server, client, cli, caplog):
-    with caplog.at_level(logging.DEBUG):
-        result = await cli.run("project", "create", "-n", "test_project")
-        assert result.exit_code == 0
-        log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")
+async def test_inmanta_cli_http_version(server, client, cli):
+    result = await cli.run("project", "create", "-n", "test_project")
+    assert result.exit_code == 0
 
 
 async def test_pause_agent(server, cli):
