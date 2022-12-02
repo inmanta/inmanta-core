@@ -373,7 +373,7 @@ class ForcedStringColumn(ColumnType):
 
 class ResourceVersionIdColumnType(ColumnType):
     def __init__(self) -> None:
-        super().__init__(base_type=None, nullable=False)
+        self.nullable = False
 
     def as_basic_filter_elements(self, name: str, value: object) -> Sequence[Tuple[str, "ColumnType", object]]:
         """
