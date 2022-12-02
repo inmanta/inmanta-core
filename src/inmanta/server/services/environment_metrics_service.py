@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import List
 
+from inmanta.data import BaseDocument
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class MetricsCollector(abc.ABC):
 
 
 class EnvironmentMetricsService(protocol.ServerSlice):
-    """Slice for the management of environment metrics"""
+    """Slice for the management of metrics"""
 
     metrics_collectors: List[MetricsCollector]
 
@@ -88,11 +89,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         return [SLICE_DATABASE]
 
     def get_depended_by(self) -> List[str]:
-        return [SLICE_TRANSPORT]  # todo: what is this slice for?
+        return [SLICE_TRANSPORT]
 
     async def start(self) -> None:
         await super().start()
-        self.schedule(self.flush_metrics, 60, initial_delay=0, cancel_on_stop=False)  # todo: should cancel on stop?
+        self.schedule(self.flush_metrics, 60, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
@@ -107,14 +108,79 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         to the database.
         """
         now: datetime = datetime.now()
+        metric_count: List[EnvironmentMetricsCounter] = []
+        metric_non_count: List[EnvironmentMetricsNonCounter] = []
         for metrics_collector in self.metrics_collectors:
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
             metric_value: object = metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
             if metric_type == MetricType.count:
-                pass
+                metric_count.append(EnvironmentMetricsCounter.new(metric_name, now, metric_value.count))
             if metric_type == MetricType.non_count:
-                pass
+                metric_non_count.append(
+                    EnvironmentMetricsNonCounter.new(metric_name, now, metric_value.count, metric_value.value)
+                )
+
+        await EnvironmentMetricsCounter.insert_many(metric_count)
+        await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
 
         if datetime.now() - now > timedelta(seconds=60):
             LOGGER.warning("flush_metrics method took more than 1 minute")
+
+
+class EnvironmentMetricsCounter(BaseDocument):
+    """
+    A metrics that is a counter
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at witch a new record is created
+    :param count: the counter for the metric in the last timestamp
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+    def table_name(cls) -> str:
+        """
+        Return the name of the collection #todo changer ca
+        """
+        return cls.__name__.lower()
+
+    @classmethod
+    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int) -> "EnvironmentMetricsCounter":
+        attr = dict(
+            metric_name=metric_name,
+            timestamp=timestamp,
+            count=count,
+        )
+        return cls(**attr)
+
+
+class EnvironmentMetricsNonCounter(BaseDocument):
+    """
+    A metrics that is not a counter
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at witch a new record is created
+    :param count: the number of occurrences in the last timestamp
+    :param value: the value of the metric for the last timestamp
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+    value: int
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+    @classmethod
+    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
+        attr = dict(
+            metric_name=metric_name,
+            timestamp=timestamp,
+            count=count,
+        )
+        return cls(**attr)

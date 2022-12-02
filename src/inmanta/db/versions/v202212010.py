@@ -21,22 +21,22 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    CREATE TABLE IF NOT EXISTS public.environment_metrics_counter (
-        metric_type VARCHAR NOT NULL,
+    CREATE TABLE IF NOT EXISTS public.environment_metrics_counter(
+        metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
-        PRIMARY KEY (metric_type, timestamp)
+        PRIMARY KEY (metric_name, timestamp)
     );
-    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environment_metrics_counter(metric_type);
+    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environment_metrics_counter(metric_name);
 
     CREATE TABLE IF NOT EXISTS public.environment_metrics_non_counter (
-        metric_type VARCHAR NOT NULL,
+        metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
         value INT NOT NULL,
-        PRIMARY KEY (metric_type, timestamp)
+        PRIMARY KEY (metric_name, timestamp)
     );
-    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environment_metrics_counter(metric_type);
+    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environment_metrics_counter(metric_name);
     """
 
     async with connection.transaction():
