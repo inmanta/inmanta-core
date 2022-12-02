@@ -16,9 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import sys
-from io import StringIO
-
 import inmanta.compiler as compiler
 
 
