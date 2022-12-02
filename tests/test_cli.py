@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import datetime
-import logging
 import os
 import uuid
 from typing import Dict
