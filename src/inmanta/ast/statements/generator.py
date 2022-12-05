@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc
 from itertools import chain
-from typing import Dict, Iterator, List, MutableMapping, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -698,7 +698,7 @@ class Constructor(ExpressionStatement):
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
         # register any potential index collision
-        collisions: MutableMapping[tuple[str, ...], Instance] = {}
+        collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
         for index in type_class.get_indices():
             params = []
             for attr in index:
