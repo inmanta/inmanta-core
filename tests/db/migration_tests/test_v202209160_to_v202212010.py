@@ -43,7 +43,7 @@ async def migrate_v202209160_to_v202212010(
     await ibl.stop(timeout=15)
 
 
-async def test_added_environment_metrics_counter_table(
+async def test_added_environment_metrics_tables(
     migrate_v202209160_to_v202212010: Callable[[], Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],
 ) -> None:
@@ -54,25 +54,6 @@ async def test_added_environment_metrics_counter_table(
     # The table is not present before the migration
     tables = await get_tables_in_db()
     assert "environment_metrics_counter" not in tables
-
-    # Migrate DB schema
-    await migrate_v202209160_to_v202212010()
-
-    # The table is added to the database
-    tables = await get_tables_in_db()
-    assert "environment_metrics_counter" in tables
-
-
-async def test_added_environment_metrics_non_counter_table(
-    migrate_v202209160_to_v202212010: Callable[[], Awaitable[None]],
-    get_tables_in_db: Callable[[], Awaitable[List[str]]],
-) -> None:
-    """
-    Test whether the environment_metrics_counter table was added
-    """
-
-    # The table is not present before the migration
-    tables = await get_tables_in_db()
     assert "environment_metrics_non_counter" not in tables
 
     # Migrate DB schema
@@ -80,4 +61,5 @@ async def test_added_environment_metrics_non_counter_table(
 
     # The table is added to the database
     tables = await get_tables_in_db()
+    assert "environment_metrics_counter" in tables
     assert "environment_metrics_non_counter" in tables

@@ -5269,7 +5269,7 @@ class Notification(BaseDocument):
 
 class EnvironmentMetricsCounter(BaseDocument):
     """
-    A metrics that is a counter
+    A metric that is a counter
 
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at witch a new record is created
@@ -5294,7 +5294,7 @@ class EnvironmentMetricsCounter(BaseDocument):
 
 class EnvironmentMetricsNonCounter(BaseDocument):
     """
-    A metrics that is not a counter
+    A metric that is not a counter
 
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at witch a new record is created
@@ -5310,7 +5310,7 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     __primary_key__ = ("metric_name", "timestamp")
 
     @classmethod
-    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
+    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsNonCounter":
         attr = dict(
             metric_name=metric_name,
             timestamp=timestamp,
