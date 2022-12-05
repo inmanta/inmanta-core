@@ -25,7 +25,7 @@ import pytest
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
-from utils import get_resource, log_contains
+from utils import get_resource
 
 
 async def test_project(server, client, cli):
