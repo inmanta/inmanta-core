@@ -61,7 +61,7 @@ class MetricsCollector(abc.ABC):
         return self.metric_type
 
     @abc.abstractmethod
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
+    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> dict[str, int]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
         Returns the metrics collected by this MetricCollector within the past metrics collection interval.
@@ -113,7 +113,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         for metrics_collector in self.metrics_collectors:
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
-            metric_value: object = await metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
+            metric_value: dict[str, int] = await metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
             if metric_type == MetricType.count:
                 metric_count.append(EnvironmentMetricsCounter.new(metric_name, now, metric_value["count"]))
             if metric_type == MetricType.non_count:
