@@ -458,7 +458,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         sort: str,
     ) -> T_SELF:
         valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+            f"^({'|'.join(cls.get_valid_sort_columns().keys())})\\.(asc|desc)$", re.IGNORECASE
         )
         match = valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
@@ -551,7 +551,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
 
     def __str__(self) -> str:
         # used to serialize the order back to a  paging url
-        return f"{self.order_by_column}.{self.order}"
+        return f"{self.order_by_column}.{self.order.value.lower()}"
 
 
 class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
