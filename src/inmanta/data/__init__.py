@@ -5267,6 +5267,59 @@ class Notification(BaseDocument):
         )
 
 
+class EnvironmentMetricsCounter(BaseDocument):
+    """
+    A metrics that is a counter
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at witch a new record is created
+    :param count: the counter for the metric in the last timestamp
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+    @classmethod
+    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int) -> "EnvironmentMetricsCounter":
+        attr = dict(
+            metric_name=metric_name,
+            timestamp=timestamp,
+            count=count,
+        )
+        return cls(**attr)
+
+
+class EnvironmentMetricsNonCounter(BaseDocument):
+    """
+    A metrics that is not a counter
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at witch a new record is created
+    :param count: the number of occurrences in the last timestamp
+    :param value: the value of the metric for the last timestamp
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+    value: int
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+    @classmethod
+    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
+        attr = dict(
+            metric_name=metric_name,
+            timestamp=timestamp,
+            count=count,
+            value=value,
+        )
+        return cls(**attr)
+
+
 _classes = [
     Project,
     Environment,
@@ -5283,6 +5336,8 @@ _classes = [
     Compile,
     Report,
     Notification,
+    EnvironmentMetricsCounter,
+    EnvironmentMetricsNonCounter,
 ]
 
 

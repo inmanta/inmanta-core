@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import List
 
-from inmanta.data import BaseDocument
+from inmanta.data import EnvironmentMetricsCounter, EnvironmentMetricsNonCounter
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -126,68 +126,3 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         if datetime.now() - now > timedelta(seconds=60):
             LOGGER.warning("flush_metrics method took more than 1 minute")
-
-
-class EnvironmentMetricsCounter(BaseDocument):
-    """
-    A metrics that is a counter
-
-    :param metric_name: The name of the metric
-    :param timestamp: The timestamps at witch a new record is created
-    :param count: the counter for the metric in the last timestamp
-    """
-
-    metric_name: str
-    timestamp: datetime
-    count: int
-
-    __primary_key__ = ("metric_name", "timestamp")
-
-    def table_name(cls) -> str:
-        """
-        Return the name of the collection
-        """
-        return "environment_metrics_counter"
-
-    @classmethod
-    def new(cls, metric_name: str, timestamp: datetime, count: int) -> "EnvironmentMetricsCounter":
-        attr = dict(
-            metric_name=metric_name,
-            timestamp=timestamp,
-            count=count,
-        )
-        return cls(**attr)
-
-
-class EnvironmentMetricsNonCounter(BaseDocument):
-    """
-    A metrics that is not a counter
-
-    :param metric_name: The name of the metric
-    :param timestamp: The timestamps at witch a new record is created
-    :param count: the number of occurrences in the last timestamp
-    :param value: the value of the metric for the last timestamp
-    """
-
-    metric_name: str
-    timestamp: datetime
-    count: int
-    value: int
-
-    __primary_key__ = ("metric_name", "timestamp")
-
-    def table_name(cls) -> str:
-        """
-        Return the name of the collection
-        """
-        return "environment_metrics_non_counter"
-
-    @classmethod
-    def new(cls, metric_name: str, timestamp: datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
-        attr = dict(
-            metric_name=metric_name,
-            timestamp=timestamp,
-            count=count,
-            value=value,
-        )
-        return cls(**attr)
