@@ -30,7 +30,7 @@ import sys
 import tempfile
 import time
 import zipfile
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
@@ -680,7 +680,11 @@ When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version and the version mentioned in the change to a development version that is
   a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
   is determined respectively by the --patch, --minor or --major argument (--patch is the default).
+
+When a CHANGELOG.md file is present in the root of the module directory then the version number in the changelog is also
+updated accordingly.
             """.strip(),
+            formatter_class=RawTextHelpFormatter,
         )
         release.add_argument(
             "--dev",
