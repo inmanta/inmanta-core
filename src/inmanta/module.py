@@ -26,11 +26,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import traceback
 import types
 import warnings
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import abc, defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
 from importlib.abc import Loader
@@ -64,6 +65,7 @@ import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
+from pydantic.error_wrappers import display_errors
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -86,15 +88,10 @@ except ImportError:
     TYPE_CHECKING = False
 
 
-if TYPE_CHECKING:
-    from pkg_resources.packaging.version import Version  # noqa: F401
-
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
-
 
 T = TypeVar("T")
 TModule = TypeVar("TModule", bound="Module")
@@ -260,10 +257,9 @@ class InvalidMetadata(CompilerException):
 
     @classmethod
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
-        for error in validation_error.errors():
-            mgs: str = error["msg"]
-            error_type = error["type"]
-            msg += f"\n{error['loc']}\n\t{mgs} ({error_type})"
+        errors = validation_error.errors()
+        if errors:
+            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
         return msg
 
 
@@ -325,6 +321,16 @@ class PluginModuleLoadException(Exception):
         return exception
 
 
+class UntrackedFilesMode(enum.Enum):
+    """
+    The different options that can be passed to the --untracked-files option of the `git status` command.
+    """
+
+    ALL = "all"
+    NORMAL = "normal"
+    NO = "no"
+
+
 class GitProvider(object):
     def clone(self, src: str, dest: str) -> None:
         pass
@@ -332,7 +338,13 @@ class GitProvider(object):
     def fetch(self, repo: str) -> None:
         pass
 
+    def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
+        pass
+
     def get_all_tags(self, repo: str) -> List[str]:
+        pass
+
+    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
         pass
 
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
@@ -341,13 +353,35 @@ class GitProvider(object):
     def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
-    def commit(self, repo: str, message: str, commit_all: bool, add: List[str] = []) -> None:
+    def commit(
+        self,
+        repo: str,
+        message: str,
+        commit_all: bool,
+        add: Optional[abc.Sequence[str]] = None,
+        raise_exc_when_nothing_to_commit: bool = True,
+    ) -> None:
         pass
 
     def tag(self, repo: str, tag: str) -> None:
         pass
 
     def push(self, repo: str) -> str:
+        pass
+
+    def pull(self, repo: str) -> str:
+        pass
+
+    def get_remote(self, repo: str) -> Optional[str]:
+        pass
+
+    def is_git_repository(self, repo: str) -> bool:
+        pass
+
+    def git_init(self, repo: str) -> None:
+        pass
+
+    def add(self, repo: str, files: list[str]) -> None:
         pass
 
 
@@ -369,18 +403,69 @@ class CLIGitProvider(GitProvider):
             ["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
         )
 
-    def status(self, repo: str) -> str:
-        return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
+    def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
+        """
+        Return the output of the `git status --porcelain` command.
+
+        :param repo: The path to the directory that contains the git repository on which the git command should be executed.
+        :param untracked_files_mode: If provided, the --untracked-files option will be passed to `git status` command.
+        """
+        extra_args = []
+        if untracked_files_mode:
+            extra_args.append(f"--untracked-files={untracked_files_mode.value}")
+        return subprocess.check_output(["git", "status", "--porcelain", *extra_args], cwd=repo).decode("utf-8")
 
     def get_all_tags(self, repo: str) -> List[str]:
         return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
 
+    def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
+        """
+        Return the Git tags that represent version numbers as version.Version objects. Only PEP440 compliant
+        versions will be returned.
+
+        :param repo: The path to the directory that contains the git repository on which the git command should be executed.
+        :param only_return_stable_versions: Return only version for stable releases.
+        """
+        result = []
+        all_tags: List[str] = sorted(self.get_all_tags(repo))
+        for tag in all_tags:
+            try:
+                parsed_version: version.Version = version.Version(tag)
+            except version.InvalidVersion:
+                continue
+            if not only_return_stable_versions or not parsed_version.is_prerelease:
+                result.append(parsed_version)
+        return sorted(result)
+
     def checkout_tag(self, repo: str, tag: str) -> None:
         subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def commit(self, repo: str, message: str, commit_all: bool, add: List[str] = []) -> None:
-        for file in add:
-            subprocess.check_call(["git", "add", file], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def commit(
+        self,
+        repo: str,
+        message: str,
+        commit_all: bool,
+        add: Optional[abc.Sequence[str]] = None,
+        raise_exc_when_nothing_to_commit: bool = True,
+    ) -> None:
+        """
+        Execute the `git commit` command.
+
+        :param repo: The path to the directory that contains the git repository on which the git command should be executed.
+        :param message: The commit message.
+        :param commit_all: Commit changes to all tracked files using the `-a` option.
+        :param add: Paths to files that have to be staged for the commit.
+        :param raise_exc_when_nothing_to_commit: True iff there are no changes to commit.
+        """
+        if add is None:
+            add = []
+        self.add(repo=repo, files=add)
+        if (
+            not raise_exc_when_nothing_to_commit
+            and not self.status(repo=repo, untracked_files_mode=UntrackedFilesMode.NO).strip()
+        ):
+            # Nothing to commit
+            return
         if not commit_all:
             subprocess.check_call(
                 ["git", "commit", "-m", message], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -426,6 +511,27 @@ class CLIGitProvider(GitProvider):
         b = tf.extractfile(tfile)
         assert b is not None
         return b.read().decode("utf-8")
+
+    def is_git_repository(self, repo: str) -> bool:
+        """
+        Return True iff the given directory is a git repository.
+        """
+        try:
+            self.status(repo=repo)
+        except subprocess.CalledProcessError:
+            return False
+        else:
+            return True
+
+    def git_init(self, repo: str) -> None:
+        """
+        Execute `git init` in the given repository.
+        """
+        subprocess.check_call(["git", "init"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def add(self, repo: str, files: abc.Sequence[str]) -> None:
+        if files:
+            subprocess.check_call(["git", "add", *files], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 gitprovider = CLIGitProvider()
@@ -501,18 +607,18 @@ class ModuleSource(Generic[TModule]):
         """
         raise NotImplementedError("Abstract method")
 
-    def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, "Version"]) -> None:
+    def _log_version_snapshot(self, header: Optional[str], version_snapshot: Dict[str, version.Version]) -> None:
         if version_snapshot:
             out = [header] if header is not None else []
             out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
             LOGGER.debug("\n".join(out))
 
     def _log_snapshot_difference(
-        self, version_snapshot: Dict[str, "Version"], previous_snapshot: Dict[str, "Version"], header: Optional[str]
+        self, version_snapshot: Dict[str, version.Version], previous_snapshot: Dict[str, version.Version], header: Optional[str]
     ) -> None:
-        set_pre_install: Set[tuple[str, "Version"]] = set(previous_snapshot.items())
-        set_post_install: Set[tuple[str, "Version"]] = set(version_snapshot.items())
-        updates_and_additions: Set[tuple[str, "Version"]] = set_post_install - set_pre_install
+        set_pre_install: Set[tuple[str, version.Version]] = set(previous_snapshot.items())
+        set_post_install: Set[tuple[str, version.Version]] = set(version_snapshot.items())
+        updates_and_additions: Set[tuple[str, version.Version]] = set_post_install - set_pre_install
 
         if version_snapshot:
             out = [header] if header is not None else []
@@ -651,7 +757,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> Dict[str, "Version"]:
+    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> Dict[str, version.Version]:
         """
         Log and return a dictionary containing currently installed v2 modules and their versions.
 
@@ -662,7 +768,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         super()._log_version_snapshot(header, version_snapshot)
         return version_snapshot
 
-    def log_snapshot_difference_v2_modules(self, previous_snapshot: Dict[str, "Version"], header: Optional[str] = None) -> None:
+    def log_snapshot_difference_v2_modules(
+        self, previous_snapshot: Dict[str, version.Version], header: Optional[str] = None
+    ) -> None:
         """
         Logs a diff view of v2 inmanta modules currently installed (in alphabetical order) and their version.
 
@@ -681,8 +789,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         :param module_name: The module's name.
         """
-        version: Optional[Version] = self.get_installed_version(module_name)
-        LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, version)
+        installed_version: Optional[version.Version] = self.get_installed_version(module_name)
+        LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, installed_version)
 
     def path_for(self, name: str) -> Optional[str]:
         """
@@ -745,7 +853,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v1) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, "Version"]:
+    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> Dict[str, version.Version]:
         """
         Log and return a dictionary containing currently loaded modules and their versions.
 
@@ -757,7 +865,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         return version_snapshot
 
     def log_snapshot_difference_v1_modules(
-        self, project: "Project", previous_snapshot: Dict[str, "Version"], header: Optional[str] = None
+        self, project: "Project", previous_snapshot: Dict[str, version.Version], header: Optional[str] = None
     ) -> None:
         """
         Logs a diff view on inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
@@ -1009,7 +1117,7 @@ class CfgParser(RawParser):
                 install_requires = [r for r in config.get("options", "install_requires").split("\n") if r]
             else:
                 install_requires = []
-            version_tag: Optional[str] = config.get("egg_info", "tag_build", fallback=None)
+            version_tag: str = config.get("egg_info", "tag_build", fallback="")
             return {**config["metadata"], "install_requires": install_requires, "version_tag": version_tag}
         except configparser.Error as e:
             if isinstance(source, TextIOBase):
@@ -1096,7 +1204,7 @@ class Metadata(BaseModel):
             return cls(**raw)
         except ValidationError as e:
             if isinstance(source, TextIOBase):
-                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid", validation_error=e) from e
+                raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
             else:
                 raise InvalidMetadata(msg=str(e), validation_error=e) from e
 
@@ -1137,7 +1245,9 @@ class ModuleMetadata(ABC, Metadata):
         return v
 
     @classmethod
-    def rewrite_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> Tuple[str, TModuleMetadata]:
+    def rewrite_version(
+        cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = ""
+    ) -> Tuple[str, TModuleMetadata]:
         """
         Returns the source text with the version replaced by the new version.
         """
@@ -1146,22 +1256,44 @@ class ModuleMetadata(ABC, Metadata):
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
-        result: str = cls._substitute_version(source, new_version)
+        result: str = cls._substitute_version(source, new_version, version_tag)
 
         try:
             new_metadata = cls.parse(result)
         except Exception:
             raise Exception("Unable to rewrite module definition.")
 
-        if new_metadata.version != new_version:
-            raise Exception(f"Unable to write module definition, should be {new_version} got {new_metadata.version} instead.")
+        # Validate whether the version and version_tag field was updated correctly in metadata file
+        full_version_in_meta_data: packaging.version.Version = new_metadata.get_full_version()
+        expected_full_version: packaging.version.Version = cls._compose_full_version(new_version, version_tag)
+        if full_version_in_meta_data != expected_full_version:
+            raise Exception(
+                "Unable to write version and version tag information to the module metadata file.\n"
+                "\t* For a V1 module: Does the module.yml file contain a syntax error near the version field?\n"
+                "\t* For a V2 module: Does the setup.cfg file contain a syntax error near the metadata.version or "
+                "the egg_info.tag_build field?"
+            )
 
         return result, new_metadata
 
     @classmethod
     @abstractmethod
-    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
         raise NotImplementedError()
+
+    @abstractmethod
+    def get_full_version(self) -> packaging.version.Version:
+        """
+        Return the full version (version + version tag) of this module.
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def _compose_full_version(cls, v: str, version_tag: str) -> packaging.version.Version:
+        if not version_tag:
+            return version.Version(v)
+        normalized_tag: str = version_tag.lstrip(".")
+        return version.Version(f"{v}.{normalized_tag}")
 
 
 @stable_api
@@ -1194,8 +1326,12 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
         return cls.is_pep440_version(v)
 
     @classmethod
-    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
-        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", r"\g<1>" + new_version + r"\g<2>", source)
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
+        new_version_obj: version.Version = cls._compose_full_version(new_version, version_tag)
+        return re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)", rf"\g<1>{new_version_obj}\g<2>", source)
+
+    def get_full_version(self) -> packaging.version.Version:
+        return version.Version(self.version)
 
     def to_v2(self) -> "ModuleV2Metadata":
         values = self.dict()
@@ -1228,7 +1364,7 @@ class ModuleV2Metadata(ModuleMetadata):
     """
 
     install_requires: List[str]
-    version_tag: Optional[str] = None
+    version_tag: str = ""
 
     _raw_parser: Type[CfgParser] = CfgParser
 
@@ -1243,19 +1379,12 @@ class ModuleV2Metadata(ModuleMetadata):
         return v
 
     @classmethod
-    def _compose_full_version(cls, v: str, version_tag: Optional[str]) -> packaging.version.Version:
-        if version_tag is None:
-            return version.Version(v)
-        normalized_tag: str = version_tag.lstrip(".")
-        return version.Version(f"{v}.{normalized_tag}")
-
-    @classmethod
-    def split_version(cls, v: packaging.version.Version) -> tuple[str, Optional[str]]:
+    def split_version(cls, v: packaging.version.Version) -> tuple[str, str]:
         """
         Splits a full version in a base version and a tag.
         """
 
-        def get_version_tag(v: packaging.version.Version) -> Optional[str]:
+        def get_version_tag(v: packaging.version.Version) -> str:
             if v.is_devrelease:
                 return f"dev{v.dev}"
             if v.is_prerelease:
@@ -1264,7 +1393,7 @@ class ModuleV2Metadata(ModuleMetadata):
                 return "%s%s" % (v.pre[0], v.pre[1])
             if v.is_postrelease:
                 return f"post{v.post}"
-            return None
+            return ""
 
         return v.base_version, get_version_tag(v)
 
@@ -1293,8 +1422,23 @@ class ModuleV2Metadata(ModuleMetadata):
         return self._compose_full_version(self.version, self.version_tag)
 
     @classmethod
-    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str) -> str:
-        return re.sub(r"(\[metadata\][^\[]*\s*version\s*=\s*)[^\"'}\s\[]+", r"\g<1>" + new_version, source)
+    def _substitute_version(cls: Type[TModuleMetadata], source: str, new_version: str, version_tag: str = "") -> str:
+        result = re.sub(
+            r"(\[metadata\][^\[]*[ \t\f\v]*version[ \t\f\v]*=[ \t\f\v]*)[\S]+(\n|$)",
+            rf"\g<1>{new_version}\n",
+            source,
+        )
+        if "[egg_info]" not in result:
+            result = f"{result}\n[egg_info]\ntag_build = {version_tag}"
+        elif "tag_build" not in result:
+            result = result.replace("[egg_info]", f"[egg_info]\ntag_build = {version_tag}")
+        else:
+            result = re.sub(
+                r"(\[egg_info\][^\[]*[ \t\f\v]*tag_build[ \t\f\v]*=)[ \t\f\v]*[\S]*(\n|$)",
+                rf"\g<1> {version_tag}\n",
+                result,
+            )
+        return result
 
     def to_config(self, inp: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
         if inp:
@@ -1307,7 +1451,7 @@ class ModuleV2Metadata(ModuleMetadata):
         for k, v in self.dict(exclude_none=True, exclude={"install_requires"}).items():
             out.set("metadata", k, str(v))
 
-        if self.version_tag is not None:
+        if self.version_tag:
             if not out.has_section("egg_info"):
                 out.add_section("egg_info")
             out.set("egg_info", "tag_build", self.version_tag)
@@ -1323,7 +1467,6 @@ class ModuleRepoType(enum.Enum):
 
 @stable_api
 class ModuleRepoInfo(BaseModel):
-
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 
@@ -2556,11 +2699,13 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         except FileNotFoundError:
             raise InvalidModuleException(f"Directory {module_subdirectory} is not part of a valid {cls.GENERATION.name} module")
 
-    def rewrite_version(self, new_version: str) -> None:
+    def rewrite_version(self, new_version: str, version_tag: str = "") -> None:
         new_version = str(new_version)  # make sure it is a string!
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             module_def = fd.read()
-        new_module_def, new_metadata = self.get_metadata_file_schema_type().rewrite_version(module_def, new_version)
+        new_module_def, new_metadata = self.get_metadata_file_schema_type().rewrite_version(
+            module_def, new_version, version_tag
+        )
         with open(self.get_metadata_file_path(), "w+", encoding="utf-8") as fd:
             fd.write(new_module_def)
         self._metadata = new_metadata
@@ -2882,16 +3027,16 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def get_suitable_version_for(
         cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
-    ) -> "Optional[Version]":
-        versions = gitprovider.get_all_tags(path)
+    ) -> Optional[version.Version]:
+        versions_str = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> "Version":
+        def try_parse(x: str) -> Optional[version.Version]:
             try:
                 return parse_version(x)
             except Exception:
                 return None
 
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions: List[version.Version] = [x for x in [try_parse(v) for v in versions_str] if x is not None]
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
@@ -2903,9 +3048,9 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 
     @classmethod
     def __best_for_compiler_version(
-        cls, modulename: str, versions: "List[Version]", path: str, comp_version: "Version"
-    ) -> "Optional[Version]":
-        def get_cv_for(best: "Version") -> "Optional[Version]":
+        cls, modulename: str, versions: List[version.Version], path: str, comp_version: version.Version
+    ) -> Optional[version.Version]:
+        def get_cv_for(best: version.Version) -> Optional[version.Version]:
             cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
             metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
             if metadata.compiler_version is None:
@@ -2973,19 +3118,19 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             # Remove requirement from module.yml file
             self.remove_module_requirement_from_requires_and_write(requirement.key)
 
-    def versions(self) -> List["Version"]:
+    def versions(self) -> List[version.Version]:
         """
         Provide a list of all versions available in the repository
         """
-        versions = gitprovider.get_all_tags(self._path)
+        versions_str: List[str] = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x: str) -> "Optional[Version]":
+        def try_parse(x: str) -> Optional[version.Version]:
             try:
                 return parse_version(x)
             except Exception:
                 return None
 
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = [x for x in [try_parse(v) for v in versions_str] if x is not None]
         versions = sorted(versions, reverse=True)
 
         return versions
@@ -3041,10 +3186,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
     ) -> None:
         self._is_editable_install = is_editable_install
         self._version: Optional[version.Version] = installed_version
-        try:
-            super(ModuleV2, self).__init__(project, path)
-        except InvalidMetadata as e:
-            raise InvalidModuleException(f"The module found at {path} is not a valid V2 module") from e
+        super(ModuleV2, self).__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(

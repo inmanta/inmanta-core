@@ -18,7 +18,6 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
@@ -52,44 +51,7 @@ if TYPE_CHECKING:
 import inmanta.ast.attribute
 
 
-class EntityLike(NamedType):
-
-    parent_entities: "List[Entity]"
-
-    @abstractmethod
-    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
-        """get defaults defined on this entity"""
-        pass
-
-    def get_default(self, name: str) -> "ExpressionStatement":
-        defaults = self.get_default_values()
-        if name not in defaults:
-            raise AttributeError(name)
-        return defaults[name]
-
-    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
-        """
-        Return the dictionary with default values
-        """
-        values = []  # type: List[Tuple[str,ExpressionStatement]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self._get_own_defaults().items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
-
-    @abstractmethod
-    def get_entity(self) -> "Entity":
-        pass
-
-
-class Entity(EntityLike, NamedType):
+class Entity(NamedType):
     """
     This class models a defined entity in the domain model of the configuration model.
 
@@ -474,11 +436,31 @@ class Entity(EntityLike, NamedType):
                 self.index_queue[key] = [(target, stmt)]
         return None
 
-    def get_entity(self) -> "Entity":
+    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
-        Get the entity (follow through defaults if needed)
+        Return the dictionary with default values
         """
-        return self
+        values = []  # type: List[Tuple[str,Optional[ExpressionStatement]]]
+
+        # left most parent takes precedence
+        for parent in reversed(self.parent_entities):
+            values.extend(parent.get_default_values().items())
+
+        # self takes precedence
+        values.extend(self._get_own_defaults().items())
+        # make dict, remove doubles
+        dvalues = dict(values)
+        # remove erased defaults
+        return {k: v for k, v in dvalues.items() if v is not None}
+
+    def get_default(self, name: str) -> "ExpressionStatement":
+        """
+        Get a default value for a given name
+        """
+        defaults = self.get_default_values()
+        if name not in defaults:
+            raise AttributeError(name)
+        return defaults[name]
 
     def final(self, excns: List[CompilerException]) -> None:
         for key, indices in self.index_queue.items():
@@ -494,6 +476,10 @@ class Entity(EntityLike, NamedType):
 
     def get_location(self) -> Location:
         return self.location
+
+
+# Kept for backwards compatibility. May be dropped from iso7 onwards.
+EntityLike = Entity
 
 
 class Implementation(NamedType):
@@ -561,69 +547,3 @@ class Implement(Locatable):
             return
         self.normalized = True
         self.constraint.normalize()
-
-
-class Default(EntityLike):
-    """
-    This class models default values for a constructor.
-    """
-
-    def __init__(self, namespace: Namespace, name: str) -> None:
-        Type.__init__(self)
-        self.name = name
-        self._namespace = namespace
-        self.entity = None  # type: Entity
-        self._defaults = {}  # type: Dict[str,ExpressionStatement]
-        self.comment = None  # type: Optional[str]
-
-    def _get_own_defaults(self) -> "Dict[str, ExpressionStatement]":
-        return self._defaults
-
-    def set_entity(self, entity: EntityLike) -> None:
-        self.entity = entity
-        self.parent_entities = [entity]
-
-    def add_default(self, name: str, value: "ExpressionStatement") -> None:
-        """
-        Add a default value
-        """
-        self._defaults[name] = value
-
-    def get_default(self, name: str) -> "ExpressionStatement":
-        """
-        Get a default value for a given name
-        """
-        if name in self._defaults:
-            return self._defaults[name]
-
-        if isinstance(self._entity, Default):
-            return self._entity.get_default(name)
-
-        raise AttributeError(name)
-
-    def get_entity(self) -> Entity:
-        """
-        Get the entity (follow through defaults if needed)
-        """
-        return self.entity.get_entity()
-
-    def __repr__(self) -> str:
-        """
-        The representation of this type
-        """
-        return "Default(%s)" % (self.get_full_name())
-
-    def __str__(self) -> str:
-        """
-        The pretty string of this type
-        """
-        return "%s" % (self.get_full_name())
-
-    def get_full_name(self) -> str:
-        """
-        Get the full name of the entity
-        """
-        return self._namespace.get_full_name() + "::" + self.__name
-
-    def get_namespace(self) -> "Namespace":
-        return self._namespace

@@ -79,6 +79,7 @@ import time
 import traceback
 import uuid
 import venv
+from collections import abc
 from configparser import ConfigParser
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -115,7 +116,7 @@ from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import SliceStartupException
+from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
@@ -738,7 +739,7 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start):
+async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -1358,7 +1359,7 @@ def modules_dir() -> str:
 
 
 @pytest.fixture(scope="session")
-def modules_v2_dir():
+def modules_v2_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 

@@ -1545,7 +1545,7 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
     assert request.url == "/api/v1/test/1/monty?age=42"
 
 
-async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
+async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_port) -> None:
     async def _id(x: object, dct: Dict[str, str]) -> object:
         return x
 
@@ -1565,6 +1565,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
         async def test_method_implementation(self, header_param: str, body_param: str) -> None:
             pass
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -1595,7 +1596,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
-async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
+async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool, unused_tcp_port) -> None:
     @protocol.typedmethod(
         path="/typedtestmethod",
         operation="GET",
@@ -1612,6 +1613,7 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         async def test_method_typed_implementation(self) -> Optional[int]:
             return return_value  # type: ignore
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -1637,7 +1639,7 @@ def test_method_strict_exception() -> None:
             pass
 
 
-async def test_method_nonstrict_allowed(async_finalizer) -> None:
+async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
         """
@@ -1649,6 +1651,7 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
         async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
             return {**one, **other}
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)

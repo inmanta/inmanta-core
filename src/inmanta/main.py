@@ -162,6 +162,13 @@ class Client(object):
 
 
 def print_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> None:
+    click.echo(get_table(header, rows, data_type))
+
+
+def get_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> str:
+    """
+    Returns a table that would fit in the current terminal.
+    """
     width, _ = shutil.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
@@ -171,7 +178,7 @@ def print_table(header: List[str], rows: List[List[str]], data_type: Optional[Li
     table.header(header)
     for row in rows:
         table.add_row(row)
-    click.echo(table.draw())
+    return table.draw()
 
 
 @with_plugins(iter_entry_points("inmanta.cli_plugins"))
@@ -337,22 +344,34 @@ def environment_list(client: Client) -> None:
     if len(data) > 0:
         print_table(["Project name", "Project ID", "Environment", "Environment ID"], data)
     else:
-        click.echo("No environment defined.")
+        click.echo("No environments defined.")
 
 
 @environment.command(name="show")
 @click.argument("environment")
+@click.option(
+    "--format",
+    "format_string",
+    help=(
+        "Instead of outputting a table, use the supplied format string. Accepts Python format syntax."
+        " Supported fields are 'id', 'name', 'project', 'repo_url', 'repo_branch'"
+    ),
+    required=False,
+)
 @click.pass_obj
-def environment_show(client: Client, environment: str) -> None:
+def environment_show(client: Client, environment: str, format_string: Optional[str]) -> None:
     """
     Show details of an environment
 
     ENVIRONMENT: ID or name of the environment to show
     """
     env = client.get_dict("get_environment", "environment", dict(id=client.to_environment_id(environment)))
-    print_table(
-        ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
-    )
+    if format_string is not None:
+        print(format_string.format(**env))
+    else:
+        print_table(
+            ["ID", "Name", "Repository URL", "Branch Name"], [[env["id"], env["name"], env["repo_url"], env["repo_branch"]]]
+        )
 
 
 @environment.command(name="save")

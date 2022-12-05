@@ -1,0 +1,5 @@
+description: "Fixed `tests/server/test_workon.py` for non-activated test environments, e.g. docker-pytest"
+change-type: patch
+destination-branches:
+  - master
+  - iso5
