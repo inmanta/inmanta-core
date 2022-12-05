@@ -3,6 +3,6 @@ description: Added `inmanta module release` command.
 issue-nr: 5082
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso5]
+destination-branches: [master, iso6]
 sections:
   feature: "{{description}}"
