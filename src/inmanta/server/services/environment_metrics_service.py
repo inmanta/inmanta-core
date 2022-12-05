@@ -58,7 +58,7 @@ class MetricsCollector(abc.ABC):
         This information is required by the `EnvironmentMetricsService` to know how the data
         should be aggregated.
         """
-        raise self.metric_type
+        return self.metric_type
 
     @abc.abstractmethod
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
@@ -80,7 +80,7 @@ class MetricsCollector(abc.ABC):
 class EnvironmentMetricsService(protocol.ServerSlice):
     """Slice for the management of metrics"""
 
-    metrics_collectors: List[MetricsCollector]
+    metrics_collectors: List[MetricsCollector] = []
 
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
@@ -113,12 +113,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         for metrics_collector in self.metrics_collectors:
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
-            metric_value: object = metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
+            metric_value: object = await metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
             if metric_type == MetricType.count:
-                metric_count.append(EnvironmentMetricsCounter.new(metric_name, now, metric_value.count))
+                metric_count.append(EnvironmentMetricsCounter.new(metric_name, now, metric_value["count"]))
             if metric_type == MetricType.non_count:
                 metric_non_count.append(
-                    EnvironmentMetricsNonCounter.new(metric_name, now, metric_value.count, metric_value.value)
+                    EnvironmentMetricsNonCounter.new(metric_name, now, metric_value["count"], metric_value["value"])
                 )
 
         await EnvironmentMetricsCounter.insert_many(metric_count)
@@ -138,19 +138,19 @@ class EnvironmentMetricsCounter(BaseDocument):
     """
 
     metric_name: str
-    timestamp: datetime.datetime
+    timestamp: datetime
     count: int
 
     __primary_key__ = ("metric_name", "timestamp")
 
     def table_name(cls) -> str:
         """
-        Return the name of the collection #todo changer ca
+        Return the name of the collection
         """
-        return cls.__name__.lower()
+        return "environment_metrics_counter"
 
     @classmethod
-    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int) -> "EnvironmentMetricsCounter":
+    def new(cls, metric_name: str, timestamp: datetime, count: int) -> "EnvironmentMetricsCounter":
         attr = dict(
             metric_name=metric_name,
             timestamp=timestamp,
@@ -170,17 +170,24 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     """
 
     metric_name: str
-    timestamp: datetime.datetime
+    timestamp: datetime
     count: int
     value: int
 
     __primary_key__ = ("metric_name", "timestamp")
 
+    def table_name(cls) -> str:
+        """
+        Return the name of the collection
+        """
+        return "environment_metrics_non_counter"
+
     @classmethod
-    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
+    def new(cls, metric_name: str, timestamp: datetime, count: int, value: int) -> "EnvironmentMetricsCounter":
         attr = dict(
             metric_name=metric_name,
             timestamp=timestamp,
             count=count,
+            value=value,
         )
         return cls(**attr)
