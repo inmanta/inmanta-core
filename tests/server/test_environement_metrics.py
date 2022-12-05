@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import logging
 from datetime import datetime
 
 import pytest
@@ -22,6 +23,7 @@ import pytest
 from inmanta import data
 from inmanta.server.protocol import Server
 from inmanta.server.services.environment_metrics_service import EnvironmentMetricsService, MetricsCollector, MetricType
+from utils import log_contains
 
 
 @pytest.fixture
@@ -53,6 +55,19 @@ async def test_register_metrics_collector(env_metrics_service):
     env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
 
     assert len(EnvironmentMetricsService.metrics_collectors) == 2
+
+
+async def test_register_same_metrics_collector(env_metrics_service, caplog):
+    dummy_count = DummyCountMetric("dummy_count", MetricType.count)
+    dummy_count2 = DummyCountMetric("dummy_count", MetricType.count)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_count2)
+    log_contains(
+        caplog,
+        "inmanta.server.services.environment_metrics_service",
+        logging.WARNING,
+        "There already is a metric collector with the name dummy_count",
+    )
 
 
 async def test_flush_metrics_count(env_metrics_service):
