@@ -27,7 +27,7 @@ from utils import log_contains
 
 
 @pytest.fixture
-async def env_metrics_service(server_config, init_dataclasses_and_load_schema):
+async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -> EnvironmentMetricsService:
     metrics_service = EnvironmentMetricsService()
     yield metrics_service
 

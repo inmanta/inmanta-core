@@ -2,5 +2,3 @@ description: Add support to write collected metrics to the database
 issue-nr: 5124
 change-type: minor
 destination-branches: [master, iso6]
-sections:
-  minor-improvement: "{{description}}"
