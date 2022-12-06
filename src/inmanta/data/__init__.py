@@ -5272,7 +5272,7 @@ class EnvironmentMetricsCounter(BaseDocument):
     A metric that is a counter
 
     :param metric_name: The name of the metric
-    :param timestamp: The timestamps at witch a new record is created
+    :param timestamp: The timestamps at which a new record is created
     :param count: the counter for the metric for the given timestamp
     """
 
@@ -5297,7 +5297,7 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     A metric that is not a counter
 
     :param metric_name: The name of the metric
-    :param timestamp: The timestamps at witch a new record is created
+    :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences for the given timestamp
     :param value: the value of the metric for the given timestamp
     """
