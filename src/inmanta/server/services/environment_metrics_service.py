@@ -34,31 +34,21 @@ class MetricType(str, Enum):
 
 
 class MetricsCollector(abc.ABC):
-    def __init__(
-        self,
-        metric_name: str,
-        metric_type: MetricType,
-    ) -> None:
-        """
-        :param metric_name: The name of the metric collected by this MetricsCollector
-        :param metric_type: The metric type of Metric collected by this metrics collector (count, non-count, etc.)
-        """
-        self.metric_name = metric_name
-        self.metric_type = metric_type
-
+    @abc.abstractmethod
     def get_metric_name(self) -> str:
         """
         Returns the name of the metric collected by this MetricsCollector.
         """
-        return self.metric_name
+        raise NotImplementedError()
 
+    @abc.abstractmethod
     def get_metric_type(self) -> MetricType:
         """
         Returns the type of Metric collected by this metrics collector (count, non-count, etc.).
         This information is required by the `EnvironmentMetricsService` to know how the data
         should be aggregated.
         """
-        return self.metric_type
+        raise NotImplementedError()
 
     @abc.abstractmethod
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> dict[str, int]:
@@ -80,10 +70,9 @@ class MetricsCollector(abc.ABC):
 class EnvironmentMetricsService(protocol.ServerSlice):
     """Slice for the management of metrics"""
 
-    metrics_collectors: List[MetricsCollector] = []
-
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
+        self.metrics_collectors: List[MetricsCollector] = []
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -99,10 +88,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         Register the given metrics_collector.
         """
-        if not any(metric.metric_name == metrics_collector.metric_name for metric in self.metrics_collectors):
+        if not any(metric.get_metric_name() == metrics_collector.get_metric_name() for metric in self.metrics_collectors):
             self.metrics_collectors.append(metrics_collector)
         else:
-            LOGGER.warning(f"There already is a metric collector with the name {metrics_collector.metric_name}")
+            LOGGER.warning(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
 
     async def flush_metrics(self) -> None:
         """

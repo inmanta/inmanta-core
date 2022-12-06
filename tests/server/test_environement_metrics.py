@@ -33,27 +33,39 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema):
 
 
 class DummyCountMetric(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.count
+
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
         return {"count": 1}
 
 
 class DummyNonCountMetric(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_non_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.non_count
+
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
         return {"count": 2, "value": 100}
 
 
 async def test_register_metrics_collector(env_metrics_service):
-    dummy_count = DummyCountMetric("dummy_count", MetricType.count)
-    dummy_non_count = DummyNonCountMetric("dummy_non_count", MetricType.non_count)
+    dummy_count = DummyCountMetric()
+    dummy_non_count = DummyNonCountMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
     env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
 
-    assert len(EnvironmentMetricsService.metrics_collectors) == 2
+    assert len(env_metrics_service.metrics_collectors) == 2
 
 
 async def test_register_same_metrics_collector(env_metrics_service, caplog):
-    dummy_count = DummyCountMetric("dummy_count", MetricType.count)
-    dummy_count2 = DummyCountMetric("dummy_count", MetricType.count)
+    dummy_count = DummyCountMetric()
+    dummy_count2 = DummyCountMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
     env_metrics_service.register_metric_collector(metrics_collector=dummy_count2)
     log_contains(
@@ -65,7 +77,7 @@ async def test_register_same_metrics_collector(env_metrics_service, caplog):
 
 
 async def test_flush_metrics_count(env_metrics_service):
-    dummy_count = DummyCountMetric("dummy_count", MetricType.count)
+    dummy_count = DummyCountMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
 
     await env_metrics_service.flush_metrics()
@@ -83,7 +95,7 @@ async def test_flush_metrics_count(env_metrics_service):
 
 
 async def test_flush_metrics_non_count(env_metrics_service):
-    dummy_non_count = DummyNonCountMetric("dummy_non_count", MetricType.non_count)
+    dummy_non_count = DummyNonCountMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
 
     await env_metrics_service.flush_metrics()
@@ -102,8 +114,8 @@ async def test_flush_metrics_non_count(env_metrics_service):
 
 
 async def test_flush_metrics_mix(env_metrics_service):
-    dummy_count = DummyCountMetric("dummy_count", MetricType.count)
-    dummy_non_count = DummyNonCountMetric("dummy_non_count", MetricType.non_count)
+    dummy_count = DummyCountMetric()
+    dummy_non_count = DummyNonCountMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
     env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
 
