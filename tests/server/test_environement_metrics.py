@@ -23,9 +23,7 @@ import pytest
 
 from inmanta import data
 from inmanta.protocol.exceptions import ServerError
-from inmanta.server.protocol import Server
 from inmanta.server.services.environment_metrics_service import EnvironmentMetricsService, MetricsCollector, MetricType
-from utils import log_contains
 
 
 @pytest.fixture
