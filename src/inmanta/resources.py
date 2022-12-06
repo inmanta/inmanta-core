@@ -527,7 +527,7 @@ class Id(object):
         return self._version
 
     def set_version(self, version: int) -> None:
-        if self._version > 0:
+        if self._version > 0 and version != self._version:
             raise AttributeError("can't set attribute version")
 
         self._version = version
@@ -595,7 +595,7 @@ class Id(object):
     def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
-            raise Exception(f"Version is missing from resource id: {resource_id}")
+            raise ValueError(f"Version is missing from resource id: {resource_id}")
         return id
 
     @classmethod
@@ -607,7 +607,7 @@ class Id(object):
         result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
-            raise Exception("Invalid id for resource %s" % resource_id)
+            raise ValueError("Invalid id for resource %s" % resource_id)
 
         version_match: str = result.group("version")
 

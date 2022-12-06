@@ -22,7 +22,7 @@ import logging
 import time
 import uuid
 from collections import abc
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, cast
 
 import asyncpg
 import pytest
@@ -34,7 +34,6 @@ from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
-from utils import resource_action_consistency_check
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
@@ -224,7 +223,8 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
         assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
         for (environment, resource_version_id) in resource_ids:
-            assert func(await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id))
+            id = Id.parse_id(resource_version_id)
+            assert func(await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version))
         assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
@@ -337,7 +337,10 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.AgentInstance.get_by_id(agi2.id)) is not None
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is not None
     for environment, resource_version_id in resource_ids:
-        assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is not None
+        id = Id.parse_id(resource_version_id)
+        assert (
+            await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)
+        ) is not None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is not None
     assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
@@ -352,7 +355,8 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
     assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is None
     for environment, resource_version_id in resource_ids:
-        assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is None
+        id = Id.parse_id(resource_version_id)
+        assert (await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version)) is None
     assert await data.ResourceAction.get_by_id(resource_action.action_id) is None
     assert (await data.Code.get_one(environment=code.environment, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
@@ -974,8 +978,9 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     await cm.delete_cascade()
 
     assert (await data.ConfigurationModel.get_list()) == []
+    id = Id.parse_resource_version_id(resource.resource_version_id)
     assert (
-        await data.Resource.get_one(environment=resource.environment, resource_version_id=resource.resource_version_id)
+        await data.Resource.get_one(environment=resource.environment, resource_id=id.resource_str(), model=id.version)
     ) is None
     assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
@@ -1851,7 +1856,6 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         assert len(ra.messages) == 2
         for message in ra.messages:
             assert message == {}
-    await resource_action_consistency_check()
 
 
 async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
@@ -1939,8 +1943,6 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             assert action.action == const.ResourceAction.dryrun
         else:
             assert action.action == const.ResourceAction.deploy
-
-    await resource_action_consistency_check()
 
 
 async def test_data_document_recursion(init_dataclasses_and_load_schema):
@@ -2449,7 +2451,8 @@ async def test_resources_json(init_dataclasses_and_load_schema):
     )
     await res1.insert()
 
-    res = await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)
+    id = Id.parse_resource_version_id(res1.resource_version_id)
+    res = await data.Resource.get_one(environment=res1.environment, resource_id=id.resource_str(), model=id.version)
 
     assert res1.attributes == res.attributes
 
@@ -2654,8 +2657,6 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     assert len(resource_actions) == 1
     assert resource_actions[0].messages[0]["level"] == "WARNING"
 
-    await resource_action_consistency_check()
-
 
 async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and_load_schema):
     """
@@ -2826,17 +2827,22 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     cm = data.ConfigurationModel(version=1, environment=env.id)
     await cm.insert()
 
-    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
-    rvid_r2_v1 = "std::File[agent1,path=/etc/file2],v=1"
-    rvid_r3_v1 = "std::File[agent1,path=/etc/file3],v=1"
-    rvid_r4_v1 = "std::File[agent1,path=/etc/file4],v=1"
+    rid_r1_v1 = "std::File[agent1,path=/etc/file1]"
+    rid_r2_v1 = "std::File[agent1,path=/etc/file2]"
+    rid_r3_v1 = "std::File[agent1,path=/etc/file3]"
+    rid_r4_v1 = "std::File[agent1,path=/etc/file4]"
+
+    rvid_r1_v1 = rid_r1_v1 + ",v=1"
+    rvid_r2_v1 = rid_r2_v1 + ",v=1"
+    rvid_r3_v1 = rid_r3_v1 + ",v=1"
+    rvid_r4_v1 = rid_r4_v1 + ",v=1"
 
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.available,
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1, rvid_r4_v1]},
+        attributes={"purge_on_delete": False, "requires": [rid_r2_v1, rid_r3_v1, rid_r4_v1]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
@@ -2874,18 +2880,21 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     cm = data.ConfigurationModel(version=2, environment=env.id)
     await cm.insert()
 
-    rvid_r1_v2 = "std::File[agent1,path=/etc/file1],v=2"
-    rvid_r2_v2 = "std::File[agent1,path=/etc/file2],v=2"
-    rvid_r3_v2 = "std::File[agent1,path=/etc/file3],v=2"
-    rvid_r4_v2 = "std::File[agent1,path=/etc/file4],v=2"
-    rvid_r5_v2 = "std::File[agent1,path=/etc/file5],v=2"
+    rid_r2_v2 = "std::File[agent1,path=/etc/file2]"
+    rid_r3_v2 = "std::File[agent1,path=/etc/file3]"
+
+    rvid_r1_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file1],v=2")
+    rvid_r2_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file2],v=2")
+    rvid_r3_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file3],v=2")
+    rvid_r4_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file4],v=2")
+    rvid_r5_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file5],v=2")
 
     await data.Resource.new(
         environment=env.id,
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
-        attributes={"purge_on_delete": False, "requires": [rvid_r2_v2, rvid_r3_v2]},
+        attributes={"purge_on_delete": False, "requires": [rid_r2_v2, rid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
@@ -2906,7 +2915,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
-        attributes={"purge_on_delete": False, "requires": [rvid_r3_v2]},
+        attributes={"purge_on_delete": False, "requires": [rid_r3_v2]},
     ).insert()
     await data.Resource.new(
         environment=env.id,
