@@ -44,7 +44,7 @@ async def migrate_v202211230_to_v202212010(
 
 
 async def test_added_environment_metrics_tables(
-    migrate_v202209160_to_v202212010: Callable[[], Awaitable[None]],
+    migrate_v202211230_to_v202212010: Callable[[], Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],
 ) -> None:
     """
@@ -57,7 +57,7 @@ async def test_added_environment_metrics_tables(
     assert "environmentmetricsnoncounter" not in tables
 
     # Migrate DB schema
-    await migrate_v202209160_to_v202212010()
+    await migrate_v202211230_to_v202212010()
 
     # The table is added to the database
     tables = await get_tables_in_db()
