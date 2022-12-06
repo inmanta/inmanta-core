@@ -30,10 +30,10 @@ async def migrate_v202209160_to_v202212010(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
 ) -> AsyncIterator[Callable[[], Awaitable[None]]]:
     """
-    Returns a callable that performs a v202209160 database restore and migrates to v202212010.
+    Returns a callable that performs a v202211230 database restore and migrates to v202212010.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202209160.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v202211230.sql"), "r") as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
