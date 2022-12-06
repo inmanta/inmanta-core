@@ -5433,7 +5433,7 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     metric_name: str
     timestamp: datetime.datetime
     count: int
-    value: int
+    value: float
 
     __primary_key__ = ("metric_name", "timestamp")
 

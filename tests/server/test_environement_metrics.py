@@ -53,7 +53,7 @@ class DummyNonCountMetric(MetricsCollector):
         return MetricType.NON_COUNT
 
     async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> Dict[str, int]:
-        return {"count": 2, "value": 100}
+        return {"count": 2, "value": 200.05}
 
 
 async def test_register_metrics_collector(env_metrics_service):
@@ -104,7 +104,7 @@ async def test_flush_metrics_non_count(env_metrics_service):
     result = await data.EnvironmentMetricsNonCounter.get_list()
     assert len(result) == 1
     assert result[0].count == 2
-    assert result[0].value == 100
+    assert result[0].value == 200.05
     assert result[0].metric_name == "dummy_non_count"
     assert isinstance(result[0].timestamp, datetime)
 

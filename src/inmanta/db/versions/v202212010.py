@@ -32,7 +32,7 @@ async def update(connection: Connection) -> None:
         metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
-        value INT NOT NULL,
+        value FLOAT NOT NULL,
         PRIMARY KEY (metric_name, timestamp)
     );
     """
