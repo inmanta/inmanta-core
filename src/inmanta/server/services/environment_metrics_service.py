@@ -19,18 +19,21 @@ import abc
 import logging
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import List
+from typing import Dict, List
 
 from inmanta.data import EnvironmentMetricsCounter, EnvironmentMetricsNonCounter
+from inmanta.protocol.exceptions import ServerError
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
 
+COLLECTION_INTERVAL = 60
+
 
 class MetricType(str, Enum):
-    count = "count"
-    non_count = "non_count"
-    compile_rate = "compile_rate"
+    COUNT = "count"
+    NON_COUNT = "non_count"
+    COMPILE_RATE = "compile_rate"
 
 
 class MetricsCollector(abc.ABC):
@@ -72,7 +75,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
-        self.metrics_collectors: List[MetricsCollector] = []
+        self.metrics_collectors: Dict[str, MetricsCollector] = {}
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -82,16 +85,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self.schedule(self.flush_metrics, 60, initial_delay=0, cancel_on_stop=True)
+        self.schedule(self.flush_metrics, COLLECTION_INTERVAL, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
         Register the given metrics_collector.
         """
-        if not any(metric.get_metric_name() == metrics_collector.get_metric_name() for metric in self.metrics_collectors):
-            self.metrics_collectors.append(metrics_collector)
+        if not metrics_collector.get_metric_name() in self.metrics_collectors:
+            self.metrics_collectors[metrics_collector.get_metric_name()] = metrics_collector
         else:
-            LOGGER.warning(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
+            raise ServerError(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
 
     async def flush_metrics(self) -> None:
         """
@@ -102,19 +105,24 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         now: datetime = datetime.now()
         metric_count: List[EnvironmentMetricsCounter] = []
         metric_non_count: List[EnvironmentMetricsNonCounter] = []
-        for metrics_collector in self.metrics_collectors:
+        for mc in self.metrics_collectors:
+            metrics_collector: MetricsCollector = self.metrics_collectors[mc]
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
             metric_value: dict[str, int] = await metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
-            if metric_type == MetricType.count:
-                metric_count.append(EnvironmentMetricsCounter.new(metric_name, now, metric_value["count"]))
-            if metric_type == MetricType.non_count:
+            if metric_type == MetricType.COUNT:
+                metric_count.append(
+                    EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
+                )
+            if metric_type == MetricType.NON_COUNT:
                 metric_non_count.append(
-                    EnvironmentMetricsNonCounter.new(metric_name, now, metric_value["count"], metric_value["value"])
+                    EnvironmentMetricsNonCounter(
+                        metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
+                    )
                 )
 
         await EnvironmentMetricsCounter.insert_many(metric_count)
         await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
 
-        if datetime.now() - now > timedelta(seconds=60):
+        if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL):
             LOGGER.warning("flush_metrics method took more than 1 minute")

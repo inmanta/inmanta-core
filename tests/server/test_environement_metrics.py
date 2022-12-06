@@ -17,10 +17,12 @@
 """
 import logging
 from datetime import datetime
+from typing import Dict
 
 import pytest
 
 from inmanta import data
+from inmanta.protocol.exceptions import ServerError
 from inmanta.server.protocol import Server
 from inmanta.server.services.environment_metrics_service import EnvironmentMetricsService, MetricsCollector, MetricType
 from utils import log_contains
@@ -37,9 +39,9 @@ class DummyCountMetric(MetricsCollector):
         return "dummy_count"
 
     def get_metric_type(self) -> MetricType:
-        return MetricType.count
+        return MetricType.COUNT
 
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
+    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> Dict[str, int]:
         return {"count": 1}
 
 
@@ -48,9 +50,9 @@ class DummyNonCountMetric(MetricsCollector):
         return "dummy_non_count"
 
     def get_metric_type(self) -> MetricType:
-        return MetricType.non_count
+        return MetricType.NON_COUNT
 
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> object:
+    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> Dict[str, int]:
         return {"count": 2, "value": 100}
 
 
@@ -63,17 +65,13 @@ async def test_register_metrics_collector(env_metrics_service):
     assert len(env_metrics_service.metrics_collectors) == 2
 
 
-async def test_register_same_metrics_collector(env_metrics_service, caplog):
-    dummy_count = DummyCountMetric()
-    dummy_count2 = DummyCountMetric()
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_count2)
-    log_contains(
-        caplog,
-        "inmanta.server.services.environment_metrics_service",
-        logging.WARNING,
-        "There already is a metric collector with the name dummy_count",
-    )
+async def test_register_same_metrics_collector(env_metrics_service):
+    with pytest.raises(ServerError) as e:
+        dummy_count = DummyCountMetric()
+        dummy_count2 = DummyCountMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_count2)
+    assert "There already is a metric collector with the name dummy_count" in str(e.value)
 
 
 async def test_flush_metrics_count(env_metrics_service):

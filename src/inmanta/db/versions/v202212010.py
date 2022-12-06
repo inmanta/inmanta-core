@@ -27,7 +27,6 @@ async def update(connection: Connection) -> None:
         count INT NOT NULL,
         PRIMARY KEY (metric_name, timestamp)
     );
-    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environmentmetricscounter(metric_name);
 
     CREATE TABLE IF NOT EXISTS public.environmentmetricsnoncounter (
         metric_name VARCHAR NOT NULL,
@@ -36,7 +35,6 @@ async def update(connection: Connection) -> None:
         value INT NOT NULL,
         PRIMARY KEY (metric_name, timestamp)
     );
-    CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environmentmetricsnoncounter(metric_name);
     """
 
     await connection.execute(schema)
