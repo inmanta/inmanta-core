@@ -5419,10 +5419,6 @@ class EnvironmentMetricsCounter(BaseDocument):
 
     __primary_key__ = ("metric_name", "timestamp")
 
-    @classmethod
-    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int) -> "EnvironmentMetricsCounter":
-        return cls(metric_name=metric_name, timestamp=timestamp, count=count)
-
 
 class EnvironmentMetricsNonCounter(BaseDocument):
     """
@@ -5440,10 +5436,6 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     value: int
 
     __primary_key__ = ("metric_name", "timestamp")
-
-    @classmethod
-    def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsNonCounter":
-        return cls(metric_name=metric_name, timestamp=timestamp, count=count, value=value)
 
 
 _classes = [

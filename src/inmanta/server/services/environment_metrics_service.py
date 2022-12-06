@@ -76,6 +76,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
         self.metrics_collectors: Dict[str, MetricsCollector] = {}
+        self.previous_timestamp = datetime.now()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -109,7 +110,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             metrics_collector: MetricsCollector = self.metrics_collectors[mc]
             metric_name: str = metrics_collector.get_metric_name()
             metric_type: str = metrics_collector.get_metric_type()
-            metric_value: dict[str, int] = await metrics_collector.get_metric_value(now - timedelta(seconds=60), now)
+            metric_value: dict[str, int] = await metrics_collector.get_metric_value(self.previous_timestamp, now)
+            self.previous_timestamp = now
             if metric_type == MetricType.COUNT:
                 metric_count.append(
                     EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
