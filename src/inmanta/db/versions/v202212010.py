@@ -39,5 +39,4 @@ async def update(connection: Connection) -> None:
     CREATE INDEX IF NOT EXISTS environment_metrics_counter_index ON environmentmetricsnoncounter(metric_name);
     """
 
-    async with connection.transaction():
-        await connection.execute(schema)
+    await connection.execute(schema)
