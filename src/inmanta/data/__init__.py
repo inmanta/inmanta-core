@@ -5284,12 +5284,7 @@ class EnvironmentMetricsCounter(BaseDocument):
 
     @classmethod
     def new(cls, metric_name: str, timestamp: datetime.datetime, count: int) -> "EnvironmentMetricsCounter":
-        attr = dict(
-            metric_name=metric_name,
-            timestamp=timestamp,
-            count=count,
-        )
-        return cls(**attr)
+        return cls(metric_name=metric_name, timestamp=timestamp, count=count)
 
 
 class EnvironmentMetricsNonCounter(BaseDocument):
@@ -5311,13 +5306,7 @@ class EnvironmentMetricsNonCounter(BaseDocument):
 
     @classmethod
     def new(cls, metric_name: str, timestamp: datetime.datetime, count: int, value: int) -> "EnvironmentMetricsNonCounter":
-        attr = dict(
-            metric_name=metric_name,
-            timestamp=timestamp,
-            count=count,
-            value=value,
-        )
-        return cls(**attr)
+        return cls(metric_name=metric_name, timestamp=timestamp, count=count, value=value)
 
 
 _classes = [
