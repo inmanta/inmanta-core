@@ -33,7 +33,14 @@ from pkg_resources import parse_version
 
 from inmanta import module
 from inmanta.command import CLIException
-from inmanta.module import InmantaModuleRequirement, InvalidMetadata, InvalidModuleException, ModuleDeprecationWarning, Project
+from inmanta.module import (
+    InmantaModuleRequirement,
+    InvalidMetadata,
+    InvalidModuleException,
+    ModuleDeprecationWarning,
+    ModuleV2Metadata,
+    Project,
+)
 from inmanta.moduletool import ModuleTool
 from inmanta.parser import ParserException
 from moduletool.common import add_file, commitmodule, install_project, make_module_simple, makeproject
@@ -145,14 +152,15 @@ def test_rewrite(tmpdir, module_type: Type[module.Module]):
 
     metadata_file: str = module_path.join("module.yml" if v1 else "setup.cfg")
 
-    def metadata_contents(version: str) -> str:
+    def metadata_contents(version: str, version_tag: str = "") -> str:
         if v1:
+
             return f"""
 name: mod
 license: ASL
-version: {version}
+version: {version if not version_tag else f"{version}.{version_tag.rstrip('.')}"}
 compiler_version: 2017.2
-            """.strip()
+            """
         else:
             return f"""
 [metadata]
@@ -167,7 +175,9 @@ install_requires =
 
   cookiecutter~=1.7.0
   cryptography>1.0,<3.5
-            """.strip()
+[egg_info]
+tag_build = {version_tag}
+            """
 
     metadata_file.write(metadata_contents("1.2"))
     mod = module_type(None, module_path.strpath)
@@ -176,11 +186,91 @@ install_requires =
     if v1:
         assert mod.compiler_version == "2017.2"
 
+    # Only rewrite version
     mod.rewrite_version("1.3.1")
     assert mod.version == version.Version("1.3.1")
     if v1:
         assert mod.compiler_version == "2017.2"
-    assert metadata_file.read().strip() == metadata_contents("1.3.1")
+    assert metadata_file.read().strip() == metadata_contents("1.3.1").strip()
+
+    # Rewrite version and version_tag
+    mod.rewrite_version("2.1.2", version_tag="dev0")
+    assert mod.version == version.Version("2.1.2.dev0")
+    if v1:
+        assert mod.compiler_version == "2017.2"
+    assert metadata_file.read().strip() == metadata_contents("2.1.2", version_tag="dev0").strip()
+
+
+def test_substitute_version_v2_modules() -> None:
+    """
+    Test the behavior of the `ModuleV2Metadata._substitute_version()` method.
+    """
+    expected_result = """
+[metadata]
+name = inmanta-module-mod
+version = 4.5.6
+license = ASL
+[egg_info]
+tag_build = dev0
+    """.strip()
+
+    metadata_file_content = """
+[metadata]
+name = inmanta-module-mod
+version = 1.2.3
+license = ASL
+    """.strip()
+    result = ModuleV2Metadata._substitute_version(source=metadata_file_content, new_version="4.5.6", version_tag="dev0").strip()
+    assert result == expected_result
+
+    metadata_file_content = """
+[metadata]
+name = inmanta-module-mod
+version = 1.2.3
+license = ASL
+[egg_info]
+    """.strip()
+    result = ModuleV2Metadata._substitute_version(source=metadata_file_content, new_version="4.5.6", version_tag="dev0").strip()
+    assert result == expected_result
+
+    metadata_file_content = """
+[metadata]
+name = inmanta-module-mod
+version = 1.2.3
+license = ASL
+[egg_info]
+tag_build = dev999
+    """.strip()
+    result = ModuleV2Metadata._substitute_version(source=metadata_file_content, new_version="4.5.6", version_tag="dev0").strip()
+    assert result == expected_result
+
+    expected_result = """
+[metadata]
+name = inmanta-module-mod
+version = 4.5.6
+license = ASL
+[egg_info]
+tag_build = dev0
+tag_date = 0
+tag_svn_revision = 0
+[flake8]
+ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
+    """.strip()
+
+    metadata_file_content = """
+[metadata]
+name = inmanta-module-mod
+version = 1.2.3
+license = ASL
+[egg_info]
+tag_build = rc123
+tag_date = 0
+tag_svn_revision = 0
+[flake8]
+ignore = H405,H404,H302,H306,H301,H101,H801,E402,W503,E252,E203
+    """.strip()
+    result = ModuleV2Metadata._substitute_version(source=metadata_file_content, new_version="4.5.6", version_tag="dev0").strip()
+    assert result == expected_result
 
 
 def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):

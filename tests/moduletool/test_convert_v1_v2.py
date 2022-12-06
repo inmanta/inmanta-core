@@ -259,7 +259,7 @@ def test_issue_4373_circular_dependency(tmpdir, modules_dir: str) -> None:
 @pytest.mark.parametrize_any(
     "full_version, base, tag",
     [
-        ("1.2.3", "1.2.3", None),
+        ("1.2.3", "1.2.3", ""),
         ("1.2.3.dev0", "1.2.3", "dev0"),
         # keep explicit 0 because of setuptools bug: https://github.com/pypa/setuptools/issues/2529
         ("1.2.3.dev", "1.2.3", "dev0"),

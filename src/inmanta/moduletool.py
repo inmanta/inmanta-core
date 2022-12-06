@@ -18,6 +18,7 @@
 import argparse
 import configparser
 import datetime
+import enum
 import inspect
 import logging
 import os
@@ -29,11 +30,14 @@ import sys
 import tempfile
 import time
 import zipfile
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
+from collections import abc
 from configparser import ConfigParser
+from functools import total_ordering
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
 
+import click
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
@@ -44,7 +48,7 @@ import build.env
 import inmanta
 import toml
 from build.env import IsolatedEnvBuilder
-from inmanta import env
+from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
@@ -58,6 +62,7 @@ from inmanta.module import (
     Module,
     ModuleGeneration,
     ModuleLike,
+    ModuleMetadata,
     ModuleMetadataFileNotFound,
     ModuleNotFoundException,
     ModuleV1,
@@ -67,6 +72,7 @@ from inmanta.module import (
     gitprovider,
 )
 from inmanta.stable_api import stable_api
+from packaging.version import Version
 
 if TYPE_CHECKING:
     from pkg_resources import Requirement  # noqa: F401
@@ -149,6 +155,9 @@ class ModuleLikeTool(object):
         return project
 
     def determine_new_version(self, old_version, version, major, minor, patch, dev):
+        """
+        Only used by the `inmanta module commit` command.
+        """
         was_dev = old_version.is_prerelease
 
         if was_dev:
@@ -178,20 +187,12 @@ class ModuleLikeTool(object):
                 elif len(opts) > 1:
                     LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
                     return None
-                parts = old_version.base_version.split(".")
-                while len(parts) < 3:
-                    parts.append("0")
-                parts = [int(x) for x in parts]
-                if patch:
-                    parts[2] += 1
-                if minor:
-                    parts[1] += 1
-                    parts[2] = 0
-                if major:
-                    parts[0] += 1
-                    parts[1] = 0
-                    parts[2] = 0
-                outversion = ".".join([str(x) for x in parts])
+
+                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+                if change_type:
+                    outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
+                else:
+                    outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
 
             if dev:
                 outversion = "%s.dev%d" % (outversion, time.time())
@@ -202,6 +203,110 @@ class ModuleLikeTool(object):
             return None
 
         return outversion
+
+
+@total_ordering
+@enum.unique
+class ChangeType(enum.Enum):
+    MAJOR: str = "major"
+    MINOR: str = "minor"
+    PATCH: str = "patch"
+
+    def less(self) -> Optional["ChangeType"]:
+        """
+        Returns the change type that is one less than this one.
+        """
+        if self == ChangeType.MAJOR:
+            return ChangeType.MINOR
+        if self == ChangeType.MINOR:
+            return ChangeType.PATCH
+        return None
+
+    def __lt__(self, other: "ChangeType") -> bool:
+        order: List[ChangeType] = [ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
+        if other not in order:
+            return NotImplemented
+        return order.index(self) < order.index(other)
+
+    @classmethod
+    def diff(cls, *, low: Version, high: Version) -> Optional["ChangeType"]:
+        """
+        Returns the order of magnitude of the change type diff between two versions.
+        Return None if the versions are less than a patch separated from each other.
+        For example, a dev release and a post release for the same version number are less
+        than a patch separated from each other.
+        """
+        if low > high:
+            raise ValueError(f"Expected low <= high, got {low} > {high}")
+        if Version(low.base_version) == Version(high.base_version):
+            return None
+        if high.major > low.major:
+            return cls.MAJOR
+        if high.minor > low.minor:
+            return cls.MINOR
+        if high.micro > low.micro:
+            return cls.PATCH
+        raise Exception("Couldn't determine version change type diff: this state should be unreachable")
+
+    @classmethod
+    def parse_from_bools(cls, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
+        """
+        Create a ChangeType for the type of which the boolean is set to True. If none
+        of the boolean arguments is set to True, None is returned. If more
+        than one boolean argument is set to True, a ValueError is raised.
+        """
+        if sum([patch, minor, major]) > 1:
+            raise ValueError("Only one argument of patch, minor or major can be set to True at the same time.")
+        if patch:
+            return ChangeType.PATCH
+        if minor:
+            return ChangeType.MINOR
+        if major:
+            return ChangeType.MAJOR
+        return None
+
+
+class VersionOperation:
+    @classmethod
+    def bump_version(cls, change_type: ChangeType, version: Version, version_tag: str) -> Version:
+        """
+        Bump the release part of the given version with this ChangeType and apply the given version_tag to it.
+        If the given version has a different version tag set, it will be ignored.
+        """
+        parts = [int(x) for x in version.base_version.split(".")]
+        while len(parts) < 3:
+            parts.append(0)
+        if change_type is ChangeType.PATCH:
+            parts[2] += 1
+        if change_type is ChangeType.MINOR:
+            parts[1] += 1
+            parts[2] = 0
+        if change_type is ChangeType.MAJOR:
+            parts[0] += 1
+            parts[1] = 0
+            parts[2] = 0
+        # Reset remaining digits to zero
+        if len(parts) > 3:
+            parts[3:] = [0 for _ in range(len(parts) - 3)]
+
+        return cls._to_version(parts, version_tag)
+
+    @classmethod
+    def set_version_tag(cls, version: Version, version_tag: str) -> Version:
+        """
+        Return a new version that is a copy of the given version where the version_tag
+        is replaced with the given version_tag.
+        """
+        return cls._to_version(version.release, version_tag)
+
+    @classmethod
+    def _to_version(cls, release_part_version_number: abc.Iterable[int], version_tag: str) -> Version:
+        """
+        Compose a version from the release part of the version number and the version_tag.
+        """
+        release_part_str = ".".join(str(number) for number in release_part_version_number)
+        version_tag_str = f".{version_tag.lstrip('.')}" if version_tag else ""
+        return Version(f"{release_part_str}{version_tag_str}")
 
 
 class ProjectTool(ModuleLikeTool):
@@ -561,6 +666,52 @@ mode.
         )
 
         subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+
+        release = subparser.add_parser(
+            "release",
+            help="Release a new stable or dev release for this module.",
+            description="""
+When a stable release is done, this command:
+* Does a commit that changes the current version to a stable version.
+* Adds Git release tag.
+* Does a commit that changes the current version to a development version that is one patch increment ahead of the released
+  version.
+When a development release is done using the --dev option, this command:
+* Does a commit that updates the current version and the version mentioned in the change to a development version that is
+  a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
+  is determined respectively by the --patch, --minor or --major argument (--patch is the default).
+
+When a CHANGELOG.md file is present in the root of the module directory then the version number in the changelog is also
+updated accordingly.
+            """.strip(),
+            formatter_class=RawTextHelpFormatter,
+        )
+        release.add_argument(
+            "--dev",
+            dest="dev",
+            help="Create a development version. The new version number will have the .dev0 build tag.",
+            action="store_true",
+            default=False,
+        )
+        release.add_argument(
+            "--major",
+            dest="major",
+            help="Do a major version bump compared to the previous stable release. Ignored when --dev is not set.",
+            action="store_true",
+        )
+        release.add_argument(
+            "--minor",
+            dest="minor",
+            help="Do a minor version bump compared to the previous stable release. Ignored when --dev is not set.",
+            action="store_true",
+        )
+        release.add_argument(
+            "--patch",
+            dest="patch",
+            help="Do a patch version bump compared to the previous stable release. Ignored when --dev is not set.",
+            action="store_true",
+        )
+        release.add_argument("-m", "--message", help="Commit message")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -922,6 +1073,145 @@ version: 0.0.1dev0"""
         finally:
             if close:
                 out_fd.close()
+
+    def _get_dev_version_with_minimal_distance_to_previous_stable_release(
+        self,
+        current_version: Version,
+        all_existing_stable_version: abc.Collection[Version],
+        minimal_version_bump_to_prev_release: Optional[ChangeType],
+    ) -> Version:
+        """
+        Turn the given current_version into a dev version with version_tag dev0 and ensure
+        the version number is at least `minimal_version_bump_to_prev_release` separated
+        from its predecessor in all_existing_stable_version.
+        """
+        if not minimal_version_bump_to_prev_release:
+            # No version bump is required
+            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+        version_previous_release: Version
+        try:
+            version_previous_release = sorted([v for v in all_existing_stable_version if v <= current_version])[-1]
+        except IndexError:
+            # No previous release happened
+            version_previous_release = Version("0.0.0")
+
+        assert version_previous_release <= current_version
+        current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
+        if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
+            new_version = VersionOperation.bump_version(
+                minimal_version_bump_to_prev_release, current_version, version_tag="dev0"
+            )
+            versions_between_current_and_new_version = [
+                v for v in all_existing_stable_version if current_version < v <= new_version
+            ]
+            if versions_between_current_and_new_version:
+                raise click.ClickException(
+                    f"Stable release {versions_between_current_and_new_version[0]} exists between "
+                    f"current version {current_version} and new version {new_version}"
+                )
+            else:
+                return new_version
+        else:
+            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+
+    def _update_version_in_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
+        """
+        In the given changelog file replace the version number old_version with new_version.
+        This operation is performed in-place.
+        """
+        if old_version.base_version == new_version.base_version:
+            return
+        with open(path_changelog_file, "r", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+        # The changelog only contains the base_version. Replace only the first occurrence
+        # to not accidentally perform invalid replacements in the remainder of the file.
+        new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
+        if content_changelog == new_content_changelog:
+            LOGGER.warning(
+                "Failed to bump the version number in the changelog file from %s to %s.",
+                str(old_version.base_version),
+                str(new_version.base_version),
+            )
+        else:
+            with open(path_changelog_file, "w", encoding="utf-8") as fh:
+                fh.write(new_content_changelog)
+
+    def release(
+        self,
+        dev: bool,
+        message: Optional[str] = None,
+        patch: bool = False,
+        minor: bool = False,
+        major: bool = False,
+        add_new_version_to_changelog: bool = False,
+    ) -> None:
+        """
+        Execute the release command.
+
+        :param add_new_version_to_changelog: Indicate that the new version has to be added to the changelog instead of
+                                             bumping the current version. This is used by the recursive call to prevent
+                                             bumping the latest stable release.
+        """
+        nb_version_bump_arguments_set = sum([patch, minor, major])
+        if nb_version_bump_arguments_set > 1:
+            raise click.UsageError("Only one of --patch, --minor and --major arguments can be set at the same time.")
+        module_dir = os.path.abspath(os.getcwd())
+        module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
+        if not gitprovider.is_git_repository(repo=module_dir):
+            raise click.ClickException(f"Directory {module_dir} is not a git repository.")
+        current_version: Version = module.version
+        if current_version.epoch != 0:
+            raise click.ClickException("Version with an epoch value larger than zero are not supported by this tool.")
+        gitprovider.fetch(module_dir)
+        stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
+        path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
+        if dev:
+            requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+            new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
+                current_version, stable_releases, requested_version_bump
+            )
+            assert new_version.dev is not None and new_version.dev == 0
+            new_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
+            module.rewrite_version(new_version=new_version_str, version_tag=version_tag)
+            files_to_commit = [module.get_metadata_file_path()]
+            if os.path.exists(path_changelog_file):
+                if add_new_version_to_changelog:
+                    # Create a new section in the changelog for the version number
+                    with open(path_changelog_file, "r+", encoding="utf-8") as fh:
+                        current_content = fh.read()
+                        fh.seek(0, 0)
+                        fh.write(f"V{new_version_str}\n-\n\n{current_content}")
+                else:
+                    self._update_version_in_changelog_file(
+                        path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
+                    )
+                files_to_commit.append(path_changelog_file)
+            gitprovider.commit(
+                repo=module_dir,
+                message=message if message else f"Bump version to {new_version}",
+                commit_all=True,
+                add=files_to_commit,
+                raise_exc_when_nothing_to_commit=False,
+            )
+        else:
+            if nb_version_bump_arguments_set > 0:
+                LOGGER.warning("Performing a stable release. The --patch, --minor and --major arguments will be ignored.")
+            release_tag: Version = VersionOperation.set_version_tag(current_version, version_tag="")
+            if release_tag in stable_releases:
+                raise click.ClickException(f"A Git version tag already exists for version {release_tag}")
+            module.rewrite_version(new_version=str(release_tag), version_tag="")
+            gitprovider.commit(
+                repo=module_dir,
+                message=message if message else f"Release version {module.metadata.get_full_version()}",
+                commit_all=True,
+                add=[module.get_metadata_file_path()],
+                raise_exc_when_nothing_to_commit=False,
+            )
+            gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            # bump to the next dev version
+            self.release(
+                dev=True, message="Bump version to next development version", patch=True, add_new_version_to_changelog=True
+            )
 
 
 class ModuleBuildFailedError(Exception):

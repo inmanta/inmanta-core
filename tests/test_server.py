@@ -998,16 +998,19 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await cm.insert()
 
     model_version = 1
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
-    rvid_r2_v1 = f"std::File[agent1,path=/etc/file2],v={model_version}"
-    rvid_r3_v1 = f"std::File[agent1,path=/etc/file3],v={model_version}"
+    rvid_r1 = "std::File[agent1,path=/etc/file1]"
+    rvid_r2 = "std::File[agent1,path=/etc/file2]"
+    rvid_r3 = "std::File[agent1,path=/etc/file3]"
+    rvid_r1_v1 = f"{rvid_r1},v={model_version}"
+    rvid_r2_v1 = f"{rvid_r2},v={model_version}"
+    rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
+        attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
