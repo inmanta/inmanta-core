@@ -99,7 +99,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         Register the given metrics_collector.
         """
-        if not any(existing.metric_name == metrics_collector.metric_name for existing in self.metrics_collectors):
+        if not any(metric.metric_name == metrics_collector.metric_name for metric in self.metrics_collectors):
             self.metrics_collectors.append(metrics_collector)
         else:
             LOGGER.warning(f"There already is a metric collector with the name {metrics_collector.metric_name}")

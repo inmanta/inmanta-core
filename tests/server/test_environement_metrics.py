@@ -28,14 +28,8 @@ from utils import log_contains
 
 @pytest.fixture
 async def env_metrics_service(server_config, init_dataclasses_and_load_schema):
-    server = Server()
     metrics_service = EnvironmentMetricsService()
-    await metrics_service.prestart(server)
-    await metrics_service.start()
-    server.add_slice(metrics_service)
     yield metrics_service
-    await metrics_service.prestop()
-    await metrics_service.stop()
 
 
 class DummyCountMetric(MetricsCollector):
