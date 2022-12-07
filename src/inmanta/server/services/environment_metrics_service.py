@@ -116,6 +116,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         to the database.
         """
         now: datetime = datetime.now()
+        old_previous_timestamp = self.previous_timestamp
+        self.previous_timestamp = datetime.now()
         metric_gauge: List[EnvironmentMetricsGauge] = []
         metric_timer: List[EnvironmentMetricsTimer] = []
         async with EnvironmentMetricsGauge.get_connection() as con:
@@ -124,7 +126,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_name: str = metrics_collector.get_metric_name()
                 metric_type: str = metrics_collector.get_metric_type()
                 metric_value: dict[str, int] = await metrics_collector.get_metric_value(
-                    self.previous_timestamp, now, connection=con
+                    old_previous_timestamp, now, connection=con
                 )
                 if metric_type == MetricType.GAUGE:
                     metric_gauge.append(
@@ -142,8 +144,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     )
                 else:
                     raise Exception(f"Metric type {metric_type.value} is unknown.")
-
-            self.previous_timestamp = now  # <--- should be in a finally
 
             await EnvironmentMetricsGauge.insert_many(metric_gauge, connection=con)
             await EnvironmentMetricsTimer.insert_many(metric_timer, connection=con)
