@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import datetime
-import logging
 import os
 import uuid
 from typing import Dict
@@ -26,7 +25,7 @@ import pytest
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.util import get_compiler_version
-from utils import get_resource, log_contains
+from utils import get_resource
 
 
 async def test_project(server, client, cli):
@@ -288,11 +287,9 @@ async def test_create_environment(tmpdir, server, client, cli):
     assert ctime_0 != ctime_2
 
 
-async def test_inmanta_cli_http_version(server, client, cli, caplog):
-    with caplog.at_level(logging.DEBUG):
-        result = await cli.run("project", "create", "-n", "test_project")
-        assert result.exit_code == 0
-        log_contains(caplog, "inmanta.protocol.rest.server", logging.DEBUG, "HTTP version of request: HTTP/1.1")
+async def test_inmanta_cli_http_version(server, client, cli):
+    result = await cli.run("project", "create", "-n", "test_project")
+    assert result.exit_code == 0
 
 
 async def test_pause_agent(server, cli):
