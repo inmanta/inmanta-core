@@ -88,7 +88,6 @@ async def test_enum_shrink(
         result = _get_column_names_and_values(self)
         return ([*result[0], "resource_version_id"], [*result[1], str(uuid.uuid4())])
 
-
     monkeypatch.setattr(data.Resource, "_get_column_names_and_values", get_column_names_and_values)
 
     # Insert some known documents so we can verify correct conversion of existing values
