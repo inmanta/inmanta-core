@@ -1,5 +1,5 @@
 ---
-description: Fix issue where server-side compiles fail when the server has SSL disabled but the project being compiled has a .inmanta file with SSL enabled.
+description: Fix issue where server-side compiles fail when the SSL configuration on the server doesn't match the SSL configuration defined in the .inmanta file of the project.
 issue-nr: 4640
 issue-repo: inmanta-core
 change-type: patch
