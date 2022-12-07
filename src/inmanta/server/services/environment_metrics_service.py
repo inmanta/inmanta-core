@@ -106,26 +106,28 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         now: datetime = datetime.now()
         metric_count: List[EnvironmentMetricsCounter] = []
         metric_non_count: List[EnvironmentMetricsNonCounter] = []
-        for mc in self.metrics_collectors:
-            metrics_collector: MetricsCollector = self.metrics_collectors[mc]
-            metric_name: str = metrics_collector.get_metric_name()
-            metric_type: str = metrics_collector.get_metric_type()
-            metric_value: dict[str, int] = await metrics_collector.get_metric_value(self.previous_timestamp, now)
-            self.previous_timestamp = now
-            if metric_type == MetricType.COUNT:
-                metric_count.append(
-                    EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
-                )
-            elif metric_type == MetricType.NON_COUNT:
-                metric_non_count.append(
-                    EnvironmentMetricsNonCounter(
-                        metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
+        try:
+            for mc in self.metrics_collectors:
+                metrics_collector: MetricsCollector = self.metrics_collectors[mc]
+                metric_name: str = metrics_collector.get_metric_name()
+                metric_type: str = metrics_collector.get_metric_type()
+                metric_value: dict[str, int] = await metrics_collector.get_metric_value(self.previous_timestamp, now)
+                if metric_type == MetricType.COUNT:
+                    metric_count.append(
+                        EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
                     )
-                )
-            elif metric_type == COMPILE_RATE:
-                raise NotImplementedError()
-            else:
-                raise Exception("Metric type {metric_type.value} is unknown.")
+                elif metric_type == MetricType.NON_COUNT:
+                    metric_non_count.append(
+                        EnvironmentMetricsNonCounter(
+                            metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
+                        )
+                    )
+                elif metric_type == MetricType.COMPILE_RATE:
+                    raise NotImplementedError()
+                else:
+                    raise Exception("Metric type {metric_type.value} is unknown.")
+        finally:
+            self.previous_timestamp = now
 
         await EnvironmentMetricsCounter.insert_many(metric_count)
         await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
