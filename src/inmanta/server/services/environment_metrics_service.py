@@ -31,6 +31,14 @@ COLLECTION_INTERVAL_IN_SEC = 60
 
 
 class MetricType(str, Enum):
+    """
+    Currently there are 3 types of metrics: metrics that represents a counter, metrics that doesn't represent a counter and
+    the compile_rate metric which is a special case. An examples of the count type metric is the agent_count metric which counts
+    the number of agents at a timestamp. An example of a non_count metric is the compile_time metric. This metric counts the
+    numer of compiles between the current timestamp and the last one and the total compile time.
+    The compile_rate metric is a special case as it is being calculated using only the count field of the compile_time metric.
+    """
+
     COUNT = "count"
     NON_COUNT = "non_count"
     COMPILE_RATE = "compile_rate"
@@ -95,7 +103,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         if metrics_collector.get_metric_name() not in self.metrics_collectors:
             self.metrics_collectors[metrics_collector.get_metric_name()] = metrics_collector
         else:
-            raise ServerError(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
+            raise Exception(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
 
     async def flush_metrics(self) -> None:
         """

@@ -21,7 +21,6 @@ from typing import Dict
 import pytest
 
 from inmanta import data
-from inmanta.protocol.exceptions import ServerError
 from inmanta.server.services.environment_metrics_service import EnvironmentMetricsService, MetricsCollector, MetricType
 
 
@@ -63,7 +62,7 @@ async def test_register_metrics_collector(env_metrics_service):
 
 
 async def test_register_same_metrics_collector(env_metrics_service):
-    with pytest.raises(ServerError) as e:
+    with pytest.raises(Exception) as e:
         dummy_count = DummyCountMetric()
         dummy_count2 = DummyCountMetric()
         env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
