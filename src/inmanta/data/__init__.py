@@ -5427,7 +5427,7 @@ class EnvironmentMetricsNonCounter(BaseDocument):
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences in the interval [previous.timestamp, self.timestamp[
-    :param value: the value of the metric  in the interval [previous.timestamp, self.timestamp[
+    :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
     """
 
     metric_name: str
