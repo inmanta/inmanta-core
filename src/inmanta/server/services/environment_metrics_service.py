@@ -21,8 +21,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List
 
-from inmanta.data import EnvironmentMetricsCounter, EnvironmentMetricsNonCounter
-from inmanta.protocol.exceptions import ServerError
+from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -32,16 +31,17 @@ COLLECTION_INTERVAL_IN_SEC = 60
 
 class MetricType(str, Enum):
     """
-    There are 3 types of metrics: metrics that represent a counter, metrics that doesn't represent a counter and
-    the compile_rate metric which is a special case. An examples of the count type metric is the agent_count metric which counts
-    the number of agents at a timestamp. An example of a non_count metric is the compile_time metric. This metric counts the
-    numer of compiles between the current timestamp and the last one and the total compile time.
-    The compile_rate metric is a special case as it is being calculated using only the count field of the compile_time metric.
+    There are 3 types of metrics: metrics that represent a gauge, metrics that represent a timer and metrics that represent a
+    meter.
+
+    gauge: an instantaneous reading of particular values at timestamps
+    timer: the number of time events occurred and the total time the events took.
+    meter: Measures the rate of events over time.
     """
 
-    COUNT = "count"
-    NON_COUNT = "non_count"
-    COMPILE_RATE = "compile_rate"
+    GAUGE = "gauge"
+    TIMER = "timer"
+    METER = "meter"
 
 
 class MetricsCollector(abc.ABC):
@@ -55,7 +55,7 @@ class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     def get_metric_type(self) -> MetricType:
         """
-        Returns the type of Metric collected by this metrics collector (count, non-count, etc.).
+        Returns the type of Metric collected by this metrics collector (gauge, timer, meter).
         This information is required by the `EnvironmentMetricsService` to know how the data
         should be aggregated.
         """
@@ -112,33 +112,39 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         to the database.
         """
         now: datetime = datetime.now()
-        metric_count: List[EnvironmentMetricsCounter] = []
-        metric_non_count: List[EnvironmentMetricsNonCounter] = []
+        metric_gauge: List[EnvironmentMetricsGauge] = []
+        metric_timer: List[EnvironmentMetricsTimer] = []
         try:
             for mc in self.metrics_collectors:
                 metrics_collector: MetricsCollector = self.metrics_collectors[mc]
                 metric_name: str = metrics_collector.get_metric_name()
                 metric_type: str = metrics_collector.get_metric_type()
                 metric_value: dict[str, int] = await metrics_collector.get_metric_value(self.previous_timestamp, now)
-                if metric_type == MetricType.COUNT:
-                    metric_count.append(
-                        EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
+                if metric_type == MetricType.GAUGE:
+                    metric_gauge.append(
+                        EnvironmentMetricsGauge(metric_name=metric_name, timestamp=now, count=metric_value["count"])
                     )
-                elif metric_type == MetricType.NON_COUNT:
-                    metric_non_count.append(
-                        EnvironmentMetricsNonCounter(
+                elif metric_type == MetricType.TIMER:
+                    metric_timer.append(
+                        EnvironmentMetricsTimer(
                             metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
                         )
                     )
-                elif metric_type == MetricType.COMPILE_RATE:
-                    raise NotImplementedError()
+                elif metric_type == MetricType.METER:
+                    raise Exception(
+                        f"Metric type {metric_type.value} is a derived quantity and can not be the type of a MetricsCollector"
+                    )
                 else:
-                    raise Exception("Metric type {metric_type.value} is unknown.")
+                    raise Exception(f"Metric type {metric_type.value} is unknown.")
         finally:
             self.previous_timestamp = now
 
-        await EnvironmentMetricsCounter.insert_many(metric_count)
-        await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
+        async with EnvironmentMetricsGauge.get_connection() as con:
+            await EnvironmentMetricsGauge.insert_many(metric_gauge, connection=con)
+            await EnvironmentMetricsTimer.insert_many(metric_timer, connection=con)
 
         if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
-            LOGGER.warning("flush_metrics method took more than 1 minute")
+            LOGGER.warning(
+                f"flush_metrics method took more than {COLLECTION_INTERVAL_IN_SEC} seconds: new attempts to flush metrics are fired faster than they resolve."
+                f"Verify the load on the Database and the available connection pool size."
+            )

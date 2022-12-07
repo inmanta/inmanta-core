@@ -5404,7 +5404,7 @@ class Notification(BaseDocument):
         )
 
 
-class EnvironmentMetricsCounter(BaseDocument):
+class EnvironmentMetricsGauge(BaseDocument):
     """
     A metric that is a counter
 
@@ -5420,7 +5420,7 @@ class EnvironmentMetricsCounter(BaseDocument):
     __primary_key__ = ("metric_name", "timestamp")
 
 
-class EnvironmentMetricsNonCounter(BaseDocument):
+class EnvironmentMetricsTimer(BaseDocument):
     """
     A metric that is not a counter
 
@@ -5454,8 +5454,8 @@ _classes = [
     Compile,
     Report,
     Notification,
-    EnvironmentMetricsCounter,
-    EnvironmentMetricsNonCounter,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
 ]
 
 

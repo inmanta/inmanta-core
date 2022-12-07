@@ -53,13 +53,13 @@ async def test_added_environment_metrics_tables(
 
     # The table is not present before the migration
     tables = await get_tables_in_db()
-    assert "environmentmetricscounter" not in tables
-    assert "environmentmetricsnoncounter" not in tables
+    assert "environmentmetricsgauge" not in tables
+    assert "environmentmetricstimer" not in tables
 
     # Migrate DB schema
     await migrate_v202211230_to_v202212010()
 
     # The table is added to the database
     tables = await get_tables_in_db()
-    assert "environmentmetricscounter" in tables
-    assert "environmentmetricsnoncounter" in tables
+    assert "environmentmetricsgauge" in tables
+    assert "environmentmetricstimer" in tables

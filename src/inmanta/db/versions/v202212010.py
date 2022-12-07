@@ -21,14 +21,14 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    CREATE TABLE IF NOT EXISTS public.environmentmetricscounter(
+    CREATE TABLE IF NOT EXISTS public.environmentmetricsgauge(
         metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
         PRIMARY KEY (metric_name, timestamp)
     );
 
-    CREATE TABLE IF NOT EXISTS public.environmentmetricsnoncounter (
+    CREATE TABLE IF NOT EXISTS public.environmentmetricstimer (
         metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
