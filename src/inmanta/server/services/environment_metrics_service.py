@@ -27,7 +27,7 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 
 LOGGER = logging.getLogger(__name__)
 
-COLLECTION_INTERVAL = 60
+COLLECTION_INTERVAL_IN_SEC = 60
 
 
 class MetricType(str, Enum):
@@ -86,7 +86,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self.schedule(self.flush_metrics, COLLECTION_INTERVAL, initial_delay=0, cancel_on_stop=True)
+        self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
@@ -126,5 +126,5 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         await EnvironmentMetricsCounter.insert_many(metric_count)
         await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
 
-        if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL):
+        if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
             LOGGER.warning("flush_metrics method took more than 1 minute")
