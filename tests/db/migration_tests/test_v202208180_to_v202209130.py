@@ -81,6 +81,16 @@ async def test_enum_shrink(
     # simplified ResourceAction insert: allow empty resource_version_id
     monkeypatch.setattr(data.ResourceAction, "insert", data.BaseDocument.insert)
 
+    # inject resource_version_id field for db dump pre-removal
+    _get_column_names_and_values = data.Resource._get_column_names_and_values
+
+    def get_column_names_and_values(self):
+        result = _get_column_names_and_values(self)
+        return ([*result[0], "resource_version_id"], [*result[1], str(uuid.uuid4())])
+
+
+    monkeypatch.setattr(data.Resource, "_get_column_names_and_values", get_column_names_and_values)
+
     # Insert some known documents so we can verify correct conversion of existing values
     pre_actions: abc.Mapping[str, uuid.UUID] = {state: uuid.uuid4() for state in all_states_pre}
     pre_resources: abc.Mapping[str, uuid.UUID] = {state: uuid.uuid4() for state in all_states_pre}
@@ -103,7 +113,6 @@ async def test_enum_shrink(
             # these are only mock resources: use uuid instead of actual valid resource version id
             resource_id=str(resource_id),
             resource_type=model.ResourceType("myresource"),
-            resource_version_id=model.ResourceVersionIdStr(str(resource_id)),
             resource_id_value=model.ResourceVersionIdStr("notarealidvalue"),
             agent="myagent",
             attribute_hash=None,
