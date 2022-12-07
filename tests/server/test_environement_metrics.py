@@ -77,7 +77,7 @@ async def test_flush_metrics_count(env_metrics_service):
 
     previous_timestamp: datetime = env_metrics_service.previous_timestamp
     await env_metrics_service.flush_metrics()
-    assert previous_timestamp != env_metrics_service.previous_timestamp
+    assert previous_timestamp < env_metrics_service.previous_timestamp
     result = await data.EnvironmentMetricsCounter.get_list()
     assert len(result) == 1
     assert result[0].count == 1
@@ -97,7 +97,7 @@ async def test_flush_metrics_non_count(env_metrics_service):
 
     previous_timestamp: datetime = env_metrics_service.previous_timestamp
     await env_metrics_service.flush_metrics()
-    assert previous_timestamp != env_metrics_service.previous_timestamp
+    assert previous_timestamp < env_metrics_service.previous_timestamp
     result = await data.EnvironmentMetricsNonCounter.get_list()
     assert len(result) == 1
     assert result[0].count == 2

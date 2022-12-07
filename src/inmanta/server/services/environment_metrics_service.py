@@ -92,7 +92,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         Register the given metrics_collector.
         """
-        if not metrics_collector.get_metric_name() in self.metrics_collectors:
+        if metrics_collector.get_metric_name() not in self.metrics_collectors:
             self.metrics_collectors[metrics_collector.get_metric_name()] = metrics_collector
         else:
             raise ServerError(f"There already is a metric collector with the name {metrics_collector.get_metric_name()}")
@@ -116,12 +116,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_count.append(
                     EnvironmentMetricsCounter(metric_name=metric_name, timestamp=now, count=metric_value["count"])
                 )
-            if metric_type == MetricType.NON_COUNT:
+            elif metric_type == MetricType.NON_COUNT:
                 metric_non_count.append(
                     EnvironmentMetricsNonCounter(
                         metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
                     )
                 )
+            elif metric_type == COMPILE_RATE:
+                raise NotImplementedError()
+            else:
+                raise Exception("Metric type {metric_type.value} is unknown.")
 
         await EnvironmentMetricsCounter.insert_many(metric_count)
         await EnvironmentMetricsNonCounter.insert_many(metric_non_count)
