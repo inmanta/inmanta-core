@@ -19,7 +19,9 @@ import abc
 import logging
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+import asyncpg
 
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
@@ -31,12 +33,11 @@ COLLECTION_INTERVAL_IN_SEC = 60
 
 class MetricType(str, Enum):
     """
-    There are 3 types of metrics: metrics that represent a gauge, metrics that represent a timer and metrics that represent a
-    meter.
+    There are 3 types of metrics: gauge, timer and meter metrics.
 
-    gauge: an instantaneous reading of particular values at timestamps
-    timer: the number of time events occurred and the total time the events took.
-    meter: Measures the rate of events over time.
+    gauge: will do instantaneous readings of particular values at timestamps
+    timer: will count the number of time events occurred and the total time the events took.
+    meter: will measure the rate of events over time.
     """
 
     GAUGE = "gauge"
@@ -62,7 +63,9 @@ class MetricsCollector(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> dict[str, int]:
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> dict[str, int]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
         Returns the metrics collected by this MetricCollector within the past metrics collection interval.
@@ -73,6 +76,7 @@ class MetricsCollector(abc.ABC):
 
         :param start_interval: The start time of the metrics collection interval (inclusive).
         :param end_interval: The end time of the metrics collection interval (exclusive).
+        :param connection: An optional connection
         :result: The metrics collected by this MetricCollector within the past metrics collection interval.
         """
         raise NotImplementedError()
@@ -145,6 +149,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
             LOGGER.warning(
-                f"flush_metrics method took more than {COLLECTION_INTERVAL_IN_SEC} seconds: new attempts to flush metrics are fired faster than they resolve."
+                f"flush_metrics method took more than {COLLECTION_INTERVAL_IN_SEC} seconds: "
+                f"new attempts to flush metrics are fired faster than they resolve."
                 f"Verify the load on the Database and the available connection pool size."
             )

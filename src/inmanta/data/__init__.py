@@ -5406,7 +5406,7 @@ class Notification(BaseDocument):
 
 class EnvironmentMetricsGauge(BaseDocument):
     """
-    A metric that is a counter
+    A metric that is of type gauge
 
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
@@ -5422,7 +5422,7 @@ class EnvironmentMetricsGauge(BaseDocument):
 
 class EnvironmentMetricsTimer(BaseDocument):
     """
-    A metric that is not a counter
+    A metric that is type timer
 
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
