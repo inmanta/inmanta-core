@@ -17,6 +17,7 @@
 """
 import abc
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional
@@ -45,6 +46,26 @@ class MetricType(str, Enum):
     METER = "meter"
 
 
+class MetricValue(object):
+    """
+    the Metric values as they should be returned by a MetricsCollector of type gauge
+    """
+
+    def __init__(self, name: str, count: int) -> None:
+        self.metric_name = name
+        self.count = count
+
+
+class MetricValueTimer(MetricValue):
+    """
+    the Metric values as they should be returned by a MetricsCollector of type timer
+    """
+
+    def __init__(self, name: str, count: int, value: float) -> None:
+        super().__init__(name, count)
+        self.value = value
+
+
 class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     def get_metric_name(self) -> str:
@@ -65,7 +86,7 @@ class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> dict[str, int]:
+    ) -> Sequence[MetricValue]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
         Returns the metrics collected by this MetricCollector within the past metrics collection interval.
@@ -118,26 +139,30 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         now: datetime = datetime.now()
         old_previous_timestamp = self.previous_timestamp
         self.previous_timestamp = now
-        metric_gauge: List[EnvironmentMetricsGauge] = []
-        metric_timer: List[EnvironmentMetricsTimer] = []
+        metric_gauge: Sequence[EnvironmentMetricsGauge] = []
+        metric_timer: Sequence[EnvironmentMetricsTimer] = []
+
+        def create_metrics_gauge(metric_values_gauge: Sequence[MetricValue], timestamp: datetime):
+            for mv in metric_values_gauge:
+                metric_gauge.append(EnvironmentMetricsGauge(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count))
+
+        def create_metrics_timer(metric_values_timer: Sequence[MetricValueTimer], timestamp: datetime):
+            for mv in metric_values_timer:
+                metric_timer.append(
+                    EnvironmentMetricsTimer(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, value=mv.value)
+                )
+
         async with EnvironmentMetricsGauge.get_connection() as con:
             for mc in self.metrics_collectors:
                 metrics_collector: MetricsCollector = self.metrics_collectors[mc]
-                metric_name: str = metrics_collector.get_metric_name()
                 metric_type: str = metrics_collector.get_metric_type()
-                metric_value: dict[str, int] = await metrics_collector.get_metric_value(
+                metric_values: Sequence[MetricValue] = await metrics_collector.get_metric_value(
                     old_previous_timestamp, now, connection=con
                 )
                 if metric_type == MetricType.GAUGE:
-                    metric_gauge.append(
-                        EnvironmentMetricsGauge(metric_name=metric_name, timestamp=now, count=metric_value["count"])
-                    )
+                    create_metrics_gauge(metric_values, now)
                 elif metric_type == MetricType.TIMER:
-                    metric_timer.append(
-                        EnvironmentMetricsTimer(
-                            metric_name=metric_name, timestamp=now, count=metric_value["count"], value=metric_value["value"]
-                        )
-                    )
+                    create_metrics_timer(metric_values, now)
                 elif metric_type == MetricType.METER:
                     raise Exception(
                         f"Metric type {metric_type.value} is a derived quantity and can not be the type of a MetricsCollector"
