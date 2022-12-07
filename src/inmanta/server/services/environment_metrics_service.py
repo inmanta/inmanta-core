@@ -32,7 +32,7 @@ COLLECTION_INTERVAL_IN_SEC = 60
 
 class MetricType(str, Enum):
     """
-    Currently there are 3 types of metrics: metrics that represents a counter, metrics that doesn't represent a counter and
+    There are 3 types of metrics: metrics that represent a counter, metrics that doesn't represent a counter and
     the compile_rate metric which is a special case. An examples of the count type metric is the agent_count metric which counts
     the number of agents at a timestamp. An example of a non_count metric is the compile_time metric. This metric counts the
     numer of compiles between the current timestamp and the last one and the total compile time.
