@@ -56,7 +56,7 @@ class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     def get_metric_type(self) -> MetricType:
         """
-        Returns the type of Metric collected by this metrics collector (gauge, timer, meter).
+        Returns the type of Metric collected by this metrics collector (gauge, timer).
         This information is required by the `EnvironmentMetricsService` to know how the data
         should be aggregated.
         """
@@ -117,7 +117,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """
         now: datetime = datetime.now()
         old_previous_timestamp = self.previous_timestamp
-        self.previous_timestamp = datetime.now()
+        self.previous_timestamp = now
         metric_gauge: List[EnvironmentMetricsGauge] = []
         metric_timer: List[EnvironmentMetricsTimer] = []
         async with EnvironmentMetricsGauge.get_connection() as con:

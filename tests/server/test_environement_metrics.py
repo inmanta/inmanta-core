@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
+import asyncpg
 import pytest
 
 from inmanta import data
@@ -30,49 +31,53 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
     yield metrics_service
 
 
-class DummyCountMetric(MetricsCollector):
+class DummyGaugeMetric(MetricsCollector):
     def get_metric_name(self) -> str:
-        return "dummy_count"
+        return "dummy_gauge"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.GAUGE
 
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> Dict[str, int]:
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Dict[str, int]:
         return {"count": 1}
 
 
-class DummyNonCountMetric(MetricsCollector):
+class DummyTimerMetric(MetricsCollector):
     def get_metric_name(self) -> str:
-        return "dummy_non_count"
+        return "dummy_timer"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.TIMER
 
-    async def get_metric_value(self, start_interval: datetime, end_interval: datetime) -> Dict[str, int]:
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Dict[str, int]:
         return {"count": 2, "value": 200.05}
 
 
 async def test_register_metrics_collector(env_metrics_service):
-    dummy_count = DummyCountMetric()
-    dummy_non_count = DummyNonCountMetric()
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
+    dummy_gauge = DummyGaugeMetric()
+    dummy_timer = DummyTimerMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
 
     assert len(env_metrics_service.metrics_collectors) == 2
 
 
 async def test_register_same_metrics_collector(env_metrics_service):
     with pytest.raises(Exception) as e:
-        dummy_count = DummyCountMetric()
-        dummy_count2 = DummyCountMetric()
-        env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
-        env_metrics_service.register_metric_collector(metrics_collector=dummy_count2)
-    assert "There already is a metric collector with the name dummy_count" in str(e.value)
+        dummy_gauge = DummyGaugeMetric()
+        dummy_gauge2 = DummyGaugeMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge2)
+    assert "There already is a metric collector with the name dummy_gauge" in str(e.value)
 
 
-async def test_flush_metrics_count(env_metrics_service):
-    dummy_count = DummyCountMetric()
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
+async def test_flush_metrics_gauge(env_metrics_service):
+    dummy_gauge = DummyGaugeMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
 
     previous_timestamp: datetime = env_metrics_service.previous_timestamp
     await env_metrics_service.flush_metrics()
@@ -80,7 +85,7 @@ async def test_flush_metrics_count(env_metrics_service):
     result = await data.EnvironmentMetricsGauge.get_list()
     assert len(result) == 1
     assert result[0].count == 1
-    assert result[0].metric_name == "dummy_count"
+    assert result[0].metric_name == "dummy_gauge"
     assert isinstance(result[0].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
@@ -90,9 +95,9 @@ async def test_flush_metrics_count(env_metrics_service):
     assert len(result) == 3
 
 
-async def test_flush_metrics_non_count(env_metrics_service):
-    dummy_non_count = DummyNonCountMetric()
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
+async def test_flush_metrics_timer(env_metrics_service):
+    dummy_timer = DummyTimerMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
 
     previous_timestamp: datetime = env_metrics_service.previous_timestamp
     await env_metrics_service.flush_metrics()
@@ -101,7 +106,7 @@ async def test_flush_metrics_non_count(env_metrics_service):
     assert len(result) == 1
     assert result[0].count == 2
     assert result[0].value == 200.05
-    assert result[0].metric_name == "dummy_non_count"
+    assert result[0].metric_name == "dummy_timer"
     assert isinstance(result[0].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
@@ -112,10 +117,10 @@ async def test_flush_metrics_non_count(env_metrics_service):
 
 
 async def test_flush_metrics_mix(env_metrics_service):
-    dummy_count = DummyCountMetric()
-    dummy_non_count = DummyNonCountMetric()
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_count)
-    env_metrics_service.register_metric_collector(metrics_collector=dummy_non_count)
+    dummy_gauge = DummyGaugeMetric()
+    dummy_timer = DummyTimerMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
 
     await env_metrics_service.flush_metrics()
     result_non_count = await data.EnvironmentMetricsTimer.get_list()
