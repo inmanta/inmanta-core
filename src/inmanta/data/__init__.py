@@ -5404,6 +5404,40 @@ class Notification(BaseDocument):
         )
 
 
+class EnvironmentMetricsGauge(BaseDocument):
+    """
+    A metric that is of type gauge
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at which a new record is created
+    :param count: the counter for the metric for the given timestamp
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+
+class EnvironmentMetricsTimer(BaseDocument):
+    """
+    A metric that is type timer
+
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at which a new record is created
+    :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
+    :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
+    """
+
+    metric_name: str
+    timestamp: datetime.datetime
+    count: int
+    value: float
+
+    __primary_key__ = ("metric_name", "timestamp")
+
+
 _classes = [
     Project,
     Environment,
@@ -5420,6 +5454,8 @@ _classes = [
     Compile,
     Report,
     Notification,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
 ]
 
 

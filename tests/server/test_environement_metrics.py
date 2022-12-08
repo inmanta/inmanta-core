@@ -1,0 +1,281 @@
+"""
+    Copyright 2022 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Optional
+
+import asyncpg
+import pytest
+
+from inmanta import data
+from inmanta.server.services.environment_metrics_service import (
+    EnvironmentMetricsService,
+    MetricsCollector,
+    MetricType,
+    MetricValue,
+    MetricValueTimer,
+)
+
+
+@pytest.fixture
+async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -> EnvironmentMetricsService:
+    metrics_service = EnvironmentMetricsService()
+    yield metrics_service
+
+
+class DummyGaugeMetric(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_gauge"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValue]:
+        a = MetricValue("dummy_gauge", 1)
+        return [a]
+
+
+class DummyGaugeMetricMulti(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_gauge_multi"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValue]:
+        a = MetricValue("dummy_gauge_multi", 1, "up")
+        b = MetricValue("dummy_gauge_multi", 2, "down")
+        c = MetricValue("dummy_gauge_multi", 3, "left")
+        return [a, b, c]
+
+
+class DummyTimerMetric(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_timer"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValueTimer]:
+        a = MetricValueTimer("dummy_timer", 3, 50.50)
+        return [a]
+
+
+class DummyTimerMetricMulti(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "dummy_timer_multi"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValueTimer]:
+        a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, "up")
+        b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, "down")
+        c = MetricValueTimer("dummy_timer_multi", 23, 50.50 * 3, "left")
+        return [a, b, c]
+
+
+async def test_register_metrics_collector(env_metrics_service):
+    dummy_gauge = DummyGaugeMetric()
+    dummy_timer = DummyTimerMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
+
+    assert len(env_metrics_service.metrics_collectors) == 2
+
+
+async def test_register_same_metrics_collector(env_metrics_service):
+    with pytest.raises(Exception) as e:
+        dummy_gauge = DummyGaugeMetric()
+        dummy_gauge2 = DummyGaugeMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+        env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge2)
+    assert "There already is a metric collector with the name dummy_gauge" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "metric_name, grouped_by, error_msg",
+    [
+        ("bad.name", "ok", 'The character "." can not be used in the metric_name (bad.name)'),
+        ("ok_name", "not.ok", 'The character "." can not be used in the grouped_by value (not.ok)'),
+    ],
+)
+async def test_bad_name_metric(env_metrics_service, metric_name, grouped_by, error_msg):
+    class BadNameMetric(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return metric_name
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.GAUGE
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        ) -> Sequence[MetricValueTimer]:
+            a = MetricValue(self.get_metric_name(), 10, grouped_by)
+            return [a]
+
+    with pytest.raises(Exception) as e:
+        bad_name = BadNameMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=bad_name)
+        await env_metrics_service.flush_metrics()
+    assert error_msg in str(e.value)
+
+
+async def test_bad_type_metric(env_metrics_service):
+    class BadTypeMetric(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "bad_type"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.TIMER
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        ) -> Sequence[MetricValue]:
+            a = MetricValue(self.get_metric_name(), 10)
+            return [a]
+
+    with pytest.raises(Exception):
+        bad_name = BadTypeMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=bad_name)
+        await env_metrics_service.flush_metrics()
+
+
+async def test_flush_metrics_gauge(env_metrics_service):
+    dummy_gauge = DummyGaugeMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+
+    previous_timestamp: datetime = env_metrics_service.previous_timestamp
+    await env_metrics_service.flush_metrics()
+    assert previous_timestamp < env_metrics_service.previous_timestamp
+    result = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result) == 1
+    assert result[0].count == 1
+    assert result[0].metric_name == "dummy_gauge"
+    assert isinstance(result[0].timestamp, datetime)
+
+    await env_metrics_service.flush_metrics()
+    await env_metrics_service.flush_metrics()
+
+    result = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result) == 3
+
+
+async def test_flush_metrics_gauge_multi(env_metrics_service):
+    dummy_gauge = DummyGaugeMetricMulti()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+
+    previous_timestamp: datetime = env_metrics_service.previous_timestamp
+    await env_metrics_service.flush_metrics()
+    assert previous_timestamp < env_metrics_service.previous_timestamp
+    result = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result) == 3
+    assert result[0].count == 1
+    assert result[0].metric_name == "dummy_gauge_multi.up"
+    assert isinstance(result[0].timestamp, datetime)
+    assert result[1].count == 2
+    assert result[1].metric_name == "dummy_gauge_multi.down"
+    assert isinstance(result[1].timestamp, datetime)
+    assert result[2].count == 3
+    assert result[2].metric_name == "dummy_gauge_multi.left"
+    assert isinstance(result[2].timestamp, datetime)
+
+    await env_metrics_service.flush_metrics()
+    await env_metrics_service.flush_metrics()
+
+    result = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result) == 9
+
+
+async def test_flush_metrics_timer(env_metrics_service):
+    dummy_timer = DummyTimerMetric()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
+
+    previous_timestamp: datetime = env_metrics_service.previous_timestamp
+    await env_metrics_service.flush_metrics()
+    assert previous_timestamp < env_metrics_service.previous_timestamp
+    result = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result) == 1
+    assert result[0].count == 3
+    assert result[0].value == 50.50
+    assert result[0].metric_name == "dummy_timer"
+    assert isinstance(result[0].timestamp, datetime)
+
+    await env_metrics_service.flush_metrics()
+    await env_metrics_service.flush_metrics()
+
+    result = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result) == 3
+
+
+async def test_flush_metrics_timer_multi(env_metrics_service):
+    dummy_timer = DummyTimerMetricMulti()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
+
+    previous_timestamp: datetime = env_metrics_service.previous_timestamp
+    await env_metrics_service.flush_metrics()
+    assert previous_timestamp < env_metrics_service.previous_timestamp
+    result = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result) == 3
+    assert result[0].count == 3
+    assert result[0].value == 50.50
+    assert result[0].metric_name == "dummy_timer_multi.up"
+    assert isinstance(result[0].timestamp, datetime)
+    assert result[1].count == 13
+    assert result[1].value == 50.50 * 2
+    assert result[1].metric_name == "dummy_timer_multi.down"
+    assert isinstance(result[1].timestamp, datetime)
+    assert result[2].count == 23
+    assert result[2].value == 50.50 * 3
+    assert result[2].metric_name == "dummy_timer_multi.left"
+    assert isinstance(result[2].timestamp, datetime)
+
+    await env_metrics_service.flush_metrics()
+    await env_metrics_service.flush_metrics()
+
+    result = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result) == 9
+
+
+async def test_flush_metrics_mix(env_metrics_service):
+    dummy_gauge = DummyGaugeMetric()
+    dummy_timer = DummyTimerMetricMulti()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
+
+    await env_metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_gauge) == 1
+    assert len(result_timer) == 3
+
+    await env_metrics_service.flush_metrics()
+    await env_metrics_service.flush_metrics()
+
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_gauge) == 3
+    assert len(result_timer) == 9
