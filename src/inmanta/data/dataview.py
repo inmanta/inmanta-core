@@ -514,8 +514,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
 
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
-            # TODO: for more efficient paging, query for initial row should use paging boundary instead of None. Add tests to
-            #       maintain performance
             prelude=f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
                 /* The latest_version CTE finds the maximum released version number in the environment */
