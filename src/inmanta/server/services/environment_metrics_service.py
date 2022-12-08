@@ -175,6 +175,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 if metric_type == MetricType.GAUGE:
                     create_metrics_gauge(metric_values, now)
                 elif metric_type == MetricType.TIMER:
+                    assert all(isinstance(x, MetricValueTimer) for x in metric_values)
                     create_metrics_timer(metric_values, now)
                 elif metric_type == MetricType.METER:
                     raise Exception(

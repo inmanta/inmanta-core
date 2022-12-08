@@ -144,6 +144,27 @@ async def test_bad_name_metric(env_metrics_service, metric_name, grouped_by, err
     assert error_msg in str(e.value)
 
 
+async def test_bad_type_metric(env_metrics_service):
+    class BadTypeMetric(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "bad_type"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.TIMER
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        ) -> Sequence[MetricValue]:
+            a = MetricValue(self.get_metric_name(), 10)
+            return [a]
+
+    with pytest.raises(Exception) as e:
+        bad_name = BadTypeMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=bad_name)
+        await env_metrics_service.flush_metrics()
+    print(e)
+
+
 async def test_flush_metrics_gauge(env_metrics_service):
     dummy_gauge = DummyGaugeMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
