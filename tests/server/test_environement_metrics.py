@@ -311,7 +311,6 @@ async def test_flo(server, client, clienthelper, environment, postgresql_client)
             "send_event": False,
             "requires": [],
             "purged": True,
-            "status": ResourceState.skipped,
         },
     ]
 
