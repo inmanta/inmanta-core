@@ -175,7 +175,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
             LOGGER.warning(
-                f"flush_metrics method took more than {COLLECTION_INTERVAL_IN_SEC} seconds: "
-                f"new attempts to flush metrics are fired faster than they resolve."
-                f"Verify the load on the Database and the available connection pool size."
+                f"flush_metrics method took more than %d seconds: "
+                f"new attempts to flush metrics are fired faster than they resolve. "
+                f"Verify the load on the Database and the available connection pool size.",
+                COLLECTION_INTERVAL_IN_SEC,
             )
