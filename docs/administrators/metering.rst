@@ -54,7 +54,7 @@ Setup guide
 
 #. Restart the inmanta server.
 #. [optional] install grafana, follow the instructions found at `<https://grafana.com/grafana/download>`_
-#. [optional] load the inmanta dashboard found at `<https://grafana.com/dashboards/10089>`_
+#. [optional] load the inmanta dashboard found at `<https://grafana.com/grafana/dashboards/10089-inmanta-api-performance/>`_
 
 Reported Metrics
 ----------------
