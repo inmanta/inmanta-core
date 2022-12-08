@@ -24,14 +24,13 @@ import asyncpg
 import pytest
 
 from inmanta import data
-from inmanta.const import ResourceState
-from inmanta.data import Resource
 from inmanta.server.services.environment_metrics_service import (
     EnvironmentMetricsService,
     MetricsCollector,
     MetricType,
     MetricValue,
     MetricValueTimer,
+    ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version, retry_limited
 
@@ -285,7 +284,8 @@ async def test_flush_metrics_mix(env_metrics_service):
     assert len(result_timer) == 9
 
 
-async def test_resource_count_metric(server, client, clienthelper, environment, postgresql_client):
+async def test_resource_count_metric(clienthelper, environment, client, agent):
+    metrics_service = EnvironmentMetricsService()
     version = str(await clienthelper.get_version())
     resources = [
         {
@@ -324,9 +324,21 @@ async def test_resource_count_metric(server, client, clienthelper, environment, 
     )
     assert result.code == 200
 
+    rcmc = ResourceCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    # flush the metrics for the first time: 1 record (3 resources in available state)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 1
+    assert result_gauge[0].metric_name == "resource_count.available"
+    assert result_gauge[0].count == 3
+
+    # change the state of one of the resources
     now = datetime.now()
     action_id = uuid.uuid4()
-    result = await client.resource_action_update(
+    aclient = agent._client
+    result = await aclient.resource_action_update(
         environment,
         ["test::Resource[agent1,key=key1],v=" + version],
         action_id,
@@ -340,13 +352,16 @@ async def test_resource_count_metric(server, client, clienthelper, environment, 
 
     assert result.code == 200
 
-    result1 = await Resource.get_list()
-
-    query = """
-        SELECT status,count(*)
-        FROM resource
-        GROUP BY status
-    """
-    result2 = await postgresql_client.fetch(query)
-    print(result1)
-    print(result2)
+    # flush the metrics for the second time: 1 old record (3 resources in available state)
+    # + 2 new records (2 resources in available state, 1 in the deployed state)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 3
+    assert result_gauge[0].metric_name == "resource_count.available"
+    assert result_gauge[0].count == 3
+    assert result_gauge[1].metric_name == "resource_count.available"
+    assert result_gauge[1].count == 2
+    assert result_gauge[2].metric_name == "resource_count.deployed"
+    assert result_gauge[2].count == 1
+    assert result_gauge[2].timestamp == result_gauge[1].timestamp
+    assert result_gauge[0].timestamp < result_gauge[1].timestamp

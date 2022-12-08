@@ -207,5 +207,13 @@ class ResourceCountMetricsCollector(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
-        agent_counts_by_state = await data.Resource.get_list()
-        print(agent_counts_by_state)
+        query = """
+            SELECT status,count(*)
+            FROM resource
+            GROUP BY status
+        """
+        metric_values: List[MetricValue] = []
+        result = await connection.fetch(query)
+        for record in result:
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["status"]))
+        return metric_values
