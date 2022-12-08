@@ -33,7 +33,7 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValue,
     MetricValueTimer,
 )
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, retry_limited
 
 
 @pytest.fixture
@@ -285,7 +285,7 @@ async def test_flush_metrics_mix(env_metrics_service):
     assert len(result_timer) == 9
 
 
-async def test_flo(server, client, clienthelper, environment, postgresql_client):
+async def test_resource_count_metric(server, client, clienthelper, environment, postgresql_client):
     version = str(await clienthelper.get_version())
     resources = [
         {
