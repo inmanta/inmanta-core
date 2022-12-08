@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Optional
@@ -23,6 +24,8 @@ import asyncpg
 import pytest
 
 from inmanta import data
+from inmanta.const import ResourceState
+from inmanta.data import Resource
 from inmanta.server.services.environment_metrics_service import (
     EnvironmentMetricsService,
     MetricsCollector,
@@ -30,6 +33,7 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValue,
     MetricValueTimer,
 )
+from inmanta.util import get_compiler_version
 
 
 @pytest.fixture
@@ -279,3 +283,71 @@ async def test_flush_metrics_mix(env_metrics_service):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
     assert len(result_gauge) == 3
     assert len(result_timer) == 9
+
+
+async def test_flo(server, client, clienthelper, environment, postgresql_client):
+    version = str(await clienthelper.get_version())
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=" + version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": None,
+            "id": "test::Resource[agent1,key=key3],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+            "status": ResourceState.skipped,
+        },
+    ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    now = datetime.now()
+    action_id = uuid.uuid4()
+    result = await client.resource_action_update(
+        environment,
+        ["test::Resource[agent1,key=key1],v=" + version],
+        action_id,
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
+    )
+
+    assert result.code == 200
+
+    result1 = await Resource.get_list()
+
+    query = """
+        SELECT status,count(*)
+        FROM resource
+        GROUP BY status
+    """
+    result2 = await postgresql_client.fetch(query)
+    print(result1)
+    print(result2)

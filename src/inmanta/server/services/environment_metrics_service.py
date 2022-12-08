@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
+from inmanta import data
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
@@ -194,3 +195,17 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 "Verify the load on the Database and the available connection pool size.",
                 COLLECTION_INTERVAL_IN_SEC,
             )
+
+
+class ResourceCountMetricsCollector(MetricsCollector):
+    def get_metric_name(self) -> str:
+        return "resource_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValue]:
+        agent_counts_by_state = await data.Resource.get_list()
+        print(agent_counts_by_state)
