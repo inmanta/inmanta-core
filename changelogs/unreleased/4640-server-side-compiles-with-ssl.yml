@@ -1,0 +1,8 @@
+---
+description: Fix issue where server-side compiles fail when the SSL configuration on the server doesn't match the SSL configuration defined in the .inmanta file of the project.
+issue-nr: 4640
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  bugfix: "{{description}}"
