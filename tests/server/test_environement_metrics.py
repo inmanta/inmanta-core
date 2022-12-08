@@ -62,9 +62,9 @@ class DummyGaugeMetricMulti(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
-        a = MetricValue("dummy_gauge_up", 1)
-        b = MetricValue("dummy_gauge_down", 2)
-        c = MetricValue("dummy_gauge_left", 3)
+        a = MetricValue("dummy_gauge_multi", 1, "up")
+        b = MetricValue("dummy_gauge_multi", 2, "down")
+        c = MetricValue("dummy_gauge_multi", 3, "left")
         return [a, b, c]
 
 
@@ -92,9 +92,9 @@ class DummyTimerMetricMulti(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValueTimer]:
-        a = MetricValueTimer("dummy_timer_up", 3, 50.50 * 1)
-        b = MetricValueTimer("dummy_timer_down", 13, 50.50 * 2)
-        c = MetricValueTimer("dummy_timer_left", 23, 50.50 * 3)
+        a = MetricValueTimer("dummy_timer", 3, 50.50 * 1, "up")
+        b = MetricValueTimer("dummy_timer", 13, 50.50 * 2, "down")
+        c = MetricValueTimer("dummy_timer", 23, 50.50 * 3, "left")
         return [a, b, c]
 
 
@@ -146,13 +146,13 @@ async def test_flush_metrics_gauge_multi(env_metrics_service):
     result = await data.EnvironmentMetricsGauge.get_list()
     assert len(result) == 3
     assert result[0].count == 1
-    assert result[0].metric_name == "dummy_gauge_up"
+    assert result[0].metric_name == "dummy_gauge_multi.up"
     assert isinstance(result[0].timestamp, datetime)
     assert result[1].count == 2
-    assert result[1].metric_name == "dummy_gauge_down"
+    assert result[1].metric_name == "dummy_gauge_multi.down"
     assert isinstance(result[1].timestamp, datetime)
     assert result[2].count == 3
-    assert result[2].metric_name == "dummy_gauge_left"
+    assert result[2].metric_name == "dummy_gauge_multi.left"
     assert isinstance(result[2].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
@@ -194,15 +194,15 @@ async def test_flush_metrics_timer_multi(env_metrics_service):
     assert len(result) == 3
     assert result[0].count == 3
     assert result[0].value == 50.50
-    assert result[0].metric_name == "dummy_timer_up"
+    assert result[0].metric_name == "dummy_timer_multi.up"
     assert isinstance(result[0].timestamp, datetime)
     assert result[1].count == 13
     assert result[1].value == 50.50 * 2
-    assert result[1].metric_name == "dummy_timer_down"
+    assert result[1].metric_name == "dummy_timer_multi.down"
     assert isinstance(result[1].timestamp, datetime)
     assert result[2].count == 23
     assert result[2].value == 50.50 * 3
-    assert result[2].metric_name == "dummy_timer_left"
+    assert result[2].metric_name == "dummy_timer_multi.left"
     assert isinstance(result[2].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
