@@ -46,7 +46,7 @@ class MetricType(str, Enum):
     METER = "meter"
 
 
-class MetricValue(object):
+class MetricValue:
     """
     the Metric values as they should be returned by a MetricsCollector of type gauge
     """
