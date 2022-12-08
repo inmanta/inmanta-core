@@ -32,7 +32,7 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValueTimer,
     ResourceCountMetricsCollector,
 )
-from inmanta.util import get_compiler_version, retry_limited
+from inmanta.util import get_compiler_version
 
 
 @pytest.fixture

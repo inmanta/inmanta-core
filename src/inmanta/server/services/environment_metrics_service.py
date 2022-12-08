@@ -24,7 +24,6 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta import data
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
