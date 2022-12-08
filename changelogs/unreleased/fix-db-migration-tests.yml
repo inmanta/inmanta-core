@@ -1,0 +1,5 @@
+description: Fixed compatibility of existing db migration tests with new resource schema
+change-type: patch
+destination-branches:
+  - master
+  - iso6
