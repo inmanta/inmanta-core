@@ -411,6 +411,8 @@ class CompileRun(object):
 
             if opt.server_ssl_cert.get() is not None:
                 cmd.append("--ssl")
+            else:
+                cmd.append("--no-ssl")
 
             if opt.server_ssl_ca_cert.get() is not None:
                 cmd.append("--ssl-ca-cert")
