@@ -119,8 +119,8 @@ async def test_register_same_metrics_collector(env_metrics_service):
 @pytest.mark.parametrize(
     "metric_name, grouped_by, error_msg",
     [
-        ("bad.name", "ok", 'The value "." can not be used in the metric_name (bad.name) as it is used as separator'),
-        ("ok_name", "not.ok", 'The value "." can not be used in the grouped_by value (not.ok) as it is used as separator'),
+        ("bad.name", "ok", 'The character "." can not be used in the metric_name (bad.name)'),
+        ("ok_name", "not.ok", 'The character "." can not be used in the grouped_by value (not.ok)'),
     ],
 )
 async def test_bad_name_metric(env_metrics_service, metric_name, grouped_by, error_msg):

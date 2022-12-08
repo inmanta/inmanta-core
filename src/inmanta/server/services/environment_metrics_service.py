@@ -60,14 +60,10 @@ class MetricValue:
 
     def __init__(self, metric_name: str, count: int, grouped_by: Optional[str] = None) -> None:
         if METRIC_NAME_SEPARATOR in metric_name:
-            raise Exception(
-                'The character "%s" can not be used in the metric_name (%s)'
-                % (METRIC_NAME_SEPARATOR, metric_name)
-            )
+            raise Exception('The character "%s" can not be used in the metric_name (%s)' % (METRIC_NAME_SEPARATOR, metric_name))
         if grouped_by and METRIC_NAME_SEPARATOR in grouped_by:
             raise Exception(
-                'The character "%s" can not be used in the grouped_by value (%s)'
-                % (METRIC_NAME_SEPARATOR, grouped_by)
+                'The character "%s" can not be used in the grouped_by value (%s)' % (METRIC_NAME_SEPARATOR, grouped_by)
             )
         self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
         self.count = count
