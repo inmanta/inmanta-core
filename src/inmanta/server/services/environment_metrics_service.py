@@ -26,6 +26,7 @@ import asyncpg
 
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
+from stubs.asyncpg import Record
 
 LOGGER = logging.getLogger(__name__)
 
@@ -197,6 +198,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
 
 class ResourceCountMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the number of resources (grouped by resources state).
+    """
+
     def get_metric_name(self) -> str:
         return "resource_count"
 
@@ -206,13 +211,13 @@ class ResourceCountMetricsCollector(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
-        query = """
+        query: str = """
             SELECT status,count(*)
             FROM resource
             GROUP BY status
         """
         metric_values: List[MetricValue] = []
-        result = await connection.fetch(query)
+        result: List[Record] = await connection.fetch(query)
         for record in result:
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["status"]))
         return metric_values
