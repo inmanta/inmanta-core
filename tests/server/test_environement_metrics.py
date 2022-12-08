@@ -84,7 +84,7 @@ class DummyTimerMetric(MetricsCollector):
 
 class DummyTimerMetricMulti(MetricsCollector):
     def get_metric_name(self) -> str:
-        return "dummy_timer"
+        return "dummy_timer_multi"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.TIMER
