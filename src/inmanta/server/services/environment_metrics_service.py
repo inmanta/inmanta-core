@@ -51,22 +51,25 @@ class MetricValue:
     """
     the Metric values as they should be returned by a MetricsCollector of type gauge
 
-    The name of a metric is the concatenation of the name of the collector and a field on which the data is grouped by.
-    The METRIC_SEPARATOR '.' is used as separator and should not be used in the name itself.
+    The name of a metric as stored in the DB is the concatenation of metric_name and a field on which the data is grouped by.
+    The METRIC_NAME_SEPARATOR '.' is used as separator and should not be used in the name itself.
     For example, a metric collected by for the agent_count collector and grouped for the state "up",
     will have agent_count.up as metric.
+    if the metric is not grouped by anything the name of the collector is used as metric_name
     """
 
-    def __init__(self, collector_name: str, count: int, grouped_by: Optional[str] = None) -> None:
-        if METRIC_NAME_SEPARATOR in collector_name:
+    def __init__(self, metric_name: str, count: int, grouped_by: Optional[str] = None) -> None:
+        if METRIC_NAME_SEPARATOR in metric_name:
             raise Exception(
-                "The value %s can not be used in the collector_name as it is used as separator", METRIC_NAME_SEPARATOR
+                'The value "%s" can not be used in the metric_name (%s) as it is used as separator'
+                % (METRIC_NAME_SEPARATOR, metric_name)
             )
         if grouped_by and METRIC_NAME_SEPARATOR in grouped_by:
             raise Exception(
-                "The value %s can not be used in the grouped_by value as it is used as separator", METRIC_NAME_SEPARATOR
+                'The value "%s" can not be used in the grouped_by value (%s) as it is used as separator'
+                % (METRIC_NAME_SEPARATOR, grouped_by)
             )
-        self.metric_name = ".".join([collector_name, grouped_by]) if grouped_by else collector_name
+        self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
         self.count = count
 
 
@@ -75,7 +78,7 @@ class MetricValueTimer(MetricValue):
     the Metric values as they should be returned by a MetricsCollector of type timer
     """
 
-    def __init__(self, collector_name: str, count: int, value: float, grouped_by: Optional[str]) -> None:
+    def __init__(self, collector_name: str, count: int, value: float, grouped_by: Optional[str] = None) -> None:
         super().__init__(collector_name, count, grouped_by)
         self.value = value
 

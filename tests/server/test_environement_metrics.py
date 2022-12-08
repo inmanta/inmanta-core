@@ -92,9 +92,9 @@ class DummyTimerMetricMulti(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValueTimer]:
-        a = MetricValueTimer("dummy_timer", 3, 50.50 * 1, "up")
-        b = MetricValueTimer("dummy_timer", 13, 50.50 * 2, "down")
-        c = MetricValueTimer("dummy_timer", 23, 50.50 * 3, "left")
+        a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, "up")
+        b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, "down")
+        c = MetricValueTimer("dummy_timer_multi", 23, 50.50 * 3, "left")
         return [a, b, c]
 
 
@@ -114,6 +114,34 @@ async def test_register_same_metrics_collector(env_metrics_service):
         env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
         env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge2)
     assert "There already is a metric collector with the name dummy_gauge" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "metric_name, grouped_by, error_msg",
+    [
+        ("bad.name", "ok", 'The value "." can not be used in the metric_name (bad.name) as it is used as separator'),
+        ("ok_name", "not.ok", 'The value "." can not be used in the grouped_by value (not.ok) as it is used as separator'),
+    ],
+)
+async def test_bad_name_metric(env_metrics_service, metric_name, grouped_by, error_msg):
+    class BadNameMetric(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return metric_name
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.GAUGE
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        ) -> Sequence[MetricValueTimer]:
+            a = MetricValue(self.get_metric_name(), 10, grouped_by)
+            return [a]
+
+    with pytest.raises(Exception) as e:
+        bad_name = BadNameMetric()
+        env_metrics_service.register_metric_collector(metrics_collector=bad_name)
+        await env_metrics_service.flush_metrics()
+    assert error_msg in str(e.value)
 
 
 async def test_flush_metrics_gauge(env_metrics_service):
