@@ -158,11 +158,10 @@ async def test_bad_type_metric(env_metrics_service):
             a = MetricValue(self.get_metric_name(), 10)
             return [a]
 
-    with pytest.raises(Exception) as e:
+    with pytest.raises(Exception):
         bad_name = BadTypeMetric()
         env_metrics_service.register_metric_collector(metrics_collector=bad_name)
         await env_metrics_service.flush_metrics()
-    print(e)
 
 
 async def test_flush_metrics_gauge(env_metrics_service):
