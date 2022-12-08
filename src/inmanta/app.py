@@ -491,7 +491,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
@@ -583,10 +583,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl:
-        Config.set("compiler_rest_transport", "ssl", "true")
-    else:
-        Config.set("compiler_rest_transport", "ssl", "false")
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
