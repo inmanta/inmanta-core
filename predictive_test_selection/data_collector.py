@@ -17,10 +17,12 @@
 """
 import logging
 import os
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import List, MutableMapping, Set, Union
+from collections import abc
 
 import click
 
@@ -33,8 +35,8 @@ LOGGER = logging.getLogger(__name__)
 # should not be modified in one place without modifying it in the other.
 CHANGE_LOOK_BACK: List[int] = [3, 14, 56]
 
-# Currently supported dev_branches
-DEV_BRANCHES = ["master", "iso5", "iso4"]
+# Only collect data for features branches that were branched off from these branches
+COLLECT_DATA_FOR_SOURCE_BRANCHES: abc.Collection = ["master"]
 
 # Url of the influx db into which we store the collected data
 INFLUX_DB_URL = "http://mon.ii.inmanta.com:8086/write?db=predictive_test_selection&precision=s"
@@ -82,11 +84,14 @@ class CodeChange:
             raise AbortDataCollection("the code change was created by the merge tool and not by a developer.")
 
         self._fully_checkout_branch(feature_branch)
-        self._compute_changed_files(feature_branch)
+        self._compute_changed_files()
         self._compute_file_extensions()
         self._count_modifications()
 
     def _fully_checkout_branch(self, branch: str) -> None:
+        """
+        Jenkins only checks out the feature branch. This method ensure that the given branch is checked out as well.
+        """
         LOGGER.info(f"Full checkout on {branch}")
 
         cmd = ["git", "remote", "set-branches", "--add", "origin", f"{branch}"]
@@ -94,16 +99,25 @@ class CodeChange:
         cmd = ["git", "fetch", "origin", f"{branch}"]
         subprocess.check_output(cmd)
 
-    def _compute_changed_files(self, feature_branch: str) -> None:
+    def _get_remote_dev_branches(self) -> abc.Collection[str]:
+        """
+        Return the list of development branches available on the remote repository.
+        """
+        cmd = ["git", "ls-remote", "--heads"]
+        output = subprocess.check_output(cmd, encoding="utf-8")
+        all_branches = [br.strip().split("\t")[1][len("refs/heads/"):] for br in output.split("\n") if br.strip()]
+        return set(br for br in all_branches if br == "master" or re.match(r"^iso[0-9]+$", br))
+
+    def _compute_changed_files(self) -> None:
         """
         Finds the development branch that is the closest to this code change and sets the relevant attributes accordingly.
         The distance metric used is the total number of files in the diff with the feature branch latest commit
         """
         max_cardinality: Union[float, int] = float("inf")
-
-        for dev_branch in DEV_BRANCHES:
+        for dev_branch in self._get_remote_dev_branches():
             self._fully_checkout_branch(dev_branch)
-            cmd = ["git", "diff", f"origin/{dev_branch}...origin/{feature_branch}", "--name-only"]
+            assert self.commit_hash is not None
+            cmd = ["git", "diff", f"origin/{dev_branch}...{self.commit_hash}", "--name-only"]
             changed_files = [line.strip() for line in subprocess.check_output(cmd).decode().split("\n") if line.strip()]
 
             current_cardinality = len(changed_files)
@@ -116,6 +130,9 @@ class CodeChange:
 
             if max_cardinality == 0:
                 raise AbortDataCollection(f"the code change is aligned with dev branch {dev_branch}.")
+
+        if self.dev_branch not in COLLECT_DATA_FOR_SOURCE_BRANCHES:
+            raise AbortDataCollection("The feature branch was not branched off from the master branch.")
 
     def _count_modifications(self) -> None:
         """
