@@ -1,0 +1,6 @@
+description: Revert verbose logging in tox.ini
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
