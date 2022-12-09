@@ -74,7 +74,14 @@ async def compilerservice(server_config, init_dataclasses_and_load_schema):
 
 
 async def compile_and_assert(
-    env, client, project_work_dir: str, export=True, meta={}, env_vars={}, update=False, exporter_plugin=None
+    env,
+    client,
+    project_work_dir: str,
+    export=True,
+    meta={},
+    env_vars={},
+    update=False,
+    exporter_plugin=None,
 ) -> tuple[CompileRun, abc.Mapping[str, object]]:
     """
     Create a compile data object and run it. Returns the compile run itself and the reports for each stage.
@@ -446,6 +453,41 @@ async def test_compile_runner(environment_factory: EnvironmentFactory, server, c
     pip_binary_path = os.path.join(project_work_dir, ".env", "bin", "pip")
     output = subprocess.check_output([pip_binary_path, "list", "--format", "json"], encoding="utf-8")
     assert "inmanta-core" in output
+
+
+@pytest.mark.slowtest
+async def test_server_side_compile_with_ssl_enabled(
+    tmpdir, request, environment_factory: EnvironmentFactory, server_multi, client_multi, environment_multi
+) -> None:
+    """
+    Ensure that server-side compiles work correctly when SSL is enabled on the server, but the
+    .inmanta file present in the project disables SSL (issue: #4640).
+    """
+    if request.node.callspec.id != "SSL" and request.node.callspec.id != "Normal":
+        # Only run this test case once for a server with SSL enabled and once for a server with SSL disabled.
+        return
+
+    ssl_enabled_on_server = "SSL" in request.node.callspec.id
+
+    project_work_dir = os.path.join(tmpdir, "work")
+    ensure_directory_exist(project_work_dir)
+
+    main_cf = """
+host = std::Host(name="test", os=std::linux)
+std::ConfigFile(host=host, path="/tmp/test", content="1234")
+    """.strip()
+
+    # Add .inmanta file with inverse SSL config as the server itself.
+    dot_inmanta = f"""
+[compiler_rest_transport]
+ssl={str(not ssl_enabled_on_server).lower()}
+    """.strip()
+
+    env = await environment_factory.create_environment(main=main_cf)
+    environment_factory.write_file(path=".inmanta", content=dot_inmanta)
+
+    compile, stages = await compile_and_assert(env=env, client=client_multi, project_work_dir=project_work_dir, export=True)
+    assert all(stage["returncode"] == 0 for stage in stages.values())
 
 
 @pytest.mark.slowtest
