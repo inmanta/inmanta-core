@@ -432,6 +432,21 @@ def get_columns_in_db_table(postgresql_client):
 
 
 @pytest.fixture(scope="function")
+def get_primary_key_columns_in_db_table(postgresql_client):
+    async def _get_primary_key_columns_in_db_table(table_name: str) -> List[str]:
+        # Query taken from here: https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
+        result = await postgresql_client.fetch(
+            "SELECT a.attname FROM pg_index i "
+            "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+            "WHERE i.indrelid = '" + table_name + "'::regclass "
+            "AND i.indisprimary;"
+        )
+        return [r["attname"] for r in result]
+
+    return _get_primary_key_columns_in_db_table
+
+
+@pytest.fixture(scope="function")
 def get_tables_in_db(postgresql_client):
     async def _get_tables_in_db() -> List[str]:
         result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")

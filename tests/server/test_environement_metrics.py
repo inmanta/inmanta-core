@@ -31,7 +31,6 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValue,
     MetricValueTimer,
 )
-from inmanta.util import get_compiler_version
 
 env_uuid = uuid.uuid4()
 
@@ -297,3 +296,44 @@ async def test_flush_metrics_mix(env_metrics_service, env_with_uuid):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
     assert len(result_gauge) == 3
     assert len(result_timer) == 9
+
+
+async def test_flush_metrics_to_different_envs(env_metrics_service):
+    # create a project with 2 Environments
+    env_uuid2 = uuid.uuid4()
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment: data.Environment = data.Environment(id=env_uuid, project=project_id, name="testenv1")
+    await environment.insert()
+    environment: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
+
+    # create a MetricCollector that will push data for the second Environment and register both collectors
+    class DummyGaugeMetric2(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "dummy_gauge_2"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.GAUGE
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        ) -> Sequence[MetricValue]:
+            a = MetricValue("dummy_gauge_2", 2, env_uuid2)
+            return [a]
+
+    dummy_gauge1 = DummyGaugeMetric()
+    dummy_gauge2 = DummyGaugeMetric2()
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge1)
+    env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge2)
+
+    # flush metrics
+    await env_metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 2
+    assert result_gauge[0].environment != result_gauge[1].environment
