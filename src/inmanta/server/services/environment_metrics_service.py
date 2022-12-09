@@ -223,7 +223,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
         return MetricType.GAUGE
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = """
             SELECT status,environment,count(*)
