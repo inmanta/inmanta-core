@@ -336,4 +336,6 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
     await env_metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 2
-    assert result_gauge[0].environment != result_gauge[1].environment
+    envs = [result_gauge[0].environment, result_gauge[1].environment]
+    assert env_uuid in envs
+    assert env_uuid2 in envs
