@@ -26,7 +26,6 @@ import asyncpg
 
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
-from stubs.asyncpg import Record
 
 LOGGER = logging.getLogger(__name__)
 
@@ -133,6 +132,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        self.register_metric_collector(ResourceCountMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -217,7 +217,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
             GROUP BY status
         """
         metric_values: List[MetricValue] = []
-        result: List[Record] = await connection.fetch(query)
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["status"]))
         return metric_values

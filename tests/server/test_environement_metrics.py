@@ -306,7 +306,7 @@ async def test_resource_count_metric(clienthelper, environment, client, agent):
         },
         {
             "key": "key3",
-            "value": None,
+            "value": "value3",
             "id": "test::Resource[agent1,key=key3],v=" + version,
             "send_event": False,
             "requires": [],
