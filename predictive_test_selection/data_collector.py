@@ -114,7 +114,12 @@ class CodeChange:
         The distance metric used is the total number of files in the diff with the feature branch latest commit
         """
         max_cardinality: Union[float, int] = float("inf")
-        for dev_branch in self._get_remote_dev_branches():
+
+        dev_branches = self._get_remote_dev_branches()
+        # Ensure that the master branch is always in the front of the list, to cover the scenario where
+        # the master branch is aligned with another branch.
+        dev_branches_ordered = ["master"] if "master" in dev_branches else [] + [br for br in dev_branches if br != "master"]
+        for dev_branch in dev_branches_ordered:
             self._fully_checkout_branch(dev_branch)
             assert self.commit_hash is not None
             cmd = ["git", "diff", f"origin/{dev_branch}...{self.commit_hash}", "--name-only"]
