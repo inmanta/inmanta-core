@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Optional
@@ -28,8 +29,9 @@ from inmanta.server.services.environment_metrics_service import (
     MetricsCollector,
     MetricType,
     MetricValue,
-    MetricValueTimer,
+    MetricValueTimer, CompileTimeMetricsCollector,
 )
+from inmanta.util import get_compiler_version
 
 
 @pytest.fixture
@@ -279,3 +281,86 @@ async def test_flush_metrics_mix(env_metrics_service):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
     assert len(result_gauge) == 3
     assert len(result_timer) == 9
+
+
+async def test_compile_time_metric(clienthelper, environment, client, agent):
+    metrics_service = EnvironmentMetricsService()
+    version = str(await clienthelper.get_version())
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=" + version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": "test::Resource[agent1,key=key3],v=" + version,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+    ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    ctmc = CompileTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=ctmc)
+
+    # flush the metrics for the first time: 1 record (3 resources in available state)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 1
+    assert result_gauge[0].metric_name == "resource_count.available"
+    assert result_gauge[0].count == 3
+
+    # change the state of one of the resources
+    now = datetime.now()
+    action_id = uuid.uuid4()
+    aclient = agent._client
+    result = await aclient.resource_action_update(
+        environment,
+        ["test::Resource[agent1,key=key1],v=" + version],
+        action_id,
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
+    )
+
+    assert result.code == 200
+
+    # flush the metrics for the second time: 1 old record (3 resources in available state)
+    # + 2 new records (2 resources in available state, 1 in the deployed state)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 3
+    assert result_gauge[0].metric_name == "resource_count.available"
+    assert result_gauge[0].count == 3
+    assert result_gauge[1].metric_name == "resource_count.available"
+    assert result_gauge[1].count == 2
+    assert result_gauge[2].metric_name == "resource_count.deployed"
+    assert result_gauge[2].count == 1
+    assert result_gauge[2].timestamp == result_gauge[1].timestamp
+    assert result_gauge[0].timestamp < result_gauge[1].timestamp
