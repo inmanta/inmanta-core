@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
+from inmanta.data import ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class MetricsCollector(abc.ABC):
 
     @abc.abstractmethod
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
@@ -225,13 +225,21 @@ class ResourceCountMetricsCollector(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
-        query: str = """
+        query: str = f"""
             SELECT status,environment,count(*)
-            FROM resource
+            FROM {Resource.table_name()} AS r
+            WHERE r.model=(
+                SELECT MAX(cm.version)
+                FROM {ConfigurationModel.table_name()} AS cm
+                WHERE cm.environment=r.environment
+                )
             GROUP BY (status, environment)
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["status"], str)
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
         return metric_values
