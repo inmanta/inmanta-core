@@ -102,7 +102,7 @@ class MetricsCollector(abc.ABC):
 
     @abc.abstractmethod
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
@@ -136,7 +136,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self.register_metric_collector(ResourceCountMetricsCollector(environment))
+        self.register_metric_collector(ResourceCountMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
