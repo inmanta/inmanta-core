@@ -17,6 +17,7 @@
 """
 import abc
 import logging
+import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
@@ -26,7 +27,6 @@ import asyncpg
 
 from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
-from stubs.asyncpg import Record
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class MetricValue:
     if the metric is not grouped by anything the name of the collector is used as metric_name
     """
 
-    def __init__(self, metric_name: str, count: int, grouped_by: Optional[str] = None) -> None:
+    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
         if METRIC_NAME_SEPARATOR in metric_name:
             raise Exception('The character "%s" can not be used in the metric_name (%s)' % (METRIC_NAME_SEPARATOR, metric_name))
         if grouped_by and METRIC_NAME_SEPARATOR in grouped_by:
@@ -68,6 +68,7 @@ class MetricValue:
             )
         self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
         self.count = count
+        self.environment = environment
 
 
 class MetricValueTimer(MetricValue):
@@ -75,8 +76,10 @@ class MetricValueTimer(MetricValue):
     the Metric values as they should be returned by a MetricsCollector of type timer
     """
 
-    def __init__(self, collector_name: str, count: int, value: float, grouped_by: Optional[str] = None) -> None:
-        super().__init__(collector_name, count, grouped_by)
+    def __init__(
+        self, metric_name: str, count: int, value: float, environment: uuid.UUID, grouped_by: Optional[str] = None
+    ) -> None:
+        super().__init__(metric_name, count, environment, grouped_by)
         self.value = value
 
 
@@ -133,6 +136,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        self.register_metric_collector(ResourceCountMetricsCollector(environment))
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -158,12 +162,22 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         def create_metrics_gauge(metric_values_gauge: Sequence[MetricValue], timestamp: datetime):
             for mv in metric_values_gauge:
-                metric_gauge.append(EnvironmentMetricsGauge(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count))
+                metric_gauge.append(
+                    EnvironmentMetricsGauge(
+                        metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, environment=mv.environment
+                    )
+                )
 
         def create_metrics_timer(metric_values_timer: Sequence[MetricValueTimer], timestamp: datetime):
             for mv in metric_values_timer:
                 metric_timer.append(
-                    EnvironmentMetricsTimer(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, value=mv.value)
+                    EnvironmentMetricsTimer(
+                        metric_name=mv.metric_name,
+                        timestamp=timestamp,
+                        count=mv.count,
+                        value=mv.value,
+                        environment=mv.environment,
+                    )
                 )
 
         async with EnvironmentMetricsGauge.get_connection() as con:
@@ -212,12 +226,12 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
         query: str = """
-            SELECT status,count(*)
+            SELECT status,environment,count(*)
             FROM resource
-            GROUP BY status
+            GROUP BY (status, environment)
         """
         metric_values: List[MetricValue] = []
-        result: List[Record] = await connection.fetch(query)
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
-            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["status"]))
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
         return metric_values
