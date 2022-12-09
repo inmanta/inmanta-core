@@ -22,18 +22,20 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     schema = """
     CREATE TABLE IF NOT EXISTS public.environmentmetricsgauge(
+        environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
         metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
-        PRIMARY KEY (metric_name, timestamp)
+        PRIMARY KEY (environment, metric_name, timestamp)
     );
 
     CREATE TABLE IF NOT EXISTS public.environmentmetricstimer (
+        environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
         metric_name VARCHAR NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         count INT NOT NULL,
         value FLOAT NOT NULL,
-        PRIMARY KEY (metric_name, timestamp)
+        PRIMARY KEY (environment, metric_name, timestamp)
     );
     """
 
