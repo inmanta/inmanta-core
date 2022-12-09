@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Optional
@@ -30,12 +31,29 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValue,
     MetricValueTimer,
 )
+from inmanta.util import get_compiler_version
+
+env_uuid = uuid.uuid4()
 
 
 @pytest.fixture
 async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -> EnvironmentMetricsService:
     metrics_service = EnvironmentMetricsService()
     yield metrics_service
+
+
+@pytest.fixture
+async def env_with_uuid():
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment: data.Environment = data.Environment(id=env_uuid, project=project_id, name="testenv")
+    await environment.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 1
+    assert envs[0].id == env_uuid
 
 
 class DummyGaugeMetric(MetricsCollector):
@@ -48,7 +66,7 @@ class DummyGaugeMetric(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
-        a = MetricValue("dummy_gauge", 1)
+        a = MetricValue("dummy_gauge", 1, env_uuid)
         return [a]
 
 
@@ -62,9 +80,9 @@ class DummyGaugeMetricMulti(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValue]:
-        a = MetricValue("dummy_gauge_multi", 1, "up")
-        b = MetricValue("dummy_gauge_multi", 2, "down")
-        c = MetricValue("dummy_gauge_multi", 3, "left")
+        a = MetricValue("dummy_gauge_multi", 1, env_uuid, "up")
+        b = MetricValue("dummy_gauge_multi", 2, env_uuid, "down")
+        c = MetricValue("dummy_gauge_multi", 3, env_uuid, "left")
         return [a, b, c]
 
 
@@ -78,7 +96,7 @@ class DummyTimerMetric(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValueTimer]:
-        a = MetricValueTimer("dummy_timer", 3, 50.50)
+        a = MetricValueTimer("dummy_timer", 3, 50.50, env_uuid)
         return [a]
 
 
@@ -92,9 +110,9 @@ class DummyTimerMetricMulti(MetricsCollector):
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
     ) -> Sequence[MetricValueTimer]:
-        a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, "up")
-        b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, "down")
-        c = MetricValueTimer("dummy_timer_multi", 23, 50.50 * 3, "left")
+        a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, env_uuid, "up")
+        b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, env_uuid, "down")
+        c = MetricValueTimer("dummy_timer_multi", 23, 50.50 * 3, env_uuid, "left")
         return [a, b, c]
 
 
@@ -134,7 +152,7 @@ async def test_bad_name_metric(env_metrics_service, metric_name, grouped_by, err
         async def get_metric_value(
             self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
         ) -> Sequence[MetricValueTimer]:
-            a = MetricValue(self.get_metric_name(), 10, grouped_by)
+            a = MetricValue(self.get_metric_name(), 10, env_uuid, grouped_by)
             return [a]
 
     with pytest.raises(Exception) as e:
@@ -155,7 +173,7 @@ async def test_bad_type_metric(env_metrics_service):
         async def get_metric_value(
             self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
         ) -> Sequence[MetricValue]:
-            a = MetricValue(self.get_metric_name(), 10)
+            a = MetricValue(self.get_metric_name(), env_uuid, 10)
             return [a]
 
     with pytest.raises(Exception):
@@ -164,7 +182,7 @@ async def test_bad_type_metric(env_metrics_service):
         await env_metrics_service.flush_metrics()
 
 
-async def test_flush_metrics_gauge(env_metrics_service):
+async def test_flush_metrics_gauge(env_metrics_service, env_with_uuid):
     dummy_gauge = DummyGaugeMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
 
@@ -184,7 +202,7 @@ async def test_flush_metrics_gauge(env_metrics_service):
     assert len(result) == 3
 
 
-async def test_flush_metrics_gauge_multi(env_metrics_service):
+async def test_flush_metrics_gauge_multi(env_metrics_service, env_with_uuid):
     dummy_gauge = DummyGaugeMetricMulti()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
 
@@ -210,7 +228,7 @@ async def test_flush_metrics_gauge_multi(env_metrics_service):
     assert len(result) == 9
 
 
-async def test_flush_metrics_timer(env_metrics_service):
+async def test_flush_metrics_timer(env_metrics_service, env_with_uuid):
     dummy_timer = DummyTimerMetric()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
 
@@ -231,7 +249,7 @@ async def test_flush_metrics_timer(env_metrics_service):
     assert len(result) == 3
 
 
-async def test_flush_metrics_timer_multi(env_metrics_service):
+async def test_flush_metrics_timer_multi(env_metrics_service, env_with_uuid):
     dummy_timer = DummyTimerMetricMulti()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_timer)
 
@@ -260,7 +278,7 @@ async def test_flush_metrics_timer_multi(env_metrics_service):
     assert len(result) == 9
 
 
-async def test_flush_metrics_mix(env_metrics_service):
+async def test_flush_metrics_mix(env_metrics_service, env_with_uuid):
     dummy_gauge = DummyGaugeMetric()
     dummy_timer = DummyTimerMetricMulti()
     env_metrics_service.register_metric_collector(metrics_collector=dummy_gauge)
