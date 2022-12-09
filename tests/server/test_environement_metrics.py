@@ -298,7 +298,7 @@ async def test_flush_metrics_mix(env_metrics_service, env_with_uuid):
     assert len(result_timer) == 9
 
 
-async def test_flush_metrics_to_different_envs(env_metrics_service):
+async def test_flush_metrics_for_different_envs(env_metrics_service):
     # create a project with 2 Environments
     env_uuid2 = uuid.uuid4()
     project = data.Project(name="test")
