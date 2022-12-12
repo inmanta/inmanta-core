@@ -1,3 +1,0 @@
-description: Add support to write collected metrics to the database for different environments.
-change-type: Patch
-destination-branches: [master, iso6]
