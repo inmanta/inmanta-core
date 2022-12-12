@@ -33,7 +33,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version
-from tests_common.src.inmanta_tests import utils
+from utils import ClientHelper
 
 env_uuid = uuid.uuid4()
 
@@ -372,9 +372,9 @@ async def test_resource_count_metric(clienthelper, client, agent):
     assert len(envs) == 2
 
     metrics_service = EnvironmentMetricsService()
-    version_env1 = str(await utils.ClientHelper(client, env_uuid1).get_version())
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
     assert version_env1 == "1"
-    version_env2 = str(await utils.ClientHelper(client, env_uuid2).get_version())
+    version_env2 = str(await ClientHelper(client, env_uuid2).get_version())
     resources_env1_v1 = [
         {
             "key": "key1",
@@ -394,7 +394,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-    version_env1 = str(await utils.ClientHelper(client, env_uuid1).get_version())
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
     assert version_env1 == "2"
     resources_env1_v2 = [
         {
