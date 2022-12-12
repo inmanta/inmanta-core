@@ -37,9 +37,6 @@ from tests_common.src.inmanta_tests import utils
 
 env_uuid = uuid.uuid4()
 
-env_uuid = uuid.uuid4()
-
-
 @pytest.fixture
 async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -> EnvironmentMetricsService:
     metrics_service = EnvironmentMetricsService()
