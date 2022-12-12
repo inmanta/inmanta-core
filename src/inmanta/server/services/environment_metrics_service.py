@@ -231,7 +231,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
             WHERE r.model=(
                 SELECT MAX(cm.version)
                 FROM {ConfigurationModel.table_name()} AS cm
-                WHERE cm.environment=r.environment
+                WHERE cm.environment=r.environment AND cm.released=TRUE
                 )
             GROUP BY (status, environment)
         """
