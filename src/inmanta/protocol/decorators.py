@@ -78,25 +78,28 @@ def method(
     and model the protocol.
 
     :param path: The url path to use for this call. This path can contain parameter names of the function. These names
-                 should be enclosed in < > brackets.
-    :param operation: The type of HTTP operation (verb)
-    :param timeout: nr of seconds before request it terminated
-    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
-    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-    :param agent_server: This is a call from the Agent to the Server
+        should be enclosed in < > brackets.
+    :param operation: The type of HTTP operation (verb).
+    :param timeout: nr of seconds before request it terminated.
+    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server).
+    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll).
+    :param agent_server: This is a call from the Agent to the Server.
     :param validate_sid: This call requires a valid session, true by default if agent_server and not api
     :param client_types: The allowed client types for this call.
-            The valid values are defined by the :const:`inmanta.const.ClientType` enum.
+        The valid values are defined by the :const:`inmanta.const.ClientType` enum.
     :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
         which the options apply. The value is another dict that can contain the following options:
+
             header: Map this argument to a header with the following name.
             reply_header: If the argument is mapped to a header, this header will also be included in the reply
             getter: Call this method after validation and pass its return value to the method call. This may change the
-                    type of the argument. This method can raise an HTTPException to return a 404 for example.
-    :param api_version: The version of the api this method belongs to
-    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+            type of the argument. This method can raise an HTTPException to return a 404 for example.
+
+    :param api_version: The version of the api this method belongs to.
+    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>.
     :param envelope: Put the response of the call under an envelope with key envelope_key.
     :param envelope_key: The envelope key to use.
+
     """
 
     def wrapper(func: MethodT) -> MethodT:

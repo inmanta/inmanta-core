@@ -971,10 +971,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
     Get the state for this agent.
 
-    returns a map
-    {
-     enabled: bool
-    }
+    Returns a map {"enabled": bool}.
     """
 
 

@@ -3,8 +3,8 @@
 Overwrite default server configuration
 ######################################
 
-By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.  
-If you want to change it, you can copy this file, edit it, then mount it in the container, 
+By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.
+If you want to change it, you can copy this file, edit it, then mount it in the container,
 where the original file was located.
 
 If you use docker-compose, you can simply update this section of the example above:
@@ -23,9 +23,9 @@ If you use docker-compose, you can simply update this section of the example abo
 Starting the ssh server
 #######################
 
-By default, no ssh server is running in the container.  You don't need it to have a functional 
-orchestrator.  
-If you want to enable ssh anyway, for easy access to the orchestrator, 
+By default, no ssh server is running in the container.  You don't need it to have a functional
+orchestrator.
+If you want to enable ssh anyway, for easy access to the orchestrator,
 you can overwrite the startup command of the container with the following:
 
 .. code-block:: sh
@@ -43,9 +43,9 @@ If you use docker-compose, it should look like:
         command: "server-with-ssh"
 
 .. warning::
-    By default, the inmanta user doesn't have any password, if you want to ssh into the container, 
-    you also need to set the authorized_keys file for the inmanta user.  You can do so by mounting 
-    your public key to the following path in the container: ``/var/lib/inmanta/.ssh/authorized_keys``.  
+    By default, the inmanta user doesn't have any password, if you want to ssh into the container,
+    you also need to set the authorized_keys file for the inmanta user.  You can do so by mounting
+    your public key to the following path in the container: ``/var/lib/inmanta/.ssh/authorized_keys``.
     When starting, the container will make sure that the file has the correct ownership and permissions.
 
 
@@ -75,14 +75,16 @@ If you use docker-compose, it should look like:
 Setting environment variables
 #############################
 
-You might want your inmanta server to be able to reach some environment variables.  
+You might want your inmanta server to be able to reach some environment variables.
 There are two ways you can achieve this:
- 1. Set the environment variables with docker, either using the ``--env`` argument or in your 
-    docker-compose file.  Those variables will be accessible to the inmanta server and any 
-    agent it starts, but not to any other process running in the container (if you for example 
-    login via ssh to the container and try to install a project again).
- 2. (Recommended) Set the environment variables in a file and mount it to the following path in the 
-    container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for 
+
+ 1. Set the environment variables with docker, either using the ``--env`` argument or in your
+     docker-compose file.  Those variables will be accessible to the inmanta server and any
+     agent it starts, but not to any other process running in the container (if you for example
+     login via ssh to the container and try to install a project again).
+
+ 2. (Recommended) Set the environment variables in a file and mount it to the following path in the
+    container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for
     every session that the inmanta user starts in the container.
 
 .. code-block:: yaml
@@ -107,7 +109,7 @@ on the host, meaning that you would lose the ownership of you files.  This is a 
 situation.
 While ``Podman`` has been offering the possibility to do a mapping of a user id in the container to a
 user id on the host at runtime, which would solve our problem here, ``Docker`` still doesn't offer this
-functionality.  
+functionality.
 The inmanta container allows you to change the user and group id of the inmanta user inside the
 container when starting the container to match the user on the host, getting rid that way of any
 conflict in the files ownership.
