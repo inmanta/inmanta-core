@@ -345,6 +345,18 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
 
 
 async def test_resource_count_metric(clienthelper, client, agent):
+    """
+    This test will create 2 environments and start by adding 1 resource to the first. then It will create a second version
+    with 3 other resources. It also adds two resources to the second environment.
+    It then flushes the resource_count metric a first time. This creates 2 records in EnvironmentMetricsGauge:
+    - one for the first environment with 3 resources in the latest version in the available state.
+    - one for the second environment with 2 resources in the latest version in the available state.
+    following this, the state of one resource in the first environment is updated and the metrics are flushed again.
+    This creates 3 records in EnvironmentMetricsGauge:
+    - one for the first environment with 2 resources in the latest version in the available state.
+    - one for the first environment with 1 resource in the latest version in the deployed state.
+    - one for the second environment with 2 resources in the latest version in the available state.
+    """
     env_uuid1 = uuid.uuid4()
     env_uuid2 = uuid.uuid4()
     project = data.Project(name="test")
@@ -361,6 +373,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
 
     metrics_service = EnvironmentMetricsService()
     version_env1 = str(await utils.ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "1"
     version_env2 = str(await utils.ClientHelper(client, env_uuid2).get_version())
     resources_env1_v1 = [
         {
@@ -382,6 +395,7 @@ async def test_resource_count_metric(clienthelper, client, agent):
     )
     assert result.code == 200
     version_env1 = str(await utils.ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "2"
     resources_env1_v2 = [
         {
             "key": "key2",
@@ -417,7 +431,6 @@ async def test_resource_count_metric(clienthelper, client, agent):
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-
     resources_env2 = [
         {
             "key": "key5",
@@ -447,6 +460,8 @@ async def test_resource_count_metric(clienthelper, client, agent):
     assert result.code == 200
 
     assert len(await data.Resource.get_list()) == 6
+
+    # adds the ResourceCountMetricsCollector
     rcmc = ResourceCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=rcmc)
 
@@ -456,12 +471,10 @@ async def test_resource_count_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 2
     assert any(
-        lambda x: x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1
-        for x in result_gauge
+        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
     assert any(
-        lambda x: x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid2
-        for x in result_gauge
+        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid2 for x in result_gauge
     )
 
     # change the state of one of the resources
@@ -489,28 +502,15 @@ async def test_resource_count_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 5
     assert any(
-        lambda x: x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1
-        for x in result_gauge
+        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
     assert any(
-        lambda x: x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid1
-        for x in result_gauge
+        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
-    assert any(
-        lambda x: x.count == 1 and x.metric_name == "resource_count.deployed" and x.environment == env_uuid1
-        for x in result_gauge
-    )
-    assert any(
-        lambda x: x.count == 2
-        and x.metric_name == "resource_count.available"
-        and x.environment == env_uuid2
-        and x.timestamp == now
-        for x in result_gauge
-    )
-    assert any(
-        lambda x: x.count == 2
-        and x.metric_name == "resource_count.available"
-        and x.environment == env_uuid2
-        and x.timestamp != now
-        for x in result_gauge
-    )
+    assert any(x.count == 1 and x.metric_name == "resource_count.deployed" and x.environment == env_uuid1 for x in result_gauge)
+
+    env_uuid2_records = [
+        r for r in result_gauge if r.environment == env_uuid2 and r.metric_name == "resource_count.available" and r.count == 2
+    ]
+
+    assert len(env_uuid2_records) == 2
