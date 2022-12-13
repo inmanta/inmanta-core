@@ -31,7 +31,7 @@ extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
     'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_tabs.tabs',
-    'myst_parser',
+    'recommonmark',
 ]
 
 def setup(app):
