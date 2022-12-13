@@ -149,6 +149,37 @@ pygments_style = 'sphinx'
 
 html_theme = "furo"
 
+html_css_files = [
+      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
+      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
+      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
+]
+
+html_theme_options = {
+    "footer_icons": [
+        {
+            "name": "Website",
+            "url": "https://inmanta.com",
+            "class": "fa-solid fa-globe",
+        },
+        {
+            "name": "Linkedin",
+            "url": "https://www.linkedin.com/company/inmanta-nv/",
+            "class": "fa-brands fa-linkedin",
+        },
+        {
+            "name": "Twitter",
+            "url": "https://twitter.com/inmanta_com",
+            "class": "fa-brands fa-twitter",
+        },
+        {
+            "name": "GitHub",
+            "url": "https://github.com/inmanta",
+            "class": "fa-brands fa-github",
+        },
+    ],
+}
+
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
 html_title = f"Inmanta OSS {release}"
@@ -215,7 +246,10 @@ html_show_copyright = True
 htmlhelp_basename = 'InmantaDoc'
 
 html_css_files = [
-    'css/custom.css',
+    "css/custom.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
 ]
 
 
