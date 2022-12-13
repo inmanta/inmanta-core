@@ -46,21 +46,21 @@ _________________________
 
 This folder contains a **project.yml**, which looks like this:
 
-    .. code-block:: yaml
+.. code-block:: yaml
 
-        name: SR Linux Examples
-        description: Provides examples for the SR Linux module
-        author: Inmanta
-        author_email: code@inmanta.com
-        license: ASL 2.0
-        copyright: 2022 Inmanta
-        modulepath: libs
-        downloadpath: libs
-        repo:
-        - type: package
-            url: https://packages.inmanta.com/public/quickstart/python/simple/
-        install_mode: release
-        requires:
+    name: SR Linux Examples
+    description: Provides examples for the SR Linux module
+    author: Inmanta
+    author_email: code@inmanta.com
+    license: ASL 2.0
+    copyright: 2022 Inmanta
+    modulepath: libs
+    downloadpath: libs
+    repo:
+    - type: package
+        url: https://packages.inmanta.com/public/quickstart/python/simple/
+    install_mode: release
+    requires:
 
 
 - The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
@@ -185,12 +185,13 @@ A project is a collection of related environments. (e.g. development, testing, p
 There are **two ways** to create a project and an environment:
 
 1. Using Inmanta CLI (**recommended**):
-    .. code-block:: sh
 
-        # Create a project called test
-        inmanta-cli --host 172.30.0.3 project create -n test
-        # Create an environment called SR_Linux
-        inmanta-cli --host 172.30.0.3 environment create -p test -n SR_Linux --save
+.. code-block:: sh
+
+    # Create a project called test
+    inmanta-cli --host 172.30.0.3 project create -n test
+    # Create an environment called SR_Linux
+    inmanta-cli --host 172.30.0.3 environment create -p test -n SR_Linux --save
 
 
 The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file that contains the required information about the server and environment ID. The compiler uses this file to find the server and to export to the right environment.
