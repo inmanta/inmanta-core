@@ -1,0 +1,5 @@
+decsription: "Reverted version bump of `packaging` on EOS because it contains breaking changes"
+change-type: patch
+destination-branches:
+  - iso5
+  - master
