@@ -1,0 +1,6 @@
+description: Use the default sphinx theme to be able to upgrade the documentation deps
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
