@@ -23,7 +23,7 @@ from typing import Optional
 import asyncpg
 import pytest
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.server.services.environment_metrics_service import (
     EnvironmentMetricsService,
     MetricsCollector,
@@ -515,11 +515,11 @@ async def test_resource_count_metric(clienthelper, client, agent):
     assert len(env_uuid2_records) == 2
 
 
-async def test_resource_count_metric_released(clienthelper, client, agent):
+async def test_resource_count_metric_released(clienthelper, client, server, agent):
     """
     test that only the latest released version is used for the metrics:
-    - adds a first version with 3 resources and a second one with one resource.
-    - set the second one to unreleased.
+    - adds a first version with 3 resources and a second one with one resource but don't deploy them
+    - deploy only the first one
     - verify the flushed data comes from the first version
     """
     env_uuid1 = uuid.uuid4()
@@ -533,6 +533,10 @@ async def test_resource_count_metric_released(clienthelper, client, agent):
     envs = await data.Environment.get_list(project=project_id)
     assert len(envs) == 1
     version1 = str(await ClientHelper(client, env_uuid1).get_version())
+
+    result = await client.set_setting(tid=env_uuid1, id="auto_deploy", value=False)
+    assert result.code == 200
+
     resources_env1_v1 = [
         {
             "key": "key1",
@@ -569,7 +573,7 @@ async def test_resource_count_metric_released(clienthelper, client, agent):
     )
     assert result.code == 200
     version2 = str(await ClientHelper(client, env_uuid1).get_version())
-    resources_env2 = [
+    resources_env1_v2 = [
         {
             "key": "key5",
             "value": "value5",
@@ -582,18 +586,19 @@ async def test_resource_count_metric_released(clienthelper, client, agent):
     result = await client.put_version(
         tid=env_uuid1,
         version=version2,
-        resources=resources_env2,
+        resources=resources_env1_v2,
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
     )
     assert result.code == 200
-    version = await data.ConfigurationModel.get_one(environment=env_uuid1, version=int(version2))
-    await version.update(released=False)
 
     metrics_service = EnvironmentMetricsService()
     rcmc = ResourceCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    result = await client.release_version(env_uuid1, version1, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
