@@ -1,5 +1,3 @@
-    .. vim: spell
-
 Quickstart
 ***************
 
@@ -17,7 +15,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
 
 
 Prerequisites
-----------------------------
+_________________________
 
 **Python version 3.9**, ``Docker``, ``Containerlab`` and ``Inmanta`` need to be installed on your machine and our ``SR Linux`` repository has to be cloned in order to proceed. Please make sure to follow the links below to that end.
 
@@ -472,7 +470,7 @@ Pick all or any of the devices you like, connect to them as discussed in `Connec
 
 
 Resetting the LAB environment
-_______________________________________________
+______________________________
 
 To fully clean up or reset the LAB, go to the **containerlab** folder and run the following commands:
 
@@ -491,7 +489,7 @@ This will give you a clean LAB the next time you run:
 
 
 Reusing existing modules
-------------------------------
+______________________________
 
 We host modules to set up and manage many systems on our Github. These are available under https://github.com/inmanta/.
 
@@ -502,7 +500,7 @@ to using them in an import statement. Some of our public modules are hosted in t
 
 
 Update the configuration model
-------------------------------
+_______________________________
 
 The provided configuration models can be easily modified to reflect your desired configuration. Be it a change in IP addresses or adding new devices to the model. All you need to do is to create a new or modify the existing configuration model, say ``interfaces.cf`` to introduce your desired changes.
 

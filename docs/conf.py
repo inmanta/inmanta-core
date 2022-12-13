@@ -31,7 +31,7 @@ extensions = [
     'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
     'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_tabs.tabs',
-    'recommonmark',
+    'myst_parser',
 ]
 
 def setup(app):
@@ -122,7 +122,7 @@ release = version
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
-exclude_patterns = ['extensions.rst']
+exclude_patterns = ['extensions.rst', 'adr/*.md']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -147,14 +147,7 @@ pygments_style = 'sphinx'
 
 # -- Options for HTML output ---------------------------------------------------
 
-# html_theme_options = {
-#     'logo_only': True,
-#     'display_version': True,
-# }
-# import sphinx_rtd_theme
-
-# html_theme = "sphinx_rtd_theme"
-# html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_theme = "furo"
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
@@ -186,9 +179,7 @@ html_static_path = ['_static']
 # html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-html_sidebars = {
-   '**': ['globaltoc.html', 'sourcelink.html', 'searchbox.html']
-}
+# html_sidebars = {}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -232,7 +223,7 @@ html_css_files = [
 
 latex_elements = {
 # The paper size ('letterpaper' or 'a4paper').
-# 'papersize': 'letterpaper',
+    'papersize': 'a4paper',
 
 # The font size ('10pt', '11pt' or '12pt').
 # 'pointsize': '10pt',
