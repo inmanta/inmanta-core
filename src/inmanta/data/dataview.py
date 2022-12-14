@@ -480,55 +480,66 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # Todo: when not including 'orphaned' in the filter, use a simple query
+        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
+            """
+            Returns a subquery to select a single row from a resource table:
+                - for the first resource id higher than the given boundary
+                - the highest (released) version for which a resource with this id exists
+
+            :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
+                If not given, the subquery selects the first resource id, period.
+            """
+            higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
+            return f"""
+                SELECT
+                    r.resource_id,
+                    r.resource_version_id,
+                    r.attributes,
+                    r.resource_type,
+                    r.agent,
+                    r.resource_id_value,
+                    r.model,
+                    r.environment,
+                    (
+                        CASE WHEN (SELECT r.model < latest_version.version FROM latest_version)
+                            THEN 'orphaned' -- use the CTE to check the status
+                            ELSE r.status::text
+                        END
+                    ) as status
+                FROM resource r
+                JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+                WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
+                ORDER BY resource_id, model DESC
+                LIMIT 1
+            """
+
         query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT *""",
-            prelude="""
-            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-            /* The cm_version CTE finds the maximum released version number in the environment  */
-            WITH RECURSIVE cm_version AS (
-                  SELECT
-                    MAX(public.configurationmodel.version) as max_version
+            select_clause="SELECT *",
+            prelude=f"""
+                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
+                /* The latest_version CTE finds the maximum released version number in the environment */
+                WITH RECURSIVE latest_version AS (
+                    SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
-                WHERE public.configurationmodel.released=TRUE
-                AND environment=$1
+                    WHERE public.configurationmodel.released=TRUE AND environment=$1
                 ),
-            /* emulate a loose (or skip) index scan */
-            cte AS (
-               (
-               /* specify the necessary columns */
-               SELECT r.resource_id, r.resource_version_id, r.attributes, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned' -- use the CTE to check the status
-                    ELSE r.status::text END) as status
-               FROM   resource r
-               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-               WHERE  r.environment = $1 AND cm.released = TRUE
-               ORDER  BY resource_id, model DESC
-               LIMIT  1
-               )
-               UNION ALL
-               SELECT r.*
-               FROM   cte c
-               CROSS JOIN LATERAL
-               /* specify the same columns in the recursive part */
-                (SELECT r.resource_id,  r.resource_version_id, r.attributes, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned'
-                    ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
-               /* One result from the recursive call is the latest released version of one specific resource.
-                  We always start looking for this based on the previous resource_id. */
-               WHERE  r.resource_id > c.resource_id AND r.environment = $1 AND cm.released = TRUE
-               ORDER  BY r.resource_id, r.model DESC
-               LIMIT  1) r
-               )
+                /*
+                emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
+                1 resource_id at a time, select the latest (released) version it exists in.
+                */
+                cte AS (
+                    /* Initial row for recursion: select relevant version for first resource */
+                    ( {subquery_latest_version_for_single_resource(higher_than=None)} )
+                    UNION ALL
+                    SELECT next_r.*
+                    FROM cte curr_r
+                    CROSS JOIN LATERAL (
+                        /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
+                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
+                    ) next_r
+                )
             """,
-            from_clause="FROM cte",
+            from_clause="FROM cte r",
             values=[self.environment.id],
         )
         return query_builder
