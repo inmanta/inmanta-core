@@ -46,6 +46,7 @@ from pkg_resources import parse_version
 import build
 import build.env
 import inmanta
+import inmanta.warnings
 import toml
 from build.env import IsolatedEnvBuilder
 from inmanta import const, env
@@ -88,6 +89,10 @@ LOGGER = logging.getLogger(__name__)
 class ModuleVersionException(CLIException):
     def __init__(self, msg: str) -> None:
         super().__init__(msg, exitcode=5)
+
+
+class CommandDeprecationWarning(inmanta.warnings.InmantaWarning, FutureWarning):
+    pass
 
 
 def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1010,6 +1015,11 @@ version: 0.0.1dev0"""
         """
         Commit all current changes.
         """
+        inmanta.warnings.warn(
+            CommandDeprecationWarning(
+                "The `inmanta module commit` command has been deprecated in favor of `inmanta module release`."
+            )
+        )
         # find module
         module = self.get_module(module)
         if not isinstance(module, ModuleV1):

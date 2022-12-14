@@ -16,13 +16,10 @@
     Contact: code@inmanta.com
 """
 
-import sys
-from io import StringIO
-
 import inmanta.compiler as compiler
 
 
-def test_order_of_execution(snippetcompiler):
+def test_order_of_execution(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 for i in std::sequence(10):
@@ -31,15 +28,11 @@ end
         """
     )
 
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == "\n".join([str(x) for x in range(10)])
-    finally:
-        sys.stdout = saved_stdout
+    capsys.readouterr()
+    compiler.do_compile()
+    out, _ = capsys.readouterr()
+    output = out.strip()
+    assert output == "\n".join([str(x) for x in range(10)])
 
 
 def test_for_error(snippetcompiler):
