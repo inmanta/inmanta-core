@@ -12,4 +12,3 @@ Administrator documentation
     administrators/credentials.rst
     administrators/logging.rst
     administrators/metering.rst
-    administrators/*
