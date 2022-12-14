@@ -11,3 +11,4 @@ flake8-junit-report==2.1.0
 
 # documentation theme
 furo==2022.12.7
+sphinx-design

@@ -1,9 +1,9 @@
 Install the software
 ####################
 
-.. tabs::
+.. tab-set::
 
-    .. tab:: RHEL 8
+    .. tab-item:: RHEL 8
 
         For RHEL 8 based systems use dnf:
 
@@ -31,7 +31,7 @@ Install the software
         files and systemd unit files. The web-console is installed with the server package.
 
 
-    .. tab:: Debian, Ubuntu and derivatives.
+    .. tab-item:: Debian, Ubuntu and derivatives.
 
         First make sure Python >= 3.9 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with pip install in the newly created virtual env.
@@ -68,7 +68,7 @@ Install the software
 
         If you want to use the web-console you need to install it as well:
 
-        Get the pre-built package from our `web-console github page<https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+        Get the pre-built package from our `web-console github page <https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
         .. code-block:: ini
 
@@ -82,7 +82,7 @@ Install the software
             sudo /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
 
 
-    .. tab:: Other
+    .. tab-item:: Other
 
         First make sure Python >= 3.9 and git are installed. Inmanta requires many dependencies so it is recommended to create a virtual env.
         Next install inmanta with ``pip install`` in the newly created virtual env.
@@ -128,7 +128,7 @@ Install the software
             sudo /opt/inmanta/bin/inmanta -vv -c /opt/inmanta/inmanta.cfg --config-dir /opt/inmanta/inmanta.d server
 
 
-    .. tab:: Windows
+    .. tab-item:: Windows
 
         On Windows only the compile and export commands are supported. This is useful in the :ref:`push-to-server` deployment mode of
         inmanta. First make sure you have Python >= 3.9 and git. Inmanta requires many dependencies so it is recommended to create a virtual env.
@@ -142,7 +142,7 @@ Install the software
             C:\inmanta\env\Script\inmanta --help
 
 
-    .. tab:: Source
+    .. tab-item:: Source
 
         Get the source either from our `release page on github <https://github.com/inmanta/inmanta-core/releases>`_ or clone/download a branch directly.
 
