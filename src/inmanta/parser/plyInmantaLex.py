@@ -141,7 +141,7 @@ def t_MLS(t: lex.LexToken) -> lex.LexToken:
     #   see ( https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
     try:
         with warnings.catch_warnings():
-            warnings.filterwarnings('error', message="invalid escape sequence")
+            warnings.filterwarnings("error", message="invalid escape sequence")
             value = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
     except DeprecationWarning:
         with warnings.catch_warnings():
@@ -150,7 +150,6 @@ def t_MLS(t: lex.LexToken) -> lex.LexToken:
 
         msg: str = f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in multi-line string:\n{value}"
         warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
-
 
     lexer = t.lexer
     match = lexer.lexmatch[0]
@@ -183,14 +182,14 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"(\"([^\\\"\n]|\\.)*\")|(\'([^\\\'\n]|\\.)*\')"
     try:
         with warnings.catch_warnings():
-            warnings.filterwarnings('error', message="invalid escape sequence")
+            warnings.filterwarnings("error", message="invalid escape sequence")
             value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     except DeprecationWarning:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             value = bytes(t.value[1:-1], "utf_8").decode("unicode_escape")
 
-        msg:str=f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in string:\n{value}"
+        msg: str = f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in string:\n{value}"
         warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
 
     t.value = value
