@@ -25,7 +25,7 @@ import shutil
 import sys
 from collections import abc
 from logging import INFO
-from typing import List, Set
+from typing import List, Optional, Set
 
 import py
 import pytest

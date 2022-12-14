@@ -103,7 +103,7 @@ class SourceInfo(object):
         """List of python requirements associated with this source file"""
         if self._requires is None:
             # TODO: make this configurable
-            #self._requires = module.roject.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
+            # self._requires = module.roject.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
             self._requires = module.Project.get().modules[self._get_module_name()].get_all_python_requirements_as_list()
         return self._requires
 
