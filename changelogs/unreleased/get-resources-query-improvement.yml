@@ -1,0 +1,5 @@
+description: "Improved performance of `get_resources` query"
+change-type: patch
+destination-branches:
+  - iso6
+  - master
