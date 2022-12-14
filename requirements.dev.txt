@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core,sphinx]==2.50.0
+inmanta-dev-dependencies[pytest,async,core,sphinx]==2.51.0
 bumpversion==0.6.0
 openapi_spec_validator==0.5.1
 pip2pi==0.8.2
@@ -11,4 +11,4 @@ flake8-junit-report==2.1.0
 
 # documentation theme
 furo==2022.12.7
-sphinx-design
+sphinx-design==0.3.0
