@@ -1,3 +1,3 @@
-description: Remove predictive test selection from isort and black target.
+description: Remove predictive test selection from isort, black and pep8 target.
 change-type: patch
 destination-branches: [master, iso6]
