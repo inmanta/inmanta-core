@@ -23,14 +23,17 @@ from typing import Optional
 import asyncpg
 import pytest
 
-from inmanta import data
+from inmanta import const, data
 from inmanta.server.services.environment_metrics_service import (
     EnvironmentMetricsService,
     MetricsCollector,
     MetricType,
     MetricValue,
     MetricValueTimer,
+    ResourceCountMetricsCollector,
 )
+from inmanta.util import get_compiler_version
+from utils import ClientHelper
 
 env_uuid = uuid.uuid4()
 
@@ -339,3 +342,267 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
     envs = [result_gauge[0].environment, result_gauge[1].environment]
     assert env_uuid in envs
     assert env_uuid2 in envs
+
+
+async def test_resource_count_metric(clienthelper, client, agent):
+    """
+    This test will create 2 environments and start by adding 1 resource to the first. then It will create a second version
+    with 3 other resources. It also adds two resources to the second environment.
+    It then flushes the resource_count metric a first time. This creates 2 records in EnvironmentMetricsGauge:
+    - one for the first environment with 3 resources in the latest version in the available state.
+    - one for the second environment with 2 resources in the latest version in the available state.
+    following this, the state of one resource in the first environment is updated and the metrics are flushed again.
+    This creates 3 records in EnvironmentMetricsGauge:
+    - one for the first environment with 2 resources in the latest version in the available state.
+    - one for the first environment with 1 resource in the latest version in the deployed state.
+    - one for the second environment with 2 resources in the latest version in the available state.
+    """
+    env_uuid1 = uuid.uuid4()
+    env_uuid2 = uuid.uuid4()
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
+    await environment1.insert()
+    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment2.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "1"
+    version_env2 = str(await ClientHelper(client, env_uuid2).get_version())
+    resources_env1_v1 = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=" + version_env1,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    result = await client.put_version(
+        tid=env_uuid1,
+        version=version_env1,
+        resources=resources_env1_v1,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "2"
+    resources_env1_v2 = [
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version_env1,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": "test::Resource[agent1,key=key3],v=" + version_env1,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+        {
+            "key": "key4",
+            "value": "value4",
+            "id": "test::Resource[agent1,key=key4],v=" + version_env1,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+    ]
+    result = await client.put_version(
+        tid=env_uuid1,
+        version=version_env1,
+        resources=resources_env1_v2,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    resources_env2 = [
+        {
+            "key": "key5",
+            "value": "value5",
+            "id": "test::Resource[agent1,key=key5],v=" + version_env2,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key6",
+            "value": "value6",
+            "id": "test::Resource[agent1,key=key6],v=" + version_env2,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+    ]
+    result = await client.put_version(
+        tid=env_uuid2,
+        version=version_env2,
+        resources=resources_env2,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    assert len(await data.Resource.get_list()) == 6
+
+    # adds the ResourceCountMetricsCollector
+    rcmc = ResourceCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    # flush the metrics for the first time: 2 record (3 resources in available state for the first
+    # environment and 2 for the second)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 2
+    assert any(
+        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+    )
+    assert any(
+        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid2 for x in result_gauge
+    )
+
+    # change the state of one of the resources
+    now = datetime.now()
+    action_id = uuid.uuid4()
+    aclient = agent._client
+    result = await aclient.resource_action_update(
+        env_uuid1,
+        ["test::Resource[agent1,key=key2],v=" + version_env1],
+        action_id,
+        "deploy",
+        now,
+        now,
+        "deployed",
+        [],
+        {},
+    )
+
+    assert result.code == 200
+
+    # flush the metrics for the second time: 2 old record +
+    # + 3 new records (1 for available state and one for the deployed state for the first environment
+    # and one for the available state for the second environment)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 5
+    assert any(
+        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+    )
+    assert any(
+        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+    )
+    assert any(x.count == 1 and x.metric_name == "resource_count.deployed" and x.environment == env_uuid1 for x in result_gauge)
+
+    env_uuid2_records = [
+        r for r in result_gauge if r.environment == env_uuid2 and r.metric_name == "resource_count.available" and r.count == 2
+    ]
+
+    assert len(env_uuid2_records) == 2
+
+
+async def test_resource_count_metric_released(clienthelper, client, server, agent):
+    """
+    test that only the latest released version is used for the metrics:
+    - adds a first version with 3 resources and a second one with one resource but don't deploy them
+    - deploy only the first one
+    - verify the flushed data comes from the first version
+    """
+    env_uuid1 = uuid.uuid4()
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
+    await environment1.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 1
+    version1 = str(await ClientHelper(client, env_uuid1).get_version())
+
+    result = await client.set_setting(tid=env_uuid1, id="auto_deploy", value=False)
+    assert result.code == 200
+
+    resources_env1_v1 = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=" + version1,
+            "send_event": False,
+            "requires": [],
+            "purged": False,
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=" + version1,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": "test::Resource[agent1,key=key3],v=" + version1,
+            "send_event": False,
+            "requires": [],
+            "purged": True,
+        },
+    ]
+    result = await client.put_version(
+        tid=env_uuid1,
+        version=version1,
+        resources=resources_env1_v1,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+    version2 = str(await ClientHelper(client, env_uuid1).get_version())
+    resources_env1_v2 = [
+        {
+            "key": "key5",
+            "value": "value5",
+            "id": "test::Resource[agent1,key=key5],v=" + version2,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    result = await client.put_version(
+        tid=env_uuid1,
+        version=version2,
+        resources=resources_env1_v2,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    metrics_service = EnvironmentMetricsService()
+    rcmc = ResourceCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    result = await client.release_version(env_uuid1, version1, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 1
+    assert any(
+        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+    )
