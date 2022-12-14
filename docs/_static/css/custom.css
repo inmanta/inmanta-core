@@ -6,3 +6,8 @@ dl.attribute .sig-prename {
 dl.relation .sig-prename {
     margin-left: 0.5em;
 }
+
+/* make a title smaller to not wrap */
+.sidebar-brand-text {
+    font-size: 1.2rem;
+}
