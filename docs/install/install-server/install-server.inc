@@ -3,9 +3,9 @@ Install the software
 
 .. tab-set::
 
-    .. tab-item:: RHEL 8
+    .. tab-item:: RHEL 8 and 9
 
-        For RHEL 8 based systems use dnf:
+        For RHEL, Almalinux and Rockylinux 8 and 9  based systems use dnf:
 
         .. code-block:: sh
 
