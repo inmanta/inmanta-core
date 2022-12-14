@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import warnings
 from re import error as RegexError
 
 import ply.lex as lex
@@ -22,7 +23,7 @@ import ply.lex as lex
 from inmanta.ast import LocatableString, Range
 from inmanta.ast.constraint.expression import Regex
 from inmanta.ast.variables import Reference
-from inmanta.parser import ParserException
+from inmanta.parser import ParserException, ParserWarning
 
 keyworldlist = [
     "typedef",
@@ -132,7 +133,25 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
-    value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
+
+    #   Check for the presence of an invalid escape sequence (ex: "\.")
+    #   Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
+    #   Python 3.12 will raise a SyntaxWarning
+    #   Future versions will eventually raise a SyntaxError
+    #   see ( https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings('error', message="invalid escape sequence")
+            value = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
+    except DeprecationWarning:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            value = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
+
+        msg: str = f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in multi-line string:\n{value}"
+        warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
+
+
     lexer = t.lexer
     match = lexer.lexmatch[0]
     lines = match.split("\n")
@@ -162,7 +181,19 @@ def t_INT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"(\"([^\\\"\n]|\\.)*\")|(\'([^\\\'\n]|\\.)*\')"
-    t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings('error', message="invalid escape sequence")
+            value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+    except DeprecationWarning:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            value = bytes(t.value[1:-1], "utf_8").decode("unicode_escape")
+
+        msg:str=f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in string:\n{value}"
+        warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
+
+    t.value = value
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
