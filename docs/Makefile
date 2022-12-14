@@ -73,6 +73,11 @@ html: openapi latexpdf
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
+onlyhtml:
+	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	@echo
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html. PDF and REST API documentation will be missing"
+
 dirhtml:
 	$(SPHINXBUILD) -b dirhtml $(ALLSPHINXOPTS) $(BUILDDIR)/dirhtml
 	@echo
@@ -197,4 +202,3 @@ PNGs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.png,$(wildcard $(SOURCED
 
 # Make a rule to build the PDFs
 images: $(PNGs) $(PDFs)
-
