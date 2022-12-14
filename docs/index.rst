@@ -54,15 +54,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     troubleshooting
     changelogs
 
-Additional resources
---------------------
-
-* `Inmanta User Mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
-* `Inmanta Developer Mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
-* `Inmanta Twitter <https://twitter.com/inmanta_com>`_
-
 PDF version
 -----------
 
 Download: :download:`inmanta.pdf <inmanta.pdf>`
-
