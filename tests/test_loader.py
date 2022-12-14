@@ -16,10 +16,14 @@
     Contact: code@inmanta.com
 """
 import hashlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import inspect
 import os
 import shutil
 import sys
+from collections import abc
 from logging import INFO
 from typing import List, Set
 
@@ -27,7 +31,8 @@ import py
 import pytest
 from pytest import fixture
 
-from inmanta import loader
+import utils
+from inmanta import const, env, loader, moduletool
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 
@@ -224,6 +229,57 @@ def module_path(tmpdir):
     loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
     loader.PluginModuleFinder.reset()
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize(
+    "prefer_finder",
+    [True, False],
+)
+def test_plugin_module_finder(
+    tmpdir: py.path.local,
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_dir: str,
+    prefer_finder: bool,
+) -> abc.Iterator[None]:
+    """
+    Verify correct behavior of the PluginModuleFinder class, especially with respect to preference when a module is present
+    both in the normal venv and in the finder's module path.
+    The different scenarios are tested via parametrization rather than in a single test case to force proper cleanup in
+    between.
+    """
+    module: str = "mymodule"
+    python_module: str = f"{const.PLUGINS_PACKAGE}.{module}"
+    libs_dir: py.path.local = tmpdir.mkdir("libs")
+    module_dir: py.path.local = libs_dir.join(module)
+    utils.v1_module_from_template(
+        os.path.join(modules_dir, "minimalv1module"),
+        str(module_dir),
+        new_name=module,
+        new_content_init_py="",
+    )
+    moduletool.ModuleTool().install(path=str(module_dir))
+    assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
+    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(libs_dir)], prefer=prefer_finder)
+    # verify that the correct module will be loaded
+    assert isinstance(sys.meta_path[0 if prefer_finder else -1], loader.PluginModuleFinder)
+    spec: Optional[importlib.machinery.ModuleSpec] = importlib.util.find_spec(python_module)
+    assert spec is not None
+    assert spec.loader is not None
+    assert isinstance(spec.loader, loader.PluginModuleLoader) == prefer_finder
+    # verify that import works
+    importlib.import_module(python_module)
+
+
+def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
+    """
+    Verify that the agent code loader prefers its loaded code over code in the Python venv.
+    """
+    assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
+    loader.CodeLoader(code_dir=str(tmpdir))
+    # it suffices to verify that the module finder is firs in the meta path:
+    # `test_plugin_module_finder` verifies the actual loader behavior
+    assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
 
 
 def test_venv_path(tmpdir: py.path.local, projects_dir: str):
