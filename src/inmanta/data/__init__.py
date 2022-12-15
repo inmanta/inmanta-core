@@ -4259,9 +4259,11 @@ class Resource(BaseDocument):
             return []
 
         query = (
-            f"SELECT * FROM {cls.table_name()} WHERE "
-            f"environment=$1 AND "
-            f"(resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
+            f"SELECT r.* FROM {cls.table_name()} r"
+            f" INNER JOIN unnest($2::resource_id_version_pair[]) requested(resource_id, model)"
+            f" ON r.resource_id = requested.resource_id AND r.model = requested.model"
+            f" WHERE environment=$1"
+            f" {query_lock}"
         )
         out = await cls.select_query(
             query,
@@ -5408,34 +5410,38 @@ class EnvironmentMetricsGauge(BaseDocument):
     """
     A metric that is of type gauge
 
+    :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
     :param count: the counter for the metric for the given timestamp
     """
 
+    environment: uuid.UUID
     metric_name: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
     """
     A metric that is type timer
 
+    :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
     """
 
+    environment: uuid.UUID
     metric_name: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "timestamp")
 
 
 _classes = [

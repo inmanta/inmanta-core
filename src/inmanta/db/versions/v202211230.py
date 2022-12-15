@@ -89,10 +89,14 @@ def query_part_convert_provides(from_value: str) -> str:
 
     # loop over the array and convert
     collect = f"""
-        (select
-             array_agg(
-               {convert}
-            )
-        from unnest({from_value}) element)"""
+        coalesce(
+            (select
+                 array_agg(
+                   {convert}
+                )
+            from unnest({from_value}) element),
+            ARRAY[]::character varying[]
+        )
+        """
 
     return collect
