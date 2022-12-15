@@ -82,7 +82,17 @@ async def test_query_parts(postgresql_client):
     out_decoded = json.loads(out)
     assert out_decoded == test_data_2
 
+    test_data_2["requires"] = []
+    out = await postgresql_client.fetchval(f"select {query_part_convert_requires('$1::jsonb')}", json.dumps(test_data_2))
+    out_decoded = json.loads(out)
+    assert out_decoded == test_data_2
+
     # provides
     test_in_data_3 = (["std::AgentConfig[internal,agentname=localhost],v=1", "std::xconf[internal,agentname=localhost],v=1"],)
     out = await postgresql_client.fetchval(f"select {query_part_convert_provides('$1::character varying[]')}", test_in_data_3)
     assert out == ["std::AgentConfig[internal,agentname=localhost]", "std::xconf[internal,agentname=localhost]"]
+
+    # provides
+    test_in_data_3 = ([],)
+    out = await postgresql_client.fetchval(f"select {query_part_convert_provides('$1::character varying[]')}", test_in_data_3)
+    assert out == []
