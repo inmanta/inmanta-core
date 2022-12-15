@@ -4259,9 +4259,11 @@ class Resource(BaseDocument):
             return []
 
         query = (
-            f"SELECT * FROM {cls.table_name()} WHERE "
-            f"environment=$1 AND "
-            f"(resource_id, model)::resource_id_version_pair = ANY($2::resource_id_version_pair[]) {query_lock}"
+            f"SELECT r.* FROM {cls.table_name()} r"
+            f" INNER JOIN unnest($2::resource_id_version_pair[]) requested(resource_id, model)"
+            f" ON r.resource_id = requested.resource_id AND r.model = requested.model"
+            f" WHERE environment=$1"
+            f" {query_lock}"
         )
         out = await cls.select_query(
             query,
