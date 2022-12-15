@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
-
+import logging
 import re
 import warnings
 from typing import List
 
 import pytest
 
+from inmanta import compiler
 from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
@@ -43,6 +44,7 @@ from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import base_parse
+from utils import log_contains, log_doesnt_contain
 
 
 def parse_code(model_code: str):
@@ -2339,3 +2341,46 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)
     assert isinstance(regex, Regex)
+
+
+def test_invalid_escape_sequence(snippetcompiler, caplog):
+    """
+    Check that invalid escape sequences in regular strings and multi-line strings raise warnings.
+    Check that raw strings don't raise such warnings.
+    """
+    caplog.set_level(logging.WARNING)
+    snippetcompiler.setup_for_snippet(
+        r'''
+s1 = r"No warnings in raw strings: \."
+s2 = 'Warnings in standard strings: \.'
+s3 = "Warnings in standard strings: \."
+s4 = """l1
+Warnings in MLS:
+Bad escape sequence: \.
+"""
+std::print(s1)
+        '''
+    )
+    compiler.do_compile()
+
+    dir = snippetcompiler.project_dir
+    expected_warnings = [
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:3)",
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:4)",
+        f"ParserWarning: Invalid escape sequence in multi-line string. ({dir}/main.cf:5)",
+    ]
+    for warning in expected_warnings:
+        log_contains(
+            caplog,
+            "inmanta.warnings",
+            logging.WARNING,
+            warning,
+        )
+
+    absent_warning = f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:2)"
+    log_doesnt_contain(
+        caplog,
+        "inmanta.warnings",
+        logging.WARNING,
+        absent_warning,
+    )
