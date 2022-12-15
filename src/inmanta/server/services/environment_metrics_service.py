@@ -136,8 +136,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
-        self.register_metric_collector(CompileTimeMetricsCollector())
         self.register_metric_collector(ResourceCountMetricsCollector())
+        self.register_metric_collector(CompileTimeMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -212,31 +212,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             )
 
 
-class CompileTimeMetricsCollector(MetricsCollector):
-    """
-    This Metric will track the duration of compiles executed on the server.
-    """
-
-    def get_metric_name(self) -> str:
-        return "compile_time"
-
-    async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValue]:
-        query: str = f"""
-            SELECT count(*), sum(completed - started) as compile_time
-            FROM compile
-            WHERE started >= {start_interval}
-            AND started < {end_interval}
-        """
-        metric_values: List[MetricValue] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
-        for record in result:
-            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["compile_time"]))
-
-        return metric_values
-
-
 class ResourceCountMetricsCollector(MetricsCollector):
     """
     This Metric will track the number of resources (grouped by resources state).
@@ -268,4 +243,32 @@ class ResourceCountMetricsCollector(MetricsCollector):
             assert isinstance(record["environment"], uuid.UUID)
             assert isinstance(record["status"], str)
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class CompileTimeMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the duration of compiles executed on the server.
+    """
+
+    def get_metric_name(self) -> str:
+        return "compile_time"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+    ) -> Sequence[MetricValue]:
+        query: str = f"""
+            SELECT count(*), sum(completed - started) as compile_time
+            FROM compile
+            WHERE started >= {start_interval}
+            AND started < {end_interval}
+        """
+        metric_values: List[MetricValue] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["compile_time"]))
+
         return metric_values
