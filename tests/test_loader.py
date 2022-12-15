@@ -102,6 +102,16 @@ def test_code_manager(tmpdir: py.path.local):
     with pytest.raises(loader.SourceNotFoundException):
         mgr.register_code("test2", str)
 
+    # verify requirements behavior
+    source_info: SourceInfo = single_type_list[0]
+    # by default only install non-module dependencies
+    assert source_info.requires == ["lorem"]
+    project._metadata.agent_install_dependency_modules = True
+    # reset cache
+    source_info._requires = None
+    # when enabled, also install dependencies on other modules
+    assert source_info.requires == ["inmanta-module-std", "lorem"]
+
 
 def test_code_loader(tmp_path, caplog):
     """Test loading a new module"""
