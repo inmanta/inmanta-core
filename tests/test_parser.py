@@ -2348,7 +2348,6 @@ def test_invalid_escape_sequence(snippetcompiler, caplog):
     Check that invalid escape sequences in regular strings and multi-line strings raise warnings.
     Check that raw strings don't raise such warnings.
     """
-    caplog.set_level(logging.WARNING)
     snippetcompiler.setup_for_snippet(
         r'''
 s1 = r"No warnings in raw strings: \."
@@ -2384,3 +2383,29 @@ std::print(s1)
         logging.WARNING,
         absent_warning,
     )
+
+
+def context_manager_performance_benchmark(snippetcompiler):
+    """
+    Test the performance of the safe_decode function in the lexer.
+    """
+    snippetcompiler.setup_for_snippet(
+        r'''
+s1 = r"No warnings in raw strings: \."
+s2 = 'Warnings in standard strings: \.'
+s3 = "Warnings in standard strings: \."
+s4 = """l1
+Warnings in MLS:
+Bad escape sequence: \.
+"""
+std::print(s1)
+        '''
+    )
+
+    compiler.do_compile()
+
+
+def test_safe_decode(benchmark, snippetcompiler):
+    # benchmark something
+    # benchmark(context_manager_performance_benchmark, snippetcompiler)
+    benchmark.pedantic(context_manager_performance_benchmark, args=(snippetcompiler,), iterations=10, rounds=100)
