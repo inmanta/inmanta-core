@@ -132,7 +132,6 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
     pass
 
 
-
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
 
@@ -226,20 +225,20 @@ lexer = lex.lex()
 
 def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
     """
-        Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token. This function
-        assumes to be called from within a t_STRING or a t_MLS rule.
+    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.  # noqa: W605
+    This function assumes to be called from within a t_STRING or a t_MLS rule.
 
-        - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
-        - Python 3.12 will raise a SyntaxWarning
-        - Future versions will eventually raise a SyntaxError
-        (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
+    - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
+    - Python 3.12 will raise a SyntaxWarning
+    - Future versions will eventually raise a SyntaxError
+    (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
 
-        :param token: The token whose value we want to decode.
-        :param warning_message: The warning message to display.
-        :param start: Start of the value slice (To only decode the characters after the leading quotation mark(s))
-        :param end: End of the value slice (To only decode the characters before the trailing quotation mark(s))
+    :param token: The token whose value we want to decode.
+    :param warning_message: The warning message to display.
+    :param start: Start of the value slice (To only decode the characters after the leading quotation mark(s))
+    :param end: End of the value slice (To only decode the characters before the trailing quotation mark(s))
 
-        :return: The token value as a python str.
+    :return: The token value as a python str.
     """
 
     try:
@@ -254,7 +253,8 @@ def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: 
             warnings.filterwarnings("ignore", message="invalid escape sequence", category=DeprecationWarning)
             value = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
 
-        warnings.warn(ParserWarning(location=Location(file=token.lexer.inmfile, lnr=token.lexer.lineno), msg=warning_message,
-                                    value=value))
+        warnings.warn(
+            ParserWarning(location=Location(file=token.lexer.inmfile, lnr=token.lexer.lineno), msg=warning_message, value=value)
+        )
 
     return value
