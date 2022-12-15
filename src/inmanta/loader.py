@@ -102,9 +102,12 @@ class SourceInfo(object):
     def requires(self) -> List[str]:
         """List of python requirements associated with this source file"""
         if self._requires is None:
-            # TODO: make this configurable
-            # self._requires = module.roject.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
-            self._requires = module.Project.get().modules[self._get_module_name()].get_all_python_requirements_as_list()
+            project: module.Project = module.Project.get()
+            mod: module.Module = project.modules[self._get_module_name()]
+            if project.metadata.agent_install_dependency_modules:
+                self._requires = mod.get_all_python_requirements_as_list()
+            else:
+                self._requires = mod.get_strict_python_requirements_as_list()
         return self._requires
 
 
