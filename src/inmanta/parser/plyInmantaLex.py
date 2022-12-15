@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import typing
 import warnings
 from re import error as RegexError
 
@@ -142,11 +143,11 @@ def t_MLS(t: lex.LexToken) -> lex.LexToken:
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("error", message="invalid escape sequence")
-            value = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
+            value: str = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
     except DeprecationWarning:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            value = bytes(t.value[3:-3], "utf_8").decode("unicode_escape")
+            value = bytes(typing.cast(str, t.value)[3:-3], "utf_8").decode("unicode_escape")
 
         msg: str = f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in multi-line string:\n{value}"
         warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
@@ -183,11 +184,11 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("error", message="invalid escape sequence")
-            value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+            value: str = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     except DeprecationWarning:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            value = bytes(t.value[1:-1], "utf_8").decode("unicode_escape")
+            value = bytes(typing.cast(str, t.value)[1:-1], "utf_8").decode("unicode_escape")
 
         msg: str = f"({t.lexer.inmfile}:{t.lexer.lineno}) Invalid escape sequence in string:\n{value}"
         warnings.showwarning(msg, lineno=t.lexer.lineno, filename=t.lexer.inmfile, category=ParserWarning)
