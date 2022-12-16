@@ -258,17 +258,20 @@ class CompileTimeMetricsCollector(MetricsCollector):
         return MetricType.TIMER
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValue]:
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            SELECT count(*), sum(completed - started) as compile_time
+            SELECT count(*), environment, sum(completed - started) as compile_time
             FROM compile
-            WHERE started >= {start_interval}
-            AND started < {end_interval}
+            WHERE completed >= {start_interval}
+            AND completed < {end_interval}
         """
-        metric_values: List[MetricValue] = []
+        metric_values: List[MetricValueTimer] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
-            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["compile_time"]))
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["compile_time"], float)
+            metric_values.append(MetricValueTimer(self.get_metric_name(), record["count"], record["compile_time"], record["environment"]))
 
         return metric_values

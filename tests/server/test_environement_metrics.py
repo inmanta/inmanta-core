@@ -606,3 +606,67 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
     assert any(
         x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
+
+
+
+@pytest.fixture
+async def env_with_compiles(client, environment):
+    compile_requested_timestamps = []
+    compiles = []
+    # Make sure that timestamp is never older than 7 days,
+    # as such that the cleanup service doesn't delete them.
+    now = datetime.datetime.now()
+    for i in range(4):
+        requested = now + datetime.timedelta(minutes=i)
+        compile_requested_timestamps.append(requested)
+        compile = data.Compile(
+            id=uuid.uuid4(),
+            remote_id=uuid.uuid4(),
+            environment=uuid.UUID(environment),
+            requested=requested,
+            started=requested + datetime.timedelta(seconds=20),
+            completed=requested + datetime.timedelta(seconds=40),
+            do_export=True,
+            force_update=False,
+            metadata={"meta": 42} if i % 2 else None,
+            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            success=True,
+            handled=True,
+            version=1,
+            substitute_compile_id=None,
+            compile_data={"errors": [{"type": "UnexpectedException", "message": "msg"}]} if i % 2 else None,
+        )
+        compiles.append(compile)
+    compiles[1].substitute_compile_id = compiles[0].id
+    compiles[2].substitute_compile_id = compiles[1].id
+    for compile in compiles:
+        await compile.insert()
+    ids = [compile.id for compile in compiles]
+
+    await Report(
+        id=uuid.uuid4(),
+        started=datetime.datetime.now(),
+        completed=datetime.datetime.now(),
+        command="inmanta export",
+        name="name",
+        errstream="error",
+        outstream="success",
+        returncode=0,
+        compile=ids[0],
+    ).insert()
+    await Report(
+        id=uuid.uuid4(),
+        started=datetime.datetime.now(),
+        completed=datetime.datetime.now(),
+        command="inmanta export",
+        name="another_name",
+        errstream="error",
+        outstream="success",
+        returncode=0,
+        compile=ids[0],
+    ).insert()
+
+    return environment, ids, compile_requested_timestamps
+
+async def test_compile_time_metric(): #clienthelper, client, agent):
+
