@@ -248,9 +248,9 @@ def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: 
             value: str = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
     except DeprecationWarning:
         # If the first block did actually encounter an invalid escape sequence, we have to decode the value again, this time
-        # ignoring the python warning, and raising a warning of our own.
+        # ignoring this or any other python warning that has already been emitted, and raising a warning of our own.
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="invalid escape sequence", category=DeprecationWarning)
+            warnings.filterwarnings("ignore")
             value = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
 
         warnings.warn(
