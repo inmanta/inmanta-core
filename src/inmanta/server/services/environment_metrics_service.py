@@ -19,13 +19,13 @@ import abc
 import logging
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource, Compile
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -261,17 +261,18 @@ class CompileTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            SELECT count(*), environment, sum(completed - started) as compile_time
-            FROM compile
-            WHERE completed >= {start_interval}
-            AND completed < {end_interval}
+            SELECT count(*)  as count,environment,sum(completed-started) as compile_time
+            FROM {Compile.table_name()}
+            WHERE completed >= '{start_interval}'
+            AND completed < '{end_interval}'
+            GROUP BY environment
         """
         metric_values: List[MetricValueTimer] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
-            assert isinstance(record["compile_time"], float)
+            assert isinstance(record["compile_time"], float) # Problem here -> the db returns timestamps TODO -> convert to float
             metric_values.append(MetricValueTimer(self.get_metric_name(), record["count"], record["compile_time"], record["environment"]))
 
         return metric_values
