@@ -31,7 +31,7 @@ from inmanta.server.services.environment_metrics_service import (
     MetricType,
     MetricValue,
     MetricValueTimer,
-    ResourceCountMetricsCollector,
+    ResourceCountMetricsCollector, CompileTimeMetricsCollector,
 )
 from inmanta.util import get_compiler_version
 from utils import ClientHelper
@@ -670,7 +670,10 @@ async def env_with_compiles(client, environment):
     return environment, ids, compile_requested_timestamps
 
 
-async def test_compile_time_metric(client, env_with_compiles): #clienthelper, client, agent):
+async def test_compile_time_metric(clienthelper, client, agent, env_with_compiles):
+    """
+    WIP => need to rewrite custom env_with_compiles
+    """
     env_uuid1 = uuid.uuid4()
     env_uuid2 = uuid.uuid4()
     project = data.Project(name="test")
@@ -684,3 +687,16 @@ async def test_compile_time_metric(client, env_with_compiles): #clienthelper, cl
     await environment2.insert()
     envs = await data.Environment.get_list(project=project_id)
     assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    rcmc = CompileTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "1"
+    version_env2 = str(await ClientHelper(client, env_uuid2).get_version())
+    await metrics_service.flush_metrics()
+
+    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+
+    # print(result_gauge)
