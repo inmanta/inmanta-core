@@ -2390,15 +2390,41 @@ def context_manager_performance_benchmark(snippetcompiler):
     Test the performance of the safe_decode function in the lexer.
     """
     snippetcompiler.setup_for_snippet(
-        r'''
-s1 = r"No warnings in raw strings: \."
-s2 = 'Warnings in standard strings: \.'
-s3 = "Warnings in standard strings: \."
+          r'''
+s1 = r"No warnings in raw strings: "
+s2 = 'Warnings in standard strings: '
+s3 = "Warnings in standard strings: "
 s4 = """l1
 Warnings in MLS:
-Bad escape sequence: \.
+Bad escape sequence:
 """
 std::print(s1)
+
+s11 = r"No warnings in raw strings: "
+s12 = 'Warnings in standard strings: '
+s13 = "Warnings in standard strings: "
+s14 = """l1
+Warnings in MLS:
+Bad escape sequence:
+"""
+std::print(s1)
+s21 = r"No warnings in raw strings: "
+s22 = 'Warnings in standard strings: '
+s23 = "Warnings in standard strings: "
+s24 = """l1
+Warnings in MLS:
+Bad escape sequence:
+"""
+std::print(s1)
+s31 = r"No warnings in raw strings: "
+s32 = 'Warnings in standard strings: '
+s33 = "Warnings in standard strings: "
+s34 = """l1
+Warnings in MLS:
+Bad escape sequence:
+"""
+std::print(s1)
+
         '''
     )
 
@@ -2406,6 +2432,6 @@ std::print(s1)
 
 
 def test_safe_decode(benchmark, snippetcompiler):
-    # benchmark something
-    # benchmark(context_manager_performance_benchmark, snippetcompiler)
     benchmark.pedantic(context_manager_performance_benchmark, args=(snippetcompiler,), iterations=10, rounds=100)
+
+
