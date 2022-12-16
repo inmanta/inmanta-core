@@ -17,13 +17,14 @@
 """
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.data import Report
 from inmanta.server.services.environment_metrics_service import (
     EnvironmentMetricsService,
     MetricsCollector,
@@ -615,17 +616,17 @@ async def env_with_compiles(client, environment):
     compiles = []
     # Make sure that timestamp is never older than 7 days,
     # as such that the cleanup service doesn't delete them.
-    now = datetime.datetime.now()
+    now = datetime.now()
     for i in range(4):
-        requested = now + datetime.timedelta(minutes=i)
+        requested = now + timedelta(minutes=i)
         compile_requested_timestamps.append(requested)
         compile = data.Compile(
             id=uuid.uuid4(),
             remote_id=uuid.uuid4(),
             environment=uuid.UUID(environment),
             requested=requested,
-            started=requested + datetime.timedelta(seconds=20),
-            completed=requested + datetime.timedelta(seconds=40),
+            started=requested + timedelta(seconds=20),
+            completed=requested + timedelta(seconds=40),
             do_export=True,
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
@@ -645,8 +646,8 @@ async def env_with_compiles(client, environment):
 
     await Report(
         id=uuid.uuid4(),
-        started=datetime.datetime.now(),
-        completed=datetime.datetime.now(),
+        started=datetime.now(),
+        completed=datetime.now(),
         command="inmanta export",
         name="name",
         errstream="error",
@@ -656,8 +657,8 @@ async def env_with_compiles(client, environment):
     ).insert()
     await Report(
         id=uuid.uuid4(),
-        started=datetime.datetime.now(),
-        completed=datetime.datetime.now(),
+        started=datetime.now(),
+        completed=datetime.now(),
         command="inmanta export",
         name="another_name",
         errstream="error",
@@ -668,5 +669,18 @@ async def env_with_compiles(client, environment):
 
     return environment, ids, compile_requested_timestamps
 
-async def test_compile_time_metric(): #clienthelper, client, agent):
 
+async def test_compile_time_metric(client, env_with_compiles): #clienthelper, client, agent):
+    env_uuid1 = uuid.uuid4()
+    env_uuid2 = uuid.uuid4()
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
+    await environment1.insert()
+    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment2.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
