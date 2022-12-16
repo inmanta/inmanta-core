@@ -321,7 +321,7 @@ def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
     """
     assert not isinstance(sys.meta_path[0], loader.PluginModuleFinder)
     loader.CodeLoader(code_dir=str(tmpdir))
-    # it suffices to verify that the module finder is firs in the meta path:
+    # it suffices to verify that the module finder is first in the meta path:
     # `test_plugin_module_finder` verifies the actual loader behavior
     assert isinstance(sys.meta_path[0], loader.PluginModuleFinder)
 
