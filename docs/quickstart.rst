@@ -1,3 +1,6 @@
+
+.. _quickstart:
+
 Quickstart
 ***************
 
@@ -13,6 +16,7 @@ In this guide we start simple and manage a 3-node CLOS network with a spine and 
     This guide is meant to quickly set up an Inmanta LAB environment to experiment with.
     It is not recommended to run this setup in production, as it might lead to instabilities in the long term.
 
+.. _quickstart_prerequisites:
 
 Prerequisites
 _________________________
@@ -102,6 +106,7 @@ Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
 
 Depending on your system's horsepower, give them a few seconds/minutes to fully boot-up.
 
+.. _quickstart_connecting_to_the_containers:
 
 Connecting to the containers
 ______________________________
