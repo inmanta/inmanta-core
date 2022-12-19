@@ -862,6 +862,24 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return 404, {"message": "resource_id parameter is required."}
 
+    @protocol.handle(methods.discover_facts, env="tid")
+    async def discover_facts(self, env: data.Environment):
+        if env is None:
+            raise NotFound(f"Environment not found")
+
+        # get latest version
+        version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
+        if version is None:
+            return 404, {"message": "No version available"}
+
+        # get all agents
+        agents = await data.ConfigurationModel.get_agents(env.id, version)
+        for agent in agents:
+            client = self.get_agent_client(env.id, agent)
+            if client:
+                await client.discover_resources_client(env.id, agent, version)
+        return 200
+
     @protocol.handle(methods_v2.get_agents, env="tid")
     async def get_agents(
         self,

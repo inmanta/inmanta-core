@@ -3440,3 +3440,67 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
     # Exception is raised by handler
     resource_container.Provider.set_fail("agent1", "key1", 1)
     assert const.ResourceState.failed == await deploy_resource()
+
+
+async def test_discovery_resource(
+    resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer
+):
+    resource_container.Provider.reset()
+    myagent = agent.Agent(
+        hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
+    )
+    await myagent.add_end_point_name("agent1")
+    await myagent.add_end_point_name("agent2")
+    await myagent.start()
+    async_finalizer(myagent.stop)
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
+
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Discover1[agent1,key=key1],v=%d" % version,
+            "requires": [],
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": False,
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Discover2[agent1,key=key2],v=%d" % version,
+            "requires": [],
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": False,
+        },
+        {
+            "key": "key3",
+            "value": "value3",
+            "id": "test::Discover3[agent2,key=key3],v=%d" % version,
+            "requires": [],
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": False,
+        },
+    ]
+
+    await clienthelper.put_version_simple(resources, version)
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 3
+
+    # call the API endpoint
+    await client.discover_facts(tid=environment)
+
+    discovered_resources = await data.DiscoveredResources.get_list(environment=environment)
+    assert len(discovered_resources) == 3
+
+    await myagent.stop()

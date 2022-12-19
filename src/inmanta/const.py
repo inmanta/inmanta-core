@@ -158,6 +158,7 @@ class ResourceAction(str, Enum):
     dryrun = "dryrun"
     getfact = "getfact"
     other = "other"
+    discovery = "discovery"
 
 
 STATE_UPDATE = [ResourceAction.deploy]

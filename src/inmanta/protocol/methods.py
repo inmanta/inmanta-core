@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from inmanta import const, data, resources
 from inmanta.data import model
@@ -480,6 +480,41 @@ def resource_action_update(
 # Manage configuration model versions
 
 
+@typedmethod(
+    path="/discovered_resources",
+    validate_sid=False,
+    operation="POST",
+    agent_server=True,
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.agent],
+)
+def discovered_resources_create(env: uuid.UUID, discovered_resource_name: str, value: List[Dict[str, str]]) -> None:
+    """
+    Send discovered resource to the server
+
+    :param env: The id of the environment this resource belongs to
+    :param discovered_resource_name: The resource with the given resource_version_id id from the agent
+    """
+
+
+@typedmethod(
+    path="/discovered_resources",
+    validate_sid=False,
+    operation="GET",
+    agent_server=True,
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.agent],
+)
+def get_discovered_resources(
+    env: uuid.UUID,
+) -> list[str]:
+    """
+    get the discovered resources to the server
+
+    :param tid: The id of the environment this resource belongs to
+    """
+
+
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
@@ -781,9 +816,32 @@ def set_parameters(tid: uuid.UUID, parameters: list):
     """
 
 
+@method(path="/discover_facts", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
+def discover_facts(tid: uuid.UUID):
+    """
+    discover all resources for an environment
+
+    :param tid: The environment
+    """
+
+
+@method(
+    path="/discover_resources_client",
+    operation="POST",
+    arg_options=AGENT_ENV_OPTS,
+    server_agent=True,
+    client_types=[const.ClientType.agent],
+)
+def discover_resources_client(tid: uuid.UUID, agent_name: str, version: int):
+    """
+    discover all resources for an environment and a client
+
+    :param tid: The environment
+    :agent_name: the name of an agent
+    """
+
+
 # Get parameters from the agent
-
-
 @method(path="/agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """

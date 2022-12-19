@@ -17,6 +17,7 @@
 """
 import asyncio
 import datetime
+import json
 import logging
 import os
 import uuid
@@ -995,3 +996,24 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
+
+    @handle(methods.discovered_resources_create)
+    async def discovered_resources_create(self, env: data.Environment, discovered_resource_name: str, value: Sequence[dict]):
+        discovered_resource = data.DiscoveredResources(
+            environment=env, discovered_resource_name=discovered_resource_name, values=value
+        )
+        (column_names, values) = discovered_resource._get_column_names_and_values()
+        column_names_as_sql_string = ",".join(column_names)
+        values_as_parameterize_sql_string = "$1,$2,$3"
+        query = f"""INSERT INTO {discovered_resource.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})
+                ON CONFLICT (environment,discovered_resource_name) DO UPDATE SET values = $3;
+            """
+        await discovered_resource._execute_query(query, *values)
+
+    @handle(methods.get_discovered_resources)
+    async def get_discovered_resources(
+        self,
+        env: data.Environment,
+    ):
+        discovered_resources = await data.DiscoveredResources.get_list(environment=env)
+        return discovered_resources

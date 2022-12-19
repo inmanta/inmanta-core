@@ -822,6 +822,22 @@ class ResourceHandler(object):
         except Exception:
             raise Exception("Unable to upload file to the server.")
 
+    def execute_discover_resource(self, ctx: HandlerContext, resource: resources.Resource):
+        ctx.info("execute_discover_resource")
+        self.pre(ctx, resource)
+        result = self.discover_resource(ctx)
+        if result:
+
+            def call():
+                client = protocol.Client("agent")
+                return client.discovered_resources_create(
+                    env=self._agent.environment, discovered_resource_name=result[0], value=result[1]
+                )
+
+            self.run_sync(call)
+
+        self.post(ctx, resource)
+
 
 @stable_api
 class CRUDHandler(ResourceHandler):
@@ -829,6 +845,13 @@ class CRUDHandler(ResourceHandler):
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
     """
+
+    def discover_resource(self, ctx: HandlerContext) -> None:
+        """
+        :param context: Context can be used to get values discovered in the read method. For example, the id used in API
+                calls. This context should also be used to let the handler know what changes were made to the
+                resource.
+        """
 
     def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """

@@ -5442,6 +5442,22 @@ class EnvironmentMetricsTimer(BaseDocument):
     __primary_key__ = ("environment", "metric_name", "timestamp")
 
 
+class DiscoveredResources(BaseDocument):
+    """
+    discovered resources
+
+    :param environment: the environment of those resources
+    :param discovered_resource_name: The name of the resources
+    :param values: The values
+    """
+
+    environment: uuid.UUID
+    discovered_resource_name: str
+    values: list[object]
+
+    __primary_key__ = ("environment", "discovered_resource_name", "values")
+
+
 _classes = [
     Project,
     Environment,
@@ -5460,6 +5476,7 @@ _classes = [
     Notification,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    DiscoveredResources,
 ]
 
 

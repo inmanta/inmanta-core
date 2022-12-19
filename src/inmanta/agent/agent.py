@@ -36,7 +36,7 @@ from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.handler import ResourceHandler, SkipResource
+from inmanta.agent.handler import HandlerContext, ResourceHandler, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
@@ -950,6 +950,23 @@ class AgentInstance(object):
             )
         return undeployable, loaded_resources
 
+    async def discover_resources_instance(self, version: int):
+        result = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, incremental_deploy=False)
+        _, resources = await self.load_resources(version, const.ResourceAction.discovery, result.result["resources"])
+        for resource in resources:
+            with self._cache.manager(version):
+                resource_handler = await self.get_provider(resource)
+                try:
+                    ctx = HandlerContext(resource)
+                    await asyncio.get_event_loop().run_in_executor(
+                        self.provider_thread_pool, resource_handler.execute_discover_resource, ctx, resource
+                    )
+
+                except Exception as e:
+                    self.logger.exception("error in discover_resources_instance")
+                    return 500
+        return 200
+
 
 class CouldNotConnectToServer(Exception):
     pass
@@ -1359,3 +1376,9 @@ class Agent(SessionEndpoint):
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:
         return 200, collect_report(self)
+
+    @protocol.handle(methods.discover_resources_client, env_id="tid")
+    async def discover_resources_client(self, env_id: uuid.UUID, agent_name: str, version: int) -> Apireturn:
+        agent_instance = self._instances[agent_name]
+        result = await agent_instance.discover_resources_instance(version)
+        return result

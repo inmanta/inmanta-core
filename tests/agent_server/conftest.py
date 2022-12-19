@@ -30,7 +30,7 @@ from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, protocol
 from inmanta.util import get_compiler_version
 from utils import retry_limited
 
@@ -203,6 +203,45 @@ def resource_container():
         """
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
+
+    @resource("test::Discover1", agent="agent", id_attribute="key")
+    class Discover1(PurgeableResource):
+        """
+        calls the Discover endpoint to discover resources.
+        """
+
+        fields = ("key", "value")
+
+    @provider("test::Discover1", name="test_discover1")
+    class Discover1(CRUDHandler):
+        def discover_resource(self, ctx: HandlerContext):
+            return "test1", [{"key1": "value1", "key2": "value2"}, {"key3": "value3", "key4": "value4"}]
+
+    @resource("test::Discover2", agent="agent", id_attribute="key")
+    class Discover2(PurgeableResource):
+        """
+        calls the Discover endpoint to discover resources.
+        """
+
+        fields = ("key", "value")
+
+    @provider("test::Discover2", name="test_discover2")
+    class Discover2(CRUDHandler):
+        def discover_resource(self, ctx: HandlerContext):
+            return "test2", [{"key5": "value5", "key6": "value6", "key7": "value7"}]
+
+    @resource("test::Discover3", agent="agent", id_attribute="key")
+    class Discover3(PurgeableResource):
+        """
+        calls the Discover endpoint to discover resources.
+        """
+
+        fields = ("key", "value")
+
+    @provider("test::Discover3", name="test_discover2")
+    class Discover3(CRUDHandler):
+        def discover_resource(self, ctx: HandlerContext):
+            return "test3", [{"key8": "value8"}]
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
