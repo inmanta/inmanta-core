@@ -133,11 +133,11 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                         - subnet: 172.30.0.0/16
 
 
-You can paste this script in a file named `docker-compose.yml` and ensure you have you license files available.
-With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
-and the license files should be named ``com.inmanta.license`` and ``com.inmanta.jwe``. You can of course update the content
-of the docker-compose file to match your current configuration.
-Then bring the containers up by running the following command:
+    You can paste this script in a file named `docker-compose.yml` and ensure you have you license files available.
+    With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
+    and the license files should be named ``com.inmanta.license`` and ``com.inmanta.jwe``. You can of course update the content
+    of the docker-compose file to match your current configuration.
+    Then bring the containers up by running the following command:
 
 .. code-block:: sh
 
