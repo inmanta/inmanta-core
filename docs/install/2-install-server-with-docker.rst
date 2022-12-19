@@ -153,7 +153,7 @@ matching your needs.  You can find more instructions for overwriting the config 
 :ref:`here<docker_overwrite_server_conf>`.
 
 .. warning::
-    We don't recommend using the setup described above as a production environment.  Hosting a database in a
+    We don't recommend using the setup described above as a production environment. Hosting a database in a
     container as shown here is not ideal in term of performance, reliability and raises some serious data
     persistence concerns.
 
