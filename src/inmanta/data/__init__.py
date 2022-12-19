@@ -70,6 +70,7 @@ from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.exceptions import BadRequest, NotFound
+from inmanta.resources import Id
 from inmanta.server import config
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes
@@ -4463,6 +4464,9 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
+        if "attributes" in kwargs and "requires" in kwargs["attributes"]:
+            assert all(not Id.is_resource_version_id(rid) for rid in kwargs["attributes"]["requires"])
+
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
