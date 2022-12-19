@@ -67,17 +67,16 @@
 
 
 .. toctree::
-    :maxdepth: 3
+    :maxdepth: 1
 
     quickstart
     install
     architecture
     language
-    moduleguides
     model_developers
     platform_developers
+    lsm/index
     administrators
-    extensions
     faq
     glossary
     reference/index
