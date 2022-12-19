@@ -63,8 +63,7 @@
     * API-ification of orchestrated services to easily plug services into the OSS/BSS environment
     * Support for brownfield environments by fine-grained roll-out
 
-    The Inmanta Service Orchestrator product is based on mature technology backed by 15+ years of
-    research and interaction with companies offering telecom and cloud services.
+    The Inmanta Service Orchestrator product is based on mature technology backed by 15+ years of research and interaction with companies offering telecom and cloud services.
 
 
 .. toctree::
