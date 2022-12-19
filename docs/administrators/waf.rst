@@ -28,6 +28,7 @@ to set this up with Apache HTTPD, but similar rules could also be applied to NGI
                 # Or limit access to certain users or prefixes
                 # Allow from 10.x.x.x/24
             </Location>
+
     3b. Only proxy the calls that the orchestrator has endpoints for. Everything else will be handled by the reverse proxy:
 
         .. code-block:: apacheconf

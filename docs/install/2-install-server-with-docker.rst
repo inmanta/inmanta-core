@@ -254,13 +254,15 @@ Setting environment variables
 
 You might want your inmanta server to be able to reach some environment variables.
 There are two ways you can achieve this:
- 1. Set the environment variables with docker, either using the ``--env`` argument or in your
-    docker-compose file.  Those variables will be accessible to the inmanta server and any
-    agent it starts, but not to any other process running in the container (if you for example
-    login via ssh to the container and try to install a project again).
- 2. (Recommended) Set the environment variables in a file and mount it to the following path in the
-    container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for
-    every session that the inmanta user starts in the container.
+
+    1.  Set the environment variables with docker, either using the ``--env`` argument or in your
+        docker-compose file.  Those variables will be accessible to the inmanta server and any
+        agent it starts, but not to any other process running in the container (if you for example
+        login via ssh to the container and try to install a project again).
+
+    2.  (Recommended) Set the environment variables in a file and mount it to the following path in the
+        container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for
+        every session that the inmanta user starts in the container.
 
 .. only:: oss
 

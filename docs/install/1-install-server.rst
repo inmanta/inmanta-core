@@ -125,7 +125,7 @@ Install the software
 
             If you want to use the web-console you need to install it as well:
 
-            Get the pre-built package from our `web-console github page<https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
+            Get the pre-built package from our `web-console github page <https://github.com/inmanta/web-console/packages/>`_. Click on the the package name to go to the package's main page, then on the right hand side under ``Assets``, you will see the compressed package. Download and extract it to your desired directory (preferably, on the same virtual env which was created earlier, in this case, /opt/inmanta). Next, open the ``inmanta.cfg`` file and at the bottom of the file, under the ``[web-console]`` section, change the ``path`` value to the ``dist`` directory of where you extracted the pre-built package. For instance:
 
             .. code-block:: ini
 
