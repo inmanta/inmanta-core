@@ -14,9 +14,9 @@ Install the software
 
     .. tab-set::
 
-        .. tab-item:: RHEL 8 and 9
+        .. tab-item:: RHEL 8
 
-            For RHEL, Almalinux and Rockylinux 8 and 9  based systems use dnf:
+            For RHEL, Almalinux and Rockylinux 8 based systems use dnf:
 
             .. code-block:: sh
 
@@ -186,12 +186,12 @@ Install the software
 
     .. code-block:: sh
 
-        [inmanta-service-orchestrator-6-stable]
-        name=inmanta-service-orchestrator-6-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
+        [inmanta-service-orchestrator-5-stable]
+        name=inmanta-service-orchestrator-5-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-5-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-5-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt
