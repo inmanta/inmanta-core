@@ -88,7 +88,47 @@ device is remote with respect to the Inmanta agent and the agent has to execute 
 Step 1: Installing the required Inmanta packages
 ================================================
 
-.. include:: ./configure-agents/install-packages.inc
+.. only:: oss
+
+    In order to run a manually started agent, the ``inmanta-oss-agent`` package is required on the
+    machine that will run the agent.
+
+    .. code-block:: sh
+
+        sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
+        [inmanta-oss-stable]
+        name=Inmanta OSS stable
+        baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
+        gpgcheck=1
+        gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+        repo_gpgcheck=1
+        enabled=1
+        enabled_metadata=1
+        EOF
+
+        sudo dnf install -y inmanta-oss-agent
+
+.. only:: iso
+
+    In order to run a manually started agent, the ``inmanta-service-orchestrator-agent`` package is required on the
+    machine that will run the agent.
+
+    .. code-block:: sh
+
+        sudo tee /etc/yum.repos.d/inmanta.repo <<EOF
+        [inmanta-service-orchestrator-6-stable]
+        name=inmanta-service-orchestrator-6-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
+        gpgcheck=1
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        repo_gpgcheck=1
+        enabled=1
+        enabled_metadata=1
+        EOF
+
+        sudo dnf install -y inmanta-service-orchestrator-agent
+
+    Replace ``<token>`` with the token provided with your license.
 
 
 Step 2: Configuring the manually-started agent

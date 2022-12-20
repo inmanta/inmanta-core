@@ -1,0 +1,52 @@
+import lsm
+import lsm::fsm
+import ip
+
+entity ServiceX extends lsm::ServiceEntity:
+    """
+        The API of ServiceX.
+
+        :attr service_id: A unique ID for this service.
+
+        :attr customer_router_name: The name of the router on the customer side.
+        :attr customer_router_system_ip: The system ip of the router on the customer side.
+        :attr customer_router_vendor: The vendor of the router on the customer side.
+        :attr customer_router_chassis: The chassis of the router on the customer side.
+
+        :attr provider_router_name: The name of the router on the provider side.
+        :attr provider_router_system_ip: The system ip of the router on the provider side.
+        :attr provider_router_vendor: The vendor of the router on the provider side.
+        :attr provider_router_chassis: The chassis of the router on the provider side.
+    """
+    string service_id
+
+    string customer_router_name
+    ip::ip customer_router_system_ip
+    lsm::attribute_modifier customer_router_system_ip__modifier="rw+"
+    string customer_router_vendor
+    string customer_router_chassis
+
+    string provider_router_name
+    ip::ip provider_router_system_ip
+    lsm::attribute_modifier provider_router_system_ip__modifier="rw+"
+    string provider_router_vendor
+    string provider_router_chassis
+end
+
+index ServiceX(service_id)
+
+implement ServiceX using parents
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::ServiceX",
+    lifecycle=lsm::fsm::service,
+    service_entity_name="service_x",
+)
+
+for instance in lsm::all(binding):
+    ServiceX(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        **instance["attributes"],
+    )
+end

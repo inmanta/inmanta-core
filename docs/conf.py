@@ -124,7 +124,7 @@ release = version
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
-exclude_patterns = ['extensions.rst', 'adr/*.md']
+exclude_patterns = ['adr/*.md']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -150,12 +150,6 @@ pygments_style = 'sphinx'
 # -- Options for HTML output ---------------------------------------------------
 
 html_theme = "furo"
-
-html_css_files = [
-      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
-      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
-      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
-]
 
 html_theme_options = {
     "footer_icons": [
@@ -341,9 +335,5 @@ linkcheck_ignore = [
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
 ]
-
-# Do not print the warning that tabs only work in html
-# https://github.com/djungelorm/sphinx-tabs/issues/39
-sphinx_tabs_nowarn = True
 
 graphviz_output_format = "svg"
