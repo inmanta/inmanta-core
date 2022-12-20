@@ -1,0 +1,71 @@
+# file included in documentation (allocation.rst)
+import lsm
+import lsm::fsm
+
+entity VlanAssignment extends lsm::ServiceEntity:
+    string name
+
+    int? vlan_id
+    lsm::attribute_modifier vlan_id__modifier="r"
+end
+
+implement VlanAssignment using parents, do_deploy
+implement VlanAssignment using de_allocation when lsm::has_current_state(self, "deallocating")
+
+entity PGAllocation extends std::PurgeableResource:
+    """
+        This entity ensures that an identifier allocated in PostgreSQL
+        gets de-allocated when the service instance is removed.
+    """
+   string attribute
+   std::uuid service_id
+   string agent
+end
+
+implement PGAllocation using std::none
+
+implementation de_allocation for VlanAssignment:
+    """
+        De-allocate the vlan_id identifier.
+    """
+    self.resources += PGAllocation(
+        attribute="vlan_id",
+        service_id=instance_id,
+        purged=true,
+        send_event=true,
+        agent="internal",
+        requires=self.requires,
+        provides=self.provides,
+    )
+end
+
+binding = lsm::ServiceEntityBinding(
+    service_entity="vlan_assignment::VlanAssignment",
+    lifecycle=lsm::fsm::simple_with_deallocation,
+    service_entity_name="vlan-assignment",
+    allocation_spec="allocate_vlan",
+)
+
+for assignment in lsm::all(binding):
+    VlanAssignment(
+        instance_id=assignment["id"],
+        entity_binding=binding,
+        **assignment["attributes"],
+    )
+end
+
+
+# docs cut off here.
+import unittest
+
+implementation do_deploy for VlanAssignment:
+    r1 = unittest::Resource(
+           name=self.instance_id,
+           desired_value="{{self.vlan_id}}",
+           send_event=true,
+           purged=self.purge_resources,
+           requires=self.requires,
+           provides=self.provides,
+    )
+    self.resources += r1
+end

@@ -1548,10 +1548,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                                        `first-type.relation-name` and only then `then-type.relation-name`.
     :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
                               should check the virtual environment for version conflicts in a strict way or not.
-                                * A strict check means that all transitive dependencies will be checked for version conflicts
-                                  and that any violation will result in an error
-                                * When a non-strict check is done, only version conflicts in a direct dependency will result
-                                  in an error. All other violations will only result in a warning message.
+                              A strict check means that all transitive dependencies will be checked for version conflicts
+                              and that any violation will result in an error.
+                              When a non-strict check is done, only version conflicts in a direct dependency will result
+                              in an error. All other violations will only result in a warning message.
     :param agent_install_dependency_modules: [EXPERIMENTAL FEATURE] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
