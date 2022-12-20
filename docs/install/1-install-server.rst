@@ -188,10 +188,10 @@ Install the software
 
         [inmanta-service-orchestrator-6-stable]
         name=inmanta-service-orchestrator-6-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-6-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-6-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt
