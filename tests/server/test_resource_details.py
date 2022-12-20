@@ -127,7 +127,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file1",
             ResourceState.undefined,
             1,
-            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1],v=1"]},
+            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
@@ -138,7 +138,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -150,7 +150,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=3", "std::File[internal,path=/tmp/dir1/file2],v=3"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -162,7 +162,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=4", "std::File[internal,path=/tmp/dir1/file2],v=4"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -174,7 +174,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=5", "std::File[internal,path=/tmp/dir1/file2],v=5"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -216,7 +216,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             2,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=2"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -224,7 +224,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             3,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=3"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -232,7 +232,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deploying,
             4,
-            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
+            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
 
@@ -285,7 +285,7 @@ async def env_with_resources(server, client):
             "/etc/deployed_only_in_earlier_version",
             ResourceState.deployed,
             3,
-            {"key7": "val7", "requires": ["std::File[internal,path=/etc/requirement_in_later_version],v=3"]},
+            {"key7": "val7", "requires": ["std::File[internal,path=/etc/requirement_in_later_version]"]},
         )
     )
 
@@ -319,7 +319,7 @@ async def env_with_resources(server, client):
             "/tmp/orphaned",
             ResourceState.deployed,
             3,
-            {"key9": "val9", "requires": ["std::File[internal,path=/tmp/orphaned_req],v=3"]},
+            {"key9": "val9", "requires": ["std::File[internal,path=/tmp/orphaned_req]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/orphaned_req]"].append(
@@ -337,7 +337,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.unavailable,
             4,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
             resource_type="std::Directory",
             environment=env2.id,
         )
@@ -363,7 +363,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=6", "std::File[internal,path=/tmp/dir1/file2],v=6"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
             environment=env3.id,
         )
