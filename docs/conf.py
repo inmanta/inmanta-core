@@ -28,13 +28,10 @@ from sphinx.errors import ConfigError
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
-    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
-    'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_design',
-    'myst_parser',
+    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
+    'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
+    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'recommonmark'
 ]
-
-myst_enable_extensions = ["colon_fence"]
 
 def setup(app):
     # cut off license headers
@@ -124,7 +121,7 @@ release = version
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
-exclude_patterns = ['extensions.rst', 'adr/*.md']
+exclude_patterns = ['extensions.rst']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -149,36 +146,18 @@ pygments_style = 'sphinx'
 
 # -- Options for HTML output ---------------------------------------------------
 
-html_theme = "furo"
-
 html_theme_options = {
-    "footer_icons": [
-        {
-            "name": "Website",
-            "url": "https://inmanta.com",
-            "class": "fa-solid fa-globe",
-        },
-        {
-            "name": "Linkedin",
-            "url": "https://www.linkedin.com/company/inmanta-nv/",
-            "class": "fa-brands fa-linkedin",
-        },
-        {
-            "name": "Twitter",
-            "url": "https://twitter.com/inmanta_com",
-            "class": "fa-brands fa-twitter",
-        },
-        {
-            "name": "GitHub",
-            "url": "https://github.com/inmanta",
-            "class": "fa-brands fa-github",
-        },
-    ],
+    'logo_only': True,
+    'display_version': True,
 }
+import sphinx_rtd_theme
+
+html_theme = "sphinx_rtd_theme"
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-html_title = f"Inmanta OSS {release}"
+# html_title = None
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 # html_short_title = None
@@ -206,7 +185,9 @@ html_static_path = ['_static']
 # html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-# html_sidebars = {}
+html_sidebars = {
+   '**': ['globaltoc.html', 'sourcelink.html', 'searchbox.html']
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -225,7 +206,7 @@ html_static_path = ['_static']
 html_show_sourcelink = False
 
 # If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
-html_show_sphinx = False
+# html_show_sphinx = True
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = True
@@ -242,10 +223,7 @@ html_show_copyright = True
 htmlhelp_basename = 'InmantaDoc'
 
 html_css_files = [
-    "css/custom.css",
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
-    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
+    'css/custom.css',
 ]
 
 
@@ -253,7 +231,7 @@ html_css_files = [
 
 latex_elements = {
 # The paper size ('letterpaper' or 'a4paper').
-    'papersize': 'a4paper',
+# 'papersize': 'letterpaper',
 
 # The font size ('10pt', '11pt' or '12pt').
 # 'pointsize': '10pt',
@@ -332,8 +310,8 @@ linkcheck_ignore = [
     r'openapi.html',
     r'https://twitter.com/inmanta_com',
     '../_specs/openapi.json',
-    'extensions/inmanta-ui/index.html',
-    '../extensions/inmanta-ui/index.html',
 ]
 
-graphviz_output_format = "svg"
+# Do not print the warning that tabs only work in html
+# https://github.com/djungelorm/sphinx-tabs/issues/39
+sphinx_tabs_nowarn = True
