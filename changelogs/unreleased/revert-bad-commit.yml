@@ -1,5 +1,4 @@
-description: Set the repo url correctly
+description: Revert a bad commit
 change-type: patch
 destination-branches:
   - master
-  - iso6
