@@ -4226,7 +4226,7 @@ class Resource(BaseDocument):
         character = json.dumps(
             {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
             default=custom_json_encoder,
-            sort_keys=True,
+            sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
         )
         m = hashlib.md5()
         m.update(self.resource_id.encode("utf-8"))
