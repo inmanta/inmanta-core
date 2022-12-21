@@ -334,6 +334,7 @@ linkcheck_ignore = [
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
+    '../../../reference/modules/std.html#std.validate_type',
 ]
 
 graphviz_output_format = "svg"
