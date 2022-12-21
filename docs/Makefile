@@ -10,7 +10,7 @@ BUILDDIR      = build
 endif
 SOURCEDIR	  = .
 #IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
-IMAGEDIRS     = _static model_developers/images
+IMAGEDIRS     = _static model_developers/images lsm
 
 # SVG to PDF conversion
 # support inkscape versions <1.0 and >1.0
