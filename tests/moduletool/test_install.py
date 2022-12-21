@@ -1133,7 +1133,7 @@ def test_real_time_logging(caplog):
     # "two" should be logged at least one second after "one"
     delta: float = (last_log_line_time - first_log_line_time).total_seconds()
     expected_delta = 1
-    fault_tolerance = 0.01
+    fault_tolerance = 0.1
     assert abs(delta - expected_delta) <= fault_tolerance
 
 
