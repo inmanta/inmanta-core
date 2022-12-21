@@ -1,4 +1,4 @@
 ---
-description: Fix bug that makes the `resource_history` endpoint crash with the exception `ValueError: Version is missing from resource id: <resource_id>`.
+description: "Fix bug that makes the `resource_history` endpoint crash with the exception `ValueError: Version is missing from resource id: <resource_id>`."
 change-type: patch
 destination-branches: [master, iso6]
