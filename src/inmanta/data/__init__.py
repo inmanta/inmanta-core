@@ -4463,9 +4463,6 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
-        if "attributes" in kwargs and "requires" in kwargs["attributes"]:
-            assert all(not resources.Id.is_resource_version_id(rid) for rid in kwargs["attributes"]["requires"])
-
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
