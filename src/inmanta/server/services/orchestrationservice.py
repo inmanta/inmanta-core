@@ -20,7 +20,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from typing import Dict, List, Literal, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import Dict, List, Literal, Mapping, Optional, Sequence, Set, cast
 
 import asyncpg
 import asyncpg.connection
@@ -28,15 +28,8 @@ import pydantic
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import (
-    APILIMIT,
-    AVAILABLE_VERSIONS_TO_KEEP,
-    ENVIRONMENT_AGENT_TRIGGER_METHOD,
-    PURGE_ON_DELETE,
-    DesiredStateVersionOrder,
-    InvalidSort,
-    QueryType,
-)
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort
+from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
     PromoteTriggerMethod,
@@ -45,11 +38,9 @@ from inmanta.data.model import (
     ResourceMinimal,
     ResourceVersionIdStr,
 )
-from inmanta.data.paging import DesiredStateVersionPagingCountsProvider, DesiredStateVersionPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -63,7 +54,7 @@ from inmanta.server import config as opt
 from inmanta.server import diff, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
-from inmanta.server.validate_filter import DesiredStateVersionFilterValidator, InvalidFilter
+from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
@@ -382,6 +373,7 @@ class OrchestrationService(protocol.ServerSlice):
         for env_item in envs:
             # get available versions
             n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
+            assert isinstance(n_versions, int)
             versions = await data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
@@ -560,12 +552,16 @@ class OrchestrationService(protocol.ServerSlice):
             if "requires" not in attributes:
                 LOGGER.warning("Received resource without requires attribute (%s)" % res_obj.resource_id)
             else:
+                # Collect all requires as resource_ids instead of resource version ids
+                cleaned_requires = []
                 for req in attributes["requires"]:
                     rid = Id.parse_id(req)
                     provides_tree[rid.resource_str()].append(resc_id)
                     if rid.get_agent_name() != agent:
                         # it is a CAD
                         cross_agent_dep.append((res_obj, rid))
+                    cleaned_requires.append(rid.resource_str())
+                attributes["requires"] = cleaned_requires
         resource_ids = {res.resource_id for res in resource_objects}
         superfluous_ids = set(resource_sets.keys()) - resource_ids
         if superfluous_ids:
@@ -582,7 +578,7 @@ class OrchestrationService(protocol.ServerSlice):
         # hook up all CADs
         for f, t in cross_agent_dep:
             res_obj = rv_dict[t.resource_str()]
-            res_obj.provides.append(f.resource_version_id)
+            res_obj.provides.append(f.resource_id)
 
         # detect failed compiles
         def safe_get(input: object, key: str, default: object) -> object:
@@ -632,7 +628,7 @@ class OrchestrationService(protocol.ServerSlice):
                         req_res = rv_dict[req_id.resource_str()]
 
                         req_res.attributes["requires"].append(res_obj.resource_version_id)
-                        res_obj.provides.append(req_res.resource_version_id)
+                        res_obj.provides.append(req_res.resource_id)
 
         undeployable_ids: List[str] = [res.resource_id for res in undeployable]
         # get skipped for undeployable
@@ -733,6 +729,23 @@ class OrchestrationService(protocol.ServerSlice):
             result.append(unknown_parameter)
         return result
 
+    async def _put_version_lock(self, env: data.Environment, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared once.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        await connection.execute(
+            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
+            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
+            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
+            # integer while Postgres expects a signed one, we shift it by 2**31.
+            f"SELECT {lock}({const.PG_ADVISORY_KEY_PUT_VERSION}, {env.id.time_low - 2**31})"
+        )
+
     @handle(methods.put_version, env="tid")
     async def put_version(
         self,
@@ -759,8 +772,8 @@ class OrchestrationService(protocol.ServerSlice):
         unknown_objs = self._create_unknown_from_dct(env.id, version, unknowns)
         async with data.Resource.get_connection() as con:
             async with con.transaction():
-                # Acquire a lock that conflicts with the lock acquired by put_partial.
-                await data.Resource.lock_table(data.TableLockMode.ROW_EXCLUSIVE, connection=con)
+                # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
+                await self._put_version_lock(env, shared=True, connection=con)
                 await self._put_version(
                     env, version, resources, resource_state, unknown_objs, version_info, resource_sets, connection=con
                 )
@@ -817,8 +830,8 @@ class OrchestrationService(protocol.ServerSlice):
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():
-                # Acquire a lock that conflicts with itself and with the lock acquired by put_version.
-                await data.Resource.lock_table(data.TableLockMode.SHARE_ROW_EXCLUSIVE, connection=con)
+                # Acquire a lock that conflicts with itself and with the lock acquired by put_version
+                await self._put_version_lock(env, shared=False, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
                 version: int = await env.get_next_version(connection=con)
@@ -884,43 +897,44 @@ class OrchestrationService(protocol.ServerSlice):
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
-        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-
         now = datetime.datetime.now().astimezone()
 
-        # not checking error conditions
-        await self.resource_service.resource_action_update(
-            env,
-            undep_ids,
-            action_id=uuid.uuid4(),
-            started=now,
-            finished=now,
-            status=const.ResourceState.undefined,
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[],
-            change=const.Change.nochange,
-            send_events=False,
-            connection=connection,
-        )
+        if undep:
+            undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
+            # not checking error conditions
+            await self.resource_service.resource_action_update(
+                env,
+                undep_ids,
+                action_id=uuid.uuid4(),
+                started=now,
+                finished=now,
+                status=const.ResourceState.undefined,
+                action=const.ResourceAction.deploy,
+                changes={},
+                messages=[],
+                change=const.Change.nochange,
+                send_events=False,
+                connection=connection,
+            )
 
-        skippable = await model.get_skipped_for_undeployable()
-        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-        # not checking error conditions
-        await self.resource_service.resource_action_update(
-            env,
-            skippable_ids,
-            action_id=uuid.uuid4(),
-            started=now,
-            finished=now,
-            status=const.ResourceState.skipped_for_undefined,
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[],
-            change=const.Change.nochange,
-            send_events=False,
-            connection=connection,
-        )
+            skippable = await model.get_skipped_for_undeployable()
+            if skippable:
+                skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                # not checking error conditions
+                await self.resource_service.resource_action_update(
+                    env,
+                    skippable_ids,
+                    action_id=uuid.uuid4(),
+                    started=now,
+                    finished=now,
+                    status=const.ResourceState.skipped_for_undefined,
+                    action=const.ResourceAction.deploy,
+                    changes={},
+                    messages=[],
+                    change=const.Change.nochange,
+                    send_events=False,
+                    connection=connection,
+                )
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
@@ -1002,52 +1016,17 @@ class OrchestrationService(protocol.ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "version.desc",
     ) -> ReturnValue[List[DesiredStateVersion]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(DesiredStateVersionFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
         try:
-            resource_order = DesiredStateVersionOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-        try:
-            dtos = await data.ConfigurationModel.get_desired_state_versions(
-                database_order=resource_order,
+            return await DesiredStateVersionView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                filter=filter,
+                sort=sort,
                 start=start,
                 end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = DesiredStateVersionPagingHandler(DesiredStateVersionPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            start=start,
-            end=end,
-            first_id=None,
-            last_id=None,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            ).execute()
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @handle(methods_v2.promote_desired_state_version, env="tid")
     async def promote_desired_state_version(

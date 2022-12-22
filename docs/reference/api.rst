@@ -196,7 +196,8 @@ Python Environment
     :undoc-members:
 
 Variables
-------
+----------
+
 .. autoclass:: inmanta.ast.variables.Reference
     :members: name
     :undoc-members:
@@ -383,3 +384,12 @@ sort
 
 .. automodule:: inmanta.protocol.methods_v2
     :members:
+
+Server
+------
+
+.. autoclass:: inmanta.server.extensions.ApplicationContext
+    :show-inheritance:
+
+.. autoclass:: inmanta.server.bootloader.InmantaBootloader
+    :show-inheritance:

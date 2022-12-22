@@ -1,0 +1,7 @@
+---
+description: Remove support for hyphens in identifiers. An exception will now be raised.
+change-type: major
+issue-nr: 4976
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

@@ -24,7 +24,7 @@ from jinja2 import Environment, PackageLoader
 
 from inmanta.ast import CompilerException, ModifiedAfterFreezeException
 from inmanta.ast.statements import AssignStatement
-from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.generator import Constructor, IndexCollisionException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
 
@@ -184,6 +184,25 @@ class ModuleV2InV1PathExplainer(JinjaExplainer[ModuleV2InV1PathException]):
         }
 
 
+class IndexCollisionExplainer(JinjaExplainer[IndexCollisionException]):
+    """
+    Explainer for IndexCollisionException
+    """
+
+    explainable_type: Type[IndexCollisionException] = IndexCollisionException
+
+    def __init__(self) -> None:
+        super().__init__("index_collision.j2")
+
+    def get_arguments(self, problem: IndexCollisionException) -> Mapping[str, object]:
+        return {
+            "constructor_str": problem.constructor.pretty_print(),
+            "constructor_loc": problem.constructor.location,
+            "constructor_name": problem.constructor.class_type,
+            "collisions": {",".join(index): instance for index, instance in problem.collisions.items()},
+        }
+
+
 def escape_ansi(line: str) -> str:
     ansi_escape = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", line)
@@ -191,7 +210,7 @@ def escape_ansi(line: str) -> str:
 
 class ExplainerFactory:
     def get_explainers(self) -> Sequence[ExplainerABC]:
-        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer()]
+        return [ModifiedAfterFreezeExplainer(), ModuleV2InV1PathExplainer(), IndexCollisionExplainer()]
 
     def explain(self, problem: CompilerException) -> List[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]

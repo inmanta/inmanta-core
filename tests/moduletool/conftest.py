@@ -94,6 +94,12 @@ def modules_repo(git_modules_dir) -> str:
     |        |             | 3.2      |
     +--------+-------------+----------+
     |        |             | 3.3.dev  |
+    +--------+-------------+----------+
+    | mod12  |             | 3.2.1    |
+    +--------+-------------+----------+
+    |        |             | 4.0.0.dev0 |
+    +--------+-------------+----------+
+    |        |             | 4.0.0    |
     +--------+-------------+----------+"""
     tempdir = git_modules_dir
 
@@ -136,6 +142,10 @@ def modules_repo(git_modules_dir) -> str:
     add_file(mod11, "file", "test", "release version 4.1.0", version="4.1.0")
     add_file(mod11, "file", "test", "release version 4.1.2", version="4.1.2")
     add_file(mod11, "file", "test", "release version 4.2.0", version="4.2.0")
+
+    mod12 = make_module_simple(reporoot, "mod12", version="3.2.1")
+    add_file(mod12, "file", "test", "release version 4.0.0.dev0", version="4.0.0.dev0")
+    add_file(mod12, "file", "test", "release version 4.0.0", version="4.0.0")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]

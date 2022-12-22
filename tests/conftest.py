@@ -15,6 +15,9 @@
 
     Contact: code@inmanta.com
 """
+import warnings
+
+import toml
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -55,7 +58,6 @@ The deactive_venv autouse fixture cleans up all venv activation and resets inman
 environment.
 """
 
-
 import asyncio
 import concurrent
 import csv
@@ -77,6 +79,7 @@ import time
 import traceback
 import uuid
 import venv
+from collections import abc
 from configparser import ConfigParser
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -109,14 +112,15 @@ from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import SliceStartupException
+from inmanta.server.protocol import Server, SliceStartupException
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
+from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
 
@@ -190,13 +194,27 @@ def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
 
 def pytest_runtest_setup(item: "pytest.Item"):
     """
-    When in fast mode, skip test marked as slow
+    When in fast mode, skip test marked as slow and db_migration tests that are older than 30 days.
     """
     is_fast = item.config.getoption("fast")
     if not is_fast:
         return
     if any(True for mark in item.iter_markers(name="slowtest")):
         pytest.skip("Skipping slow tests")
+
+    file_name: str = item.location[0]
+    if file_name.startswith("tests/db/migration_tests"):
+        match: Optional[re.Match] = re.fullmatch("tests/db/migration_tests/test_v[0-9]{9}_to_v([0-9]{8})[0-9].py", file_name)
+        if not match:
+            pytest.fail(
+                "The name of the test file might be incorrect: Should be test_v<old_version>_to_v<new_version>.py or the test "
+                "should have the @slowtest annotation"
+            )
+        timestamp: str = match.group(1)
+        test_creation_date: datetime.datetime = datetime.datetime(int(timestamp[0:4]), int(timestamp[4:6]), int(timestamp[6:8]))
+        elapsed_days: int = (datetime.datetime.today() - test_creation_date).days
+        if elapsed_days > 30:
+            pytest.skip("Skipping old migration test")
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -219,6 +237,19 @@ def postgres_db(request: pytest.FixtureRequest):
 
     logger.info("Using database fixture %s", fixture)
     yield request.getfixturevalue(fixture)
+
+
+@pytest.fixture
+async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[None]:
+    """
+    Fixture meant for debugging through manual interaction with the database. Run pytest with `-s/--capture=no`.
+    """
+    yield
+    print(
+        "Connection to DB will be kept alive for one hour. Connect with"
+        f" `psql --host localhost --port {postgres_db.port} {database_name} {postgres_db.user}`"
+    )
+    await asyncio.sleep(3600)
 
 
 @pytest.fixture
@@ -505,6 +536,15 @@ async def clean_reset(create_db, clean_db, deactive_venv):
     data.Environment._settings = default_settings
 
 
+@pytest.fixture(scope="session", autouse=True)
+def clean_reset_session():
+    """
+    Execute cleanup tasks that should only run at the end of the test suite.
+    """
+    yield
+    IsolatedEnvBuilderCached.get_instance().destroy()
+
+
 def reset_all_objects():
     resources.resource.reset()
     asyncio.set_child_watcher(None)
@@ -515,6 +555,13 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    compiler.Finalizers.reset_finalizers()
+
+
+@pytest.fixture()
+def disable_isolated_env_builder_cache() -> None:
+    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -687,34 +734,32 @@ def log_state_tcp_ports(request, log_file):
 async def server_config(event_loop, inmanta_config, postgres_db, database_name, clean_reset, unused_tcp_port_factory):
     reset_metrics()
 
-    state_dir = tempfile.mkdtemp()
+    with tempfile.TemporaryDirectory() as state_dir:
+        port = str(unused_tcp_port_factory())
 
-    port = str(unused_tcp_port_factory())
-
-    config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "username", postgres_db.user)
-    config.Config.set("database", "password", postgres_db.password)
-    config.Config.set("database", "connection_timeout", str(3))
-    config.Config.set("config", "state-dir", state_dir)
-    config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("agent_rest_transport", "port", port)
-    config.Config.set("compiler_rest_transport", "port", port)
-    config.Config.set("client_rest_transport", "port", port)
-    config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("server", "agent-process-purge-interval", "0")
-    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
-    config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("agent", "agent-repair-interval", "0")
-    yield config
-    shutil.rmtree(state_dir)
+        config.Config.set("database", "name", database_name)
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(postgres_db.port))
+        config.Config.set("database", "username", postgres_db.user)
+        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("config", "state-dir", state_dir)
+        config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
+        config.Config.set("agent_rest_transport", "port", port)
+        config.Config.set("compiler_rest_transport", "port", port)
+        config.Config.set("client_rest_transport", "port", port)
+        config.Config.set("cmdline_rest_transport", "port", port)
+        config.Config.set("server", "bind-port", port)
+        config.Config.set("server", "bind-address", "127.0.0.1")
+        config.Config.set("server", "agent-process-purge-interval", "0")
+        config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
+        config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("agent", "agent-repair-interval", "0")
+        yield config
 
 
 @pytest.fixture(scope="function")
-async def server(server_pre_start):
+async def server(server_pre_start) -> abc.AsyncIterator[Server]:
     """
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
@@ -756,76 +801,73 @@ async def server_multi(
     :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
     May not be required
     """
-    state_dir = tempfile.mkdtemp()
+    with tempfile.TemporaryDirectory() as state_dir:
+        ssl, auth, ca = request.param
 
-    ssl, auth, ca = request.param
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        if auth:
+            config.Config.set("server", "auth", "true")
 
-    if auth:
-        config.Config.set("server", "auth", "true")
+        for x, ct in [
+            ("server", None),
+            ("agent_rest_transport", ["agent"]),
+            ("compiler_rest_transport", ["compiler"]),
+            ("client_rest_transport", ["api", "compiler"]),
+            ("cmdline_rest_transport", ["api"]),
+        ]:
+            if ssl and not ca:
+                config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+                config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+                config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+                config.Config.set(x, "ssl", "True")
+            if ssl and ca:
+                capath = os.path.join(path, "ca", "enduser-certs")
 
-    for x, ct in [
-        ("server", None),
-        ("agent_rest_transport", ["agent"]),
-        ("compiler_rest_transport", ["compiler"]),
-        ("client_rest_transport", ["api", "compiler"]),
-        ("cmdline_rest_transport", ["api"]),
-    ]:
-        if ssl and not ca:
-            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
-            config.Config.set(x, "ssl", "True")
-        if ssl and ca:
-            capath = os.path.join(path, "ca", "enduser-certs")
+                config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
+                config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
+                config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
+                config.Config.set(x, "ssl", "True")
+            if auth and ct is not None:
+                token = protocol.encode_token(ct)
+                config.Config.set(x, "token", token)
 
-            config.Config.set(x, "ssl_cert_file", os.path.join(capath, "server.crt"))
-            config.Config.set(x, "ssl_key_file", os.path.join(capath, "server.key.open"))
-            config.Config.set(x, "ssl_ca_cert_file", os.path.join(capath, "server.chain"))
-            config.Config.set(x, "ssl", "True")
-        if auth and ct is not None:
-            token = protocol.encode_token(ct)
-            config.Config.set(x, "token", token)
+        port = str(unused_tcp_port_factory())
+        config.Config.set("database", "name", database_name)
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(postgres_db.port))
+        config.Config.set("database", "username", postgres_db.user)
+        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "connection_timeout", str(3))
+        config.Config.set("config", "state-dir", state_dir)
+        config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
+        config.Config.set("agent_rest_transport", "port", port)
+        config.Config.set("compiler_rest_transport", "port", port)
+        config.Config.set("client_rest_transport", "port", port)
+        config.Config.set("cmdline_rest_transport", "port", port)
+        config.Config.set("server", "bind-port", port)
+        config.Config.set("server", "bind-address", "127.0.0.1")
+        config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
+        config.Config.set("server", "agent-timeout", "2")
+        config.Config.set("agent", "agent-repair-interval", "0")
 
-    port = str(unused_tcp_port_factory())
-    config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "username", postgres_db.user)
-    config.Config.set("database", "password", postgres_db.password)
-    config.Config.set("database", "connection_timeout", str(3))
-    config.Config.set("config", "state-dir", state_dir)
-    config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("agent_rest_transport", "port", port)
-    config.Config.set("compiler_rest_transport", "port", port)
-    config.Config.set("client_rest_transport", "port", port)
-    config.Config.set("cmdline_rest_transport", "port", port)
-    config.Config.set("server", "bind-port", port)
-    config.Config.set("server", "bind-address", "127.0.0.1")
-    config.Config.set("config", "executable", os.path.abspath(inmanta.app.__file__))
-    config.Config.set("server", "agent-timeout", "2")
-    config.Config.set("agent", "agent-repair-interval", "0")
+        ibl = InmantaBootloader()
 
-    ibl = InmantaBootloader()
+        try:
+            await ibl.start()
+        except SliceStartupException as e:
+            port = config.Config.get("server", "bind-port")
+            output = subprocess.check_output(["ss", "-antp"])
+            output = output.decode("utf-8")
+            logger.debug(f"Port: {port}")
+            logger.debug(f"Port usage: \n {output}")
+            raise e
 
-    try:
-        await ibl.start()
-    except SliceStartupException as e:
-        port = config.Config.get("server", "bind-port")
-        output = subprocess.check_output(["ss", "-antp"])
-        output = output.decode("utf-8")
-        logger.debug(f"Port: {port}")
-        logger.debug(f"Port usage: \n {output}")
-        raise e
-
-    yield ibl.restserver
-    try:
-        await ibl.stop(timeout=15)
-    except concurrent.futures.TimeoutError:
-        logger.exception("Timeout during stop of the server in teardown")
-
-    shutil.rmtree(state_dir)
+        yield ibl.restserver
+        try:
+            await ibl.stop(timeout=15)
+        except concurrent.futures.TimeoutError:
+            logger.exception("Timeout during stop of the server in teardown")
 
 
 @pytest.fixture(scope="function")
@@ -853,8 +895,12 @@ def clienthelper(client, environment):
 
 @pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
+    # Ensure that the test suite uses the same config for warnings as the default config used by the CLI tools.
     logging.captureWarnings(True)
+    cmd_parser = inmanta.app.cmd_parser()
+    WarningsManager.apply_config({"default": cmd_parser.get_default("warnings")})
     yield
+    warnings.resetwarnings()
     logging.captureWarnings(False)
 
 
@@ -977,8 +1023,9 @@ class ReentrantVirtualEnv(VirtualEnv):
         self.working_set = None
 
     def deactivate(self):
-        self._using_venv = False
-        self.working_set = pkg_resources.working_set
+        if self._using_venv:
+            self._using_venv = False
+            self.working_set = pkg_resources.working_set
 
     def use_virtual_env(self) -> None:
         """
@@ -1336,7 +1383,7 @@ def modules_dir() -> str:
 
 
 @pytest.fixture(scope="session")
-def modules_v2_dir():
+def modules_v2_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 
@@ -1363,11 +1410,15 @@ class CLI(object):
 
 
 @pytest.fixture
-def cli():
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    o = CLI()
-    yield o
+def cli(caplog):
+    # caplog will break this code when emitting any log line to cli
+    # due to mysterious interference when juggling with sys.stdout
+    # https://github.com/pytest-dev/pytest/issues/10553
+    with caplog.at_level(logging.FATAL):
+        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+        o = CLI()
+        yield o
 
 
 class AsyncCleaner(object):
@@ -1395,24 +1446,33 @@ class CompileRunnerMock(object):
         self.request = request
         self.version: Optional[int] = None
         self._make_compile_fail = make_compile_fail
+        self._make_pull_fail = False
         self._runner_queue = runner_queue
         self.block = False
 
     async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
         now = datetime.datetime.now()
-        returncode = 1 if self._make_compile_fail else 0
-        report = data.Report(
-            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
-        )
-        await report.insert()
-        self.version = int(time.time())
-        success = not self._make_compile_fail
 
         if self._runner_queue is not None:
             self._runner_queue.put(self)
             self.block = True
             while self.block:
                 await asyncio.sleep(0.1)
+
+        returncode = 1 if self._make_compile_fail else 0
+        report = data.Report(
+            compile=self.request.id, started=now, name="CompileRunnerMock", command="", completed=now, returncode=returncode
+        )
+        await report.insert()
+
+        if self._make_pull_fail:
+            report = data.Report(
+                compile=self.request.id, started=now, name="Pulling updates", command="", completed=now, returncode=1
+            )
+            await report.insert()
+
+        self.version = int(time.time())
+        success = not self._make_compile_fail
 
         return success, None
 
@@ -1615,6 +1675,39 @@ async def migrate_db_from(
     yield migrate
 
     await bootloader.stop(timeout=15)
+
+
+@pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
+def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
+    """
+    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
+    and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
+    """
+    for dir_name in os.listdir(modules_v2_dir):
+        module_path = os.path.join(modules_v2_dir, dir_name)
+        pyproject_toml_path = os.path.join(module_path, "pyproject.toml")
+        error_message = f"""
+Module {module_path} has a pyproject.toml file that is incompatible with the requirements of this test suite.
+The build-backend and the build requirements should be set as follows:
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+All modules present in the tests/data/module_v2 directory should satisfy the above-mentioned requirements, because
+the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
+use the same build-backend and build requirements.
+        """.strip()
+        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+            pyproject_toml_as_dct = toml.load(fh)
+            try:
+                if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(
+                    pyproject_toml_as_dct["build-system"]["requires"]
+                ) != {"setuptools", "wheel"}:
+                    raise Exception(error_message)
+            except (KeyError, TypeError):
+                raise Exception(error_message)
 
 
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)

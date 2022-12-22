@@ -796,7 +796,7 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         "value": "4",
         "version": 2,
         "purged": False,
-        "requires": ["test::Resource[agent1,key=key3],v=2"],
+        "requires": ["test::Resource[agent1,key=key3]"],
         "send_event": False,
     }
     assert resource_list[4].attributes == {

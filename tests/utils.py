@@ -627,16 +627,16 @@ async def resource_action_consistency_check():
 
     async with data.ResourceAction.get_connection() as postgresql_client:
         post_ra_one = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
                     INNER JOIN public.resource as r
-                    ON r.resource_version_id = ANY(ra.resource_version_ids)
+                    ON r.resource_id || ',v=' || r.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
             """
         )
-        all_ra_set = {(r[0], r[1], r[2]) for r in post_ra_one}
+        all_ra_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resource as r
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                          ON r.environment = jt.environment
                         AND r.resource_id = jt.resource_id
@@ -645,6 +645,6 @@ async def resource_action_consistency_check():
                         ON ra.action_id = jt.resource_action_id
             """
         )
-        assert all_ra_set == {(r[0], r[1], r[2]) for r in post_ra_two}
+        assert all_ra_set == {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
 
         assert all_ra_set

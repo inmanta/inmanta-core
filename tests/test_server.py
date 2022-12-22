@@ -259,7 +259,6 @@ async def test_n_versions_env_setting_scope(client, server):
 
     # Create a lot of versions in both environments
     for _ in range(n_many_versions):
-
         env1_version = (await client.reserve_version(env_1_id)).result["data"]
         env2_version = (await client.reserve_version(env_2_id)).result["data"]
 
@@ -999,16 +998,19 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     await cm.insert()
 
     model_version = 1
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
-    rvid_r2_v1 = f"std::File[agent1,path=/etc/file2],v={model_version}"
-    rvid_r3_v1 = f"std::File[agent1,path=/etc/file3],v={model_version}"
+    rvid_r1 = "std::File[agent1,path=/etc/file1]"
+    rvid_r2 = "std::File[agent1,path=/etc/file2]"
+    rvid_r3 = "std::File[agent1,path=/etc/file3]"
+    rvid_r1_v1 = f"{rvid_r1},v={model_version}"
+    rvid_r2_v1 = f"{rvid_r2},v={model_version}"
+    rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
+        attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
@@ -1387,3 +1389,19 @@ async def test_start_location_no_redirect(server):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert base_url == response.effective_url
+
+
+@pytest.mark.parametrize("path", ["", "/", "/test"])
+async def test_redirect_dashboard_to_console(server, path):
+    """
+    Ensure that there is a redirection from the dashboard to the webconsole
+    """
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/dashboard%s" % (port, path)
+    result_url = "http://localhost:%s/console%s" % (port, path)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert result_url == response.effective_url

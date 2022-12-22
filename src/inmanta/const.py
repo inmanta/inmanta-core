@@ -229,7 +229,7 @@ INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 
 class ClientType(str, Enum):
-    # api: The method with this client type can be used by external clients like the Dashboard, cli or 3rd party services
+    # api: The method with this client type can be used by external clients like the Web-console, cli or 3rd party services
     # compiler: The method with this client type is called by the compiler to communicate with the server
     # agent: The method with this client type is called by the agent to communicate with the server
     api = "api"
@@ -326,3 +326,8 @@ class NotificationSeverity(str, Enum):
 
 
 CF_CACHE_DIR = ".cfcache"
+
+PG_ADVISORY_KEY_PUT_VERSION = 1
+
+# The filename of the changelog file in an Inmanta module
+MODULE_CHANGELOG_FILE = "CHANGELOG.md"

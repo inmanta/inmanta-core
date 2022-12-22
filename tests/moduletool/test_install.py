@@ -34,12 +34,14 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.config import Config
-from inmanta.env import ConflictingRequirements, PythonEnvironment
+from inmanta.env import CommandRunner, ConflictingRequirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
 from packaging import version
 from utils import LogSequence, PipIndex, log_contains, module_from_template
+
+LOGGER = logging.getLogger(__name__)
 
 
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
@@ -106,7 +108,7 @@ def test_complex_checkout(git_modules_dir, modules_repo):
 
     # test all tools, perhaps isolate to other test case
     ModuleTool().execute("list", [])
-    ModuleTool().execute("update", [])
+    ProjectTool().execute("update", [])
     ModuleTool().execute("status", [])
     ModuleTool().execute("push", [])
 
@@ -129,7 +131,7 @@ def test_for_git_failures(git_modules_dir, modules_repo):
         # test all tools, perhaps isolate to other test case
         ProjectTool().execute("install", [])
         ModuleTool().execute("list", [])
-        ModuleTool().execute("update", [])
+        ProjectTool().execute("update", [])
         ModuleTool().execute("status", [])
         ModuleTool().execute("push", [])
     finally:
@@ -178,8 +180,8 @@ def test_bad_dep_checkout(git_modules_dir, modules_repo):
         ProjectTool().execute("install", [])
 
 
-def test_master_checkout(git_modules_dir, modules_repo):
-    coroot = install_project(git_modules_dir, "masterproject")
+def test_master_checkout(git_modules_dir: str, modules_repo: str, tmpdir):
+    coroot = install_project(git_modules_dir, "masterproject", tmpdir)
 
     ProjectTool().execute("install", [])
 
@@ -1117,7 +1119,7 @@ def test_real_time_logging(caplog):
     cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
     return_code: int
     output: List[str]
-    return_code, output = PythonEnvironment.run_command_and_stream_output(cmd, shell=True)
+    return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd, shell=True)
     assert return_code == 0
 
     assert "one" in caplog.records[0].message
@@ -1130,7 +1132,9 @@ def test_real_time_logging(caplog):
 
     # "two" should be logged at least one second after "one"
     delta: float = (last_log_line_time - first_log_line_time).total_seconds()
-    assert delta >= 1
+    expected_delta = 1
+    fault_tolerance = 0.1
+    assert abs(delta - expected_delta) <= fault_tolerance
 
 
 @pytest.mark.slowtest
@@ -1182,7 +1186,7 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
     for message, level in expected_logs:
         log_contains(
             caplog,
-            "inmanta.env",
+            "inmanta.pip",
             level,
             message,
         )
@@ -1210,7 +1214,7 @@ def test_git_clone_output(snippetcompiler_clean, caplog, modules_v2_dir):
     for message, level in expected_logs:
         log_contains(
             caplog,
-            "inmanta.env",
+            "inmanta.module",
             level,
             message,
         )
@@ -1250,7 +1254,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         )
     log_contains(
         caplog,
-        "inmanta.env",
+        "inmanta.pip",
         logging.DEBUG,
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
@@ -1282,7 +1286,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
 
     log_contains(
         caplog,
-        "inmanta.env",
+        "inmanta.pip",
         logging.DEBUG,
         "No matching distribution found for inmanta-module-child-module==3.3.3",
     )
@@ -1313,7 +1317,7 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     )
     log_contains(
         caplog,
-        "inmanta.env",
+        "inmanta.pip",
         logging.DEBUG,
         "Successfully installed inmanta-module-child-module-3.3.3 inmanta-module-parent-module-1.2.3",
     )

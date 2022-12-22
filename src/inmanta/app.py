@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import traceback
+import typing
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
@@ -47,6 +48,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
+from colorlog.formatter import LogColors
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -71,6 +73,50 @@ except ImportError:
     rpdb = None
 
 LOGGER = logging.getLogger("inmanta")
+
+
+class MultiLineFormatter(colorlog.ColoredFormatter):
+    """Multi-line formatter."""
+
+    def __init__(
+        self,
+        fmt: typing.Optional[str] = None,
+        *,
+        # keep interface minimal: only include fields we actually use
+        log_colors: typing.Optional[LogColors] = None,
+        reset: bool = True,
+        no_color: bool = False,
+    ):
+        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
+        self.fmt = fmt
+
+    def get_header_length(self, record: logging.LogRecord) -> int:
+        """Get the header length of a given record."""
+        # to get the length of the header we want to get the header without the color codes
+        formatter = colorlog.ColoredFormatter(
+            fmt=self.fmt,
+            log_colors=self.log_colors,
+            reset=False,
+            no_color=True,
+        )
+        header = formatter.format(
+            logging.LogRecord(
+                name=record.name,
+                level=record.levelno,
+                pathname=record.pathname,
+                lineno=record.lineno,
+                msg="",
+                args=(),
+                exc_info=None,
+            )
+        )
+        return len(header)
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format a record with added indentation."""
+        indent: str = " " * self.get_header_length(record)
+        head, *tail = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in tail)
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -406,14 +452,6 @@ def project(options: argparse.Namespace) -> None:
 def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument(
-        "--dashboard",
-        dest="dashboard",
-        help="Start the dashboard and keep the server running. "
-        "The server uses the current project as the source for server recompiles",
-        action="store_true",
-        default=False,
-    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -454,7 +492,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
@@ -546,8 +584,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl:
-        Config.set("compiler_rest_transport", "ssl", "true")
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
@@ -657,7 +695,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         dest="warnings",
         choices=["warn", "ignore", "error"],
         default="warn",
-        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+        help="The warning behaviour. Must be one of 'warn', 'ignore', 'error'",
     )
     parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
@@ -743,16 +781,19 @@ def _convert_cli_log_level(level: int) -> int:
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
-        formatter = colorlog.ColoredFormatter(
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+        formatter = MultiLineFormatter(
             log_format,
-            datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = logging.Formatter(fmt=log_format)
+        formatter = MultiLineFormatter(
+            log_format,
+            reset=False,
+            no_color=True,
+        )
     return formatter
 
 

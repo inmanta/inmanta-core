@@ -19,6 +19,8 @@
 # pylint: disable-msg=W0613,R0201
 
 import logging
+import uuid
+from collections import abc
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
@@ -32,14 +34,22 @@ from inmanta.ast import (
     Location,
     Namespace,
     NotFoundException,
+    Range,
     RuntimeException,
     TypeReferenceAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import ExpressionStatement, RawResumer, RequiresEmitStatement, StaticEagerPromise
+from inmanta.ast.statements import (
+    AttributeAssignmentLHS,
+    ExpressionStatement,
+    RawResumer,
+    RequiresEmitStatement,
+    StaticEagerPromise,
+)
 from inmanta.ast.statements.assign import GradualSetAttributeHelper, SetAttributeHelper
+from inmanta.ast.variables import Reference
 from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -51,6 +61,7 @@ from inmanta.execute.runtime import (
     ResultCollector,
     ResultVariable,
     VariableABC,
+    VariableResolver,
     WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
@@ -62,7 +73,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, EntityLike, Implement  # noqa: F401
+    from inmanta.ast.entity import Entity, Implement  # noqa: F401
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +95,7 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
         self.location = self.implements.get_location()
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
@@ -272,7 +283,7 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
@@ -329,10 +340,11 @@ class ConditionalExpression(ExpressionStatement):
         self.anchors.extend(if_expression.get_anchors())
         self.anchors.extend(else_expression.get_anchors())
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
-        self.if_expression.normalize()
-        self.else_expression.normalize()
+        # pass on lhs_attribute to branches
+        self.if_expression.normalize(lhs_attribute=lhs_attribute)
+        self.else_expression.normalize(lhs_attribute=lhs_attribute)
         self._own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
@@ -429,13 +441,13 @@ class IndexAttributeMissingInConstructorException(TypingException):
     Raised when an index attribute was not set in the constructor call for an entity.
     """
 
-    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: List[str]):
+    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: abc.Sequence[str]):
         if not unset_attributes:
             raise Exception("Argument `unset_attributes` should contain at least one element")
         error_message = self._get_error_message(entity, unset_attributes)
         super(IndexAttributeMissingInConstructorException, self).__init__(stmt, error_message)
 
-    def _get_error_message(self, entity: "Entity", unset_attributes: List[str]) -> str:
+    def _get_error_message(self, entity: "Entity", unset_attributes: abc.Sequence[str]) -> str:
         exc_message = "Invalid Constructor call:"
         for attribute_name in unset_attributes:
             attribute: Optional[Attribute] = entity.get_attribute(attribute_name)
@@ -462,7 +474,9 @@ class Constructor(ExpressionStatement):
         "__wrapped_kwarg_attributes",
         "location",
         "type",
-        "required_kwargs",
+        "_self_ref",
+        "_lhs_attribute",
+        "_required_dynamic_args",
         "_direct_attributes",
         "_indirect_attributes",
     )
@@ -484,8 +498,12 @@ class Constructor(ExpressionStatement):
         self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
-        self.type: Optional["EntityLike"] = None
-        self.required_kwargs: List[str] = []
+        self.type: Optional["Entity"] = None
+        self._self_ref: "Reference" = Reference(
+            LocatableString(str(uuid.uuid4()), Range("__internal__", 1, 1, 1, 1), -1, self.namespace)
+        )
+        self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
+        self._required_dynamic_args: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -501,34 +519,46 @@ class Constructor(ExpressionStatement):
             ),
         )
 
-    def normalize(self) -> None:
-        mytype: "EntityLike" = self.namespace.get_type(self.class_type)
-        self.type = mytype
-
+    def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
         for (k, v) in self.__attributes.items():
-            v.normalize()
-
+            # don't notify the rhs for index attributes because it won't be able to resolve the reference
+            # (index attributes need to be resolved before the instance can be constructed)
+            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k) if k not in index_attributes else None)
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
-        inindex = set()
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        mytype: "Entity" = self.namespace.get_type(self.class_type)
+        self.type = mytype
+
+        inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())
         all_attributes.update(self.__attributes)
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
-        for index in self.type.get_entity().get_indices():
+        for index in self.type.get_indices():
             for attr in index:
                 if attr not in all_attributes:
-                    self.required_kwargs.append(attr)
+                    self._required_dynamic_args.append(attr)
                     continue
                 inindex.add(attr)
-        if self.required_kwargs and not self.wrapped_kwargs:
-            raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
+
+        if self._required_dynamic_args:
+            # Limit dynamic compile-time overhead: ignore lhs if this constructor doesn't need it for instantiation.
+            # Concretely, only store it if not all index attributes are explicitly set in the constructor.
+            self._lhs_attribute = lhs_attribute
+            # raise an exception if there are more required dynamic arguments than could be provided by the kwargs and
+            # lhs attribute. If this passes but the kwargs and/or lhs attribute don't in fact provide the required arguments,
+            # an exception is raised during execution.
+            if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self._required_dynamic_args) > 1):
+                raise IndexAttributeMissingInConstructorException(self, self.type, self._required_dynamic_args)
+
+        self._normalize_rhs(inindex)
 
         for (k, v) in all_attributes.items():
-            attribute = self.type.get_entity().get_attribute(k)
+            attribute = self.type.get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
             if k not in inindex:
@@ -537,9 +567,7 @@ class Constructor(ExpressionStatement):
                 self._direct_attributes[k] = v
 
         self._own_eager_promises = list(
-            chain.from_iterable(
-                subconstructor.get_all_eager_promises() for subconstructor in self.type.get_entity().get_sub_constructor()
-            )
+            chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -563,6 +591,11 @@ class Constructor(ExpressionStatement):
         direct_requires.update(
             {rk: rv for kwargs in self.__wrapped_kwarg_attributes for (rk, rv) in kwargs.requires_emit(resolver, queue).items()}
         )
+        if self._lhs_attribute is not None:
+            direct_requires.update(
+                # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
+                self._lhs_attribute.instance.requires_emit(resolver, queue)
+            )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
         )
@@ -577,6 +610,64 @@ class Constructor(ExpressionStatement):
 
         return requires
 
+    def _collect_required_dynamic_arguments(
+        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
+    ) -> abc.Mapping[str, object]:
+        """
+        Part of the execute flow: returns values for kwargs and the inverse relation derived from the lhs for which this
+        constructor is the rhs, if appliccable.
+        """
+        type_class = self.type
+        assert type_class
+
+        # kwargs
+        kwarg_attrs: dict[str, object] = {}
+        for kwargs in self.wrapped_kwargs:
+            for (k, v) in kwargs.execute(requires, resolver, queue):
+                if k in self.attributes or k in kwarg_attrs:
+                    raise RuntimeException(
+                        self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
+                    )
+                attribute = type_class.get_attribute(k)
+                if attribute is None:
+                    raise TypingException(self, "no attribute %s on type %s" % (k, type_class.get_full_name()))
+                kwarg_attrs[k] = v
+
+        lhs_inverse_assignment: Optional[tuple[str, object]] = None
+        # add inverse relation if it is part of an index
+        if self._lhs_attribute is not None:
+            lhs_instance: object = self._lhs_attribute.instance.execute(requires, resolver, queue)
+            if not isinstance(lhs_instance, Instance):
+                # bug in internal implementation
+                raise Exception("Invalid state: received lhs_attribute that is not an instance")
+            lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute.attribute)
+            if not isinstance(lhs_attribute, RelationAttribute):
+                # bug in the model
+                raise RuntimeException(
+                    self,
+                    (
+                        f"Attempting to assign constructor of type {type_class} to attribute that is not a relation attribute:"
+                        f" {lhs_attribute} on {lhs_instance}"
+                    ),
+                )
+            inverse: Optional[RelationAttribute] = lhs_attribute.end
+            if (
+                inverse is not None
+                and inverse.name not in self._direct_attributes
+                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by
+                # the LHS
+                and inverse.name not in kwarg_attrs
+                and inverse.name in chain.from_iterable(type_class.get_indices())
+                and (inverse.entity == type_class or type_class.is_parent(inverse.entity))
+            ):
+                lhs_inverse_assignment = (inverse.name, lhs_instance)
+
+        late_args = {**dict([lhs_inverse_assignment] if lhs_inverse_assignment is not None else []), **kwarg_attrs}
+        missing_attrs: abc.Sequence[str] = [attr for attr in self._required_dynamic_args if attr not in late_args]
+        if missing_attrs:
+            raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
+        return late_args
+
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
         Evaluate this statement.
@@ -585,40 +676,29 @@ class Constructor(ExpressionStatement):
         super().execute(requires, resolver, queue)
 
         # the type to construct
-        type_class = self.type.get_entity()
+        type_class = self.type
+        assert type_class
 
-        # kwargs
-        kwarg_attrs: Dict[str, object] = {}
-        for kwargs in self.wrapped_kwargs:
-            for (k, v) in kwargs.execute(requires, resolver, queue):
-                if k in self.attributes or k in kwarg_attrs:
-                    raise RuntimeException(
-                        self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
-                    )
-                attribute = self.type.get_entity().get_attribute(k)
-                if attribute is None:
-                    raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
-                kwarg_attrs[k] = v
-
-        missing_attrs: List[str] = [attr for attr in self.required_kwargs if attr not in kwarg_attrs]
-        if missing_attrs:
-            raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
+        # kwargs and implicit inverse from lhs
+        late_args: abc.Mapping[str, object] = self._collect_required_dynamic_arguments(requires, resolver, queue)
 
         # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
         # because a RuntimeException is raised above when they are not.
         direct_attributes: Dict[str, object] = {
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
-        direct_attributes.update(kwarg_attrs)
+        direct_attributes.update(late_args)
 
         # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
         # is raised above when they are not.
         indirect_attributes: Dict[str, ExpressionStatement] = {
-            k: v for k, v in self._indirect_attributes.items() if k not in kwarg_attrs
+            k: v for k, v in self._indirect_attributes.items() if k not in late_args
         }
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
+        # register any potential index collision
+        collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
         for index in type_class.get_indices():
             params = []
             for attr in index:
@@ -627,10 +707,12 @@ class Constructor(ExpressionStatement):
             obj: Optional[Instance] = type_class.lookup_index(params, self)
 
             if obj is not None:
-                if obj.get_type().get_entity() != type_class:
+                if obj.get_type() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
+                collisions[tuple(index)] = obj
 
+        object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
         if len(instances) > 0:
             if graph is not None:
@@ -640,11 +722,16 @@ class Constructor(ExpressionStatement):
                         (i.instance_node for i in instances if i.instance_node is not None),
                     )
                 )
+
             # ensure that instances are all the same objects
             first = instances[0]
             for i in instances[1:]:
                 if i != first:
-                    raise Exception("Inconsistent indexes detected!")
+                    raise IndexCollisionException(
+                        msg=("Inconsistent indexes detected!\n"),
+                        constructor=self,
+                        collisions=collisions,
+                    )
 
             object_instance = first
             self.copy_location(object_instance)
@@ -657,6 +744,10 @@ class Constructor(ExpressionStatement):
             )
 
         # deferred execution for indirect attributes
+        # inject implicit reference to this instance so attributes can resolve the lhs_attribute we promised in _normalize_rhs
+        self_var: ResultVariable[Instance] = ResultVariable()
+        self_var.set_value(object_instance, self.location)
+        self_resolver: VariableResolver = VariableResolver(resolver, self._self_ref.name, self_var)
         for attributename, valueexpression in indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             if var.is_multi():
@@ -664,11 +755,11 @@ class Constructor(ExpressionStatement):
                 # to preserve order on lists used in attributes
                 # while allowing gradual execution on relations
                 reqs = valueexpression.requires_emit_gradual(
-                    resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
+                    self_resolver, queue, GradualSetAttributeHelper(self, object_instance, attributename, var)
                 )
             else:
-                reqs = valueexpression.requires_emit(resolver, queue)
-            SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
+                reqs = valueexpression.requires_emit(self_resolver, queue)
+            SetAttributeHelper(queue, self_resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
         # generate an implementation
         for stmt in type_class.get_sub_constructor():
@@ -715,10 +806,10 @@ class Constructor(ExpressionStatement):
 
         def get_new_node() -> dataflow.InstanceNode:
             assert self.type is not None
-            return dataflow.InstanceNode(self.type.get_entity().get_all_attribute_names())
+            return dataflow.InstanceNode(self.type.get_all_attribute_names())
 
         assert self.type is not None
-        return graph.own_instance_node_for_responsible(self.type.get_entity(), self, get_new_node).reference()
+        return graph.own_instance_node_for_responsible(self.type, self, get_new_node).reference()
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.InstanceNodeReference:
         return self._register_dataflow_node(graph)
@@ -745,7 +836,7 @@ class WrappedKwargs(ExpressionStatement):
     def __repr__(self) -> str:
         return "**%s" % repr(self.dictionary)
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.dictionary.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -765,3 +856,20 @@ class WrappedKwargs(ExpressionStatement):
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
         return list(dct.items())
+
+
+class IndexCollisionException(RuntimeException):
+    """Exception raised when an index collision is detected"""
+
+    def __init__(
+        self,
+        msg: str,
+        collisions: abc.Mapping[tuple[str, ...], Instance],
+        constructor: Constructor,
+    ) -> None:
+        super().__init__(stmt=constructor, msg=msg)
+        self.collisions: abc.Mapping[tuple[str, ...], Instance] = collisions
+        self.constructor: Constructor = constructor
+
+    def importantance(self) -> int:
+        return 10
