@@ -69,6 +69,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -4222,12 +4223,14 @@ class Resource(BaseDocument):
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
-        character = "|".join(
-            sorted([str(k) + "||" + str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]])
+        character = json.dumps(
+            {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
+            default=custom_json_encoder,
+            sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
         )
         m = hashlib.md5()
-        m.update(self.resource_id.encode())
-        m.update(character.encode())
+        m.update(self.resource_id.encode("utf-8"))
+        m.update(character.encode("utf-8"))
         self.attribute_hash = m.hexdigest()
 
     @classmethod
