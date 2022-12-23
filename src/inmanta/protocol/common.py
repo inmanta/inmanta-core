@@ -1102,9 +1102,6 @@ class Result(object):
         """
         self._callback = fnc
 
-    def __repr__(self) -> str:
-        return f"Result<{self.code}>"
-
 
 class SessionManagerInterface(object):
     """

@@ -82,14 +82,3 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     auth_client = protocol.Client("client")
     response = await auth_client.list_users()
     assert response.code == 200
-
-
-async def test_initial_user_setup(cli_user_setup, postgres_db, database_name) -> None:
-    config.Config.set("database", "name", database_name)
-    config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "username", postgres_db.user)
-    config.Config.set("database", "password", postgres_db.password)
-    config.Config.set("database", "connection_timeout", str(3))
-
-    print(await cli_user_setup.run())
