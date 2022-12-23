@@ -987,6 +987,12 @@ def encode_token(
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
 
+    for ct in client_types:
+        if ct not in cfg.client_types:
+            raise Exception(
+                f"The signing config does not support the requested client type {ct}. " f"Only {cfg.client_types} are allowed."
+            )
+
     payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
 
     if not idempotent:
@@ -1095,6 +1101,9 @@ class Result(object):
         Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+    def __repr__(self) -> str:
+        return f"Result<{self.code}>"
 
 
 class SessionManagerInterface(object):

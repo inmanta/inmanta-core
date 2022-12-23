@@ -22,18 +22,6 @@ from inmanta.protocol import endpoints
 from inmanta.server import SLICE_USER, protocol
 
 
-@pytest.fixture
-def server_auth_prestart() -> None:
-    """Enable auth on the server"""
-    config.Config.set("server", "auth", "true")
-
-
-@pytest.fixture
-async def server_auth(server_auth_prestart, server: protocol.Server) -> None:
-    """Start the server with auth enabled"""
-    yield server
-
-
 async def test_create_user(server: protocol.Server, client: endpoints.Client) -> None:
     """test operations on users and login without testing the actual auth"""
     assert server.get_slice(SLICE_USER)
@@ -90,5 +78,6 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     token = response.result["data"]
     config.Config.set("client_rest_transport", "token", token)
 
-    response = await client.list_users()
+    auth_client = protocol.Client("client")
+    response = await auth_client.list_users()
     assert response.code == 200

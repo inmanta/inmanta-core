@@ -34,11 +34,7 @@ LOGGER = logging.getLogger(__name__)
 # TODO: add access to environments
 # TODO: populate from external (header, oidc, ...)
 # TODO: Add roles that list access per API endpoint
-# TODO: add roles that also contrain on arguments, for example only one lsm service
-
-# TODO: document choice of hashin algo in an adr. pynacl is required for argon2id
-#  https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#password-hashing-algorithms
-#       bcrypt also possible but also requires external library. pynacl is a requirement for yang support
+# TODO: add roles that also constrain on arguments, for example only one lsm service
 
 
 class UserService(server_protocol.ServerSlice):
@@ -111,5 +107,5 @@ class UserService(server_protocol.ServerSlice):
             raise exceptions.UnauthorizedException()
 
         # TODO: set an expire
-        token = common.encode_token([str(const.ClientType.api)], expire=None)
+        token = common.encode_token([str(const.ClientType.api.value)], expire=None)
         return common.ReturnValue(status_code=200, headers={"Authentication": f"Bearer {token}"}, response=token)
