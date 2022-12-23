@@ -29,7 +29,7 @@ from inmanta import protocol
 
 
 def test_jwt_create(inmanta_config):
-    """z
+    """
     Test creating, signing and verifying JWT with HS256 from the configuration
     """
     jot = protocol.encode_token(["api"])
