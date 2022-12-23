@@ -34,7 +34,7 @@ Prerequisites
 
 This guide assumes that you already finished the :ref:`quickstart<quickstart>`, so if you haven't followed that one, please start with it.
 
-**Make sure that you have the necessary sensitive information**, namely:
+**Make sure that you have the necessary license information**, namely:
 
 - Credentials to the package repository;
 
@@ -43,9 +43,22 @@ This guide assumes that you already finished the :ref:`quickstart<quickstart>`, 
 - License file.
 
 
-1. Follow the :ref:`quickstart prerequisites<quickstart_prerequisites>` until step 4
+**Python version 3.9 needs to be installed on your machine.**
 
-2. Change directory to the LSM SR Linux example:
+1.  [Install Docker](https://docs.docker.com/get-docker/).
+
+2.  [Install Containerlab](https://containerlab.dev/install/).
+
+3.  Prepare a development environment by creating a python virtual environment and installing Inmanta:
+
+.. code-block::
+
+    $ mkdir -p ~/.virtualenvs
+    $ python3 -m venv ~/.virtualenvs/lsm-srlinux
+    $ source ~/.virtualenvs/lsm-srlinux/bin/activate
+    $ pip install inmanta
+
+4.  Change directory to the LSM SR Linux example:
 
 .. code-block::
 
@@ -75,17 +88,17 @@ This folder contains a project.yml, which looks like this:
 
     Additional explanation of each field can be found on the quickstart.
 
-3. Change the <token> in the repo url to the password that you received.
+5. Change the <token> in the repo url to the credentials to the package repository (see Prerequisites section).
 
-4. Go to the ``containerlab`` directory.
+6. Go to the ``containerlab`` directory.
 
 .. code-block::
 
    $ cd containerlab
 
-5. Create a folder called ``resources`` on the ``containerlab`` folder and place your license and entitlement files there.
+7. Create a folder called ``resources`` on the ``containerlab`` folder and place your license and entitlement files there.
    The names of the files have to be ``com.inmanta.jwe`` for the entitlement file and ``com.inmanta.license`` for the license file.
-6. :ref:`Spin-up the containers<lab>`.
+8. :ref:`Spin-up the containers<lab>`.
 
 .. code-block::
 
@@ -159,22 +172,15 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
                 name = self.interface_name,
                 resource = resource,
                 mtu = 9000,
-                subinterface = [subinterface],
+                subinterface = srinterface::Subinterface(
+                    x_index = 0,
+                    ipv4=srsubinterface::Ipv4(
+                        address = sripv4::Address(
+                            ip_prefix = self.address
+                        ),
+                    ),
+                ),           
                 comanaged = false
-            )
-
-            subinterface = srinterface::Subinterface(
-                parent_interface = interface,
-                x_index = 0,
-                ipv4 = subinterface_address
-            )
-
-            subinterface_address = srsubinterface::Ipv4(
-                parent_subinterface = subinterface,
-                address = sripv4::Address(
-                    parent_ipv4 = subinterface_address,
-                    ip_prefix = self.address
-                )
             )
 
         end
@@ -201,22 +207,22 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
 
 * Lines 1 to 7 import several modules required by this configuration model.
 * Lines 9 to 26 define the API of the new service, i.e. the attributes required to instantiate a new instance of the
-  service. The ÎnterfaceIPAssignment entity defines four attributes: router_ip, router_name, interface_name and address. Each
+  service. The `InterfaceIPAssignment` entity defines four attributes: `router_ip`, `router_name`, `interface_name` and `address`. Each
   attribute has a description defined in the docstring above. The docstring provides documentation on the meaning of a specific service attribute. The "<attribute>__modifier" fields are
   meta-data fields. They defines whether the attribute can be modified or not. In the above-mentioned orchestration model,
-  the  router_ip, router_name and the interface_name attribute can only be set upon instantiation of the model, while the address
+  the  `router_ip`, `router_name` and the `interface_name` attribute can only be set upon instantiation of the model, while the `address`
   attribute can be changed during the lifetime of the service. More information on attribute modifiers can be
   found :ref:`here<attributes_metadata_attribute_modifiers>`.
-* Lines 28 defines which implementation should be used to instantiate the InterfaceIPAssignment service entity.
-* Lines 30 to 72 provide the actual implementation for the InterfaceIPAssignment service entity. If an instance is created of the
-  InterfaceIPAssignment service entity, this implementation will make sure that the address specified in the attributes of the
+* Line 28 defines which implementation should be used to instantiate the `InterfaceIPAssignment` service entity.
+* Lines 30 to 65 provide the actual implementation for the `InterfaceIPAssignment` service entity. If an instance is created of the
+  `InterfaceIPAssignment` service entity, this implementation will make sure that the `address` specified in the attributes of the
   service instance, will be configured on the requested interface and SR Linux router. 
-* Lines 42 to 47 in particular, are where the resource is instantiated and assigned to the resources field. 
-  The resources field should contain the list of resources that need to be deployed before the state of the instance can be moved from *creating* to *up*.
-* Lines 75 to 79 create a service entity binding. It associates a name and a lifecycle to the InterfaceIPAssignment service entity
+* Lines 42 to 47 in particular, are where the resource is instantiated and assigned to the `resources` field. 
+  The `resources` field should contain the list of `resources` that need to be deployed before the state of the instance can be moved from *creating* to *up*.
+* Lines 68 to 72 create a service entity binding. It associates a name and a lifecycle to the `InterfaceIPAssignment` service entity
   and registers it in the Inmanta Service Orchestrator via its northbound API. More information on service lifecycles can be
   found :ref:`here<lifecycle>`.
-* Lines 82 to 90 create an instance of the InterfaceIPAssignment entity for each service instance. The ``lsm::all()`` plugin
+* Lines 75 to 83 create an instance of the `InterfaceIPAssignment` entity for each service instance. The ``lsm::all()`` plugin
   retrieves all the service instances via the Inmanta Service Orchestrator API.
 
 
@@ -225,6 +231,14 @@ Install the orchestration model onto the Inmanta server
 
 Go back to the previous folder and :ref:`create an Inmanta project and environment<inenv>`.
 
+.. code-block::
+
+    # Create a project called test
+    $ inmanta-cli --host 172.30.0.3 project create -n test
+    # Create an environment called lsm-srlinux
+    $ inmanta-cli --host 172.30.0.3 environment create -p test -n lsm-srlinux --save
+
+
 The following command executes a script to copy the required resources to a specific folder inside the container.
 
 .. code-block::
@@ -232,7 +246,6 @@ The following command executes a script to copy the required resources to a spec
    $ docker exec -ti -w /code clab-srlinux-inmanta-server  /code/setup.sh
 
 Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/. 
-This IP-address can be configured in ``containerlab/topology.html`` under the ``mgmt_ipv4`` of the ``inmanta-server``.
 
 .. image:: images/empty-service-catalog.png
     :align: center
@@ -244,11 +257,9 @@ making it possible to create new instances of this service via the LSM API or vi
 
 Clicking on the button will:
 
-- Pull the code from the git repository to the container, when applicable;
-
-- The orchestrator will then install the project;
-
-- Lastly, the orchestrator will export the orchestration models.
+-   Download all required code onto the orchestrator;
+-   Install the project;
+-   Export the service entity bindings to the service catalog.
 
 After executing these commands, the ``interface-ip-assignment`` service will appear in the service catalog of the Inmanta
 web-console as shown in the figure below.
