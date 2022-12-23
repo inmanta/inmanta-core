@@ -15,8 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import pytest
-
 from inmanta import config
 from inmanta.protocol import endpoints
 from inmanta.server import SLICE_USER, protocol
@@ -41,6 +39,9 @@ async def test_create_user(server: protocol.Server, client: endpoints.Client) ->
     response = await client.login("admin", "test")
     assert response.code == 200
     assert response.result["data"]
+    assert "token" in response.result["data"]
+    assert "user" in response.result["data"]
+    assert response.result["data"]["user"]["username"] == "admin"
 
     response = await client.login("admin", "wrong")
     assert response.code == 401
@@ -81,3 +82,14 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     auth_client = protocol.Client("client")
     response = await auth_client.list_users()
     assert response.code == 200
+
+
+async def test_initial_user_setup(cli_user_setup, postgres_db, database_name) -> None:
+    config.Config.set("database", "name", database_name)
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "username", postgres_db.user)
+    config.Config.set("database", "password", postgres_db.password)
+    config.Config.set("database", "connection_timeout", str(3))
+
+    print(await cli_user_setup.run())

@@ -710,3 +710,11 @@ class User(BaseModel):
     username: str
     auth_method: str
     enabled: bool
+
+
+class LoginReturn(BaseModel):
+    """Login information"""
+
+    token: str
+    expiry: int
+    user: User

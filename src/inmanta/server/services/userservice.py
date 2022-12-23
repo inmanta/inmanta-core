@@ -35,6 +35,7 @@ LOGGER = logging.getLogger(__name__)
 # TODO: populate from external (header, oidc, ...)
 # TODO: Add roles that list access per API endpoint
 # TODO: add roles that also constrain on arguments, for example only one lsm service
+# TODO: how do we logout? A token blacklist
 
 
 class UserService(server_protocol.ServerSlice):
@@ -92,7 +93,7 @@ class UserService(server_protocol.ServerSlice):
         await user.update_fields(password=pw_hash.decode())
 
     @protocol.handle(protocol.methods_v2.login)
-    async def login(self, username: str, password: str) -> common.ReturnValue[str]:
+    async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         # check if the user exists
         user = await data.User.get_one(username=username)
         if not user:
@@ -108,4 +109,12 @@ class UserService(server_protocol.ServerSlice):
 
         # TODO: set an expire
         token = common.encode_token([str(const.ClientType.api.value)], expire=None)
-        return common.ReturnValue(status_code=200, headers={"Authentication": f"Bearer {token}"}, response=token)
+        return common.ReturnValue(
+            status_code=200,
+            headers={"Authentication": f"Bearer {token}"},
+            response=model.LoginReturn(
+                user=user.to_dao(),
+                token=token,
+                expiry=0,
+            ),
+        )

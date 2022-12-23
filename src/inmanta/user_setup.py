@@ -65,7 +65,7 @@ def validate_server_setup() -> None:
     # make sure there is auth config that supports signing tokens
     cfg = config.AuthJWTConfig.get_sign_config()
     if cfg is None:
-        click.echo(f"Error: No signing config available in the configuration.")
+        click.echo("Error: No signing config available in the configuration.")
 
         value = None
         while value not in ["yes", "no"]:
@@ -134,7 +134,7 @@ async def do_user_setup() -> None:
         if connection is not None:
             await data.disconnect()
 
-    click.echo(f"Make sure to (re)start the orchestrator to activate all changes.")
+    click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 
 
 @click.command(help="Do the initial user setup")
