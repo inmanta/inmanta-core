@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import cast
 
 import nacl.exceptions
 import nacl.pwhash
@@ -37,7 +36,8 @@ LOGGER = logging.getLogger(__name__)
 # TODO: Add roles that list access per API endpoint
 # TODO: add roles that also contrain on arguments, for example only one lsm service
 
-# TODO: document choice of hashin algo in an adr. pynacl is required for argon2id https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#password-hashing-algorithms
+# TODO: document choice of hashin algo in an adr. pynacl is required for argon2id
+#  https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#password-hashing-algorithms
 #       bcrypt also possible but also requires external library. pynacl is a requirement for yang support
 
 

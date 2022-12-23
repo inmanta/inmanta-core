@@ -31,7 +31,7 @@ CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION_TABLE = "schemamanager"
+SCHEMA_VERSION_TABLE = "public.schemamanager"
 
 create_schemamanager = """
 -- Table: public.schemamanager

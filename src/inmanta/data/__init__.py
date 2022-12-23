@@ -5457,8 +5457,8 @@ class User(BaseDocument):
     auth_method: str
     enabled: bool
 
-    def to_dao(self) -> model.User:
-        return model.User(username=self.username, enabled=self.enabled, auth_method=self.auth_method)
+    def to_dao(self) -> m.User:
+        return m.User(username=self.username, enabled=self.enabled, auth_method=self.auth_method)
 
 
 _classes = [

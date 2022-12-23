@@ -24,7 +24,7 @@ from typing import Dict, List, Literal, Optional, Union
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
-from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.types import PrimitiveTypes
 
 from ..data.model import ResourceIdStr
 from . import methods
