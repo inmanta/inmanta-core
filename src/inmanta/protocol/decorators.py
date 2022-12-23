@@ -139,6 +139,7 @@ def typedmethod(
     api_prefix: str = "api",
     envelope_key: str = const.ENVELOPE_KEY,
     strict_typing: bool = True,
+    enforce_auth: bool = True,
     varkw: bool = False,
 ) -> Callable[..., Callable]:
     """
@@ -167,6 +168,8 @@ def typedmethod(
     :param strict_typing: If true, does not allow `Any`. Setting this option to False is heavily discouraged except for some
         few very specific cases where the type system does not allow the strict type to be specified, for example in case of
         infinite recursion.
+    :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is not
+                         enforced, even if auth is enabled.
     :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                   responsible for the validation.
     """
@@ -190,6 +193,7 @@ def typedmethod(
             True,
             envelope_key,
             strict_typing=strict_typing,
+            enforce_auth=enforce_auth,
             varkw=varkw,
         )
         common.MethodProperties.register_method(properties)

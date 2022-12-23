@@ -702,3 +702,11 @@ class Source(BaseModel):
     is_byte_code: bool
     module_name: str
     requirements: List[str]
+
+
+class User(BaseModel):
+    """A user"""
+
+    username: str
+    auth_method: str
+    enabled: bool

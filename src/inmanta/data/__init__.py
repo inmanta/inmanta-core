@@ -1290,7 +1290,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Return the name of the collection
         """
-        return cls.__name__.lower()
+        return f"public.{cls.__name__.lower()}"
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
@@ -5447,6 +5447,20 @@ class EnvironmentMetricsTimer(BaseDocument):
     __primary_key__ = ("environment", "metric_name", "timestamp")
 
 
+class User(BaseDocument):
+    """A user that can authenticate against inmanta"""
+
+    __primary_key__ = ("username",)
+
+    username: str
+    password: Optional[str] = None
+    auth_method: str
+    enabled: bool
+
+    def to_dao(self) -> model.User:
+        return model.User(username=self.username, enabled=self.enabled, auth_method=self.auth_method)
+
+
 _classes = [
     Project,
     Environment,
@@ -5465,6 +5479,7 @@ _classes = [
     Notification,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    User,
 ]
 
 

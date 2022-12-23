@@ -31,6 +31,7 @@ from inmanta.server.services import (
     paramservice,
     projectservice,
     resourceservice,
+    userservice,
 )
 
 
@@ -50,3 +51,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(orchestrationservice.OrchestrationService())
     application.register_slice(dryrunservice.DyrunService())
     application.register_slice(notificationservice.NotificationService())
+    application.register_slice(userservice.UserService())

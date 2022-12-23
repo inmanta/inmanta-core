@@ -24,7 +24,7 @@ from typing import Dict, List, Literal, Optional, Union
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
-from inmanta.types import PrimitiveTypes
+from inmanta.types import Apireturn, PrimitiveTypes
 
 from ..data.model import ResourceIdStr
 from . import methods
@@ -1287,3 +1287,36 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
     """
+
+
+@typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def login(username: str, password: str) -> ReturnValue[str]:
+    """Login a new user. When the login succeeds an authentication header is returned with the Bearer token set.
+    :param username: The user to login
+    :param password: The password of this user
+    :raises UnauthorizedException: Raised when the login failed.
+    """
+
+
+@typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_users() -> List[model.User]:
+    """List all users
+    :return: A list of all users"""
+
+
+@typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def delete_user(username: str) -> None:
+    """Delete a user from the system with given username
+    :param username: The username to delete
+    :raises NotFound: Raised when the user does not exist
+    """
+
+
+@typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
+def add_user(username: str, password: str) -> model.User:
+    pass
+
+
+@typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
+def set_password(username: str, password: str) -> None:
+    pass
