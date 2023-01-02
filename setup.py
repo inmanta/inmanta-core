@@ -9,7 +9,7 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab~=0.23",
-    "cryptography>=36,<39",
+    "cryptography>=36,<40",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
     "email-validator~=1.0",
