@@ -1,3 +1,5 @@
+.. _partial_compile:
+
 ****************
 Partial compiles
 ****************
