@@ -25,6 +25,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.server.services.environment_metrics_service import (
+    AgentCountMetricsCollector,
     EnvironmentMetricsService,
     MetricsCollector,
     MetricType,
@@ -606,3 +607,73 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
     assert any(
         x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
+
+
+async def test_agent_count_metric(clienthelper, client, agent):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+
+    agent1 = data.Agent(environment=env1.id, name="agent1", paused=True)
+    await agent1.insert()
+    agent2 = data.Agent(environment=env2.id, name="agent2", paused=True)
+    await agent2.insert()
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 2
+
+    # adds the AgentCountMetricsCollector
+    acmc = AgentCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=acmc)
+
+    # flush the metrics for the first time: 2 record (1 agent in paused state for the first
+    # environment and 2 for the second)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 2
+    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
+    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env2.id for x in result_gauge)
+
+    # add 1 agent with same state to env1 and 2 agents to env2 with different statuses
+    agent_proc = data.AgentProcess(hostname="test", environment=env2.id, expired=None, sid=uuid.uuid4())
+    await agent_proc.insert()
+    agent_instance = data.AgentInstance(
+        id=uuid.uuid4(), process=agent_proc.sid, name="agent_instance", expired=None, tid=env2.id
+    )
+    await agent_instance.insert()
+
+    agent3 = data.Agent(environment=env2.id, name="agent3", paused=False)
+    await agent3.insert()
+    agent4 = data.Agent(environment=env2.id, name="agent4", paused=False, id_primary=agent_instance.id)
+    await agent4.insert()
+    agent5 = data.Agent(environment=env1.id, name="agent5", paused=True)
+    await agent5.insert()
+
+    agents = await data.Agent.get_list()
+    assert len(agents) == 5
+
+    # flush the metrics for the second time: 2 old record +
+    # + 4 new records (1 for paused state in the first env, 1 for paused, one for down and one for up state in the second env)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 6
+    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
+    assert any(x.count == 2 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
+    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env2.id for x in result_gauge)
+    assert any(x.count == 1 and x.metric_name == "agent_count.up" and x.environment == env2.id for x in result_gauge)
+    assert any(x.count == 1 and x.metric_name == "agent_count.down" and x.environment == env2.id for x in result_gauge)
+
+    env_uuid2_records = [
+        r for r in result_gauge if r.environment == env2.id and r.metric_name == "agent_count.paused" and r.count == 1
+    ]
+    assert len(env_uuid2_records) == 2

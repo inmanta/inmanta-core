@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import Agent, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -137,6 +137,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         self.register_metric_collector(ResourceCountMetricsCollector())
+        self.register_metric_collector(AgentCountMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -234,6 +235,40 @@ class ResourceCountMetricsCollector(MetricsCollector):
                 WHERE cm.environment=r.environment AND cm.released=TRUE
                 )
             GROUP BY (status, environment)
+        """
+        metric_values: List[MetricValue] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["status"], str)
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class AgentCountMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the number of resources (grouped by resources state).
+    """
+
+    def get_metric_name(self) -> str:
+        return "agent_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(  # todo
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValue]:
+        query: str = f"""
+SELECT
+  CASE
+    WHEN paused THEN 'paused'
+    WHEN NOT paused AND id_primary IS NOT NULL THEN 'up'
+    ELSE 'down'
+  END AS status,environment,count(*)
+FROM {Agent.table_name()}
+GROUP BY (status, environment);
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
