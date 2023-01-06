@@ -1274,7 +1274,7 @@ class ModuleChangelog:
         """
         header_for_new_version: str = self._get_header_for_version(new_version)
         # Try to insert the section before the section of the previous version if such a section exists
-        regex_header_previous_version: re.Pattern = re.compile(
+        regex_header_previous_version: re.Pattern[str] = re.compile(
             rf"(^{re.escape(f'## v{old_version.base_version}')}[^\n]*$)", re.MULTILINE
         )
         new_content_changelog = regex_header_previous_version.sub(
@@ -1286,7 +1286,7 @@ class ModuleChangelog:
             return new_content_changelog
         # No changelog section exists for the previous version. Search for the top-level header of the changelog and insert the
         # section below it.
-        regex_top_level_header: re.Pattern = re.compile(r"(^\# [^\n]*$)", re.MULTILINE)
+        regex_top_level_header: re.Pattern[str] = re.compile(r"(^\# [^\n]*$)", re.MULTILINE)
         new_content_changelog = regex_top_level_header.sub(
             repl=f"\\g<1>\n\n{header_for_new_version}\n\n\n",
             string=content_changelog,
@@ -1314,7 +1314,7 @@ class ModuleChangelog:
         Return True iff this changelog contains a section of the given version.
         """
         with open(self.path_changelog_file, "r", encoding="utf-8") as fh:
-            regex_version_header: re.Pattern = re.compile(rf"^{re.escape(f'## v{version.base_version} - ')}", re.MULTILINE)
+            regex_version_header: re.Pattern[str] = re.compile(rf"^{re.escape(f'## v{version.base_version} - ')}", re.MULTILINE)
             content = fh.read()
             return regex_version_header.search(content) is not None
 
@@ -1339,7 +1339,7 @@ class ModuleChangelog:
         """
         with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
             content_changelog = fh.read()
-            regex_version_header: re.Pattern = re.compile(rf"^({re.escape(f'## v{version} - ')})\?([ ]*)$", re.MULTILINE)
+            regex_version_header: re.Pattern[str] = re.compile(rf"^({re.escape(f'## v{version} - ')})\?([ ]*)$", re.MULTILINE)
             new_content_changelog = regex_version_header.sub(
                 repl=f"\\g<1>{datetime.date.today().isoformat()}\\g<2>",
                 string=content_changelog,
@@ -1363,7 +1363,7 @@ class ModuleChangelog:
             self.add_section_for_version(old_version, version)
         with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
             content_changelog = fh.read()
-            regex_version_header: re.Pattern = re.compile(rf"({re.escape(f'## v{version.base_version} - ?')}[ ]*\n\n)")
+            regex_version_header: re.Pattern[str] = re.compile(rf"({re.escape(f'## v{version.base_version} - ?')}[ ]*\n\n)")
             new_content_changelog = regex_version_header.sub(repl=f"\\g<1>- {message}\n", string=content_changelog, count=1)
             if new_content_changelog != content_changelog:
                 fh.seek(0, 0)
