@@ -471,10 +471,12 @@ async def test_resource_count_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 2
     assert any(
-        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+        x.count == 3 and x.metric_name == "resource.resource_count#available" and x.environment == env_uuid1
+        for x in result_gauge
     )
     assert any(
-        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid2 for x in result_gauge
+        x.count == 2 and x.metric_name == "resource.resource_count#available" and x.environment == env_uuid2
+        for x in result_gauge
     )
 
     # change the state of one of the resources
@@ -502,15 +504,22 @@ async def test_resource_count_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 5
     assert any(
-        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+        x.count == 3 and x.metric_name == "resource.resource_count#available" and x.environment == env_uuid1
+        for x in result_gauge
     )
     assert any(
-        x.count == 2 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+        x.count == 2 and x.metric_name == "resource.resource_count#available" and x.environment == env_uuid1
+        for x in result_gauge
     )
-    assert any(x.count == 1 and x.metric_name == "resource_count.deployed" and x.environment == env_uuid1 for x in result_gauge)
+    assert any(
+        x.count == 1 and x.metric_name == "resource.resource_count#deployed" and x.environment == env_uuid1
+        for x in result_gauge
+    )
 
     env_uuid2_records = [
-        r for r in result_gauge if r.environment == env_uuid2 and r.metric_name == "resource_count.available" and r.count == 2
+        r
+        for r in result_gauge
+        if r.environment == env_uuid2 and r.metric_name == "resource.resource_count#available" and r.count == 2
     ]
 
     assert len(env_uuid2_records) == 2
@@ -605,7 +614,8 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 1
     assert any(
-        x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
+        x.count == 3 and x.metric_name == "resource.resource_count#available" and x.environment == env_uuid1
+        for x in result_gauge
     )
 
 
@@ -641,8 +651,12 @@ async def test_agent_count_metric(clienthelper, client, agent):
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 2
-    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
-    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env2.id for x in result_gauge)
+    assert any(
+        x.count == 1 and x.metric_name == "resource.agent_count#paused" and x.environment == env1.id for x in result_gauge
+    )
+    assert any(
+        x.count == 1 and x.metric_name == "resource.agent_count#paused" and x.environment == env2.id for x in result_gauge
+    )
 
     # add 1 agent with same state to env1 and 2 agents to env2 with different statuses
     agent_proc = data.AgentProcess(hostname="test", environment=env2.id, expired=None, sid=uuid.uuid4())
@@ -667,13 +681,19 @@ async def test_agent_count_metric(clienthelper, client, agent):
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 6
-    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
-    assert any(x.count == 2 and x.metric_name == "agent_count.paused" and x.environment == env1.id for x in result_gauge)
-    assert any(x.count == 1 and x.metric_name == "agent_count.paused" and x.environment == env2.id for x in result_gauge)
-    assert any(x.count == 1 and x.metric_name == "agent_count.up" and x.environment == env2.id for x in result_gauge)
-    assert any(x.count == 1 and x.metric_name == "agent_count.down" and x.environment == env2.id for x in result_gauge)
+    assert any(
+        x.count == 1 and x.metric_name == "resource.agent_count#paused" and x.environment == env1.id for x in result_gauge
+    )
+    assert any(
+        x.count == 2 and x.metric_name == "resource.agent_count#paused" and x.environment == env1.id for x in result_gauge
+    )
+    assert any(
+        x.count == 1 and x.metric_name == "resource.agent_count#paused" and x.environment == env2.id for x in result_gauge
+    )
+    assert any(x.count == 1 and x.metric_name == "resource.agent_count#up" and x.environment == env2.id for x in result_gauge)
+    assert any(x.count == 1 and x.metric_name == "resource.agent_count#down" and x.environment == env2.id for x in result_gauge)
 
     env_uuid2_records = [
-        r for r in result_gauge if r.environment == env2.id and r.metric_name == "agent_count.paused" and r.count == 1
+        r for r in result_gauge if r.environment == env2.id and r.metric_name == "resource.agent_count#paused" and r.count == 1
     ]
     assert len(env_uuid2_records) == 2

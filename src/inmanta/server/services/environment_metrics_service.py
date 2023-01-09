@@ -31,7 +31,7 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
-METRIC_NAME_SEPARATOR = "."
+METRIC_NAME_SEPARATOR = "#"
 
 
 class MetricType(str, Enum):
@@ -53,7 +53,7 @@ class MetricValue:
     the Metric values as they should be returned by a MetricsCollector of type gauge
 
     The name of a metric as stored in the DB is the concatenation of metric_name and a field on which the data is grouped by.
-    The METRIC_NAME_SEPARATOR '.' is used as separator and should not be used in the name itself.
+    The METRIC_NAME_SEPARATOR is used as separator and should not be used in the name itself.
     For example, a metric collected by for the agent_count collector and grouped for the state "up",
     will have agent_count.up as metric.
     if the metric is not grouped by anything the name of the collector is used as metric_name
@@ -66,7 +66,7 @@ class MetricValue:
             raise Exception(
                 'The character "%s" can not be used in the grouped_by value (%s)' % (METRIC_NAME_SEPARATOR, grouped_by)
             )
-        self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
+        self.metric_name = METRIC_NAME_SEPARATOR.join([metric_name, grouped_by]) if grouped_by else metric_name
         self.count = count
         self.environment = environment
 
