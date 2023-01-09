@@ -218,7 +218,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
     """
 
     def get_metric_name(self) -> str:
-        return "resource_count"
+        return "resource.resource_count"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.GAUGE
@@ -252,7 +252,7 @@ class AgentCountMetricsCollector(MetricsCollector):
     """
 
     def get_metric_name(self) -> str:
-        return "agent_count"
+        return "resource.agent_count"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.GAUGE
