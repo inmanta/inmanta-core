@@ -25,6 +25,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.server.services.environment_metrics_service import (
+    CompileWaitingTimeMetricsCollector,
     EnvironmentMetricsService,
     MetricsCollector,
     MetricType,
@@ -606,3 +607,33 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
     assert any(
         x.count == 3 and x.metric_name == "resource_count.available" and x.environment == env_uuid1 for x in result_gauge
     )
+
+
+async def test_compile_time_metric(clienthelper, client, agent, env_with_compiles):
+    """
+    WIP => need to rewrite custom env_with_compiles
+    """
+    env_uuid1 = uuid.uuid4()
+    env_uuid2 = uuid.uuid4()
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
+    await environment1.insert()
+    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment2.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    cwtmc = CompileWaitingTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=cwtmc)
+
+    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
+    assert version_env1 == "1"
+    version_env2 = str(await ClientHelper(client, env_uuid2).get_version())
+    await metrics_service.flush_metrics()
+
+    result_gauge = await data.EnvironmentMetricsTimer.get_list()

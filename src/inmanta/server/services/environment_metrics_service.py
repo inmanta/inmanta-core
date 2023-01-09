@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -137,10 +137,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     async def start(self) -> None:
         await super().start()
         self.register_metric_collector(ResourceCountMetricsCollector())
+        self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
-        """
+        """j
         Register the given metrics_collector.
         """
         if metrics_collector.get_metric_name() not in self.metrics_collectors:
@@ -242,4 +243,40 @@ class ResourceCountMetricsCollector(MetricsCollector):
             assert isinstance(record["environment"], uuid.UUID)
             assert isinstance(record["status"], str)
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class CompileWaitingTimeMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the amount of time compile requests spends waiting in the compile queue before being executed.
+    """
+
+    def get_metric_name(self) -> str:
+        return "compile_waiting_time"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValueTimer]:
+        query: str = f"""
+            SELECT count(*)  as count,environment,sum(started-requested) as compile_waiting_time
+            FROM {Compile.table_name()}
+            WHERE started >= '{start_interval}'
+            AND started < '{end_interval}'
+            GROUP BY environment
+        """
+        metric_values: List[MetricValueTimer] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(
+                record["compile_waiting_time"], float
+            )  # Problem here -> the db returns timestamps TODO -> convert to float
+            metric_values.append(
+                MetricValueTimer(self.get_metric_name(), record["count"], record["compile_time"], record["environment"])
+            )
+
         return metric_values
