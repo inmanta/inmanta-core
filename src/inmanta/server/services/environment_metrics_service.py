@@ -261,7 +261,7 @@ class CompileTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            SELECT count(*)  as count,environment,sum(completed-started) as compile_time
+            SELECT count(*) as count, environment, sum(completed-started) as compile_time
             FROM {Compile.table_name()}
             WHERE completed >= '{start_interval}'
             AND completed < '{end_interval}'
