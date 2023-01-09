@@ -18,17 +18,17 @@ timezone information for these datetime objects?
 
 ## Decision Drivers
 
-* Behavior should be consistent regardless of the timezone participating hosts (e.g. server, agent, web-console client) live in.
-* Timezone handling over the API is non-trivial: we need to present a clear contract to the end-user.
-* In the absence of timezone information, there is no single sane interpretation: explicit timezones improve clarity.
+1. Behavior should be consistent regardless of the timezone participating hosts (e.g. server, agent, web-console client) live in.
+2. Timezone handling over the API is non-trivial: we need to present a clear contract to the end-user.
+3. In the absence of timezone information, there is no single sane interpretation: explicit timezones improve clarity.
 
 ## Considered Options
 
-* Use UTC everywhere
-* Use timezone-aware datetimes everywhere
-* Support both timezone aware and naive timestamps as input, return naive timestamps. All naive timestamps are implicitly
+1. Use UTC everywhere
+2. Use timezone-aware datetimes everywhere
+3. Support both timezone aware and naive timestamps as input, return naive timestamps. All naive timestamps are implicitly
     assumed to be in UTC. Internally both a naive and an aware representation are considered.
-* Like the previous (mixed) option but make new end-points (where backwards compatibility is irrelevant) timezone-aware only.
+4. Like the previous (mixed) option but make new end-points (where backwards compatibility is irrelevant) timezone-aware only.
 
 ## Decision Outcome
 
