@@ -32,9 +32,12 @@ timezone information for these datetime objects?
 
 ## Decision Outcome
 
-Chosen option: option 3 with timezone-aware internal representation. Support both timezone aware and naive timestamps as input,
-use timezone-naive timestamps in API return values. Internally, always use timezone-aware timestamps (objects are converted at
-the API boundary). Any timezone-naive timestamps represent a timestamp in UTC.
+Chosen option: option 3 with timezone-aware internal representation. 
+* Support both timezone aware and naive timestamps as API input,
+* Any timezone-naive timestamps represent a timestamp in UTC.
+* Use timezone-naive timestamps in API return values. 
+* Internally, always use timezone-aware timestamps (objects are converted at
+the API boundary). 
 
 Rationale: it is as explicit as we can make it (decision driver 3) without breaking backwards compatibility. In contrast to
 option 4, it remains simple: a single contract that applies to all API endpoints.
