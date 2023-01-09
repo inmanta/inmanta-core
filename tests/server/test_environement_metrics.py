@@ -610,10 +610,6 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
 
 
 async def test_compile_time_metric(clienthelper, client, agent):
-    """
-    Test
-    """
-
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
