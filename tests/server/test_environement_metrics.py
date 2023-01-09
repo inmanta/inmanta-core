@@ -18,20 +18,20 @@
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.data import Report
 from inmanta.server.services.environment_metrics_service import (
+    CompileTimeMetricsCollector,
     EnvironmentMetricsService,
     MetricsCollector,
     MetricType,
     MetricValue,
     MetricValueTimer,
-    ResourceCountMetricsCollector, CompileTimeMetricsCollector,
+    ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version
 from utils import ClientHelper
@@ -609,94 +609,127 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
     )
 
 
+async def test_compile_time_metric(clienthelper, client, agent):
+    """
+    Test
+    """
 
-@pytest.fixture
-async def env_with_compiles(client, environment):
-    compile_requested_timestamps = []
-    compiles = []
-    # Make sure that timestamp is never older than 7 days,
-    # as such that the cleanup service doesn't delete them.
-    now = datetime.now()
-    for i in range(4):
-        requested = now + timedelta(minutes=i)
-        compile_requested_timestamps.append(requested)
+    async def _add_compile(
+        environment: uuid.UUID,
+        time_origin: datetime,
+        requested_delta: timedelta = timedelta(),
+        started_delta: timedelta = timedelta(),
+        completed_delta: timedelta = timedelta(),
+    ):
+        """
+        Add a new compile to the database. All timestamps are relative to the time_origin parameter
+        """
         compile = data.Compile(
             id=uuid.uuid4(),
             remote_id=uuid.uuid4(),
-            environment=uuid.UUID(environment),
-            requested=requested,
-            started=requested + timedelta(seconds=20),
-            completed=requested + timedelta(seconds=40),
+            environment=environment,
+            requested=time_origin + requested_delta,
+            started=time_origin + started_delta,
+            completed=time_origin + completed_delta,
             do_export=True,
             force_update=False,
-            metadata={"meta": 42} if i % 2 else None,
-            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
             success=True,
             handled=True,
             version=1,
-            substitute_compile_id=None,
-            compile_data={"errors": [{"type": "UnexpectedException", "message": "msg"}]} if i % 2 else None,
         )
-        compiles.append(compile)
-    compiles[1].substitute_compile_id = compiles[0].id
-    compiles[2].substitute_compile_id = compiles[1].id
-    for compile in compiles:
         await compile.insert()
-    ids = [compile.id for compile in compiles]
 
-    await Report(
-        id=uuid.uuid4(),
-        started=datetime.now(),
-        completed=datetime.now(),
-        command="inmanta export",
-        name="name",
-        errstream="error",
-        outstream="success",
-        returncode=0,
-        compile=ids[0],
-    ).insert()
-    await Report(
-        id=uuid.uuid4(),
-        started=datetime.now(),
-        completed=datetime.now(),
-        command="inmanta export",
-        name="another_name",
-        errstream="error",
-        outstream="success",
-        returncode=0,
-        compile=ids[0],
-    ).insert()
+    async def add_compiles(environment: uuid.UUID, compile_times: Sequence[float]):
+        """
+        These compiles are anchored in time around their COMPLETION time to make sure they are picked
+        up by the next call to flush_metrics()
+        """
+        time_origin = datetime.now()
+        requested_offset = timedelta(seconds=-1 * max(compile_times))
 
-    return environment, ids, compile_requested_timestamps
+        for compile_time in compile_times:
+            started_offset = timedelta(seconds=-1 * compile_time)
+            await _add_compile(environment, time_origin, requested_delta=requested_offset, started_delta=started_offset)
 
-
-async def test_compile_time_metric(clienthelper, client, agent, env_with_compiles):
-    """
-    WIP => need to rewrite custom env_with_compiles
-    """
-    env_uuid1 = uuid.uuid4()
-    env_uuid2 = uuid.uuid4()
     project = data.Project(name="test")
     await project.insert()
     projects = await data.Project.get_list(name="test")
     assert len(projects) == 1
     project_id = projects[0].id
+
+    env_uuid1 = uuid.uuid4()
     environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
     await environment1.insert()
-    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
-    await environment2.insert()
     envs = await data.Environment.get_list(project=project_id)
-    assert len(envs) == 2
+    assert len(envs) == 1
 
     metrics_service = EnvironmentMetricsService()
-    rcmc = CompileTimeMetricsCollector()
-    metrics_service.register_metric_collector(metrics_collector=rcmc)
+    ctmc = CompileTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=ctmc)
 
-    version_env1 = str(await ClientHelper(client, env_uuid1).get_version())
-    assert version_env1 == "1"
-    version_env2 = str(await ClientHelper(client, env_uuid2).get_version())
+    # Insert a few compiles.
+    compile_times: List[float] = [1.2, 2.3, 3.4]
+    await add_compiles(env_uuid1, compile_times)
+
     await metrics_service.flush_metrics()
 
     result_gauge = await data.EnvironmentMetricsTimer.get_list()
 
-    # print(result_gauge)
+    expected_count = len(compile_times)
+    expected_total_compile_time = sum(compile_times)
+
+    assert len(result_gauge) == 1
+    assert any(
+        x.count == expected_count
+        and x.metric_name == "compile_time"
+        and x.environment == environment1.id
+        and x.value == expected_total_compile_time
+        for x in result_gauge
+    )
+
+    # Create another environment and insert a few compiles in it.
+    env_uuid2 = uuid.uuid4()
+    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment2.insert()
+
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
+
+    compile_times: List[float] = [2.1, 4.3]
+    await add_compiles(env_uuid2, compile_times)
+
+    await metrics_service.flush_metrics()
+
+    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+
+    expected_count = len(compile_times)
+    expected_total_compile_time = sum(compile_times)
+
+    assert len(result_gauge) == 2
+    assert any(
+        x.count == expected_count
+        and x.metric_name == "compile_time"
+        and x.environment == environment2.id
+        and x.value == expected_total_compile_time
+        for x in result_gauge
+    )
+
+    # Add another set of compiles to the first environment.
+    compile_times: List[float] = [1.1, 2.2, 3.3, 4.4]
+    await add_compiles(env_uuid1, compile_times)
+
+    await metrics_service.flush_metrics()
+
+    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+
+    expected_count = len(compile_times)
+    expected_total_compile_time = sum(compile_times)
+
+    assert len(result_gauge) == 3
+    assert any(
+        x.count == expected_count
+        and x.metric_name == "compile_time"
+        and x.environment == environment1.id
+        and x.value == expected_total_compile_time
+        for x in result_gauge
+    )
