@@ -16,7 +16,7 @@ How do we deal with timezones when it comes to datetime data? This data is passe
 various places in the database and manipulated throughout the code. Which invariants do we uphold with regards to explicit
 timezone information for these datetime objects?
 
-## Decision Drivers <!-- optional -->
+## Decision Drivers
 
 * Behavior should be consistent regardless of the timezone participating hosts (e.g. server, agent, web-console client) live in.
 * Timezone handling over the API is non-trivial: we need to present a clear contract to the end-user.
