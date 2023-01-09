@@ -248,7 +248,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
 
 class AgentCountMetricsCollector(MetricsCollector):
     """
-    This Metric will track the number of resources (grouped by resources state).
+    This Metric will track the number of agents (grouped by agent status).
     """
 
     def get_metric_name(self) -> str:
