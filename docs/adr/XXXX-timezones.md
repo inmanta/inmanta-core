@@ -12,13 +12,20 @@ Technical Story: [
 
 ## Context and Problem Statement
 
+In the past (before #2953, May 2021) we didn't really take timezones into account at all. The database, the code and the API
+would all use naive timestamps (timestamps without explicit timezone information), which were generally (not through any
+explicit convention/agreement) interpreted according to the system/library defaults (generally local time). Since local time
+is not necessarily the same for all participating hosts (e.g. server, agent, web-console client) and might even change on a
+single host (e.g. DST), this did not suffice.
+
 How do we deal with timezones when it comes to datetime data? This data is passed in both directions over the API, stored at
 various places in the database and manipulated throughout the code. Which invariants do we uphold with regards to explicit
-timezone information for these datetime objects?
+timezone information for these datetime objects? And how / to what extent do we remain compatible with older API clients, which
+will always send naive timestamps, and might not be able to interpret timezone-aware timestamps in the response?
 
 ## Decision Drivers
 
-1. Behavior should be consistent regardless of the timezone participating hosts (e.g. server, agent, web-console client) live in.
+1. Behavior should be consistent regardless of the timezone participating hosts live in.
 2. Timezone handling over the API is non-trivial: we need to present a clear contract to the end-user.
 3. In the absence of timezone information, there is no single sane interpretation: explicit timezones improve clarity.
 
@@ -32,12 +39,12 @@ timezone information for these datetime objects?
 
 ## Decision Outcome
 
-Chosen option: option 3 with timezone-aware internal representation. 
+Chosen option: option 3 with timezone-aware internal representation.
 * Support both timezone aware and naive timestamps as API input,
 * Any timezone-naive timestamps represent a timestamp in UTC.
-* Use timezone-naive timestamps in API return values. 
+* Use timezone-naive timestamps in API return values.
 * Internally (database + code), always use timezone-aware timestamps (objects are converted at
-the API boundary). 
+the API boundary).
 
 Rationale: it is as explicit as we can make it (decision driver 3) without breaking backwards compatibility. In contrast to
 option 4, it remains simple: a single contract that applies to all API endpoints.
