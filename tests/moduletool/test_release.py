@@ -73,7 +73,7 @@ def test_release_stable_version(
 
 - Release
 
-## v1.2.2 - 2023/01/01
+## v1.2.2 - 2023-01-01
 
 - Release
             """.strip()
@@ -85,7 +85,7 @@ def test_release_stable_version(
 
 - Release
 
-## v1.2.2 - 2023/01/01
+## v1.2.2 - 2023-01-01
 
 - Release
             """.strip()
@@ -317,7 +317,7 @@ def test_bump_dev_version(
 ## v1.0.1 - ?
 
 
-## v1.0.0 - 2023/01/02
+## v1.0.0 - 2023-01-02
 
 - test
             """.strip(),
@@ -328,7 +328,7 @@ def test_bump_dev_version(
 
 - A changelog message.
 
-## v1.0.0 - 2023/01/02
+## v1.0.0 - 2023-01-02
 
 - test
             """.strip(),

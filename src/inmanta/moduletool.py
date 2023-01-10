@@ -1219,7 +1219,7 @@ class ModuleChangelog:
 
     - Change3
 
-    ## v1.2.0 - 2022/12/19
+    ## v1.2.0 - 2022-12-19
 
     - Change1
     - change2
