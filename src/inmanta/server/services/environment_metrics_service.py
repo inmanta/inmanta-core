@@ -162,7 +162,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_gauge.append(
                     EnvironmentMetricsGauge(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by,
+                        grouped_by=mv.grouped_by if mv.grouped_by else "None",
                         timestamp=timestamp,
                         count=mv.count,
                         environment=mv.environment,
@@ -174,7 +174,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_timer.append(
                     EnvironmentMetricsTimer(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by,
+                        grouped_by=mv.grouped_by if mv.grouped_by else "None",
                         timestamp=timestamp,
                         count=mv.count,
                         value=mv.value,
@@ -326,7 +326,7 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
     """
 
     def get_metric_name(self) -> str:
-        return "compile_waiting_time"
+        return "orchestrator.compile_waiting_time"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.TIMER
@@ -343,14 +343,17 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
         """
         metric_values: List[MetricValueTimer] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
+
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
-            assert isinstance(
-                record["compile_waiting_time"], float
-            )  # Problem here -> the db returns timestamps TODO -> convert to float
+            assert isinstance(record["compile_waiting_time"], timedelta)
+
+            total_compile_waiting_time = record["compile_waiting_time"].total_seconds()  # Convert compile_time to float
+            assert isinstance(total_compile_waiting_time, float)
+
             metric_values.append(
-                MetricValueTimer(self.get_metric_name(), record["count"], record["compile_time"], record["environment"])
+                MetricValueTimer(self.get_metric_name(), record["count"], total_compile_waiting_time, record["environment"])
             )
 
         return metric_values

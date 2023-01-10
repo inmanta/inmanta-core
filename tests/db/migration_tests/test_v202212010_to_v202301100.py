@@ -50,18 +50,18 @@ async def test_added_environment_metrics_tables(
     """
 
     # The table is not present before the migration
-    assert "group_by" not in (await get_columns_in_db_table("environmentmetricsgauge"))
-    assert "group_by" not in (await get_columns_in_db_table("environmentmetricstimer"))
+    assert "grouped_by" not in (await get_columns_in_db_table("environmentmetricsgauge"))
+    assert "grouped_by" not in (await get_columns_in_db_table("environmentmetricstimer"))
     columns_pk = await get_primary_key_columns_in_db_table("environmentmetricsgauge")
     assert len(columns_pk) == 3
-    assert "group_by" not in columns_pk
+    assert "grouped_by" not in columns_pk
 
     # Migrate DB schema
     await migrate_v202212010_to_v202301100()
 
     # The table is added to the database
-    assert "group_by" in (await get_columns_in_db_table("environmentmetricsgauge"))
-    assert "group_by" in (await get_columns_in_db_table("environmentmetricstimer"))
+    assert "grouped_by" in (await get_columns_in_db_table("environmentmetricsgauge"))
+    assert "grouped_by" in (await get_columns_in_db_table("environmentmetricstimer"))
     columns_pk = await get_primary_key_columns_in_db_table("environmentmetricsgauge")
     assert len(columns_pk) == 4
-    assert "group_by" in columns_pk
+    assert "grouped_by" in columns_pk
