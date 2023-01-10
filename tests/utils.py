@@ -623,7 +623,7 @@ async def resource_action_consistency_check():
         - both methods are in use (i.e. the queries return at least one record)
     """
 
-    async with data.ResourceAction.get_connection() as postgresql_client:
+    async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
                     INNER JOIN public.resource as r
@@ -631,7 +631,7 @@ async def resource_action_consistency_check():
                     AND r.environment = ra.environment
             """
         )
-        all_ra_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
+        post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
             """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
@@ -643,6 +643,13 @@ async def resource_action_consistency_check():
                         ON ra.action_id = jt.resource_action_id
             """
         )
-        assert all_ra_set == {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        return post_ra_one_set, post_ra_two_set
 
-        assert all_ra_set
+    # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
+    # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
+    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+        get_data, tx_isolation_level="repeatable_read"
+    )
+    assert post_ra_one_set == post_ra_two_set
+    assert post_ra_one_set
