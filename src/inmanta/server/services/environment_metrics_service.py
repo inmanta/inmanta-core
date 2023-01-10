@@ -17,6 +17,7 @@
 """
 import abc
 import logging
+import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
@@ -24,13 +25,13 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import EnvironmentMetricsGauge, EnvironmentMetricsTimer
+from inmanta.data import Agent, Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
-METRIC_NAME_SEPARATOR = "."
+METRIC_NAME_SEPARATOR = "#"
 
 
 class MetricType(str, Enum):
@@ -52,21 +53,22 @@ class MetricValue:
     the Metric values as they should be returned by a MetricsCollector of type gauge
 
     The name of a metric as stored in the DB is the concatenation of metric_name and a field on which the data is grouped by.
-    The METRIC_NAME_SEPARATOR '.' is used as separator and should not be used in the name itself.
+    The METRIC_NAME_SEPARATOR is used as separator and should not be used in the name itself.
     For example, a metric collected by for the agent_count collector and grouped for the state "up",
     will have agent_count.up as metric.
     if the metric is not grouped by anything the name of the collector is used as metric_name
     """
 
-    def __init__(self, metric_name: str, count: int, grouped_by: Optional[str] = None) -> None:
+    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
         if METRIC_NAME_SEPARATOR in metric_name:
             raise Exception('The character "%s" can not be used in the metric_name (%s)' % (METRIC_NAME_SEPARATOR, metric_name))
         if grouped_by and METRIC_NAME_SEPARATOR in grouped_by:
             raise Exception(
                 'The character "%s" can not be used in the grouped_by value (%s)' % (METRIC_NAME_SEPARATOR, grouped_by)
             )
-        self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
+        self.metric_name = METRIC_NAME_SEPARATOR.join([metric_name, grouped_by]) if grouped_by else metric_name
         self.count = count
+        self.environment = environment
 
 
 class MetricValueTimer(MetricValue):
@@ -74,8 +76,10 @@ class MetricValueTimer(MetricValue):
     the Metric values as they should be returned by a MetricsCollector of type timer
     """
 
-    def __init__(self, collector_name: str, count: int, value: float, grouped_by: Optional[str] = None) -> None:
-        super().__init__(collector_name, count, grouped_by)
+    def __init__(
+        self, metric_name: str, count: int, value: float, environment: uuid.UUID, grouped_by: Optional[str] = None
+    ) -> None:
+        super().__init__(metric_name, count, environment, grouped_by)
         self.value = value
 
 
@@ -98,7 +102,7 @@ class MetricsCollector(abc.ABC):
 
     @abc.abstractmethod
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         """
         Invoked by the `EnvironmentMetricsService` at the end of the metrics collection interval.
@@ -132,6 +136,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     async def start(self) -> None:
         await super().start()
+        self.register_metric_collector(ResourceCountMetricsCollector())
+        self.register_metric_collector(AgentCountMetricsCollector())
+        self.register_metric_collector(CompileTimeMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -157,12 +164,22 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         def create_metrics_gauge(metric_values_gauge: Sequence[MetricValue], timestamp: datetime):
             for mv in metric_values_gauge:
-                metric_gauge.append(EnvironmentMetricsGauge(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count))
+                metric_gauge.append(
+                    EnvironmentMetricsGauge(
+                        metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, environment=mv.environment
+                    )
+                )
 
         def create_metrics_timer(metric_values_timer: Sequence[MetricValueTimer], timestamp: datetime):
             for mv in metric_values_timer:
                 metric_timer.append(
-                    EnvironmentMetricsTimer(metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, value=mv.value)
+                    EnvironmentMetricsTimer(
+                        metric_name=mv.metric_name,
+                        timestamp=timestamp,
+                        count=mv.count,
+                        value=mv.value,
+                        environment=mv.environment,
+                    )
                 )
 
         async with EnvironmentMetricsGauge.get_connection() as con:
@@ -194,3 +211,110 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 "Verify the load on the Database and the available connection pool size.",
                 COLLECTION_INTERVAL_IN_SEC,
             )
+
+
+class ResourceCountMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the number of resources (grouped by resources state).
+    """
+
+    def get_metric_name(self) -> str:
+        return "resource.resource_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValue]:
+        query: str = f"""
+            SELECT status,environment,count(*)
+            FROM {Resource.table_name()} AS r
+            WHERE r.model=(
+                SELECT MAX(cm.version)
+                FROM {ConfigurationModel.table_name()} AS cm
+                WHERE cm.environment=r.environment AND cm.released=TRUE
+                )
+            GROUP BY (status, environment)
+        """
+        metric_values: List[MetricValue] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["status"], str)
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class AgentCountMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the number of agents (grouped by agent status).
+    """
+
+    def get_metric_name(self) -> str:
+        return "resource.agent_count"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.GAUGE
+
+    async def get_metric_value(  # todo
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValue]:
+        query: str = f"""
+SELECT
+  CASE
+    WHEN paused THEN 'paused'
+    WHEN NOT paused AND id_primary IS NOT NULL THEN 'up'
+    ELSE 'down'
+  END AS status,environment,count(*)
+FROM {Agent.table_name()}
+GROUP BY (status, environment);
+        """
+        metric_values: List[MetricValue] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["status"], str)
+            metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class CompileTimeMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the duration of compiles executed on the server.
+    """
+
+    def get_metric_name(self) -> str:
+        return "orchestrator.compile_time"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValueTimer]:
+        query: str = f"""
+            SELECT count(*) as count, environment, sum(completed-started) as compile_time
+            FROM {Compile.table_name()}
+            WHERE completed >= '{start_interval}'
+            AND completed < '{end_interval}'
+            GROUP BY environment
+        """
+
+        metric_values: List[MetricValueTimer] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["compile_time"], timedelta)
+
+            total_compile_time = record["compile_time"].total_seconds()  # Convert compile_time to float
+            assert isinstance(total_compile_time, float)
+
+            metric_values.append(
+                MetricValueTimer(self.get_metric_name(), record["count"], total_compile_time, record["environment"])
+            )
+
+        return metric_values

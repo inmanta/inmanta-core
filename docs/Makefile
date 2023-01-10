@@ -10,7 +10,7 @@ BUILDDIR      = build
 endif
 SOURCEDIR	  = .
 #IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
-IMAGEDIRS     = _static model_developers/images
+IMAGEDIRS     = _static model_developers/images lsm
 
 # SVG to PDF conversion
 # support inkscape versions <1.0 and >1.0
@@ -29,7 +29,7 @@ SVG2PDF       = inkscape
 SVG2PDF_FLAGS =
 
 # Internal variables.
-ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
+ALLSPHINXOPTS   = -t oss -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
@@ -72,6 +72,11 @@ html: openapi latexpdf
 	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
+
+onlyhtml:
+	$(SPHINXBUILD) -b html -t include_redoc $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	@echo
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html. PDF and REST API documentation will be missing"
 
 dirhtml:
 	$(SPHINXBUILD) -b dirhtml $(ALLSPHINXOPTS) $(BUILDDIR)/dirhtml
@@ -197,4 +202,3 @@ PNGs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.png,$(wildcard $(SOURCED
 
 # Make a rule to build the PDFs
 images: $(PNGs) $(PDFs)
-

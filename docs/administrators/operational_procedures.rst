@@ -123,7 +123,7 @@ Procedure
 
 3. Temporarily disable auto_deploy
 
-    * `auto_deploy = False`
+  * `auto_deploy = False`
 
 4. Click ‘recompile’ to install the project.
 
@@ -139,10 +139,10 @@ Procedure
 
 7. Verify that automation setting are on
 
-    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
-    * `auto_deploy = true`
-    * `push_on_auto_deploy = true`
-    * `server_compile = true`
+  * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
+  * `auto_deploy = true`
+  * `push_on_auto_deploy = true`
+  * `server_compile = true`
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
