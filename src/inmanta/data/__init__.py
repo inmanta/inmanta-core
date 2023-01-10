@@ -2211,7 +2211,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         raise Exception("Failed to execute transaction after 3 attempts.")
                     else:
                         # Exponential backoff
-                        await asyncio.sleep((10 * pow(2, attempt))/1000)
+                        await asyncio.sleep(pow(10, attempt)/1000)
                         attempt += 1
 
 
