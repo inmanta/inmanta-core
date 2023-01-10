@@ -459,7 +459,7 @@ async def test_spontaneous_repair(
     now = time.time()
     while resource_container.Provider.get("agent1", "key2") != "value2":
         if time.time() > now + 10:
-            raise Exception("Timeout occured while waiting for repair run")
+            raise Exception("Timeout occurred while waiting for repair run")
         await asyncio.sleep(0.1)
 
     await verify_deployment_result()
