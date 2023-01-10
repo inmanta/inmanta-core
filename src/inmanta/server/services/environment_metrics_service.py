@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import Agent, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import Compile, Agent, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -138,6 +138,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         await super().start()
         self.register_metric_collector(ResourceCountMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
+        self.register_metric_collector(CompileTimeMetricsCollector())
         self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
@@ -277,4 +278,43 @@ GROUP BY (status, environment);
             assert isinstance(record["environment"], uuid.UUID)
             assert isinstance(record["status"], str)
             metric_values.append(MetricValue(self.get_metric_name(), record["count"], record["environment"], record["status"]))
+        return metric_values
+
+
+class CompileTimeMetricsCollector(MetricsCollector):
+    """
+    This Metric will track the duration of compiles executed on the server.
+    """
+
+    def get_metric_name(self) -> str:
+        return "compile_time"
+
+    def get_metric_type(self) -> MetricType:
+        return MetricType.TIMER
+
+    async def get_metric_value(
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+    ) -> Sequence[MetricValueTimer]:
+        query: str = f"""
+            SELECT count(*) as count, environment, sum(completed-started) as compile_time
+            FROM {Compile.table_name()}
+            WHERE completed >= '{start_interval}'
+            AND completed < '{end_interval}'
+            GROUP BY environment
+        """
+
+        metric_values: List[MetricValueTimer] = []
+        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        for record in result:
+            assert isinstance(record["count"], int)
+            assert isinstance(record["environment"], uuid.UUID)
+            assert isinstance(record["compile_time"], timedelta)
+
+            total_compile_time = record["compile_time"].total_seconds()  # Convert compile_time to float
+            assert isinstance(total_compile_time, float)
+
+            metric_values.append(
+                MetricValueTimer(self.get_metric_name(), record["count"], total_compile_time, record["environment"])
+            )
+
         return metric_values
