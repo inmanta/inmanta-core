@@ -36,7 +36,7 @@ Chosen option: option 3 with timezone-aware internal representation.
 * Support both timezone aware and naive timestamps as API input,
 * Any timezone-naive timestamps represent a timestamp in UTC.
 * Use timezone-naive timestamps in API return values. 
-* Internally, always use timezone-aware timestamps (objects are converted at
+* Internally (database + code), always use timezone-aware timestamps (objects are converted at
 the API boundary). 
 
 Rationale: it is as explicit as we can make it (decision driver 3) without breaking backwards compatibility. In contrast to
