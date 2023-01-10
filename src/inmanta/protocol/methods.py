@@ -499,11 +499,9 @@ def discovered_resources_create(env: uuid.UUID, discovered_resource_name: str, v
 
 @typedmethod(
     path="/discovered_resources",
-    validate_sid=False,
     operation="GET",
-    agent_server=True,
     arg_options=ENV_OPTS,
-    client_types=[const.ClientType.agent],
+    client_types=[const.ClientType.api],
 )
 def get_discovered_resources(
     env: uuid.UUID,
