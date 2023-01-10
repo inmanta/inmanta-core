@@ -682,12 +682,11 @@ When a stable release is done, this command:
 * Does a commit that changes the current version to a development version that is one patch increment ahead of the released
   version.
 When a development release is done using the --dev option, this command:
-* Does a commit that updates the current version and the version mentioned in the change to a development version that is
-  a patch, minor or major version ahead of the previous stable release. Whether a patch, minor or major version is created,
-  is determined respectively by the --patch, --minor or --major argument (--patch is the default).
-
-When a CHANGELOG.md file is present in the root of the module directory then the version number in the changelog is also
-updated accordingly.
+* Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
+  ahead of the previous stable release. The size of the increment is determined by the --patch, --minor or --major argument
+  (--patch is the default). When a CHANGELOG.md file is present in the root of the module directory then the version number in
+  the changelog is also updated accordingly. The changelog file is always populated with the associated stable version and
+  not a development version.
             """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
@@ -717,6 +716,12 @@ updated accordingly.
             action="store_true",
         )
         release.add_argument("-m", "--message", help="Commit message")
+        release.add_argument(
+            "-c",
+            "--changelog-message",
+            help="This changelog message will be written to the changelog file. If the -m option is not provided, "
+            "this message will also be used as the commit message. This option is ignored when --dev is not provided.",
+        )
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -1088,16 +1093,13 @@ version: 0.0.1dev0"""
         self,
         current_version: Version,
         all_existing_stable_version: abc.Collection[Version],
-        minimal_version_bump_to_prev_release: Optional[ChangeType],
+        minimal_version_bump_to_prev_release: ChangeType,
     ) -> Version:
         """
         Turn the given current_version into a dev version with version_tag dev0 and ensure
         the version number is at least `minimal_version_bump_to_prev_release` separated
         from its predecessor in all_existing_stable_version.
         """
-        if not minimal_version_bump_to_prev_release:
-            # No version bump is required
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
         version_previous_release: Version
         try:
             version_previous_release = sorted([v for v in all_existing_stable_version if v <= current_version])[-1]
@@ -1124,28 +1126,6 @@ version: 0.0.1dev0"""
         else:
             return VersionOperation.set_version_tag(current_version, version_tag="dev0")
 
-    def _update_version_in_changelog_file(self, path_changelog_file: str, old_version: Version, new_version: Version) -> None:
-        """
-        In the given changelog file replace the version number old_version with new_version.
-        This operation is performed in-place.
-        """
-        if old_version.base_version == new_version.base_version:
-            return
-        with open(path_changelog_file, "r", encoding="utf-8") as fh:
-            content_changelog = fh.read()
-        # The changelog only contains the base_version. Replace only the first occurrence
-        # to not accidentally perform invalid replacements in the remainder of the file.
-        new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
-        if content_changelog == new_content_changelog:
-            LOGGER.warning(
-                "Failed to bump the version number in the changelog file from %s to %s.",
-                str(old_version.base_version),
-                str(new_version.base_version),
-            )
-        else:
-            with open(path_changelog_file, "w", encoding="utf-8") as fh:
-                fh.write(new_content_changelog)
-
     def release(
         self,
         dev: bool,
@@ -1153,6 +1133,7 @@ version: 0.0.1dev0"""
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
+        changelog_message: Optional[str] = None,
         add_new_version_to_changelog: bool = False,
     ) -> None:
         """
@@ -1164,7 +1145,7 @@ version: 0.0.1dev0"""
         """
         nb_version_bump_arguments_set = sum([patch, minor, major])
         if nb_version_bump_arguments_set > 1:
-            raise click.UsageError("Only one of --patch, --minor and --major arguments can be set at the same time.")
+            raise click.UsageError("Only one of --patch, --minor and --major can be set at the same time.")
         module_dir = os.path.abspath(os.getcwd())
         module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
         if not gitprovider.is_git_repository(repo=module_dir):
@@ -1175,32 +1156,31 @@ version: 0.0.1dev0"""
         gitprovider.fetch(module_dir)
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
+        changelog: Optional[ModuleChangelog] = (
+            ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
+        )
         if dev:
             requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
-                current_version, stable_releases, requested_version_bump
+                current_version, stable_releases, requested_version_bump if requested_version_bump else ChangeType.PATCH
             )
             assert new_version.dev is not None and new_version.dev == 0
-            new_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
-            module.rewrite_version(new_version=new_version_str, version_tag=version_tag)
-            files_to_commit = [module.get_metadata_file_path()]
-            if os.path.exists(path_changelog_file):
+            new_base_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
+            module.rewrite_version(new_version=new_base_version_str, version_tag=version_tag)
+            if not changelog and changelog_message:
+                changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+            elif changelog:
                 if add_new_version_to_changelog:
-                    # Create a new section in the changelog for the version number
-                    with open(path_changelog_file, "r+", encoding="utf-8") as fh:
-                        current_content = fh.read()
-                        fh.seek(0, 0)
-                        fh.write(f"V{new_version_str}\n-\n\n{current_content}")
+                    changelog.add_section_for_version(current_version, new_version)
                 else:
-                    self._update_version_in_changelog_file(
-                        path_changelog_file=path_changelog_file, old_version=current_version, new_version=new_version
-                    )
-                files_to_commit.append(path_changelog_file)
+                    changelog.rewrite_version_in_changelog_header(old_version=current_version, new_version=new_version)
+                if changelog_message:
+                    changelog.add_changelog_entry(current_version, new_version, changelog_message)
             gitprovider.commit(
                 repo=module_dir,
-                message=message if message else f"Bump version to {new_version}",
+                message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
                 commit_all=True,
-                add=files_to_commit,
+                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
@@ -1210,11 +1190,13 @@ version: 0.0.1dev0"""
             if release_tag in stable_releases:
                 raise click.ClickException(f"A Git version tag already exists for version {release_tag}")
             module.rewrite_version(new_version=str(release_tag), version_tag="")
+            if changelog:
+                changelog.set_release_date_for_version(release_tag)
             gitprovider.commit(
                 repo=module_dir,
                 message=message if message else f"Release version {module.metadata.get_full_version()}",
                 commit_all=True,
-                add=[module.get_metadata_file_path()],
+                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
@@ -1222,6 +1204,176 @@ version: 0.0.1dev0"""
             self.release(
                 dev=True, message="Bump version to next development version", patch=True, add_new_version_to_changelog=True
             )
+
+
+class ModuleChangelog:
+    """
+    This class represent the changelog file in an Inmanta module.
+
+    The expected format of the changelog is the following:
+
+    ```
+    # Changelog
+
+    ## v1.2.1 - ?
+
+    - Change3
+
+    ## v1.2.0 - 2022-12-19
+
+    - Change1
+    - change2
+    ```
+    """
+
+    def __init__(self, path_changelog_file: str) -> None:
+        if not os.path.isfile(path_changelog_file):
+            raise Exception(f"{path_changelog_file} is not a file.")
+        self.path_changelog_file = os.path.abspath(path_changelog_file)
+
+    @classmethod
+    def create_changelog_file(cls, path: str, version: Version, changelog_message: str) -> "ModuleChangelog":
+        """
+        Create a new changelog file at the given path. Add a section for the given version and write the given
+        changelog message to it.
+        """
+        if os.path.exists(path):
+            raise Exception(f"File {path} already exists.")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(
+                f"""
+{cls._get_top_level_header()}
+
+{cls._get_header_for_version(version)}
+
+- {changelog_message}
+            """.strip()
+            )
+        return cls(path)
+
+    def get_path(self) -> str:
+        return self.path_changelog_file
+
+    @classmethod
+    def _get_header_for_version(cls, version: Version) -> str:
+        """
+        Return the header the given version would have in the changelog.
+        """
+        return f"## v{version.base_version} - ?"
+
+    @classmethod
+    def _get_top_level_header(cls) -> str:
+        """
+        Return the top-level header of the changelog file.
+        """
+        return "# Changelog"
+
+    def _add_changelog_section(self, content_changelog: str, old_version: Version, new_version: Version) -> str:
+        """
+        Add a new section for the given new_version to the changelog, given the current content of the changelog file.
+        """
+        header_for_new_version: str = self._get_header_for_version(new_version)
+        # Try to insert the section before the section of the previous version if such a section exists
+        regex_header_previous_version: re.Pattern[str] = re.compile(
+            rf"(^{re.escape(f'## v{old_version.base_version}')}[^\n]*$)", re.MULTILINE
+        )
+        new_content_changelog = regex_header_previous_version.sub(
+            repl=f"{header_for_new_version}\n\n\n\\g<1>",
+            string=content_changelog,
+            count=1,
+        )
+        if new_content_changelog != content_changelog:
+            return new_content_changelog
+        # No changelog section exists for the previous version. Search for the top-level header of the changelog and insert the
+        # section below it.
+        regex_top_level_header: re.Pattern[str] = re.compile(r"(^\# [^\n]*$)", re.MULTILINE)
+        new_content_changelog = regex_top_level_header.sub(
+            repl=f"\\g<1>\n\n{header_for_new_version}\n\n\n",
+            string=content_changelog,
+            count=1,
+        )
+        if new_content_changelog != content_changelog:
+            return new_content_changelog
+        # No top-level header exists in changelog file. It's a new changelog, insert at the beginning of the file.
+        return f"{self._get_top_level_header()}\n\n{header_for_new_version}\n\n\n{content_changelog}"
+
+    def add_section_for_version(self, old_version: Version, new_version: Version) -> None:
+        """
+        Add a new section for the given new_version to the changelog file. This new section is added right
+        above the section of the previous version. If no such section exists, it's added at the top of the file.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog: str = fh.read()
+            new_content_changelog: str = self._add_changelog_section(content_changelog, old_version, new_version)
+            fh.seek(0, 0)
+            fh.write(new_content_changelog)
+            fh.truncate()
+
+    def _has_section_for_version(self, version: Version) -> bool:
+        """
+        Return True iff this changelog contains a section of the given version.
+        """
+        with open(self.path_changelog_file, "r", encoding="utf-8") as fh:
+            regex_version_header: re.Pattern[str] = re.compile(rf"^{re.escape(f'## v{version.base_version} - ')}", re.MULTILINE)
+            content = fh.read()
+            return regex_version_header.search(content) is not None
+
+    def rewrite_version_in_changelog_header(self, old_version: Version, new_version: Version) -> None:
+        """
+        Replaces the first occurrence of the given old_version in this changelog file with new_version.
+        This operation is performed in-place.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            # The changelog only contains the base_version. Replace only the first occurrence
+            # to not accidentally perform invalid replacements in the remainder of the file.
+            new_content_changelog = content_changelog.replace(old_version.base_version, new_version.base_version, 1)
+            if content_changelog != new_content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+
+    def set_release_date_for_version(self, version: Version) -> None:
+        """
+        Replace the question mark placeholder in the changelog file with the current data.
+        """
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            regex_version_header: re.Pattern[str] = re.compile(rf"^({re.escape(f'## v{version} - ')})\?([ ]*)$", re.MULTILINE)
+            new_content_changelog = regex_version_header.sub(
+                repl=f"\\g<1>{datetime.date.today().isoformat()}\\g<2>",
+                string=content_changelog,
+                count=1,
+            )
+            if new_content_changelog != content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+            else:
+                LOGGER.warning(
+                    "Failed to set the release date in the changelog for version %s.",
+                    str(version.base_version),
+                )
+
+    def add_changelog_entry(self, old_version: Version, version: Version, message: str) -> None:
+        """
+        Add an entry to the changelog section of the given version.
+        """
+        if not self._has_section_for_version(version):
+            self.add_section_for_version(old_version, version)
+        with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
+            content_changelog = fh.read()
+            regex_version_header: re.Pattern[str] = re.compile(rf"({re.escape(f'## v{version.base_version} - ?')}[ ]*\n\n)")
+            new_content_changelog = regex_version_header.sub(repl=f"\\g<1>- {message}\n", string=content_changelog, count=1)
+            if new_content_changelog != content_changelog:
+                fh.seek(0, 0)
+                fh.write(new_content_changelog)
+                fh.truncate()
+            else:
+                LOGGER.warning(
+                    "Failed to add changelog entry to section for version %s.",
+                    str(version.base_version),
+                )
 
 
 class ModuleBuildFailedError(Exception):
