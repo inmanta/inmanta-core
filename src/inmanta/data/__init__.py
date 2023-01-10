@@ -2193,6 +2193,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def execute_in_retryable_transaction(
         cls, fnc: Callable[[Connection], Awaitable[TransactionResult]], tx_isolation_level: Optional[str] = None
     ) -> TransactionResult:
+        """
+        Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
+        result returned by fnc. This method performs retries when the transaction is aborted due to a
+        serialization error.
+        """
         async with cls.get_connection() as postgresql_client:
             max_retries = 3
             while True:
