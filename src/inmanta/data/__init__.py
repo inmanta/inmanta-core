@@ -2191,7 +2191,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     async def execute_in_retryable_transaction(
-        cls, fnc: Callable[[Connection], Awaitable[TransactionResult]], tx_isolation_level: Optional[str] = None
+        cls,
+        fnc: Callable[[Connection], Awaitable[TransactionResult]],
+        tx_isolation_level: Optional[str] = None,
     ) -> TransactionResult:
         """
         Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
@@ -2199,16 +2201,18 @@ class BaseDocument(object, metaclass=DocumentMeta):
         serialization error.
         """
         async with cls.get_connection() as postgresql_client:
-            max_retries = 3
+            attempt = 1
             while True:
                 try:
                     async with postgresql_client.transaction(isolation=tx_isolation_level):
                         return await fnc(postgresql_client)
                 except SerializationError:
-                    if max_retries >= 0:
-                        max_retries -= 1
+                    if attempt > 3:
+                        raise Exception("Failed to execute transaction after 3 attempts.")
                     else:
-                        raise Exception("Failed to execute transaction after 3 retries.")
+                        # Exponential backoff
+                        await asyncio.sleep(10 * pow(2, attempt))
+                        attempt += 1
 
 
 class Project(BaseDocument):
