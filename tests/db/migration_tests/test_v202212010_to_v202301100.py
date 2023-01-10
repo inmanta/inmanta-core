@@ -13,7 +13,7 @@
 """
 import os
 from collections import abc
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import AsyncIterator, Awaitable, Callable
 
 import pytest
 from asyncpg import Connection

@@ -5421,7 +5421,7 @@ class EnvironmentMetricsGauge(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: Optional[str]
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
 
@@ -5441,7 +5441,7 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: Optional[str]
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
     value: float
