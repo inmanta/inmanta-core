@@ -1300,7 +1300,7 @@ class ModuleChangelog:
     def add_section_for_version(self, old_version: Version, new_version: Version) -> None:
         """
         Add a new section for the given new_version to the changelog file. This new section is added right
-        above the section of the previous version. If no such section exists, it's added at the top fo the file.
+        above the section of the previous version. If no such section exists, it's added at the top of the file.
         """
         with open(self.path_changelog_file, "r+", encoding="utf-8") as fh:
             content_changelog: str = fh.read()
