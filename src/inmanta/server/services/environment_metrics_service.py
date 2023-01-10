@@ -31,7 +31,6 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
-METRIC_NAME_SEPARATOR = "."
 
 
 class MetricType(str, Enum):
@@ -60,13 +59,8 @@ class MetricValue:
     """
 
     def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
-        if METRIC_NAME_SEPARATOR in metric_name:
-            raise Exception('The character "%s" can not be used in the metric_name (%s)' % (METRIC_NAME_SEPARATOR, metric_name))
-        if grouped_by and METRIC_NAME_SEPARATOR in grouped_by:
-            raise Exception(
-                'The character "%s" can not be used in the grouped_by value (%s)' % (METRIC_NAME_SEPARATOR, grouped_by)
-            )
-        self.metric_name = ".".join([metric_name, grouped_by]) if grouped_by else metric_name
+        self.metric_name = metric_name
+        self.grouped_by = grouped_by
         self.count = count
         self.environment = environment
 
@@ -165,7 +159,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             for mv in metric_values_gauge:
                 metric_gauge.append(
                     EnvironmentMetricsGauge(
-                        metric_name=mv.metric_name, timestamp=timestamp, count=mv.count, environment=mv.environment
+                        metric_name=mv.metric_name,
+                        grouped_by=mv.grouped_by,
+                        timestamp=timestamp,
+                        count=mv.count,
+                        environment=mv.environment,
                     )
                 )
 
@@ -174,6 +172,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_timer.append(
                     EnvironmentMetricsTimer(
                         metric_name=mv.metric_name,
+                        grouped_by=mv.grouped_by,
                         timestamp=timestamp,
                         count=mv.count,
                         value=mv.value,
