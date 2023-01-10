@@ -50,12 +50,6 @@ class MetricType(str, Enum):
 class MetricValue:
     """
     the Metric values as they should be returned by a MetricsCollector of type gauge
-
-    The name of a metric as stored in the DB is the concatenation of metric_name and a field on which the data is grouped by.
-    The METRIC_NAME_SEPARATOR '.' is used as separator and should not be used in the name itself.
-    For example, a metric collected by for the agent_count collector and grouped for the state "up",
-    will have agent_count.up as metric.
-    if the metric is not grouped by anything the name of the collector is used as metric_name
     """
 
     def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
@@ -349,11 +343,11 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
             assert isinstance(record["environment"], uuid.UUID)
             assert isinstance(record["compile_waiting_time"], timedelta)
 
-            total_compile_waiting_time = record["compile_waiting_time"].total_seconds()  # Convert compile_time to float
-            assert isinstance(total_compile_waiting_time, float)
+            compile_waiting_time = record["compile_waiting_time"].total_seconds()  # Convert compile_waiting_time to float
+            assert isinstance(compile_waiting_time, float)
 
             metric_values.append(
-                MetricValueTimer(self.get_metric_name(), record["count"], total_compile_waiting_time, record["environment"])
+                MetricValueTimer(self.get_metric_name(), record["count"], compile_waiting_time, record["environment"])
             )
 
         return metric_values

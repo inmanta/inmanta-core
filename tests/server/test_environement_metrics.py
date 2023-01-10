@@ -191,7 +191,6 @@ async def test_flush_metrics_gauge_multi(env_metrics_service, env_with_uuid):
     assert result[0].count == 1
     assert result[0].metric_name == "dummy_gauge_multi"
     assert result[0].grouped_by == "up"
-    assert result[0].grouped_by == "up"
     assert isinstance(result[0].timestamp, datetime)
     assert result[1].count == 2
     assert result[1].metric_name == "dummy_gauge_multi"
