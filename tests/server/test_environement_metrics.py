@@ -648,7 +648,7 @@ async def test_agent_count_metric(clienthelper, client, agent):
     metrics_service.register_metric_collector(metrics_collector=acmc)
 
     # flush the metrics for the first time: 2 record (1 agent in paused state for the first
-    # environment and 2 for the second)
+    # environment and 1 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 2
