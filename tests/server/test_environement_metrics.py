@@ -728,7 +728,7 @@ async def test_compile_time_metric(clienthelper, client, agent):
     assert len(result_gauge) == 1
     assert any(
         x.count == expected_count
-        and x.metric_name == "compile_time"
+        and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
         for x in result_gauge
@@ -755,7 +755,7 @@ async def test_compile_time_metric(clienthelper, client, agent):
     assert len(result_gauge) == 2
     assert any(
         x.count == expected_count
-        and x.metric_name == "compile_time"
+        and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment2.id
         and x.value == expected_total_compile_time
         for x in result_gauge
@@ -775,7 +775,7 @@ async def test_compile_time_metric(clienthelper, client, agent):
     assert len(result_gauge) == 3
     assert any(
         x.count == expected_count
-        and x.metric_name == "compile_time"
+        and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
         for x in result_gauge

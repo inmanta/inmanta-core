@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import Compile, Agent, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import Agent, Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -287,7 +287,7 @@ class CompileTimeMetricsCollector(MetricsCollector):
     """
 
     def get_metric_name(self) -> str:
-        return "compile_time"
+        return "orchestrator.compile_time"
 
     def get_metric_type(self) -> MetricType:
         return MetricType.TIMER
