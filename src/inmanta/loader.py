@@ -31,7 +31,7 @@ from importlib.machinery import SourcelessFileLoader
 from itertools import chain, starmap
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
-from inmanta import const
+from inmanta import const, module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -96,17 +96,18 @@ class SourceInfo(object):
         """
         Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
         """
-        from inmanta.module import Project
-
-        return starmap(SourceInfo, Project.get().modules[self._get_module_name()].get_plugin_files())
+        return starmap(SourceInfo, module.Project.get().modules[self._get_module_name()].get_plugin_files())
 
     @property
     def requires(self) -> List[str]:
         """List of python requirements associated with this source file"""
-        from inmanta.module import Project
-
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
+            project: module.Project = module.Project.get()
+            mod: module.Module = project.modules[self._get_module_name()]
+            if project.metadata.agent_install_dependency_modules:
+                self._requires = mod.get_all_python_requirements_as_list()
+            else:
+                self._requires = mod.get_strict_python_requirements_as_list()
         return self._requires
 
 
@@ -215,7 +216,7 @@ class CodeLoader(object):
         self.__check_dir()
 
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir])
+        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
 
     def __check_dir(self) -> None:
         """
@@ -483,12 +484,14 @@ class PluginModuleFinder(Finder):
         cls.MODULE_FINDER = None
 
     @classmethod
-    def configure_module_finder(cls, modulepaths: List[str]) -> None:
+    def configure_module_finder(cls, modulepaths: List[str], *, prefer: bool = False) -> None:
         """
         Setup a custom module loader to handle imports in .py files of the modules. This finder will be stored
-        as the last finder in sys.meta_path.
+        as the last finder in sys.meta_path, unless prefer is True. If the custom module loader has already been
+        set up, does nothing (i.e. it is not moved to the front or the back of sys.meta_path).
 
         :param modulepaths: The directories where the module finder should look for modules.
+        :param prefer: Prefer this module finder over others, putting it first in sys.meta_path.
         """
         if cls.MODULE_FINDER is not None:
             # PluginModuleFinder already present in sys.meta_path
@@ -497,7 +500,10 @@ class PluginModuleFinder(Finder):
 
         # PluginModuleFinder not yet present in sys.meta_path.
         module_finder = PluginModuleFinder(modulepaths)
-        sys.meta_path.append(module_finder)
+        if prefer:
+            sys.meta_path.insert(0, module_finder)
+        else:
+            sys.meta_path.append(module_finder)
         cls.MODULE_FINDER = module_finder
 
     def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[FileLoader]:

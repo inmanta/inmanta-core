@@ -132,5 +132,3 @@ For very interactive changes the server pushes changes to the agent. The server 
 
  * **incremental** only deploys resource for which the orchestrator knows there are changes, based on the last known deploy status of the resource.
  * **full** always deploys all resources even if the last know status of the resource already matches desired state.
-
-

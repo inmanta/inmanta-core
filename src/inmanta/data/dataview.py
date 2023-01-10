@@ -819,10 +819,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 attribute_hash=record["attribute_hash"],
                 attributes=json.loads(record["attributes"]),
                 date=record["date"],
-                requires=[
-                    Id.parse_resource_version_id(rvid).resource_str()
-                    for rvid in json.loads(record["attributes"]).get("requires", [])
-                ],
+                requires=[Id.parse_id(rid).resource_str() for rid in json.loads(record["attributes"]).get("requires", [])],
             )
             for record in records
         ]

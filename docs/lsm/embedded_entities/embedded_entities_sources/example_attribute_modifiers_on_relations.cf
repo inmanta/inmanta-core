@@ -1,0 +1,47 @@
+import lsm
+import lsm::fsm
+import ip
+
+entity ServiceX extends lsm::ServiceEntity:
+    """
+        The API of ServiceX.
+
+        :attr service_id: A unique ID for this service.
+    """
+    string service_id
+end
+
+index ServiceX(service_id)
+
+ServiceX.primary [1] -- SubService
+ServiceX.secondary [0:1] lsm::__rwplus__ SubService
+
+entity SubService extends lsm::EmbeddedEntity:
+    """
+        :attr ip: The IP address of the service
+    """
+    ip::ip ip
+end
+
+index SubService(ip)
+
+implement ServiceX using parents
+implement SubService using parents
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::ServiceX",
+    lifecycle=lsm::fsm::service,
+    service_entity_name="service_x",
+)
+
+for instance in lsm::all(binding):
+    service_x = ServiceX(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        service_id=instance["attributes"]["service_id"],
+        primary=SubService(**instance["attributes"]["primary"]),
+    )
+    if instance["attributes"]["secondary"] != null:
+        service_x.secondary=SubService(**instance["attributes"]["secondary"])
+    end
+end

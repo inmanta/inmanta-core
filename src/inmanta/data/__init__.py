@@ -33,6 +33,7 @@ from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     Generic,
@@ -58,6 +59,7 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg import Connection
+from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
 import inmanta.const as const
@@ -69,6 +71,7 @@ from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -1237,6 +1240,7 @@ class DocumentMeta(type):
 
 
 TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
+TransactionResult = TypeVar("TransactionResult")
 
 
 @stable_api
@@ -2184,6 +2188,31 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = metadata.default_value
 
         return result
+
+    @classmethod
+    async def execute_in_retryable_transaction(
+        cls,
+        fnc: Callable[[Connection], Awaitable[TransactionResult]],
+        tx_isolation_level: Optional[str] = None,
+    ) -> TransactionResult:
+        """
+        Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
+        result returned by fnc. This method performs retries when the transaction is aborted due to a
+        serialization error.
+        """
+        async with cls.get_connection() as postgresql_client:
+            attempt = 1
+            while True:
+                try:
+                    async with postgresql_client.transaction(isolation=tx_isolation_level):
+                        return await fnc(postgresql_client)
+                except SerializationError:
+                    if attempt > 3:
+                        raise Exception("Failed to execute transaction after 3 attempts.")
+                    else:
+                        # Exponential backoff
+                        await asyncio.sleep(pow(10, attempt) / 1000)
+                        attempt += 1
 
 
 class Project(BaseDocument):
@@ -4222,12 +4251,14 @@ class Resource(BaseDocument):
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
-        character = "|".join(
-            sorted([str(k) + "||" + str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]])
+        character = json.dumps(
+            {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
+            default=custom_json_encoder,
+            sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
         )
         m = hashlib.md5()
-        m.update(self.resource_id.encode())
-        m.update(character.encode())
+        m.update(self.resource_id.encode("utf-8"))
+        m.update(character.encode("utf-8"))
         self.attribute_hash = m.hexdigest()
 
     @classmethod
