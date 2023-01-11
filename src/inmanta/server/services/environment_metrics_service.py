@@ -237,8 +237,8 @@ class ResourceCountMetricsCollector(MetricsCollector):
             FROM {Resource.table_name()} AS r
             INNER JOIN latest_models AS cm
             ON r.environment = cm.environment AND r.model = cm.version
-            GROUP BY (r.environment, r.status)
-            ORDER BY (r.environment, r.status)
+            GROUP BY r.environment, r.status
+            ORDER BY r.environment, r.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
