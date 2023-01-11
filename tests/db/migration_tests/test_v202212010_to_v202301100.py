@@ -22,26 +22,9 @@ from db.common import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
 
 
-@pytest.fixture
-async def migrate_v202212010_to_v202301100(
-    hard_clean_db, hard_clean_db_post, postgresql_client: Connection, server_config
-) -> AsyncIterator[Callable[[], Awaitable[None]]]:
-    """
-    Returns a callable that performs a v202212010 database restore and migrates to v202301100.
-    """
-    # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202212010.sql"), "r") as fh:
-        await PGRestore(fh.readlines(), postgresql_client).run()
-
-    ibl = InmantaBootloader()
-
-    # When the bootloader is started, it also executes the migration to v202212010
-    yield ibl.start
-    await ibl.stop(timeout=15)
-
-
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202212010.sql"))
 async def test_added_environment_metrics_tables(
-    migrate_v202212010_to_v202301100: Callable[[], Awaitable[None]],
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
     get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
@@ -57,7 +40,7 @@ async def test_added_environment_metrics_tables(
         assert "grouped_by" not in columns_pk
 
     # Migrate DB schema
-    await migrate_v202212010_to_v202301100()
+    await migrate_db_from()
 
     for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
         assert "grouped_by" in (await get_columns_in_db_table(table_name))

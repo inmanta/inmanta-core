@@ -788,22 +788,23 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
-        requested_delta: timedelta = timedelta(),
-        started_delta: timedelta = timedelta(),
-        completed_delta: timedelta = timedelta(),
+        requested_delta: timedelta,
     ):
         """
         Add a new compile to the database. All timestamps are relative to the time_origin parameter
+        The requested_delta will be used to create a compile: it is used to calculate "requested" by adding
+        the "requested_delta" to "started".
         """
-        started = time_origin + started_delta
-        requested = started + requested_delta
+        started = time_origin
+        requested = started - requested_delta
+        completed = started + timedelta(seconds=1)
         compile = data.Compile(
             id=uuid.uuid4(),
             remote_id=uuid.uuid4(),
             environment=environment,
             requested=requested,
             started=started,
-            completed=time_origin,
+            completed=completed,
             do_export=True,
             force_update=False,
             success=True,
@@ -813,14 +814,10 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
         await compile.insert()
 
     async def add_compiles(environment: uuid.UUID, wait_times: Sequence[float]):
-        """
-        These compiles are anchored in time around their COMPLETION time to make sure they are picked
-        up by the next call to flush_metrics()
-        """
         time_origin = datetime.now()
         for wait_time in wait_times:
-            requested_offset = timedelta(seconds=-1 * wait_time)
-            await _add_compile(environment, time_origin, requested_delta=requested_offset, started_delta=timedelta(seconds=0))
+            requested_offset = timedelta(seconds=wait_time)
+            await _add_compile(environment, time_origin, requested_delta=requested_offset)
 
     project = data.Project(name="test")
     await project.insert()

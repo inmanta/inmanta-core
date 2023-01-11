@@ -21,11 +21,11 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    ALTER TABLE public.environmentmetricsgauge ADD COLUMN grouped_by TEXT DEFAULT 'None';
+    ALTER TABLE public.environmentmetricsgauge ADD COLUMN grouped_by VARCHAR DEFAULT 'None';
     ALTER TABLE public.environmentmetricsgauge DROP Constraint environmentmetricsgauge_pkey;
     ALTER TABLE public.environmentmetricsgauge ADD PRIMARY KEY (environment, metric_name,grouped_by, timestamp);
 
-    ALTER TABLE public.environmentmetricstimer ADD COLUMN grouped_by TEXT DEFAULT 'None';
+    ALTER TABLE public.environmentmetricstimer ADD COLUMN grouped_by VARCHAR DEFAULT 'None';
     ALTER TABLE public.environmentmetricstimer DROP Constraint environmentmetricstimer_pkey;
     ALTER TABLE public.environmentmetricstimer ADD PRIMARY KEY (environment, metric_name,grouped_by, timestamp);
     """

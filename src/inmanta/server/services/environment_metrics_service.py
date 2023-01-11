@@ -292,13 +292,14 @@ class CompileTimeMetricsCollector(MetricsCollector):
         query: str = f"""
             SELECT count(*) as count, environment, sum(completed-started) as compile_time
             FROM {Compile.table_name()}
-            WHERE completed >= '{start_interval}'
-            AND completed < '{end_interval}'
+            WHERE completed >= $1
+            AND completed < $2
             GROUP BY environment
         """
+        values = [start_interval, end_interval]
+        result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
 
         metric_values: List[MetricValueTimer] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
@@ -331,13 +332,14 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
         query: str = f"""
             SELECT count(*)  as count,environment,sum(started-requested) as compile_waiting_time
             FROM {Compile.table_name()}
-            WHERE started >= '{start_interval}'
-            AND started < '{end_interval}'
+            WHERE started >= $1
+            AND started < $2
             GROUP BY environment
         """
-        metric_values: List[MetricValueTimer] = []
-        result: Sequence[asyncpg.Record] = await connection.fetch(query)
+        values = [start_interval, end_interval]
+        result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
 
+        metric_values: List[MetricValueTimer] = []
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
