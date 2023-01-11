@@ -316,7 +316,7 @@ class CompileTimeMetricsCollector(MetricsCollector):
 
 class CompileWaitingTimeMetricsCollector(MetricsCollector):
     """
-    This Metric will track the amount of time compile requests spends waiting in the compile queue before being executed.
+    This Metric will track the amount of time compile requests spend waiting in the compile queue before being executed.
     """
 
     def get_metric_name(self) -> str:
