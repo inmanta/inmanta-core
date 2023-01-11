@@ -13,13 +13,8 @@
 """
 import os
 from collections import abc
-from typing import AsyncIterator, Awaitable, Callable
 
 import pytest
-from asyncpg import Connection
-
-from db.common import PGRestore
-from inmanta.server.bootloader import InmantaBootloader
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202212010.sql"))
