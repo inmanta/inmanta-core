@@ -5449,10 +5449,11 @@ class EnvironmentMetricsGauge(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
@@ -5468,11 +5469,12 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
 
 
 _classes = [
