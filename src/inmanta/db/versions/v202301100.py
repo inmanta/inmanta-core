@@ -20,6 +20,7 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
+    # grouped_by has as default value 'None' as it is part of the PRIMARY KEY and can therefore not be NULL.
     schema = """
     ALTER TABLE public.environmentmetricsgauge ADD COLUMN grouped_by VARCHAR DEFAULT 'None';
     ALTER TABLE public.environmentmetricsgauge DROP Constraint environmentmetricsgauge_pkey;
