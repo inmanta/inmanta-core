@@ -32,6 +32,9 @@ LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
 
+# The grouped_by fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
+DEFAULT_GROUPED_BY = "__None__"
+
 
 class MetricType(str, Enum):
     """
@@ -156,7 +159,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_gauge.append(
                     EnvironmentMetricsGauge(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else "None",
+                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
                         timestamp=timestamp,
                         count=mv.count,
                         environment=mv.environment,
@@ -168,7 +171,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_timer.append(
                     EnvironmentMetricsTimer(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else "None",
+                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
                         timestamp=timestamp,
                         count=mv.count,
                         value=mv.value,
