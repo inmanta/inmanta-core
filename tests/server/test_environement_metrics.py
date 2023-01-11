@@ -869,14 +869,14 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_compile_time = sum(wait_times)
+    expected_total_wait_time = sum(wait_times)
 
     assert len(result_gauge) == 2
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment2.id
-        and x.value == expected_total_compile_time
+        and x.value == expected_total_wait_time
         for x in result_gauge
     )
 
@@ -889,13 +889,13 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_compile_time = sum(wait_times)
+    expected_total_wait_time = sum(wait_times)
 
     assert len(result_gauge) == 3
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
-        and x.value == expected_total_compile_time
+        and x.value == expected_total_wait_time
         for x in result_gauge
     )
