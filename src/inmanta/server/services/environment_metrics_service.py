@@ -139,7 +139,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(ResourceCountMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
+        self.previous_timestamp = datetime.now()
+        self.schedule(
+            self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
+        )
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
