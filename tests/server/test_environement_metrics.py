@@ -896,6 +896,6 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
-        and x.value == expected_total_compile_time
+        and x.value == expected_total_wait_time
         for x in result_gauge
     )
