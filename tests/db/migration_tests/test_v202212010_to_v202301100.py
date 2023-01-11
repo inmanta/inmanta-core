@@ -59,13 +59,9 @@ async def test_added_environment_metrics_tables(
     # Migrate DB schema
     await migrate_v202212010_to_v202301100()
 
-    assert "grouped_by" in (await get_columns_in_db_table("environmentmetricsgauge"))
-    assert "grouped_by" in (await get_columns_in_db_table("environmentmetricstimer"))
+    for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
+        assert "grouped_by" in (await get_columns_in_db_table(table_name))
 
-    columns_pk = await get_primary_key_columns_in_db_table("environmentmetricsgauge")
-    assert len(columns_pk) == 4
-    assert "grouped_by" in columns_pk
-
-    columns_pk = await get_primary_key_columns_in_db_table("environmentmetricstimer")
-    assert len(columns_pk) == 4
-    assert "grouped_by" in columns_pk
+        columns_pk = await get_primary_key_columns_in_db_table(table_name)
+        assert len(columns_pk) == 4
+        assert "grouped_by" in columns_pk
