@@ -889,7 +889,7 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     result_gauge = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_compile_time = sum(wait_times)
+    expected_total_wait_time = sum(wait_times)
 
     assert len(result_gauge) == 3
     assert any(
