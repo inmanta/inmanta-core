@@ -6,7 +6,7 @@
 
 ## Context and Problem Statement
 
-When making updates to the database schema, it is import to test this.
+When making updates to the database schema, it is important to test this.
 
 ## Decision Drivers
 
