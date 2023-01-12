@@ -43,7 +43,7 @@ In practice, this means that if you write a database update test:
 
 ### Negative Consequences
 
-* Easy to do wrong. It is more natural to set up the inital state in the testcase itself, as we do everywhere else.
+* Easy to do wrong. It is more natural to set up the initial state in the testcase itself, as we do everywhere else.
 * We accumulate some additional test data in the repo
 
 ## Pros and Cons of the Options
