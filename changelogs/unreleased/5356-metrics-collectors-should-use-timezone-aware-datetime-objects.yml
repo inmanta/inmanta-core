@@ -1,0 +1,6 @@
+description: Metrics collectors now use timezone aware datetime objects.
+change-type: patch
+issue-nr: 5356
+destination-branches:
+  - master
+  - iso6
