@@ -17,6 +17,7 @@
 """
 import abc
 import logging
+import textwrap
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -72,6 +73,41 @@ class MetricValueTimer(MetricValue):
     ) -> None:
         super().__init__(metric_name, count, environment, grouped_by)
         self.value = value
+
+
+# TODO: version -> latest_version?
+LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
+    f"""
+    latest_released_models AS (
+        SELECT cm.environment, MAX(cm.version) AS version
+        FROM {ConfigurationModel.table_name()} AS cm
+        WHERE cm.released = TRUE
+        GROUP BY cm.environment
+    )
+    """.strip("\n")
+).strip()
+"""
+Subquery to get the latest released version for each environment. Environments with no released versions are absent.
+To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main query can use the name 'latest_released_models'
+to refer to this table.
+"""
+
+LATEST_RELEASED_RESOURCES_SUBQUERY: str = textwrap.dedent(
+    f"""
+    {LATEST_RELEASED_MODELS_SUBQUERY}, latest_released_resources AS (
+        SELECT *
+        FROM {Resource.table_name()} AS r
+        INNER JOIN latest_released_models as cm
+            ON r.environment = cm.environment AND r.model = cm.version
+    )
+    """.strip("\n")
+).strip()
+"""
+Subquery to get the resources for latest released version for each environment. Environments with no released versions are absent.
+Includes LATEST_RELEASED_MODELS_SUBQUERY.
+To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query use the name 'latest_released_models'
+to refer to this table.
+"""
 
 
 class MetricsCollector(abc.ABC):
@@ -227,16 +263,11 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH latest_models AS (
-                SELECT cm.environment, MAX(cm.version) AS version
-                FROM {ConfigurationModel.table_name()} AS cm
-                WHERE cm.released=TRUE
-                GROUP BY cm.environment
-            )
-            SELECT r.environment, r.status, count(*)
+            WITH {LATEST_RELEASED_MODELS_SUBQUERY}
+            SELECT r.environment, r.status, COUNT(*)
             FROM {Resource.table_name()} AS r
             INNER JOIN latest_models AS cm
-            ON r.environment = cm.environment AND r.model = cm.version
+                ON r.environment = cm.environment AND r.model = cm.version
             GROUP BY r.environment, r.status
             ORDER BY r.environment, r.status
         """
@@ -261,18 +292,36 @@ class AgentCountMetricsCollector(MetricsCollector):
     def get_metric_type(self) -> MetricType:
         return MetricType.GAUGE
 
-    async def get_metric_value(  # todo
+    async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-SELECT
-  CASE
-    WHEN paused THEN 'paused'
-    WHEN NOT paused AND id_primary IS NOT NULL THEN 'up'
-    ELSE 'down'
-  END AS status,environment,count(*)
-FROM {Agent.table_name()}
-GROUP BY (status, environment);
+-- fetch actual counts
+WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
+    SELECT
+        environment,
+        CASE
+            WHEN paused THEN 'paused'
+            WHEN id_primary IS NOT NULL THEN 'up'
+            ELSE 'down'
+        END AS status,
+        COUNT(*)
+    FROM public.agent AS a
+    -- only count agents that are relevant for the latest model
+    WHERE EXISTS (
+        SELECT *
+        FROM latest_released_resources AS r
+        WHERE r.environment = a.environment AND r.agent = a.name
+    )
+    GROUP BY environment, status
+)
+-- inject zeroes for missing values in the environment - status matrix
+SELECT e.id, s.status, COALESCE(a.count, 0)
+FROM {Environment.table_name()} AS e
+CROSS JOIN (VALUES ('paused'), ('up'), ('down')) AS s(status)
+LEFT JOIN agent_counts AS a
+    ON a.environment = e.id AND a.status = s.status
+ORDER BY e.id, s.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
