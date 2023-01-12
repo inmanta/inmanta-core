@@ -101,10 +101,10 @@ To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main
 to refer to this table.
 """
 
-LATEST_RELEASED_RESOURCES_SUBQUERY: str = textwrap.dedent(
+LATEST_RELEASED_RESOURCES_SUBQUERY: str = LATEST_RELEASED_MODELS_SUBQUERY + textwrap.dedent(
     f"""
-    {LATEST_RELEASED_MODELS_SUBQUERY}, latest_released_resources AS (
-        SELECT *
+    , latest_released_resources AS (
+        SELECT r.*
         FROM {Resource.table_name()} AS r
         INNER JOIN latest_released_models as cm
             ON r.environment = cm.environment AND r.model = cm.version
@@ -116,8 +116,8 @@ LATEST_RELEASED_RESOURCES_SUBQUERY: str = textwrap.dedent(
 """
 Subquery to get the resources for latest released version for each environment. Environments with no released versions are
 absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
-To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query use the name 'latest_released_models'
-to refer to this table.
+To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query can use the name
+'latest_released_resources' to refer to this table.
 """
 
 
@@ -327,12 +327,12 @@ WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
     GROUP BY environment, status
 )
 -- inject zeroes for missing values in the environment - status matrix
-SELECT e.id, s.status, COALESCE(a.count, 0)
+SELECT e.id AS environment, s.status, COALESCE(a.count, 0) AS count
 FROM {Environment.table_name()} AS e
 CROSS JOIN (VALUES ('paused'), ('up'), ('down')) AS s(status)
 LEFT JOIN agent_counts AS a
     ON a.environment = e.id AND a.status = s.status
-ORDER BY e.id, s.status
+ORDER BY environment, s.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
