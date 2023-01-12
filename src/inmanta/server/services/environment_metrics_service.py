@@ -101,8 +101,10 @@ To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main
 to refer to this table.
 """
 
-LATEST_RELEASED_RESOURCES_SUBQUERY: str = LATEST_RELEASED_MODELS_SUBQUERY + textwrap.dedent(
-    f"""
+LATEST_RELEASED_RESOURCES_SUBQUERY: str = (
+    LATEST_RELEASED_MODELS_SUBQUERY
+    + textwrap.dedent(
+        f"""
     , latest_released_resources AS (
         SELECT r.*
         FROM {Resource.table_name()} AS r
@@ -110,9 +112,10 @@ LATEST_RELEASED_RESOURCES_SUBQUERY: str = LATEST_RELEASED_MODELS_SUBQUERY + text
             ON r.environment = cm.environment AND r.model = cm.version
     )
     """.strip(
-        "\n"
-    )
-).strip()
+            "\n"
+        )
+    ).strip()
+)
 """
 Subquery to get the resources for latest released version for each environment. Environments with no released versions are
 absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
