@@ -75,7 +75,6 @@ class MetricValueTimer(MetricValue):
         self.value = value
 
 
-# TODO: version -> latest_version?
 LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
     f"""
     latest_released_models AS (
