@@ -26,7 +26,15 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import Agent, Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import (
+    Agent,
+    Compile,
+    ConfigurationModel,
+    Environment,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
+    Resource,
+)
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -83,7 +91,9 @@ LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
         WHERE cm.released = TRUE
         GROUP BY cm.environment
     )
-    """.strip("\n")
+    """.strip(
+        "\n"
+    )
 ).strip()
 """
 Subquery to get the latest released version for each environment. Environments with no released versions are absent.
@@ -99,11 +109,13 @@ LATEST_RELEASED_RESOURCES_SUBQUERY: str = textwrap.dedent(
         INNER JOIN latest_released_models as cm
             ON r.environment = cm.environment AND r.model = cm.version
     )
-    """.strip("\n")
+    """.strip(
+        "\n"
+    )
 ).strip()
 """
-Subquery to get the resources for latest released version for each environment. Environments with no released versions are absent.
-Includes LATEST_RELEASED_MODELS_SUBQUERY.
+Subquery to get the resources for latest released version for each environment. Environments with no released versions are
+absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
 To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query use the name 'latest_released_models'
 to refer to this table.
 """
@@ -305,7 +317,7 @@ WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
             ELSE 'down'
         END AS status,
         COUNT(*)
-    FROM public.agent AS a
+    FROM {Agent.table_name()} AS a
     -- only count agents that are relevant for the latest model
     WHERE EXISTS (
         SELECT *
