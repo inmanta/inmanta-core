@@ -302,7 +302,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     """
     Send a heartbeat to the server
 
-    :paran sid: The session ID used by this agent at this moment
+    :param sid: The session ID used by this agent at this moment
     :param tid: The environment this node and its agents belongs to
     :param endpoint_names: The names of the endpoints on this node
     :param nodename: The name of the node from which the heart beat comes

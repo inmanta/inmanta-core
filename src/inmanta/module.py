@@ -1529,7 +1529,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
             git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
             of the module to the URL.
 
-        * package: When the type is set to package, the URL field should contains the URL of the Python package repository.
+        * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
             The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
             compliant.
 
