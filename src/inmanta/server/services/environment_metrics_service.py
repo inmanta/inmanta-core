@@ -227,14 +227,18 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            SELECT status,environment,count(*)
-            FROM {Resource.table_name()} AS r
-            WHERE r.model=(
-                SELECT MAX(cm.version)
+            WITH latest_models AS (
+                SELECT cm.environment, MAX(cm.version) AS version
                 FROM {ConfigurationModel.table_name()} AS cm
-                WHERE cm.environment=r.environment AND cm.released=TRUE
-                )
-            GROUP BY (status, environment)
+                WHERE cm.released=TRUE
+                GROUP BY cm.environment
+            )
+            SELECT r.environment, r.status, count(*)
+            FROM {Resource.table_name()} AS r
+            INNER JOIN latest_models AS cm
+            ON r.environment = cm.environment AND r.model = cm.version
+            GROUP BY r.environment, r.status
+            ORDER BY r.environment, r.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
