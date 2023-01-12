@@ -16,9 +16,8 @@ import uuid
 from collections import abc
 from datetime import datetime
 
-from asyncpg import Connection
-
 import pytest
+from asyncpg import Connection
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301110.sql"))
@@ -63,15 +62,13 @@ async def test_timestamp_timezones(
         )
         assert result[0]["type"] == type
 
-
-    type_pre = 'timestamp without time zone'
+    type_pre = "timestamp without time zone"
     for table in ["environmentmetricsgauge", "environmentmetricstimer"]:
         await check_column_type(table, "timestamp", type_pre)
 
     # Migrate DB schema
     await migrate_db_from()
 
-    type_post = 'timestamp with time zone'
+    type_post = "timestamp with time zone"
     for table in ["environmentmetricsgauge", "environmentmetricstimer"]:
         await check_column_type(table, "timestamp", type_post)
-
