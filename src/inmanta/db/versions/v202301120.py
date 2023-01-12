@@ -21,7 +21,6 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    # grouped_by has as default value '__None__' as it is part of the PRIMARY KEY and can therefore not be NULL.
     schema = """
     ALTER TABLE public.environmentmetricsgauge ALTER COLUMN timestamp TYPE TIMESTAMP WITH TIME ZONE;
     ALTER TABLE public.environmentmetricstimer ALTER COLUMN timestamp TYPE TIMESTAMP WITH TIME ZONE;

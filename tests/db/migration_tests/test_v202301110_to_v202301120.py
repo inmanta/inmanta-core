@@ -24,8 +24,6 @@ from asyncpg import Connection
 async def test_timestamp_timezones(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client: Connection,
-    # get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
-    # get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
     """
     Test that all timestamps are timezone-aware.
