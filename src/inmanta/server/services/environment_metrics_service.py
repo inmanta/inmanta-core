@@ -277,7 +277,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
             WITH {LATEST_RELEASED_MODELS_SUBQUERY}
             SELECT r.environment, r.status, COUNT(*)
             FROM {Resource.table_name()} AS r
-            INNER JOIN latest_models AS cm
+            INNER JOIN latest_released_models AS cm
                 ON r.environment = cm.environment AND r.model = cm.version
             GROUP BY r.environment, r.status
             ORDER BY r.environment, r.status
