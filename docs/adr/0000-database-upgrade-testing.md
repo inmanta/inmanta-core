@@ -28,7 +28,7 @@ How do we set up these preconditions so that the tests remain valid and relevant
 
 We chose option 1 and 2.
 
-1. When data is very simple or specific, write data to the database in the testcase, prior to the update
+1. When data is very simple or specific, write data to the database in the testcase, prior to the update. Make sure not to use any inmanta code.
 2. When the write path is non trivial, use the procedure below:
  - creating test data using the old code,
  - dumping it to file and
