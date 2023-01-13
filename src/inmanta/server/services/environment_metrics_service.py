@@ -277,11 +277,9 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH {LATEST_RELEASED_MODELS_SUBQUERY}
+            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}
             SELECT r.environment, r.status, COUNT(*)
-            FROM {Resource.table_name()} AS r
-            INNER JOIN latest_released_models AS cm
-                ON r.environment = cm.environment AND r.model = cm.version
+            FROM latest_released_resources AS r
             GROUP BY r.environment, r.status
             ORDER BY r.environment, r.status
         """
