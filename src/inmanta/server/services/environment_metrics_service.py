@@ -374,7 +374,9 @@ class CompileTimeMetricsCollector(MetricsCollector):
                 WHERE completed >= $1
                 AND completed < $2
                 GROUP BY environment
-            ) SELECT e.id AS environment, COALESCE(compile_time.count, 0) AS count, COALESCE(compile_time.sum, INTERVAL '0' SECOND) as compile_time
+            ) SELECT e.id AS environment,
+            COALESCE(compile_time.count, 0) AS count,
+            COALESCE(compile_time.sum, INTERVAL '0' SECOND) as compile_time
             FROM {Environment.table_name()} AS e
             LEFT JOIN compile_time
             ON compile_time.environment = e.id
