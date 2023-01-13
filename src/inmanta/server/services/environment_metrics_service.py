@@ -283,7 +283,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
                     GROUP BY r.environment, r.status
                 )
                 SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
-                FROM public.environment AS e
+                FROM {Environment.table_name()} AS e
                 CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
                 LEFT JOIN nonzero_statuses AS r
                 ON r.environment = e.id AND r.status = s.name
