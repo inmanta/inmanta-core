@@ -5090,10 +5090,10 @@ class ConfigurationModel(BaseDocument):
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
 
         # to increment
-        increment = []
-        not_increment = []
+        increment: list[abc.Mapping[str, Any]] = []
+        not_increment: list[abc.Mapping[str, Any]] = []
         # todo in this version
-        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
+        work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -5151,15 +5151,15 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = {res["resource_id"] for res in not_increment}
+        negative: set[ResourceIdStr] = {res["resource_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = {res["resource_id"] for res in increment}  # type: Set[str]
-        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
-        send_events = []  # type: List[str]
+        outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
+        original_provides: dict[str, List[ResourceIdStr]] = defaultdict(lambda: [])
+        send_events: list[ResourceIdStr] = []
 
         # build lookup tables
         for res in resources:
@@ -5169,10 +5169,10 @@ class ConfigurationModel(BaseDocument):
                 send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
-        work = list(outset)
-        done = set()
-        while work:
-            current = work.pop()
+        increment_work: list[ResourceIdStr] = list(outset)
+        done: set[ResourceIdStr] = set()
+        while increment_work:
+            current: ResourceIdStr = increment_work.pop()
             if current not in send_events:
                 # not sending events, so no receivers
                 continue
@@ -5182,7 +5182,7 @@ class ConfigurationModel(BaseDocument):
             done.add(current)
 
             provides = original_provides[current]
-            work.extend(provides)
+            increment_work.extend(provides)
             outset.update(provides)
             negative.difference_update(provides)
 
