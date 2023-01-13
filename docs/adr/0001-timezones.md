@@ -1,8 +1,8 @@
 # timezones
 
-* Status: proposed
+* Status: accepted
 * Deciders: [Sander, Wouter, Arnaud, Bart]
-* Date: 2023-01-09
+* Date: 2023-01-13
 
 Technical Story: [
     https://github.com/inmanta/inmanta-core/issues/2919,
