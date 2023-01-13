@@ -652,7 +652,7 @@ async def test_resource_count_empty_datapoint(client, server):
     assert all(hasattr(res, "grouped_by") and res.grouped_by != "__None__" and res.count == 0 for res in result_gauge)
 
 
-async def test_agent_count_metric(client, server):
+async def test_agent_count_metric(clienthelper, client, server):
     project = data.Project(name="test")
     await project.insert()
 
@@ -694,7 +694,6 @@ async def test_agent_count_metric(client, server):
     # adds the AgentCountMetricsCollector
     acmc = AgentCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=acmc)
-
     # flush the metrics for the first time: 2 record (1 agent in paused state for the first
     # environment and 1 for the second)
     await metrics_service.flush_metrics()
@@ -738,9 +737,10 @@ async def test_agent_count_metric_empty_datapoint(client, server):
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
     assert len(result_gauge) == 6
+    assert all(gauge.metric_name == "resource.agent_count" and gauge.count == 0 for gauge in result_gauge)
 
 
-async def test_compile_time_metric(clienthelper, client, agent):
+async def test_compile_time_metric(client, server):
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
@@ -800,18 +800,18 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 1
+    assert len(result_timer) == 1
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Create another environment and insert a few compiles in it.
@@ -827,18 +827,19 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 2
+    # 2 new entries (one for each env)
+    assert len(result_timer) == 3
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment2.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Add another set of compiles to the first environment.
@@ -847,22 +848,48 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 3
+    # 2 new entries (one for each env)
+    assert len(result_timer) == 5
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
 
-async def test_compile_wait_time_metric(clienthelper, client, agent):
+async def test_compile_time_metric_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    collector = CompileTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=collector)
+
+    await metrics_service.flush_metrics()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_timer) == 2  # one for each env
+    assert all(
+        timer.metric_name == "orchestrator.compile_time" and timer.count == 0 and timer.value == 0 for timer in result_timer
+    )
+
+
+async def test_compile_wait_time_metric(client, server):
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
@@ -918,18 +945,18 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     await add_compiles(env_uuid1, wait_times)
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 1
+    assert len(result_timer) == 1
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Create another environment and insert a few compiles in it.
@@ -944,18 +971,19 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     await add_compiles(env_uuid2, wait_times)
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 2
+    # 2 new entries (one for each env)
+    assert len(result_timer) == 3
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment2.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Add another set of compiles to the first environment.
@@ -964,16 +992,43 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 3
+    # 2 new entries (one for each env)
+    assert len(result_timer) == 5
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
+    )
+
+
+async def test_compile_time_metric_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    collector = CompileWaitingTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=collector)
+
+    await metrics_service.flush_metrics()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_timer) == 2  # one for each env
+    assert all(
+        timer.metric_name == "orchestrator.compile_waiting_time" and timer.count == 0 and timer.value == 0
+        for timer in result_timer
     )

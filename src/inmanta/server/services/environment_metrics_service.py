@@ -277,15 +277,10 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH latest_models AS (
-                SELECT cm.environment, MAX(cm.version) AS version
-                FROM {ConfigurationModel.table_name()} AS cm
-                WHERE cm.released=TRUE
-                GROUP BY cm.environment
-            ), nonzero_statuses AS (
+            WITH {LATEST_RELEASED_MODELS_SUBQUERY}, nonzero_statuses AS (
                 SELECT r.environment, r.status, COUNT(*) AS count
                 FROM {Resource.table_name()} AS r
-                INNER JOIN latest_models AS cm
+                INNER JOIN latest_released_models AS cm
                 ON r.environment = cm.environment AND r.model = cm.version
                 GROUP BY r.environment, r.status
             )
@@ -373,11 +368,17 @@ class CompileTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            SELECT count(*) as count, environment, sum(completed-started) as compile_time
-            FROM {Compile.table_name()}
-            WHERE completed >= $1
-            AND completed < $2
-            GROUP BY environment
+            WITH compile_time as (
+                SELECT count(*) as count, environment, sum(completed-started)
+                FROM {Compile.table_name()}
+                WHERE completed >= $1
+                AND completed < $2
+                GROUP BY environment
+            ) SELECT e.id AS environment, COALESCE(compile_time.count, 0) AS count, COALESCE(compile_time.sum, INTERVAL '0' SECOND) as compile_time
+            FROM {Environment.table_name()} AS e
+            LEFT JOIN compile_time
+            ON compile_time.environment = e.id
+            ORDER BY environment
         """
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
@@ -413,11 +414,17 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            SELECT count(*)  as count,environment,sum(started-requested) as compile_waiting_time
+        WITH compile_waiting_time as (
+            SELECT count(*) as count,environment,sum(started-requested)
             FROM {Compile.table_name()}
             WHERE started >= $1
             AND started < $2
             GROUP BY environment
+        ) SELECT e.id AS environment, COALESCE(compile_waiting_time.count, 0) AS count, COALESCE(compile_waiting_time.sum, INTERVAL '0' SECOND) as compile_waiting_time
+            FROM {Environment.table_name()} AS e
+            LEFT JOIN compile_waiting_time
+            ON compile_waiting_time.environment = e.id
+            ORDER BY environment
         """
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
