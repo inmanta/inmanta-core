@@ -5444,6 +5444,7 @@ class EnvironmentMetricsGauge(BaseDocument):
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
+    :grouped_by: the field on which the metrics is grouped by
     :param count: the counter for the metric for the given timestamp
     """
 
@@ -5462,6 +5463,7 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
+    :grouped_by: the field on which the metrics is grouped by
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[

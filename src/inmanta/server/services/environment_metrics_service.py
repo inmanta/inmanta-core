@@ -25,7 +25,15 @@ from typing import Dict, List, Optional
 
 import asyncpg
 
-from inmanta.data import Agent, Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource
+from inmanta.data import (
+    Agent,
+    Compile,
+    ConfigurationModel,
+    Environment,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
+    Resource,
+)
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -232,14 +240,20 @@ class ResourceCountMetricsCollector(MetricsCollector):
                 FROM {ConfigurationModel.table_name()} AS cm
                 WHERE cm.released=TRUE
                 GROUP BY cm.environment
+            ), nonzero_statuses AS (
+                SELECT r.environment, r.status, COUNT(*) AS count
+                FROM {Resource.table_name()} AS r
+                INNER JOIN latest_models AS cm
+                ON r.environment = cm.environment AND r.model = cm.version
+                GROUP BY r.environment, r.status
             )
-            SELECT r.environment, r.status, count(*)
-            FROM {Resource.table_name()} AS r
-            INNER JOIN latest_models AS cm
-            ON r.environment = cm.environment AND r.model = cm.version
-            GROUP BY r.environment, r.status
+            SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
+            FROM public.environment AS e
+            CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
+            LEFT JOIN nonzero_statuses AS r
+            ON r.environment = e.id AND r.status = s.name
             ORDER BY r.environment, r.status
-        """
+            """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
@@ -267,12 +281,15 @@ class AgentCountMetricsCollector(MetricsCollector):
         query: str = f"""
 SELECT
   CASE
-    WHEN paused THEN 'paused'
-    WHEN NOT paused AND id_primary IS NOT NULL THEN 'up'
+    WHEN a.paused THEN 'paused'
+    WHEN NOT a.paused AND a.id_primary IS NOT NULL THEN 'up'
     ELSE 'down'
-  END AS status,environment,count(*)
-FROM {Agent.table_name()}
-GROUP BY (status, environment);
+  END AS status,e.id as environment,count(*)
+FROM public.environment AS e
+LEFT JOIN {Agent.table_name()} as a
+ON a.environment = e.id
+GROUP BY status, e.id
+ORDER BY status, e.id;
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
