@@ -1008,7 +1008,7 @@ async def test_compile_wait_time_metric(client, server):
     )
 
 
-async def test_compile_time_metric_empty_datapoint(client, server):
+async def test_compile_wait_time_metric_empty_datapoint(client, server):
     project = data.Project(name="test")
     await project.insert()
 
