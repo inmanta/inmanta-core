@@ -325,7 +325,7 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
     assert env_uuid2 in envs
 
 
-async def test_resource_count_metric(server, client, agent):
+async def test_resource_count_metric(clienthelper, client, agent):
     """
     This test will create 2 environments and start by adding 1 resource to the first. then It will create a second version
     with 3 other resources. It also adds two resources to the second environment.
