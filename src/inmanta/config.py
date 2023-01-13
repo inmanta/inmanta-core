@@ -25,9 +25,9 @@ import ssl
 import sys
 import uuid
 import warnings
-from collections import defaultdict
+from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, cast, overload
+from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
@@ -207,11 +207,14 @@ def is_time(value: str) -> int:
     return int(value)
 
 
-def is_bool(value: str) -> bool:
+def is_bool(value: Union[bool, str]) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
-    if type(value) == bool:
-        return cast(bool, value)
-    return Config._get_instance()._convert_to_boolean(value)
+    if isinstance(value, bool):
+        return value
+    boolean_states: abc.Mapping[str, bool] = Config._get_instance().BOOLEAN_STATES
+    if value.lower() not in boolean_states:
+        raise ValueError('Not a boolean: %s' % value)
+    return boolean_states[value.lower()]
 
 
 def is_list(value: str) -> List[str]:
