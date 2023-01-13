@@ -16,7 +16,7 @@ How do we set up these preconditions so that the tests remain valid and relevant
 ## Decision Drivers
 
 * We want to test that database update code correctly transforms data produced by older code to data that can be handled by the current code
-* But within the code base, this older code no longer exists
+* But within the code base, this older code no longer exists or has been modified, so it can not be relied upon in the test case before the migration, where database schema and code might be out of sync.
 
 ## Considered Options
 
