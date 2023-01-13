@@ -6,7 +6,12 @@
 
 ## Context and Problem Statement
 
-When making updates to the database schema, it is important to test this.
+When making updates to the database schema, it is important to test this. In case the migration includes any data
+transformation, testing this commonly involves setting up some known preconditions, and verifying that they are
+converted as expected when the migration script is executed. These preconditions should be set up in a way that
+remains both valid and relevant for the test scenario, even when related code may change in the future.
+
+How do we set up these preconditions so that the tests remain valid and relevant in the future?
 
 ## Decision Drivers
 
