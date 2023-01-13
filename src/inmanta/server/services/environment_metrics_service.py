@@ -421,7 +421,8 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
             WHERE started >= $1
             AND started < $2
             GROUP BY environment
-        ) SELECT e.id AS environment, COALESCE(compile_waiting_time.count, 0) AS count, COALESCE(compile_waiting_time.sum, INTERVAL '0' SECOND) as compile_waiting_time
+        ) SELECT e.id AS environment, COALESCE(compile_waiting_time.count, 0) AS count,
+            COALESCE(compile_waiting_time.sum, INTERVAL '0' SECOND) as compile_waiting_time
             FROM {Environment.table_name()} AS e
             LEFT JOIN compile_waiting_time
             ON compile_waiting_time.environment = e.id
