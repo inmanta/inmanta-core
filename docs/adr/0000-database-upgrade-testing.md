@@ -2,7 +2,7 @@
 
 * Status: accepted
 * Deciders: [Sander, Arnaud, Wouter]
-* Date: 12/01/2023
+* Date: 2023-01-12
 
 ## Context and Problem Statement
 
