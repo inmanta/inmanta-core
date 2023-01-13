@@ -18,16 +18,17 @@
 import base64
 import hashlib
 import importlib
+import importlib.util
 import inspect
 import logging
 import os
 import pathlib
 import sys
 import types
-from collections.abc import KeysView
+from collections import abc
 from dataclasses import dataclass
-from importlib.abc import FileLoader, Finder
-from importlib.machinery import SourcelessFileLoader
+from importlib.abc import FileLoader, MetaPathFinder
+from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain, starmap
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
@@ -454,7 +455,7 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
 
 
 @stable_api
-class PluginModuleFinder(Finder):
+class PluginModuleFinder(MetaPathFinder):
     """
     Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder. This
     finder is stored as the last entry in `meta_path`, as such that the default Python Finders detect V2 modules first.
@@ -506,7 +507,9 @@ class PluginModuleFinder(Finder):
             sys.meta_path.append(module_finder)
         cls.MODULE_FINDER = module_finder
 
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[FileLoader]:
+    def find_spec(
+        self, fullname: str, path: Optional[abc.Sequence[str]], target: Optional[types.ModuleType] = None
+    ) -> Optional[ModuleSpec]:
         """
         :param fullname: A fully qualified import path to the module or package to be imported.
         """
@@ -515,8 +518,8 @@ class PluginModuleFinder(Finder):
             path_to_module = self._get_path_to_module(fullname)
             if path_to_module is not None:
                 if path_to_module[-4:] == ".pyc":
-                    return ByteCodePluginModuleLoader(fullname, path_to_module)
-                return PluginModuleLoader(fullname, path_to_module)
+                    return importlib.util.spec_from_loader(fullname, ByteCodePluginModuleLoader(fullname, path_to_module))
+                return importlib.util.spec_from_loader(fullname, PluginModuleLoader(fullname, path_to_module))
             else:
                 # The given module is not present in self.modulepath.
                 return None
@@ -586,7 +589,7 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
             return True
         return False
 
-    loaded_modules: KeysView[str] = sys.modules.keys()
+    loaded_modules: abc.KeysView[str] = sys.modules.keys()
     modules_to_unload: Sequence[str] = [fq_name for fq_name in loaded_modules if should_unload(fq_name)]
     for k in modules_to_unload:
         del sys.modules[k]
