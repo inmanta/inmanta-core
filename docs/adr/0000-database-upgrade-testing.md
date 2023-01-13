@@ -26,7 +26,10 @@ How do we set up these preconditions so that the tests remain valid and relevant
 
 ## Decision Outcome
 
-We chose option 2 to test upgrades by
+We chose option 1 and 2.
+
+1. When data is very simple or specific, write data to the database in the testcase, prior to the update
+2. When the write path is non trivial, use the procedure below:
  - creating test data using the old code,
  - dumping it to file and
  - running it through the update script.
