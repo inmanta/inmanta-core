@@ -281,17 +281,17 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-                WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, nonzero_statuses AS (
-                    SELECT r.environment, r.status, COUNT(*) AS count
-                    FROM latest_released_resources AS r
-                    GROUP BY r.environment, r.status
-                )
-                SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
-                FROM {Environment.table_name()} AS e
-                CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
-                LEFT JOIN nonzero_statuses AS r
-                ON r.environment = e.id AND r.status = s.name
-                ORDER BY r.environment, r.status
+            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, nonzero_statuses AS (
+                SELECT r.environment, r.status, COUNT(*) AS count
+                FROM latest_released_resources AS r
+                GROUP BY r.environment, r.status
+            )
+            SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
+            FROM {Environment.table_name()} AS e
+            CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
+            LEFT JOIN nonzero_statuses AS r
+            ON r.environment = e.id AND r.status = s.name
+            ORDER BY r.environment, r.status
             """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
@@ -371,10 +371,10 @@ class CompileTimeMetricsCollector(MetricsCollector):
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
             SELECT count(*) as count, environment, sum(completed-started) as compile_time
-                FROM {Compile.table_name()}
-                WHERE completed >= $1
-                AND completed < $2
-                GROUP BY environment
+            FROM {Compile.table_name()}
+            WHERE completed >= $1
+            AND completed < $2
+            GROUP BY environment
         """
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
